@@ -21,6 +21,7 @@ import {
   Briefcase,
   Wrench,
   Receipt,
+  UserCheck,
 } from "lucide-react";
 
 const navigation = [
@@ -29,6 +30,7 @@ const navigation = [
   { name: "Clients", href: "/clients", icon: Briefcase },
   { name: "Services", href: "/services", icon: Wrench },
   { name: "Quotes", href: "/quotes", icon: Receipt },
+  { name: "Onboarding", href: "/onboarding", icon: UserCheck },
   { name: "Bookkeeping", href: "/bookkeeping", icon: BookOpen },
   { name: "Jobs", href: "/jobs", icon: ClipboardList },
   { name: "Deadlines", href: "/deadlines", icon: Calendar },

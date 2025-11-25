@@ -400,6 +400,204 @@ export type Database = {
           },
         ]
       }
+      onboarding_applications: {
+        Row: {
+          additional_documents_uploaded: boolean | null
+          address_line_1: string | null
+          address_line_2: string | null
+          aml_notes: string | null
+          aml_status: string | null
+          application_type: string
+          approved_at: string | null
+          approved_by: string | null
+          city: string | null
+          client_id: string | null
+          company_id: string | null
+          company_name: string | null
+          company_number: string | null
+          country: string | null
+          created_at: string
+          date_of_birth: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          id_document_uploaded: boolean | null
+          incorporation_date: string | null
+          last_name: string | null
+          lead_id: string | null
+          national_insurance_number: string | null
+          organization_id: string
+          phone: string | null
+          postcode: string | null
+          proof_of_address_uploaded: boolean | null
+          quote_id: string | null
+          rejection_reason: string | null
+          status: string
+          updated_at: string
+          vat_number: string | null
+        }
+        Insert: {
+          additional_documents_uploaded?: boolean | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          aml_notes?: string | null
+          aml_status?: string | null
+          application_type: string
+          approved_at?: string | null
+          approved_by?: string | null
+          city?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          company_name?: string | null
+          company_number?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          id_document_uploaded?: boolean | null
+          incorporation_date?: string | null
+          last_name?: string | null
+          lead_id?: string | null
+          national_insurance_number?: string | null
+          organization_id: string
+          phone?: string | null
+          postcode?: string | null
+          proof_of_address_uploaded?: boolean | null
+          quote_id?: string | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string
+          vat_number?: string | null
+        }
+        Update: {
+          additional_documents_uploaded?: boolean | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          aml_notes?: string | null
+          aml_status?: string | null
+          application_type?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          city?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          company_name?: string | null
+          company_number?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          id_document_uploaded?: boolean | null
+          incorporation_date?: string | null
+          last_name?: string | null
+          lead_id?: string | null
+          national_insurance_number?: string | null
+          organization_id?: string
+          phone?: string | null
+          postcode?: string | null
+          proof_of_address_uploaded?: boolean | null
+          quote_id?: string | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string
+          vat_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_applications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_applications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_applications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_applications_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_applications_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_documents: {
+        Row: {
+          application_id: string
+          created_at: string
+          document_type: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          organization_id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          application_id: string
+          created_at?: string
+          document_type: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          organization_id: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          application_id?: string
+          created_at?: string
+          document_type?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          organization_id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_documents_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "onboarding_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_users: {
         Row: {
           created_at: string
