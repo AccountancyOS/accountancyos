@@ -33,6 +33,7 @@ interface QuoteLine {
   service_id: string;
   quantity: number;
   unit_price: number;
+  billing_frequency: "now" | "monthly";
 }
 
 const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
@@ -45,7 +46,7 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<QuoteLine[]>([
-    { service_id: "", quantity: 1, unit_price: 0 },
+    { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" },
   ]);
 
   const { data: leads } = useQuery({
@@ -121,6 +122,7 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
         quantity: line.quantity,
         unit_price: line.unit_price,
         subtotal: line.quantity * line.unit_price,
+        billing_frequency: line.billing_frequency,
         line_order: index,
       }));
 
@@ -148,7 +150,7 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
   });
 
   const addLine = () => {
-    setLines([...lines, { service_id: "", quantity: 1, unit_price: 0 }]);
+    setLines([...lines, { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" }]);
   };
 
   const removeLine = (index: number) => {
@@ -170,10 +172,15 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
     setLines(newLines);
   };
 
-  const totalAmount = lines.reduce(
-    (sum, line) => sum + line.quantity * line.unit_price,
-    0
-  );
+  const payableNow = lines
+    .filter((line) => line.billing_frequency === "now")
+    .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+
+  const payableMonthly = lines
+    .filter((line) => line.billing_frequency === "monthly")
+    .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+
+  const totalAmount = payableNow + payableMonthly;
 
   const canSubmit = lines.every((l) => l.service_id && l.quantity > 0);
 
@@ -244,6 +251,24 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
                   </Select>
                 </div>
 
+                <div className="w-32 space-y-2">
+                  <Label>Billing</Label>
+                  <Select
+                    value={line.billing_frequency}
+                    onValueChange={(value: "now" | "monthly") =>
+                      updateLine(index, "billing_frequency", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="now">Bill Now</SelectItem>
+                      <SelectItem value="monthly">Bill Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="w-24 space-y-2">
                   <Label>Qty</Label>
                   <Input
@@ -291,8 +316,20 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
             ))}
           </div>
 
-          <div className="flex justify-end pt-4 border-t">
-            <div className="text-right">
+          <div className="pt-4 border-t space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="text-sm font-medium">Payable Now</div>
+              <div className="text-lg font-semibold">
+                £{payableNow.toFixed(2)}
+              </div>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="text-sm font-medium">Payable Monthly</div>
+              <div className="text-lg font-semibold">
+                £{payableMonthly.toFixed(2)}
+              </div>
+            </div>
+            <div className="flex justify-between items-center pt-3 border-t">
               <div className="text-sm text-muted-foreground">Total Amount</div>
               <div className="text-2xl font-semibold">
                 £{totalAmount.toFixed(2)}
