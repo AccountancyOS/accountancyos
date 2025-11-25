@@ -36,6 +36,14 @@ const OnboardingWizard = () => {
   useEffect(() => {
     const verifySession = async () => {
       const sessionId = searchParams.get("session_id");
+      const testMode = searchParams.get("test");
+      
+      // Allow test mode to bypass payment verification
+      if (testMode === "true") {
+        console.log("Test mode enabled - bypassing payment verification");
+        setVerifyingPayment(false);
+        return;
+      }
       
       if (!sessionId) {
         toast({
