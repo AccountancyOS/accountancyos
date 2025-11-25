@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { Loader2, UserPlus, X } from "lucide-react";
 
 interface TeamSetupStepProps {
@@ -51,12 +52,25 @@ export const TeamSetupStep = ({ organizationId, onComplete, onSkip }: TeamSetupS
     setLoading(true);
 
     try {
-      // In a real implementation, you would send invitation emails here
-      // For now, we'll just mark this step as complete
-      
       if (members.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
+
+        const invitations = members.map(member => ({
+          organization_id: organizationId,
+          email: member.email,
+          role: member.role,
+          invited_by: user.id,
+        }));
+
+        const { error } = await supabase
+          .from("team_invitations")
+          .insert(invitations);
+
+        if (error) throw error;
+
         toast({
-          title: "Invitations sent",
+          title: "Invitations created",
           description: `${members.length} team member${members.length > 1 ? 's' : ''} will receive invitation emails.`,
         });
       }

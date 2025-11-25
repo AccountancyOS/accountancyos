@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { OrganizationProvider } from "@/lib/organization-context";
 import Auth from "./pages/Auth";
 import Overview from "./pages/Overview";
+import Index from "./pages/Index";
+import WelcomeDashboard from "./pages/WelcomeDashboard";
 import CRM from "./pages/CRM";
 import Clients from "./pages/Clients";
 import Services from "./pages/Services";
@@ -77,6 +79,22 @@ const App = () => (
               path="/"
               element={
                 <ProtectedRoute>
+                  <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/welcome"
+              element={
+                <ProtectedRoute>
+                  <WelcomeDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/overview"
+              element={
+                <ProtectedRoute>
                   <Overview />
                 </ProtectedRoute>
               }
@@ -138,7 +156,7 @@ const App = () => (
               }
             />
             <Route
-              path="/onboarding/wizard"
+              path="/onboarding-wizard"
               element={
                 <ProtectedRoute>
                   <OnboardingWizard />
