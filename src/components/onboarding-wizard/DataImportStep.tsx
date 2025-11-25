@@ -53,33 +53,7 @@ export const DataImportStep = ({ organizationId, onComplete, onSkip }: DataImpor
                   <FileUp className="h-8 w-8 text-muted-foreground" />
                   <div>
                     <h4 className="font-semibold text-sm">Import Clients</h4>
-                    <p className="text-xs text-muted-foreground">Upload individual clients (CSV)</p>
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Upload CSV
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6 space-y-3">
-                  <FileUp className="h-8 w-8 text-muted-foreground" />
-                  <div>
-                    <h4 className="font-semibold text-sm">Import Companies</h4>
-                    <p className="text-xs text-muted-foreground">Upload company clients (CSV)</p>
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Upload CSV
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6 space-y-3">
-                  <FileUp className="h-8 w-8 text-muted-foreground" />
-                  <div>
-                    <h4 className="font-semibold text-sm">Import Engagements</h4>
-                    <p className="text-xs text-muted-foreground">Upload service engagements (CSV)</p>
+                    <p className="text-xs text-muted-foreground">Upload all client data including individuals, companies, and engagements (CSV)</p>
                   </div>
                   <Button variant="outline" size="sm" className="w-full">
                     Upload CSV
@@ -91,8 +65,8 @@ export const DataImportStep = ({ organizationId, onComplete, onSkip }: DataImpor
                 <CardContent className="pt-6 space-y-3">
                   <Download className="h-8 w-8 text-muted-foreground" />
                   <div>
-                    <h4 className="font-semibold text-sm">Download Templates</h4>
-                    <p className="text-xs text-muted-foreground">Get CSV templates to fill in</p>
+                    <h4 className="font-semibold text-sm">Download Template</h4>
+                    <p className="text-xs text-muted-foreground">Get CSV template with all required headings</p>
                   </div>
                   <Button variant="outline" size="sm" className="w-full">
                     Download
