@@ -8,6 +8,10 @@ import { OrganizationProvider } from "@/lib/organization-context";
 import Auth from "./pages/Auth";
 import Overview from "./pages/Overview";
 import CRM from "./pages/CRM";
+import Clients from "./pages/Clients";
+import Services from "./pages/Services";
+import Quotes from "./pages/Quotes";
+import QuoteDetail from "./pages/QuoteDetail";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -86,21 +90,31 @@ const App = () => (
               path="/clients"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Clients"
-                    description="Manage your individual clients and their accounts"
-                  />
+                  <Clients />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/companies"
+              path="/services"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Companies"
-                    description="Manage corporate clients and company information"
-                  />
+                  <Services />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/quotes"
+              element={
+                <ProtectedRoute>
+                  <Quotes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/quotes/:id"
+              element={
+                <ProtectedRoute>
+                  <QuoteDetail />
                 </ProtectedRoute>
               }
             />

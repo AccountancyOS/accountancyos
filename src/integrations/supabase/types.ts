@@ -14,6 +14,235 @@ export type Database = {
   }
   public: {
     Tables: {
+      clients: {
+        Row: {
+          address_line_1: string | null
+          address_line_2: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          date_of_birth: string | null
+          email: string
+          first_name: string
+          id: string
+          last_name: string
+          national_insurance_number: string | null
+          notes: string | null
+          organization_id: string
+          phone: string | null
+          postcode: string | null
+          tags: Json | null
+          updated_at: string
+          utr: string | null
+        }
+        Insert: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email: string
+          first_name: string
+          id?: string
+          last_name: string
+          national_insurance_number?: string | null
+          notes?: string | null
+          organization_id: string
+          phone?: string | null
+          postcode?: string | null
+          tags?: Json | null
+          updated_at?: string
+          utr?: string | null
+        }
+        Update: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string
+          first_name?: string
+          id?: string
+          last_name?: string
+          national_insurance_number?: string | null
+          notes?: string | null
+          organization_id?: string
+          phone?: string | null
+          postcode?: string | null
+          tags?: Json | null
+          updated_at?: string
+          utr?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          address_line_1: string | null
+          address_line_2: string | null
+          city: string | null
+          company_name: string
+          company_number: string | null
+          country: string | null
+          created_at: string
+          email: string
+          id: string
+          incorporation_date: string | null
+          notes: string | null
+          organization_id: string
+          phone: string | null
+          postcode: string | null
+          tags: Json | null
+          updated_at: string
+          vat_number: string | null
+          year_end_day: number | null
+          year_end_month: number | null
+        }
+        Insert: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          company_name: string
+          company_number?: string | null
+          country?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          incorporation_date?: string | null
+          notes?: string | null
+          organization_id: string
+          phone?: string | null
+          postcode?: string | null
+          tags?: Json | null
+          updated_at?: string
+          vat_number?: string | null
+          year_end_day?: number | null
+          year_end_month?: number | null
+        }
+        Update: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          company_name?: string
+          company_number?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          incorporation_date?: string | null
+          notes?: string | null
+          organization_id?: string
+          phone?: string | null
+          postcode?: string | null
+          tags?: Json | null
+          updated_at?: string
+          vat_number?: string | null
+          year_end_day?: number | null
+          year_end_month?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      engagements: {
+        Row: {
+          active: boolean | null
+          billing_notes: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          end_date: string | null
+          frequency: string
+          id: string
+          organization_id: string
+          quote_id: string | null
+          service_id: string
+          start_date: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean | null
+          billing_notes?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          end_date?: string | null
+          frequency: string
+          id?: string
+          organization_id: string
+          quote_id?: string | null
+          service_id: string
+          start_date: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean | null
+          billing_notes?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          organization_id?: string
+          quote_id?: string | null
+          service_id?: string
+          start_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagements_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagements_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activities: {
         Row: {
           body: string | null
@@ -248,11 +477,203 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_lines: {
+        Row: {
+          created_at: string
+          description_override: string | null
+          id: string
+          line_order: number
+          organization_id: string
+          quantity: number
+          quote_id: string
+          service_id: string
+          subtotal: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description_override?: string | null
+          id?: string
+          line_order?: number
+          organization_id: string
+          quantity?: number
+          quote_id: string
+          service_id: string
+          subtotal: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          description_override?: string | null
+          id?: string
+          line_order?: number
+          organization_id?: string
+          quantity?: number
+          quote_id?: string
+          service_id?: string
+          subtotal?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_lines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_lines_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_lines_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotes: {
+        Row: {
+          accepted_at: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          lead_id: string | null
+          notes: string | null
+          organization_id: string
+          quote_number: string
+          status: string
+          total_amount: number
+          updated_at: string
+          valid_until: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          organization_id: string
+          quote_number: string
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          valid_until?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          quote_number?: string
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services_catalog: {
+        Row: {
+          active: boolean | null
+          billing_model: string
+          code: string
+          created_at: string
+          default_price: number
+          description: string | null
+          id: string
+          is_bookkeeping_related: boolean | null
+          name: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean | null
+          billing_model: string
+          code: string
+          created_at?: string
+          default_price: number
+          description?: string | null
+          id?: string
+          is_bookkeeping_related?: boolean | null
+          name: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean | null
+          billing_model?: string
+          code?: string
+          created_at?: string
+          default_price?: number
+          description?: string | null
+          id?: string
+          is_bookkeeping_related?: boolean | null
+          name?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_catalog_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      generate_quote_number: { Args: { org_id: string }; Returns: string }
       get_user_organization_id: { Args: never; Returns: string }
       has_organization_role: {
         Args: { required_role: string }

@@ -19,13 +19,16 @@ import {
   Settings,
   LogOut,
   Briefcase,
+  Wrench,
+  Receipt,
 } from "lucide-react";
 
 const navigation = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
   { name: "CRM", href: "/crm", icon: Users },
   { name: "Clients", href: "/clients", icon: Briefcase },
-  { name: "Companies", href: "/companies", icon: Building2 },
+  { name: "Services", href: "/services", icon: Wrench },
+  { name: "Quotes", href: "/quotes", icon: Receipt },
   { name: "Bookkeeping", href: "/bookkeeping", icon: BookOpen },
   { name: "Jobs", href: "/jobs", icon: ClipboardList },
   { name: "Deadlines", href: "/deadlines", icon: Calendar },
