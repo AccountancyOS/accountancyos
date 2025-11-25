@@ -53,15 +53,23 @@ export const OrganizationProvider = ({ children }: { children: ReactNode }) => {
           organization:organizations(id, name, logo_url)
         `)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
-      const orgUser = data as unknown as OrganizationUser;
-      setOrganization(orgUser.organization);
-      setRole(orgUser.role);
+      if (data) {
+        const orgUser = data as unknown as OrganizationUser;
+        setOrganization(orgUser.organization);
+        setRole(orgUser.role);
+      } else {
+        // User has no organization yet
+        setOrganization(null);
+        setRole(null);
+      }
     } catch (error) {
       console.error("Error loading organization:", error);
+      setOrganization(null);
+      setRole(null);
     } finally {
       setLoading(false);
     }
