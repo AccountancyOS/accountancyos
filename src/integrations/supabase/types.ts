@@ -727,6 +727,7 @@ export type Database = {
       }
       quote_lines: {
         Row: {
+          billing_frequency: string
           created_at: string
           description_override: string | null
           id: string
@@ -739,6 +740,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          billing_frequency?: string
           created_at?: string
           description_override?: string | null
           id?: string
@@ -751,6 +753,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          billing_frequency?: string
           created_at?: string
           description_override?: string | null
           id?: string
