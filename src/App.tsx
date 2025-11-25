@@ -2,11 +2,53 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { OrganizationProvider } from "@/lib/organization-context";
+import Auth from "./pages/Auth";
+import Overview from "./pages/Overview";
+import CRM from "./pages/CRM";
+import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  return <OrganizationProvider>{children}</OrganizationProvider>;
+};
+
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -14,11 +56,134 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route
+              path="/auth"
+              element={
+                <PublicRoute>
+                  <Auth />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Overview />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/crm"
+              element={
+                <ProtectedRoute>
+                  <CRM />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/clients"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Clients"
+                    description="Manage your individual clients and their accounts"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/companies"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Companies"
+                    description="Manage corporate clients and company information"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bookkeeping"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Bookkeeping"
+                    description="Full double-entry ledger with P&L and Balance Sheet"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Jobs & Work"
+                    description="Practice management and job tracking"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/deadlines"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Deadlines"
+                    description="Track all statutory and internal deadlines"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/filings"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Filings"
+                    description="HMRC and Companies House submissions"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/documents"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Documents"
+                    description="Document management and e-signature"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/portal"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Client Portal"
+                    description="Shared workspace for clients and accountants"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <PlaceholderPage
+                    title="Settings"
+                    description="Organization settings and preferences"
+                  />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
