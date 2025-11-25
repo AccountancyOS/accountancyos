@@ -243,6 +243,47 @@ export type Database = {
           },
         ]
       }
+      external_credentials: {
+        Row: {
+          created_at: string | null
+          credential_label: string
+          id: string
+          is_active: boolean | null
+          metadata: Json | null
+          organization_id: string
+          service_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          credential_label: string
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          organization_id: string
+          service_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          credential_label?: string
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          organization_id?: string
+          service_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_credentials_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activities: {
         Row: {
           body: string | null
@@ -637,12 +678,15 @@ export type Database = {
           city: string | null
           country: string | null
           created_at: string
+          email_domain: string | null
           id: string
           logo_url: string | null
           name: string
+          onboarding_completed: boolean | null
           postcode: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
+          timezone: string | null
           updated_at: string
         }
         Insert: {
@@ -651,12 +695,15 @@ export type Database = {
           city?: string | null
           country?: string | null
           created_at?: string
+          email_domain?: string | null
           id?: string
           logo_url?: string | null
           name: string
+          onboarding_completed?: boolean | null
           postcode?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          timezone?: string | null
           updated_at?: string
         }
         Update: {
@@ -665,12 +712,15 @@ export type Database = {
           city?: string | null
           country?: string | null
           created_at?: string
+          email_domain?: string | null
           id?: string
           logo_url?: string | null
           name?: string
+          onboarding_completed?: boolean | null
           postcode?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          timezone?: string | null
           updated_at?: string
         }
         Relationships: []
