@@ -87,10 +87,27 @@ const Auth = () => {
 
       toast({
         title: "Welcome to AccountancyOS",
-        description: "Your account and organization have been created.",
+        description: "Redirecting you to complete payment setup...",
       });
 
-      navigate("/");
+      // Redirect to Stripe checkout
+      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
+        "stripe-checkout",
+        {
+          body: {
+            organizationId: orgData.id,
+            organizationName: organizationName,
+          },
+        }
+      );
+
+      if (checkoutError) throw checkoutError;
+
+      if (checkoutData?.url) {
+        window.location.href = checkoutData.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
     } catch (error: any) {
       toast({
         title: "Error creating account",
