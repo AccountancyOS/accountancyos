@@ -14,6 +14,7 @@ import Quotes from "./pages/Quotes";
 import QuoteDetail from "./pages/QuoteDetail";
 import Onboarding from "./pages/Onboarding";
 import OnboardingDetail from "./pages/OnboardingDetail";
+import OnboardingWizard from "./pages/OnboardingWizard";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -133,6 +134,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <OnboardingDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/onboarding/wizard"
+              element={
+                <ProtectedRoute>
+                  <OnboardingWizard />
                 </ProtectedRoute>
               }
             />

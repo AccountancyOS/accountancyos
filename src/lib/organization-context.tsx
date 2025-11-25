@@ -6,6 +6,9 @@ interface Organization {
   id: string;
   name: string;
   logo_url: string | null;
+  onboarding_completed: boolean;
+  timezone: string | null;
+  email_domain: string | null;
 }
 
 interface OrganizationUser {
@@ -50,7 +53,7 @@ export const OrganizationProvider = ({ children }: { children: ReactNode }) => {
         .select(`
           organization_id,
           role,
-          organization:organizations(id, name, logo_url)
+          organization:organizations(id, name, logo_url, onboarding_completed, timezone, email_domain)
         `)
         .eq("user_id", user.id)
         .maybeSingle();
