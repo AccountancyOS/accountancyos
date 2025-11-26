@@ -21,8 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Switch } from "@/components/ui/switch";
 
 interface CreateQuoteDialogProps {
   open: boolean;
@@ -45,6 +46,7 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
   const [leadId, setLeadId] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
+  const [showPricing, setShowPricing] = useState(true);
   const [lines, setLines] = useState<QuoteLine[]>([
     { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" },
   ]);
@@ -178,7 +180,7 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
 
   const payableMonthly = lines
     .filter((line) => line.billing_frequency === "monthly")
-    .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+    .reduce((sum, line) => sum + line.quantity * (line.unit_price / 12), 0);
 
   const totalAmount = payableNow + payableMonthly;
 
@@ -224,96 +226,131 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label>Quote Lines</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Line
-              </Button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-pricing"
+                    checked={showPricing}
+                    onCheckedChange={setShowPricing}
+                  />
+                  <Label htmlFor="show-pricing" className="text-sm cursor-pointer">
+                    {showPricing ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    <span className="ml-1">Show pricing details</span>
+                  </Label>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Line
+                </Button>
+              </div>
             </div>
 
-            {lines.map((line, index) => (
-              <div key={index} className="flex gap-2 items-end">
-                <div className="flex-1 space-y-2">
-                  <Label>Service</Label>
-                  <Select
-                    value={line.service_id}
-                    onValueChange={(value) => updateLine(index, "service_id", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select service..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {services?.map((service) => (
-                        <SelectItem key={service.id} value={service.id}>
-                          {service.name} - £{service.default_price.toFixed(2)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            {lines.map((line, index) => {
+              const service = services?.find((s) => s.id === line.service_id);
+              const monthlyPrice = line.billing_frequency === "monthly" 
+                ? line.unit_price / 12 
+                : line.unit_price;
+              const displaySubtotal = line.billing_frequency === "monthly"
+                ? (line.quantity * monthlyPrice)
+                : (line.quantity * line.unit_price);
 
-                <div className="w-32 space-y-2">
-                  <Label>Billing</Label>
-                  <Select
-                    value={line.billing_frequency}
-                    onValueChange={(value: "now" | "monthly") =>
-                      updateLine(index, "billing_frequency", value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="now">Bill Now</SelectItem>
-                      <SelectItem value="monthly">Bill Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="w-24 space-y-2">
-                  <Label>Qty</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    step="0.1"
-                    value={line.quantity}
-                    onChange={(e) =>
-                      updateLine(index, "quantity", parseFloat(e.target.value))
-                    }
-                  />
-                </div>
-
-                <div className="w-32 space-y-2">
-                  <Label>Unit Price</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={line.unit_price}
-                    onChange={(e) =>
-                      updateLine(index, "unit_price", parseFloat(e.target.value))
-                    }
-                  />
-                </div>
-
-                <div className="w-32 space-y-2">
-                  <Label>Subtotal</Label>
-                  <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium">
-                    £{(line.quantity * line.unit_price).toFixed(2)}
+              return (
+                <div key={index} className="flex gap-2 items-end">
+                  <div className="flex-1 space-y-2">
+                    <Label>Service</Label>
+                    <Select
+                      value={line.service_id}
+                      onValueChange={(value) => updateLine(index, "service_id", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select service..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {services?.map((service) => (
+                          <SelectItem key={service.id} value={service.id}>
+                            {service.name} - £{service.default_price.toFixed(2)}/year
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
 
-                {lines.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeLine(index)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
+                  <div className="w-32 space-y-2">
+                    <Label>Billing</Label>
+                    <Select
+                      value={line.billing_frequency}
+                      onValueChange={(value: "now" | "monthly") =>
+                        updateLine(index, "billing_frequency", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="now">Bill Now</SelectItem>
+                        <SelectItem value="monthly">Bill Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {showPricing && (
+                    <>
+                      <div className="w-24 space-y-2">
+                        <Label>Qty</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="0.1"
+                          value={line.quantity}
+                          onChange={(e) =>
+                            updateLine(index, "quantity", parseFloat(e.target.value))
+                          }
+                        />
+                      </div>
+
+                      <div className="w-32 space-y-2">
+                        <Label>Annual Price</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.unit_price}
+                          onChange={(e) =>
+                            updateLine(index, "unit_price", parseFloat(e.target.value))
+                          }
+                        />
+                      </div>
+
+                      <div className="w-32 space-y-2">
+                        <Label>
+                          {line.billing_frequency === "monthly" ? "Monthly" : "Now"}
+                        </Label>
+                        <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium">
+                          £{displaySubtotal.toFixed(2)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {!showPricing && service && (
+                    <div className="flex-1 text-sm text-muted-foreground italic">
+                      {service.name}
+                    </div>
+                  )}
+
+                  {lines.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeLine(index)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="pt-4 border-t space-y-3">
