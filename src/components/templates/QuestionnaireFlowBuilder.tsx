@@ -266,7 +266,7 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
       id: crypto.randomUUID(),
       type,
       label: "",
-      required: false,
+      required: true,
     };
 
     if (type === "select" || type === "multiselect") {
