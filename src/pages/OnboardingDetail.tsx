@@ -180,6 +180,8 @@ const OnboardingDetail = () => {
             status: "approved",
             client_id: client.id,
             approved_at: new Date().toISOString(),
+            aml_status: "verified",
+            aml_verified_at: new Date().toISOString(),
           })
           .eq("id", id);
       } else {
@@ -210,6 +212,8 @@ const OnboardingDetail = () => {
             status: "approved",
             company_id: company.id,
             approved_at: new Date().toISOString(),
+            aml_status: "verified",
+            aml_verified_at: new Date().toISOString(),
           })
           .eq("id", id);
       }

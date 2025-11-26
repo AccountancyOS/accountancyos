@@ -14,8 +14,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Building2, User } from "lucide-react";
+import { Building2, User } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AddClientDialog } from "@/components/clients/AddClientDialog";
 
 const Clients = () => {
   const navigate = useNavigate();
@@ -68,15 +69,12 @@ const Clients = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Clients & Companies</h1>
+          <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
           <p className="text-muted-foreground mt-1">
             Manage your client relationships
           </p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Client
-        </Button>
+        <AddClientDialog />
       </div>
 
       <div className="flex gap-4">
