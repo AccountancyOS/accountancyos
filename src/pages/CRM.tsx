@@ -11,7 +11,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Phone, Mail, User, TrendingUp, Loader2 } from "lucide-react";
+import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 interface Lead {
   id: string;
@@ -42,6 +55,16 @@ const CRM = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [activeLead, setActiveLead] = useState<Lead | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -160,6 +183,29 @@ const CRM = () => {
     return leads.filter((lead) => lead.pipeline_stage === stage);
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const lead = leads.find((l) => l.id === active.id);
+    if (lead) {
+      setActiveLead(lead);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveLead(null);
+
+    if (!over) return;
+
+    const leadId = active.id as string;
+    const newStage = over.id as string;
+
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead || lead.pipeline_stage === newStage) return;
+
+    updateStage(leadId, newStage);
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -174,7 +220,13 @@ const CRM = () => {
     <DashboardLayout>
       <div className="flex-1 overflow-auto">
         <div className="p-8">
-          <div className="flex items-center justify-between mb-8">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-semibold text-foreground mb-2">CRM Pipeline</h1>
               <p className="text-muted-foreground">
@@ -331,72 +383,143 @@ const CRM = () => {
             </Dialog>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-6">
-            {pipelineStages.map((stage) => {
-              const stageLeads = getLeadsByStage(stage.value);
-              return (
-                <Card key={stage.value} className="flex flex-col">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                      {stage.label}
-                    </CardTitle>
-                    <CardDescription>{stageLeads.length} leads</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex-1 space-y-3">
-                    {stageLeads.map((lead) => (
-                      <Card key={lead.id} className="p-4 hover:shadow-md transition-shadow">
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <p className="text-sm font-medium">
-                                {lead.first_name} {lead.last_name}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Mail className="h-3 w-3" />
-                            <span className="truncate">{lead.email}</span>
-                          </div>
-                          {lead.phone && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Phone className="h-3 w-3" />
-                              <span>{lead.phone}</span>
-                            </div>
-                          )}
-                          {lead.estimated_monthly_value && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <TrendingUp className="h-3 w-3" />
-                              <span>£{lead.estimated_monthly_value.toFixed(2)}/mo</span>
-                            </div>
-                          )}
-                          <Select
-                            value={lead.pipeline_stage}
-                            onValueChange={(value) => updateStage(lead.id, value)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {pipelineStages.map((s) => (
-                                <SelectItem key={s.value} value={s.value}>
-                                  {s.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </Card>
-                    ))}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+            <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-6">
+              {pipelineStages.map((stage) => (
+                <DroppableColumn
+                  key={stage.value}
+                  id={stage.value}
+                  stage={stage}
+                  leads={getLeadsByStage(stage.value)}
+                  onUpdateStage={updateStage}
+                />
+              ))}
+            </div>
+
+            <DragOverlay>
+              {activeLead ? <LeadCard lead={activeLead} isDragging /> : null}
+            </DragOverlay>
+          </DndContext>
         </div>
       </div>
     </DashboardLayout>
+  );
+};
+
+interface DroppableColumnProps {
+  id: string;
+  stage: { value: string; label: string; color: string };
+  leads: Lead[];
+  onUpdateStage: (leadId: string, stage: string) => void;
+}
+
+const DroppableColumn = ({ id, stage, leads, onUpdateStage }: DroppableColumnProps) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <Card
+      ref={setNodeRef}
+      className={`flex flex-col transition-colors ${
+        isOver ? "ring-2 ring-primary" : ""
+      }`}
+    >
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <div className={`w-2 h-2 rounded-full ${stage.color}`} />
+          {stage.label}
+        </CardTitle>
+        <CardDescription>{leads.length} leads</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1 space-y-3">
+        {leads.map((lead) => (
+          <DraggableLead key={lead.id} lead={lead} onUpdateStage={onUpdateStage} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+};
+
+interface DraggableLeadProps {
+  lead: Lead;
+  onUpdateStage: (leadId: string, stage: string) => void;
+}
+
+const DraggableLead = ({ lead, onUpdateStage }: DraggableLeadProps) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: lead.id,
+  });
+
+  const style = transform
+    ? {
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.5 : 1,
+      }
+    : undefined;
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <LeadCard lead={lead} onUpdateStage={onUpdateStage} dragListeners={listeners} dragAttributes={attributes} />
+    </div>
+  );
+};
+
+interface LeadCardProps {
+  lead: Lead;
+  onUpdateStage?: (leadId: string, stage: string) => void;
+  isDragging?: boolean;
+  dragListeners?: any;
+  dragAttributes?: any;
+}
+
+const LeadCard = ({ lead, onUpdateStage, isDragging, dragListeners, dragAttributes }: LeadCardProps) => {
+  return (
+    <Card className={`p-4 hover:shadow-md transition-shadow ${isDragging ? "shadow-lg" : ""}`}>
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1">
+            <div {...dragListeners} {...dragAttributes} className="cursor-grab active:cursor-grabbing">
+              <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            </div>
+            <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <p className="text-sm font-medium">
+              {lead.first_name} {lead.last_name}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Mail className="h-3 w-3" />
+          <span className="truncate">{lead.email}</span>
+        </div>
+        {lead.phone && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Phone className="h-3 w-3" />
+            <span>{lead.phone}</span>
+          </div>
+        )}
+        {lead.estimated_monthly_value && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <TrendingUp className="h-3 w-3" />
+            <span>£{lead.estimated_monthly_value.toFixed(2)}/mo</span>
+          </div>
+        )}
+        {!isDragging && onUpdateStage && (
+          <Select
+            value={lead.pipeline_stage}
+            onValueChange={(value) => onUpdateStage(lead.id, value)}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {pipelineStages.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </Card>
   );
 };
 
