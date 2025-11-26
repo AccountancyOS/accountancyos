@@ -40,6 +40,12 @@ interface QuestionnaireQuestion {
   placeholder?: string;
   required: boolean;
   options?: string[];
+  branchLogic?: {
+    yesTarget?: string; // Question ID to jump to on Yes
+    noTarget?: string;  // Question ID to jump to on No
+    // For select/multiselect, map option values to target question IDs
+    optionTargets?: Record<string, string>;
+  };
 }
 
 interface QuestionnaireFlowBuilderProps {
@@ -104,7 +110,7 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
       position: { x: 250, y: index * 150 + 50 },
       data: {
         ...q,
-        hasLogic: !!(q as any).logic,
+        hasLogic: !!(q as any).branchLogic,
         onEdit: () => {
           setSelectedQuestion(q);
           setEditDialogOpen(true);
@@ -142,38 +148,89 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
     }
 
     questions.forEach((q, index) => {
-      const logic = (q as any).logic;
+      const branchLogic = (q as any).branchLogic;
       
-      if (logic?.action === "jump_to" && logic.targetQuestionId) {
-        // Conditional branch
-        const condition = logic.conditions?.[0];
-        const label = condition?.value ? `If "${condition.value}"` : "If condition met";
-        
-        newEdges.push({
-          id: `e-${q.id}-${logic.targetQuestionId}`,
-          source: q.id,
-          target: logic.targetQuestionId,
-          type: "smoothstep",
-          animated: true,
-          label,
-          markerEnd: { type: MarkerType.ArrowClosed },
-          style: { stroke: "#ef4444", strokeWidth: 2 },
-        });
-
-        // Else branch to next question
-        if (index < questions.length - 1) {
+      if (q.type === "yesno" && branchLogic) {
+        // Yes branch
+        if (branchLogic.yesTarget) {
           newEdges.push({
-            id: `e-${q.id}-${questions[index + 1].id}`,
+            id: `e-${q.id}-yes-${branchLogic.yesTarget}`,
+            source: q.id,
+            target: branchLogic.yesTarget,
+            type: "smoothstep",
+            animated: true,
+            label: "If Yes",
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#10b981", strokeWidth: 2 },
+          });
+        } else if (index < questions.length - 1) {
+          // Default to next question
+          newEdges.push({
+            id: `e-${q.id}-yes-${questions[index + 1].id}`,
             source: q.id,
             target: questions[index + 1].id,
             type: "smoothstep",
-            label: "Else",
+            label: "If Yes",
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#10b981" },
+          });
+        }
+
+        // No branch
+        if (branchLogic.noTarget) {
+          newEdges.push({
+            id: `e-${q.id}-no-${branchLogic.noTarget}`,
+            source: q.id,
+            target: branchLogic.noTarget,
+            type: "smoothstep",
+            animated: true,
+            label: "If No",
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#ef4444", strokeWidth: 2 },
+          });
+        } else if (index < questions.length - 1) {
+          // Default to next question
+          newEdges.push({
+            id: `e-${q.id}-no-${questions[index + 1].id}`,
+            source: q.id,
+            target: questions[index + 1].id,
+            type: "smoothstep",
+            label: "If No",
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#ef4444" },
+          });
+        }
+      } else if ((q.type === "select" || q.type === "multiselect") && branchLogic?.optionTargets) {
+        // Branch for each option
+        Object.entries(branchLogic.optionTargets).forEach(([option, targetId]) => {
+          if (targetId && typeof targetId === 'string') {
+            newEdges.push({
+              id: `e-${q.id}-${option}-${targetId}`,
+              source: q.id,
+              target: targetId,
+              type: "smoothstep",
+              animated: true,
+              label: `"${option}"`,
+              markerEnd: { type: MarkerType.ArrowClosed },
+              style: { stroke: "#3b82f6", strokeWidth: 2 },
+            });
+          }
+        });
+        
+        // Default path if no option matches
+        if (index < questions.length - 1) {
+          newEdges.push({
+            id: `e-${q.id}-default-${questions[index + 1].id}`,
+            source: q.id,
+            target: questions[index + 1].id,
+            type: "smoothstep",
+            label: "Other",
             markerEnd: { type: MarkerType.ArrowClosed },
             style: { stroke: "#6b7280" },
           });
         }
       } else {
-        // Normal flow to next question
+        // Normal flow to next question (no branching)
         if (index < questions.length - 1) {
           newEdges.push({
             id: `e-${q.id}-${questions[index + 1].id}`,
@@ -438,86 +495,136 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
 
               {/* Branching Logic */}
               <div className="space-y-4 pt-4 border-t">
-                <Label className="text-base font-semibold">Conditional Branching</Label>
-                <div className="space-y-2">
-                  <Label>Jump to question when condition is met</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select
-                      value={(selectedQuestion as any).logic?.targetQuestionId || ""}
-                      onValueChange={(targetId) => {
-                        const condition = selectedQuestion.type === "yesno" ? "true" : selectedQuestion.options?.[0] || "";
-                        addBranchLogic(selectedQuestion.id, targetId, condition);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select target question" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {questions
-                          .filter((q) => q.id !== selectedQuestion.id)
-                          .map((q) => (
-                            <SelectItem key={q.id} value={q.id}>
-                              {q.label}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Question Branching</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Choose where clients go based on their answer
+                  </p>
+                </div>
 
-                    {selectedQuestion.type === "yesno" && (
+                {selectedQuestion.type === "yesno" && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">If client answers "Yes"</Label>
                       <Select
-                        value={(selectedQuestion as any).logic?.conditions?.[0]?.value || "true"}
+                        value={(selectedQuestion as any).branchLogic?.yesTarget || "next"}
                         onValueChange={(value) => {
-                          const targetId = (selectedQuestion as any).logic?.targetQuestionId;
-                          if (targetId) {
-                            addBranchLogic(selectedQuestion.id, targetId, value);
-                          }
+                          const updated = {
+                            ...selectedQuestion,
+                            branchLogic: {
+                              ...(selectedQuestion as any).branchLogic,
+                              yesTarget: value === "next" ? undefined : value,
+                            },
+                          };
+                          setSelectedQuestion(updated);
+                          updateQuestion(selectedQuestion.id, updated);
                         }}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="true">When Yes</SelectItem>
-                          <SelectItem value="false">When No</SelectItem>
+                          <SelectItem value="next">Continue to next question</SelectItem>
+                          {questions
+                            .filter((q) => q.id !== selectedQuestion.id)
+                            .map((q) => (
+                              <SelectItem key={q.id} value={q.id}>
+                                Jump to: {q.label || "Untitled question"}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
-                    )}
+                    </div>
 
-                    {(selectedQuestion.type === "select" || selectedQuestion.type === "multiselect") && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">If client answers "No"</Label>
                       <Select
-                        value={(selectedQuestion as any).logic?.conditions?.[0]?.value || ""}
+                        value={(selectedQuestion as any).branchLogic?.noTarget || "next"}
                         onValueChange={(value) => {
-                          const targetId = (selectedQuestion as any).logic?.targetQuestionId;
-                          if (targetId) {
-                            addBranchLogic(selectedQuestion.id, targetId, value);
-                          }
+                          const updated = {
+                            ...selectedQuestion,
+                            branchLogic: {
+                              ...(selectedQuestion as any).branchLogic,
+                              noTarget: value === "next" ? undefined : value,
+                            },
+                          };
+                          setSelectedQuestion(updated);
+                          updateQuestion(selectedQuestion.id, updated);
                         }}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select condition" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {selectedQuestion.options?.map((opt) => (
-                            <SelectItem key={opt} value={opt}>
-                              When "{opt}"
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="next">Continue to next question</SelectItem>
+                          {questions
+                            .filter((q) => q.id !== selectedQuestion.id)
+                            .map((q) => (
+                              <SelectItem key={q.id} value={q.id}>
+                                Jump to: {q.label || "Untitled question"}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    {((selectedQuestion as any).branchLogic?.yesTarget || (selectedQuestion as any).branchLogic?.noTarget) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const updated = { ...selectedQuestion, branchLogic: undefined };
+                          setSelectedQuestion(updated);
+                          updateQuestion(selectedQuestion.id, updated);
+                        }}
+                      >
+                        Clear all branching
+                      </Button>
                     )}
                   </div>
-                  {(selectedQuestion as any).logic && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        updateQuestion(selectedQuestion.id, { logic: undefined } as any)
-                      }
-                    >
-                      Remove Branch
-                    </Button>
-                  )}
-                </div>
+                )}
+
+                {(selectedQuestion.type === "select" || selectedQuestion.type === "multiselect") && (
+                  <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                    <Label className="text-sm font-medium">Branch by option</Label>
+                    {selectedQuestion.options?.map((option, i) => (
+                      <div key={i} className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">If "{option}"</Label>
+                        <Select
+                          value={(selectedQuestion as any).branchLogic?.optionTargets?.[option] || "next"}
+                          onValueChange={(value) => {
+                            const updated = {
+                              ...selectedQuestion,
+                              branchLogic: {
+                                ...(selectedQuestion as any).branchLogic,
+                                optionTargets: {
+                                  ...(selectedQuestion as any).branchLogic?.optionTargets,
+                                  [option]: value === "next" ? undefined : value,
+                                },
+                              },
+                            };
+                            setSelectedQuestion(updated);
+                            updateQuestion(selectedQuestion.id, updated);
+                          }}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="next">Continue to next question</SelectItem>
+                            {questions
+                              .filter((q) => q.id !== selectedQuestion.id)
+                              .map((q) => (
+                                <SelectItem key={q.id} value={q.id}>
+                                  Jump to: {q.label || "Untitled question"}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
