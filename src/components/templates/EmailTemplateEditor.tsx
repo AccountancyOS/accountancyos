@@ -8,7 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus } from "lucide-react";
+import { useOrganization } from "@/lib/organization-context";
+import { Plus, Link as LinkIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface EmailTemplateEditorProps {
   content: any;
@@ -16,10 +26,13 @@ interface EmailTemplateEditorProps {
 }
 
 export default function EmailTemplateEditor({ content, onChange }: EmailTemplateEditorProps) {
+  const { organization } = useOrganization();
   const [subject, setSubject] = useState(content.subject || "");
   const [body, setBody] = useState(content.body || "");
   const [htmlBody, setHtmlBody] = useState(content.htmlBody || "");
   const [category, setCategory] = useState(content.category || "");
+  const [showQuestionnaireDialog, setShowQuestionnaireDialog] = useState(false);
+  const [selectedQuestionnaire, setSelectedQuestionnaire] = useState("");
 
   const { data: mergeFields } = useQuery({
     queryKey: ["merge-fields"],
@@ -31,6 +44,22 @@ export default function EmailTemplateEditor({ content, onChange }: EmailTemplate
       if (error) throw error;
       return data;
     },
+  });
+
+  const { data: questionnaires } = useQuery({
+    queryKey: ["questionnaire-templates", organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      const { data, error } = await supabase
+        .from("templates")
+        .select("*")
+        .eq("organization_id", organization.id)
+        .eq("type", "questionnaire")
+        .eq("status", "active");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organization?.id,
   });
 
   const handleChange = (field: string, value: string) => {
@@ -51,6 +80,14 @@ export default function EmailTemplateEditor({ content, onChange }: EmailTemplate
     } else {
       handleChange("htmlBody", htmlBody + mergeTag);
     }
+  };
+
+  const insertQuestionnaireLink = () => {
+    if (!selectedQuestionnaire) return;
+    const linkTag = `{{questionnaire_link:${selectedQuestionnaire}}}`;
+    handleChange("body", body + `\n\n[Complete Questionnaire](${linkTag})\n`);
+    setShowQuestionnaireDialog(false);
+    setSelectedQuestionnaire("");
   };
 
   const groupedFields = mergeFields?.reduce((acc, field) => {
@@ -145,6 +182,53 @@ export default function EmailTemplateEditor({ content, onChange }: EmailTemplate
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Questionnaire Links</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Insert a link to a questionnaire
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Dialog open={showQuestionnaireDialog} onOpenChange={setShowQuestionnaireDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full">
+                  <LinkIcon className="mr-2 h-4 w-4" />
+                  Insert Questionnaire Link
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Insert Questionnaire Link</DialogTitle>
+                  <DialogDescription>
+                    Choose a questionnaire template to link in this email
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Questionnaire Template</Label>
+                    <Select value={selectedQuestionnaire} onValueChange={setSelectedQuestionnaire}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select questionnaire" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {questionnaires?.map((q) => (
+                          <SelectItem key={q.id} value={q.id}>
+                            {q.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={insertQuestionnaireLink} disabled={!selectedQuestionnaire} className="w-full">
+                    Insert Link
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </CardContent>
         </Card>
 

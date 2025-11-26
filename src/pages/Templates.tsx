@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, Mail, ListChecks, Workflow, Clock } from "lucide-react";
+import { Plus, Search, FileText, Mail, ListChecks, Workflow, Clock, ClipboardCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
@@ -57,6 +57,7 @@ export default function Templates() {
       case "task": return ListChecks;
       case "checklist": return ListChecks;
       case "automation": return Workflow;
+      case "questionnaire": return ClipboardCheck;
       default: return FileText;
     }
   };
@@ -114,6 +115,10 @@ export default function Templates() {
                 <Workflow className="mr-2 h-4 w-4" />
                 Automation Template
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateTemplate("questionnaire")}>
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                Questionnaire Template
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -143,6 +148,7 @@ export default function Templates() {
                   <SelectItem value="task">Task</SelectItem>
                   <SelectItem value="checklist">Checklist</SelectItem>
                   <SelectItem value="automation">Automation</SelectItem>
+                  <SelectItem value="questionnaire">Questionnaire</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>

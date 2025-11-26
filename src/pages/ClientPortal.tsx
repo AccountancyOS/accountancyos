@@ -13,6 +13,7 @@ import ClientPortalTab from "@/components/client-portal/ClientPortalTab";
 import ClientJobsTab from "@/components/client-portal/ClientJobsTab";
 import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
 import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
+import ClientQuestionnairesTab from "@/components/client-portal/ClientQuestionnairesTab";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -101,6 +102,7 @@ export default function ClientPortal() {
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="messages">Messages</TabsTrigger>
+              <TabsTrigger value="questionnaires">Questionnaires</TabsTrigger>
               <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
               <TabsTrigger value="billing">Billing</TabsTrigger>
@@ -121,6 +123,10 @@ export default function ClientPortal() {
 
             <TabsContent value="messages">
               <ClientMessagesTab clientId={client.id} />
+            </TabsContent>
+
+            <TabsContent value="questionnaires">
+              <ClientQuestionnairesTab clientId={client.id} />
             </TabsContent>
 
             <TabsContent value="deadlines">

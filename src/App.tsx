@@ -24,6 +24,7 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
+import QuestionnaireResponse from "./pages/QuestionnaireResponse";
 import PortalAuth from "./pages/portal/Auth";
 import { Loader2 } from "lucide-react";
 
@@ -255,6 +256,10 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            
+            {/* Questionnaire public response route - no auth required */}
+            <Route path="/questionnaire/:instanceId" element={<QuestionnaireResponse />} />
+            
             <Route path="/portal/auth" element={<PortalAuth />} />
             <Route
               path="/subscription"
