@@ -154,22 +154,62 @@ const QuoteDetail = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {lines?.map((line: any) => (
-                <div key={line.id} className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="font-medium">{line.service.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {line.service.code} • {line.quantity} × £{line.unit_price.toFixed(2)}
+              {lines?.map((line: any) => {
+                const isMonthly = line.billing_frequency === "monthly";
+                const displayPrice = isMonthly ? line.unit_price / 12 : line.unit_price;
+                const displaySubtotal = isMonthly 
+                  ? (line.quantity * displayPrice)
+                  : line.subtotal;
+
+                return (
+                  <div key={line.id} className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="font-medium">{line.service.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {line.service.code} • {line.quantity} × £{displayPrice.toFixed(2)}
+                        {isMonthly && "/month"}
+                        <Badge variant="outline" className="ml-2">
+                          {isMonthly ? "Monthly" : "Bill Now"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="font-medium">
+                      £{displaySubtotal.toFixed(2)}
+                      {isMonthly && <span className="text-sm text-muted-foreground">/mo</span>}
                     </div>
                   </div>
-                  <div className="font-medium">
-                    £{line.subtotal.toFixed(2)}
+                );
+              })}
+              <Separator />
+              
+              {lines && lines.some((l: any) => l.billing_frequency === "now") && (
+                <div className="flex justify-between items-center">
+                  <div className="font-medium">Payable Now</div>
+                  <div className="font-semibold">
+                    £{lines
+                      .filter((l: any) => l.billing_frequency === "now")
+                      .reduce((sum: number, l: any) => sum + parseFloat(l.subtotal), 0)
+                      .toFixed(2)}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {lines && lines.some((l: any) => l.billing_frequency === "monthly") && (
+                <div className="flex justify-between items-center">
+                  <div className="font-medium">Payable Monthly</div>
+                  <div className="font-semibold">
+                    £{lines
+                      .filter((l: any) => l.billing_frequency === "monthly")
+                      .reduce((sum: number, l: any) => sum + (parseFloat(l.unit_price) / 12 * l.quantity), 0)
+                      .toFixed(2)}
+                    <span className="text-sm text-muted-foreground">/mo</span>
+                  </div>
+                </div>
+              )}
+
               <Separator />
               <div className="flex justify-between items-center text-lg font-semibold">
-                <div>Total</div>
+                <div>Total Amount</div>
                 <div>£{quote.total_amount.toFixed(2)}</div>
               </div>
             </div>
