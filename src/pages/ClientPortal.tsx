@@ -84,11 +84,11 @@ export default function ClientPortal() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline">
+              <Button variant="outline" disabled>
                 <Mail className="mr-2 h-4 w-4" />
                 Send Email
               </Button>
-              <Button>
+              <Button disabled>
                 <FileText className="mr-2 h-4 w-4" />
                 New Job
               </Button>

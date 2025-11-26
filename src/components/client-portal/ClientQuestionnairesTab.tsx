@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Eye, FileText, CheckCircle2, Clock, Send } from "lucide-react";
+import { Eye, FileText, CheckCircle2, Clock, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useState } from "react";
+import { SendQuestionnaireDialog } from "./SendQuestionnaireDialog";
 
 interface ClientQuestionnairesTabProps {
   clientId: string;
@@ -91,10 +92,7 @@ export default function ClientQuestionnairesTab({ clientId }: ClientQuestionnair
               Records requests and information gathering
             </CardDescription>
           </div>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Send Questionnaire
-          </Button>
+          <SendQuestionnaireDialog clientId={clientId} />
         </CardHeader>
         <CardContent>
           {isLoading ? (
