@@ -314,7 +314,7 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
                     setSelectedQuestion(updated);
                     updateQuestion(selectedQuestion.id, { label: e.target.value });
                   }}
-                  placeholder="Type your question here..."
+                  placeholder="Enter your question here"
                   rows={2}
                   className="text-base"
                   autoFocus
