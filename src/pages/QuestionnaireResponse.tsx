@@ -224,6 +224,30 @@ export default function QuestionnaireResponse() {
       });
     }
 
+    // Check for conditional logic
+    if (currentQuestion?.logic) {
+      const logic = currentQuestion.logic;
+      const answer = answers[currentQuestion.id];
+      
+      // Check if condition matches
+      const conditionMatches = logic.conditions?.some((condition: any) => {
+        if (condition.operator === "is") {
+          return answer === condition.value;
+        }
+        return false;
+      });
+
+      // If condition matches and action is jump_to, jump to target question
+      if (conditionMatches && logic.action === "jump_to" && logic.targetQuestionId) {
+        const targetIndex = questions.findIndex((q: any) => q.id === logic.targetQuestionId);
+        if (targetIndex !== -1) {
+          setCurrentQuestionIndex(targetIndex);
+          return;
+        }
+      }
+    }
+
+    // Default: move to next question or submit
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else {

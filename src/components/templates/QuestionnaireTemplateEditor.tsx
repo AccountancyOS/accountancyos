@@ -436,6 +436,181 @@ export default function QuestionnaireTemplateEditor({ content, onChange }: Quest
                             />
                             <Label>Required</Label>
                           </div>
+
+                          {/* Conditional Logic Section */}
+                          <div className="space-y-4 pt-4 border-t">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-base font-semibold">Conditional Logic (Branching)</Label>
+                              {!question.logic && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    updateQuestion(question.id, {
+                                      logic: {
+                                        conditions: [],
+                                        action: "jump_to",
+                                      },
+                                    })
+                                  }
+                                >
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Add Logic
+                                </Button>
+                              )}
+                            </div>
+
+                            {question.logic && (
+                              <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                                <div className="space-y-2">
+                                  <Label>When this question is answered...</Label>
+                                  <Select
+                                    value={question.logic.action}
+                                    onValueChange={(value) =>
+                                      updateQuestion(question.id, {
+                                        logic: { ...question.logic!, action: value as any },
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="jump_to">Jump to another question</SelectItem>
+                                      <SelectItem value="show">Show another question</SelectItem>
+                                      <SelectItem value="hide">Hide another question</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {question.logic.action === "jump_to" && (
+                                  <div className="space-y-2">
+                                    <Label>Jump to question</Label>
+                                    <Select
+                                      value={question.logic.targetQuestionId || ""}
+                                      onValueChange={(value) =>
+                                        updateQuestion(question.id, {
+                                          logic: { ...question.logic!, targetQuestionId: value },
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select a question" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {questions
+                                          .filter((q) => q.id !== question.id)
+                                          .map((q) => (
+                                            <SelectItem key={q.id} value={q.id}>
+                                              {q.label}
+                                            </SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+
+                                {question.type === "yesno" && (
+                                  <div className="space-y-2">
+                                    <Label>Trigger condition</Label>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        variant={
+                                          question.logic.conditions?.[0]?.value === "yes"
+                                            ? "default"
+                                            : "outline"
+                                        }
+                                        className="flex-1"
+                                        onClick={() =>
+                                          updateQuestion(question.id, {
+                                            logic: {
+                                              ...question.logic!,
+                                              conditions: [
+                                                {
+                                                  questionId: question.id,
+                                                  operator: "is",
+                                                  value: "yes",
+                                                },
+                                              ],
+                                            },
+                                          })
+                                        }
+                                      >
+                                        When "Yes"
+                                      </Button>
+                                      <Button
+                                        variant={
+                                          question.logic.conditions?.[0]?.value === "no"
+                                            ? "default"
+                                            : "outline"
+                                        }
+                                        className="flex-1"
+                                        onClick={() =>
+                                          updateQuestion(question.id, {
+                                            logic: {
+                                              ...question.logic!,
+                                              conditions: [
+                                                {
+                                                  questionId: question.id,
+                                                  operator: "is",
+                                                  value: "no",
+                                                },
+                                              ],
+                                            },
+                                          })
+                                        }
+                                      >
+                                        When "No"
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(question.type === "select" || question.type === "multiselect") && (
+                                  <div className="space-y-2">
+                                    <Label>Trigger when answer is</Label>
+                                    <Select
+                                      value={question.logic.conditions?.[0]?.value || ""}
+                                      onValueChange={(value) =>
+                                        updateQuestion(question.id, {
+                                          logic: {
+                                            ...question.logic!,
+                                            conditions: [
+                                              {
+                                                questionId: question.id,
+                                                operator: "is",
+                                                value,
+                                              },
+                                            ],
+                                          },
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select an option" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {question.options?.map((opt) => (
+                                          <SelectItem key={opt} value={opt}>
+                                            {opt}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => updateQuestion(question.id, { logic: undefined })}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Remove Logic
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </AccordionContent>
                     </AccordionItem>
