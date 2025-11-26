@@ -994,6 +994,227 @@ export type Database = {
           },
         ]
       }
+      questionnaire_files: {
+        Row: {
+          document_folder: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          is_archived_to_documents: boolean | null
+          mime_type: string | null
+          organization_id: string
+          question_id: string
+          questionnaire_instance_id: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          document_folder?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          is_archived_to_documents?: boolean | null
+          mime_type?: string | null
+          organization_id: string
+          question_id: string
+          questionnaire_instance_id: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          document_folder?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          is_archived_to_documents?: boolean | null
+          mime_type?: string | null
+          organization_id?: string
+          question_id?: string
+          questionnaire_instance_id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questionnaire_files_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questionnaire_files_questionnaire_instance_id_fkey"
+            columns: ["questionnaire_instance_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      questionnaire_instances: {
+        Row: {
+          access_token: string
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          job_id: string | null
+          name: string
+          organization_id: string
+          period_end: string | null
+          period_label: string | null
+          period_start: string | null
+          questions: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sent_at: string
+          service: string | null
+          started_at: string | null
+          status: string
+          submitted_at: string | null
+          task_id: string | null
+          template_id: string
+          token_expires_at: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          name: string
+          organization_id: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
+          questions: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sent_at?: string
+          service?: string | null
+          started_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          task_id?: string | null
+          template_id: string
+          token_expires_at?: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          name?: string
+          organization_id?: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
+          questions?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sent_at?: string
+          service?: string | null
+          started_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          task_id?: string | null
+          template_id?: string
+          token_expires_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questionnaire_instances_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questionnaire_instances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questionnaire_instances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questionnaire_instances_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "client_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questionnaire_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      questionnaire_responses: {
+        Row: {
+          answer_array: Json | null
+          answer_boolean: boolean | null
+          answer_date: string | null
+          answer_number: number | null
+          answer_text: string | null
+          answered_at: string
+          id: string
+          question_id: string
+          questionnaire_instance_id: string
+          updated_at: string
+        }
+        Insert: {
+          answer_array?: Json | null
+          answer_boolean?: boolean | null
+          answer_date?: string | null
+          answer_number?: number | null
+          answer_text?: string | null
+          answered_at?: string
+          id?: string
+          question_id: string
+          questionnaire_instance_id: string
+          updated_at?: string
+        }
+        Update: {
+          answer_array?: Json | null
+          answer_boolean?: boolean | null
+          answer_date?: string | null
+          answer_number?: number | null
+          answer_text?: string | null
+          answered_at?: string
+          id?: string
+          question_id?: string
+          questionnaire_instance_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questionnaire_responses_questionnaire_instance_id_fkey"
+            columns: ["questionnaire_instance_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_lines: {
         Row: {
           billing_frequency: string
@@ -1399,6 +1620,7 @@ export type Database = {
         }
         Returns: string
       }
+      generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
       get_user_organization_id:
         | { Args: { check_user_id: string }; Returns: string }
