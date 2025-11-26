@@ -11,6 +11,8 @@ import {
   Connection,
   Panel,
   MarkerType,
+  Handle,
+  Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,22 +62,26 @@ const QuestionNode = ({ data }: { data: any }) => {
   const bgColor = questionTypeColors[data.type] || "#6b7280";
   
   return (
-    <div
-      className="px-4 py-3 rounded-lg border-2 shadow-lg bg-background min-w-[200px] cursor-pointer hover:shadow-xl transition-shadow"
-      style={{ borderColor: bgColor }}
-      onClick={data.onEdit}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <Badge style={{ backgroundColor: bgColor }} className="text-white border-0">
-          {data.type}
-        </Badge>
-        {data.required && <Badge variant="destructive" className="text-xs">Required</Badge>}
+    <>
+      <Handle type="target" position={Position.Top} />
+      <div
+        className="px-4 py-3 rounded-lg border-2 shadow-lg bg-background min-w-[200px] cursor-pointer hover:shadow-xl transition-shadow"
+        style={{ borderColor: bgColor }}
+        onClick={data.onEdit}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Badge style={{ backgroundColor: bgColor }} className="text-white border-0">
+            {data.type}
+          </Badge>
+          {data.required && <Badge variant="destructive" className="text-xs">Required</Badge>}
+        </div>
+        <div className="font-medium text-sm line-clamp-2">{data.label}</div>
+        {data.hasLogic && (
+          <Badge variant="secondary" className="text-xs mt-2">Has Branching</Badge>
+        )}
       </div>
-      <div className="font-medium text-sm line-clamp-2">{data.label}</div>
-      {data.hasLogic && (
-        <Badge variant="secondary" className="text-xs mt-2">Has Branching</Badge>
-      )}
-    </div>
+      <Handle type="source" position={Position.Bottom} />
+    </>
   );
 };
 
