@@ -224,22 +224,28 @@ export default function QuestionnaireResponse() {
       });
     }
 
-    // Check for conditional logic
-    if (currentQuestion?.logic) {
-      const logic = currentQuestion.logic;
+    // Check for branch logic
+    if (currentQuestion?.branchLogic) {
       const answer = answers[currentQuestion.id];
-      
-      // Check if condition matches
-      const conditionMatches = logic.conditions?.some((condition: any) => {
-        if (condition.operator === "is") {
-          return answer === condition.value;
-        }
-        return false;
-      });
+      let targetQuestionId: string | undefined;
 
-      // If condition matches and action is jump_to, jump to target question
-      if (conditionMatches && logic.action === "jump_to" && logic.targetQuestionId) {
-        const targetIndex = questions.findIndex((q: any) => q.id === logic.targetQuestionId);
+      // Handle Yes/No branching
+      if (currentQuestion.type === "yesno") {
+        if (answer === "true" && currentQuestion.branchLogic.yesTarget) {
+          targetQuestionId = currentQuestion.branchLogic.yesTarget;
+        } else if (answer === "false" && currentQuestion.branchLogic.noTarget) {
+          targetQuestionId = currentQuestion.branchLogic.noTarget;
+        }
+      }
+
+      // Handle select/multiselect branching
+      if ((currentQuestion.type === "select" || currentQuestion.type === "multiselect") && currentQuestion.branchLogic.optionTargets) {
+        targetQuestionId = currentQuestion.branchLogic.optionTargets[answer as string];
+      }
+
+      // If we have a target, jump to it
+      if (targetQuestionId) {
+        const targetIndex = questions.findIndex((q: any) => q.id === targetQuestionId);
         if (targetIndex !== -1) {
           setCurrentQuestionIndex(targetIndex);
           return;
