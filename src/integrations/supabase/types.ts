@@ -1059,7 +1059,9 @@ export type Database = {
         Returns: string
       }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
-      get_user_organization_id: { Args: never; Returns: string }
+      get_user_organization_id:
+        | { Args: { check_user_id: string }; Returns: string }
+        | { Args: never; Returns: string }
       has_organization_role: {
         Args: { required_role: string }
         Returns: boolean
@@ -1072,8 +1074,20 @@ export type Database = {
         }
         Returns: boolean
       }
+      user_has_org_role: {
+        Args: {
+          check_org_id: string
+          check_user_id: string
+          required_role: string
+        }
+        Returns: boolean
+      }
       user_has_organization_access: {
         Args: { org_id: string }
+        Returns: boolean
+      }
+      user_in_organization: {
+        Args: { check_org_id: string; check_user_id: string }
         Returns: boolean
       }
     }
