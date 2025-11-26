@@ -17,6 +17,8 @@ import WorkpaperTemplateEditor from "@/components/templates/WorkpaperTemplateEdi
 import EmailTemplateEditor from "@/components/templates/EmailTemplateEditor";
 import JobTemplateEditor from "@/components/templates/JobTemplateEditor";
 import QuestionnaireFlowBuilder from "@/components/templates/QuestionnaireFlowBuilder";
+import QuestionnaireTemplateEditor from "@/components/templates/QuestionnaireTemplateEditor";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export default function TemplateDetail() {
   const { id } = useParams();
@@ -35,6 +37,7 @@ export default function TemplateDetail() {
   const [service, setService] = useState("");
   const [status, setStatus] = useState("draft");
   const [content, setContent] = useState<any>({});
+  const [questionnaireView, setQuestionnaireView] = useState<"flow" | "list">("flow");
 
   const { data: template, isLoading } = useQuery({
     queryKey: ["template", id],
@@ -174,10 +177,22 @@ export default function TemplateDetail() {
               </p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={saveMutation.isPending}>
-            <Save className="mr-2 h-4 w-4" />
-            {saveMutation.isPending ? "Saving..." : "Save Template"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {currentType === "questionnaire" && (
+              <ToggleGroup type="single" value={questionnaireView} onValueChange={(v) => v && setQuestionnaireView(v as "flow" | "list")}>
+                <ToggleGroupItem value="flow" aria-label="Flow view">
+                  Flow View
+                </ToggleGroupItem>
+                <ToggleGroupItem value="list" aria-label="List view">
+                  List View
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              <Save className="mr-2 h-4 w-4" />
+              {saveMutation.isPending ? "Saving..." : "Save Template"}
+            </Button>
+          </div>
         </div>
 
         {/* Basic Information */}
@@ -271,7 +286,13 @@ export default function TemplateDetail() {
           </Card>
         )}
         {currentType === "questionnaire" && (
-          <QuestionnaireFlowBuilder content={content} onChange={setContent} />
+          <>
+            {questionnaireView === "flow" ? (
+              <QuestionnaireFlowBuilder content={content} onChange={setContent} />
+            ) : (
+              <QuestionnaireTemplateEditor content={content} onChange={setContent} />
+            )}
+          </>
         )}
         </div>
       </div>
