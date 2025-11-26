@@ -158,8 +158,9 @@ export default function TemplateDetail() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="flex-1 overflow-auto">
+        <div className="p-8 space-y-6">
+          <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => navigate("/templates")}>
               <ArrowLeft className="h-4 w-4" />
@@ -272,6 +273,7 @@ export default function TemplateDetail() {
         {currentType === "questionnaire" && (
           <QuestionnaireTemplateEditor content={content} onChange={setContent} />
         )}
+        </div>
       </div>
     </DashboardLayout>
   );
