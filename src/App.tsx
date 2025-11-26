@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { OrganizationProvider } from "@/lib/organization-context";
+import { PortalProvider } from "@/lib/portal-context";
 import Auth from "./pages/Auth";
 import Overview from "./pages/Overview";
 import Index from "./pages/Index";
@@ -20,6 +21,8 @@ import OnboardingWizard from "./pages/OnboardingWizard";
 import Subscription from "./pages/Subscription";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
+import PortalAuth from "./pages/portal/Auth";
+import PortalDashboard from "./pages/portal/Dashboard";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -58,6 +61,24 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   return <>{children}</>;
+};
+
+const PortalRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/portal/auth" replace />;
+  }
+
+  return <PortalProvider>{children}</PortalProvider>;
 };
 
 const App = () => (
@@ -219,15 +240,13 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/portal/auth" element={<PortalAuth />} />
             <Route
               path="/portal"
               element={
-                <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Client Portal"
-                    description="Shared workspace for clients and accountants"
-                  />
-                </ProtectedRoute>
+                <PortalRoute>
+                  <PortalDashboard />
+                </PortalRoute>
               }
             />
             <Route
