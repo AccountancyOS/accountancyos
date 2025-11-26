@@ -26,6 +26,8 @@ import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import QuestionnaireResponse from "./pages/QuestionnaireResponse";
 import PortalAuth from "./pages/portal/Auth";
+import Jobs from "./pages/Jobs";
+import JobDetail from "./pages/JobDetail";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -211,10 +213,15 @@ const App = () => (
               path="/jobs"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Jobs & Work"
-                    description="Practice management and job tracking"
-                  />
+                  <Jobs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs/:jobId"
+              element={
+                <ProtectedRoute>
+                  <JobDetail />
                 </ProtectedRoute>
               }
             />
