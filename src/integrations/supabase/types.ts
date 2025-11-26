@@ -501,6 +501,411 @@ export type Database = {
           },
         ]
       }
+      job_conversations: {
+        Row: {
+          attachments: Json | null
+          created_at: string
+          id: string
+          job_id: string
+          message: string
+          organization_id: string
+          sender_id: string | null
+          sender_type: string
+          task_id: string | null
+          visibility: string
+        }
+        Insert: {
+          attachments?: Json | null
+          created_at?: string
+          id?: string
+          job_id: string
+          message: string
+          organization_id: string
+          sender_id?: string | null
+          sender_type: string
+          task_id?: string | null
+          visibility?: string
+        }
+        Update: {
+          attachments?: Json | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          message?: string
+          organization_id?: string
+          sender_id?: string | null
+          sender_type?: string
+          task_id?: string | null
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_conversations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_conversations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_conversations_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "job_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_documents: {
+        Row: {
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          job_id: string
+          mime_type: string | null
+          organization_id: string
+          tags: Json | null
+          task_id: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+          version: number | null
+        }
+        Insert: {
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          job_id: string
+          mime_type?: string | null
+          organization_id: string
+          tags?: Json | null
+          task_id?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          version?: number | null
+        }
+        Update: {
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          job_id?: string
+          mime_type?: string | null
+          organization_id?: string
+          tags?: Json | null
+          task_id?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_documents_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_documents_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "job_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_tasks: {
+        Row: {
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string
+          dependencies: Json | null
+          description: string | null
+          due_date: string | null
+          id: string
+          job_id: string
+          organization_id: string
+          stage: string | null
+          status: string
+          task_order: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dependencies?: Json | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          job_id: string
+          organization_id: string
+          stage?: string | null
+          status?: string
+          task_order?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dependencies?: Json | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          job_id?: string
+          organization_id?: string
+          stage?: string | null
+          status?: string
+          task_order?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_tasks_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_tasks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_templates: {
+        Row: {
+          created_at: string
+          default_priority: string | null
+          default_status: string | null
+          default_tags: Json | null
+          id: string
+          is_active: boolean | null
+          organization_id: string
+          recurrence_config: Json | null
+          service_type: string
+          tasks: Json
+          template_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_priority?: string | null
+          default_status?: string | null
+          default_tags?: Json | null
+          id?: string
+          is_active?: boolean | null
+          organization_id: string
+          recurrence_config?: Json | null
+          service_type: string
+          tasks?: Json
+          template_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_priority?: string | null
+          default_status?: string | null
+          default_tags?: Json | null
+          id?: string
+          is_active?: boolean | null
+          organization_id?: string
+          recurrence_config?: Json | null
+          service_type?: string
+          tasks?: Json
+          template_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_timeline: {
+        Row: {
+          created_at: string
+          event_data: Json | null
+          event_type: string
+          id: string
+          job_id: string
+          organization_id: string
+          task_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          job_id: string
+          organization_id: string
+          task_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          job_id?: string
+          organization_id?: string
+          task_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_timeline_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_timeline_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_timeline_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "job_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          assigned_to: string | null
+          automation_source: string | null
+          client_id: string | null
+          company_id: string | null
+          completed_at: string | null
+          created_at: string
+          filing_deadline: string | null
+          id: string
+          internal_target_date: string | null
+          is_recurring: boolean | null
+          job_name: string
+          last_activity_at: string | null
+          organization_id: string
+          period_end: string | null
+          period_label: string | null
+          period_start: string | null
+          priority: string
+          progress: number | null
+          recurrence_rule: Json | null
+          service_type: string
+          status: string
+          tags: Json | null
+          template_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          automation_source?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          filing_deadline?: string | null
+          id?: string
+          internal_target_date?: string | null
+          is_recurring?: boolean | null
+          job_name: string
+          last_activity_at?: string | null
+          organization_id: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
+          priority?: string
+          progress?: number | null
+          recurrence_rule?: Json | null
+          service_type: string
+          status?: string
+          tags?: Json | null
+          template_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          automation_source?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          filing_deadline?: string | null
+          id?: string
+          internal_target_date?: string | null
+          is_recurring?: boolean | null
+          job_name?: string
+          last_activity_at?: string | null
+          organization_id?: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
+          priority?: string
+          progress?: number | null
+          recurrence_rule?: Json | null
+          service_type?: string
+          status?: string
+          tags?: Json | null
+          template_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activities: {
         Row: {
           body: string | null
