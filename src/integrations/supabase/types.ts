@@ -448,6 +448,7 @@ export type Database = {
           address_line_2: string | null
           aml_notes: string | null
           aml_status: string | null
+          aml_verified_at: string | null
           application_type: string
           approved_at: string | null
           approved_by: string | null
@@ -483,6 +484,7 @@ export type Database = {
           address_line_2?: string | null
           aml_notes?: string | null
           aml_status?: string | null
+          aml_verified_at?: string | null
           application_type: string
           approved_at?: string | null
           approved_by?: string | null
@@ -518,6 +520,7 @@ export type Database = {
           address_line_2?: string | null
           aml_notes?: string | null
           aml_status?: string | null
+          aml_verified_at?: string | null
           application_type?: string
           approved_at?: string | null
           approved_by?: string | null

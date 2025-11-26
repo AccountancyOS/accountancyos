@@ -147,25 +147,7 @@ const OnboardingDetail = () => {
     }
   };
 
-  const updateAMLStatus = async (newStatus: string) => {
-    try {
-      const { error } = await supabase
-        .from("onboarding_applications")
-        .update({ aml_status: newStatus })
-        .eq("id", id);
-
-      if (error) throw error;
-
-      toast({ title: "AML status updated successfully" });
-      loadApplication();
-    } catch (error: any) {
-      toast({
-        title: "Error updating AML status",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
+  // AML status is now automatically set when application is approved
 
   const approveApplication = async () => {
     try {
@@ -290,9 +272,20 @@ const OnboardingDetail = () => {
                       {application.email}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 items-end">
                     <Badge variant="secondary">{application.status}</Badge>
-                    <Badge variant="secondary">AML: {application.aml_status}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge 
+                        variant={application.aml_status === "verified" ? "default" : "secondary"}
+                      >
+                        AML: {application.aml_status}
+                      </Badge>
+                      {application.aml_verified_at && (
+                        <span className="text-xs text-muted-foreground">
+                          Verified {new Date(application.aml_verified_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -303,14 +296,14 @@ const OnboardingDetail = () => {
                     <Select
                       value={application.status}
                       onValueChange={updateStatus}
+                      disabled={application.status === "approved"}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="aml_review">AML Review</SelectItem>
+                        <SelectItem value="contracts_signed">Contracts Signed</SelectItem>
                         <SelectItem value="approved">Approved</SelectItem>
                         <SelectItem value="rejected">Rejected</SelectItem>
                       </SelectContent>
@@ -318,21 +311,13 @@ const OnboardingDetail = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>AML Status</Label>
-                    <Select
-                      value={application.aml_status}
-                      onValueChange={updateAMLStatus}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="passed">Passed</SelectItem>
-                        <SelectItem value="failed">Failed</SelectItem>
-                        <SelectItem value="manual_review">Manual Review</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>AML Status (Auto-updated)</Label>
+                    <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center">
+                      <span className="text-sm capitalize">{application.aml_status}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      AML status is automatically verified when application is approved
+                    </p>
                   </div>
                 </div>
 
@@ -418,8 +403,7 @@ const OnboardingDetail = () => {
                       onClick={approveApplication}
                       disabled={
                         !application.id_document_uploaded ||
-                        !application.proof_of_address_uploaded ||
-                        application.aml_status !== "passed"
+                        !application.proof_of_address_uploaded
                       }
                     >
                       <Check className="mr-2 h-4 w-4" />
@@ -429,10 +413,15 @@ const OnboardingDetail = () => {
                 )}
 
                 {application.status === "approved" && (
-                  <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg">
+                  <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg space-y-1">
                     <p className="text-sm font-medium text-green-900 dark:text-green-100">
                       ✓ Application approved and client created successfully
                     </p>
+                    {application.aml_verified_at && (
+                      <p className="text-xs text-green-800 dark:text-green-200">
+                        AML verified on {new Date(application.aml_verified_at).toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>
