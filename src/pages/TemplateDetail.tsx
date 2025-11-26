@@ -16,7 +16,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import WorkpaperTemplateEditor from "@/components/templates/WorkpaperTemplateEditor";
 import EmailTemplateEditor from "@/components/templates/EmailTemplateEditor";
 import JobTemplateEditor from "@/components/templates/JobTemplateEditor";
-import QuestionnaireTemplateEditor from "@/components/templates/QuestionnaireTemplateEditor";
+import QuestionnaireFlowBuilder from "@/components/templates/QuestionnaireFlowBuilder";
 
 export default function TemplateDetail() {
   const { id } = useParams();
@@ -271,7 +271,7 @@ export default function TemplateDetail() {
           </Card>
         )}
         {currentType === "questionnaire" && (
-          <QuestionnaireTemplateEditor content={content} onChange={setContent} />
+          <QuestionnaireFlowBuilder content={content} onChange={setContent} />
         )}
         </div>
       </div>

@@ -342,17 +342,17 @@ export default function QuestionnaireResponse() {
                 {currentQuestion.type === "yesno" && (
                   <div className="grid grid-cols-2 gap-4">
                     <Button
-                      variant={currentAnswer === true ? "default" : "outline"}
+                      variant={currentAnswer === "true" ? "default" : "outline"}
                       size="lg"
-                      onClick={() => updateAnswer(currentQuestion.id, true)}
+                      onClick={() => updateAnswer(currentQuestion.id, "true")}
                       className="h-16 text-lg"
                     >
                       Yes
                     </Button>
                     <Button
-                      variant={currentAnswer === false ? "default" : "outline"}
+                      variant={currentAnswer === "false" ? "default" : "outline"}
                       size="lg"
-                      onClick={() => updateAnswer(currentQuestion.id, false)}
+                      onClick={() => updateAnswer(currentQuestion.id, "false")}
                       className="h-16 text-lg"
                     >
                       No
