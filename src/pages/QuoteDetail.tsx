@@ -206,12 +206,6 @@ const QuoteDetail = () => {
                   </div>
                 </div>
               )}
-
-              <Separator />
-              <div className="flex justify-between items-center text-lg font-semibold">
-                <div>Total Amount</div>
-                <div>£{quote.total_amount.toFixed(2)}</div>
-              </div>
             </div>
           </CardContent>
         </Card>
