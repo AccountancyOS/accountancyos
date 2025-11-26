@@ -208,7 +208,7 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
     const newQuestion: QuestionnaireQuestion = {
       id: crypto.randomUUID(),
       type,
-      label: `New ${type} question`,
+      label: "",
       required: false,
     };
 
@@ -217,6 +217,12 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
     }
 
     onChange({ ...content, questions: [...questions, newQuestion] });
+    
+    // Automatically open edit dialog for the new question
+    setTimeout(() => {
+      setSelectedQuestion(newQuestion);
+      setEditDialogOpen(true);
+    }, 100);
   };
 
   const updateQuestion = (questionId: string, updates: Partial<QuestionnaireQuestion>) => {
@@ -295,17 +301,35 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Question</DialogTitle>
+            <DialogTitle>{selectedQuestion?.label || "New Question"}</DialogTitle>
           </DialogHeader>
           {selectedQuestion && (
             <div className="space-y-4">
               <div className="space-y-2">
+                <Label>Question Text *</Label>
+                <Textarea
+                  value={selectedQuestion.label}
+                  onChange={(e) => {
+                    const updated = { ...selectedQuestion, label: e.target.value };
+                    setSelectedQuestion(updated);
+                    updateQuestion(selectedQuestion.id, { label: e.target.value });
+                  }}
+                  placeholder="Type your question here..."
+                  rows={2}
+                  className="text-base"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label>Question Type</Label>
                 <Select
                   value={selectedQuestion.type}
-                  onValueChange={(value) =>
-                    updateQuestion(selectedQuestion.id, { type: value as any })
-                  }
+                  onValueChange={(value) => {
+                    const updated = { ...selectedQuestion, type: value as any };
+                    setSelectedQuestion(updated);
+                    updateQuestion(selectedQuestion.id, { type: value as any });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -324,23 +348,28 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
               </div>
 
               <div className="space-y-2">
-                <Label>Question Label</Label>
+                <Label>Help Text (optional)</Label>
                 <Input
-                  value={selectedQuestion.label}
-                  onChange={(e) =>
-                    updateQuestion(selectedQuestion.id, { label: e.target.value })
-                  }
+                  value={selectedQuestion.helpText || ""}
+                  onChange={(e) => {
+                    const updated = { ...selectedQuestion, helpText: e.target.value };
+                    setSelectedQuestion(updated);
+                    updateQuestion(selectedQuestion.id, { helpText: e.target.value });
+                  }}
+                  placeholder="Additional instructions or context for the client"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Help Text (optional)</Label>
+                <Label>Placeholder (optional)</Label>
                 <Input
-                  value={selectedQuestion.helpText || ""}
-                  onChange={(e) =>
-                    updateQuestion(selectedQuestion.id, { helpText: e.target.value })
-                  }
-                  placeholder="Additional instructions"
+                  value={selectedQuestion.placeholder || ""}
+                  onChange={(e) => {
+                    const updated = { ...selectedQuestion, placeholder: e.target.value };
+                    setSelectedQuestion(updated);
+                    updateQuestion(selectedQuestion.id, { placeholder: e.target.value });
+                  }}
+                  placeholder="Example: Enter your full name"
                 />
               </div>
 
@@ -354,8 +383,11 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
                         onChange={(e) => {
                           const newOptions = [...(selectedQuestion.options || [])];
                           newOptions[i] = e.target.value;
+                          const updated = { ...selectedQuestion, options: newOptions };
+                          setSelectedQuestion(updated);
                           updateQuestion(selectedQuestion.id, { options: newOptions });
                         }}
+                        placeholder={`Option ${i + 1}`}
                       />
                       <Button
                         variant="ghost"
@@ -364,6 +396,8 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
                           const newOptions = selectedQuestion.options?.filter(
                             (_, idx) => idx !== i
                           );
+                          const updated = { ...selectedQuestion, options: newOptions };
+                          setSelectedQuestion(updated);
                           updateQuestion(selectedQuestion.id, { options: newOptions });
                         }}
                       >
@@ -377,8 +411,10 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
                     onClick={() => {
                       const newOptions = [
                         ...(selectedQuestion.options || []),
-                        `Option ${(selectedQuestion.options?.length || 0) + 1}`,
+                        "",
                       ];
+                      const updated = { ...selectedQuestion, options: newOptions };
+                      setSelectedQuestion(updated);
                       updateQuestion(selectedQuestion.id, { options: newOptions });
                     }}
                   >
@@ -391,11 +427,13 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
               <div className="flex items-center gap-2">
                 <Switch
                   checked={selectedQuestion.required}
-                  onCheckedChange={(checked) =>
-                    updateQuestion(selectedQuestion.id, { required: checked })
-                  }
+                  onCheckedChange={(checked) => {
+                    const updated = { ...selectedQuestion, required: checked };
+                    setSelectedQuestion(updated);
+                    updateQuestion(selectedQuestion.id, { required: checked });
+                  }}
                 />
-                <Label>Required</Label>
+                <Label>Required question</Label>
               </div>
 
               {/* Branching Logic */}
@@ -483,11 +521,24 @@ export default function QuestionnaireFlowBuilder({ content, onChange }: Question
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="destructive" onClick={() => selectedQuestion && deleteQuestion(selectedQuestion.id)}>
-              Delete Question
+          <DialogFooter className="flex justify-between">
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                if (selectedQuestion) {
+                  deleteQuestion(selectedQuestion.id);
+                }
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
             </Button>
-            <Button onClick={() => setEditDialogOpen(false)}>Done</Button>
+            <Button 
+              onClick={() => setEditDialogOpen(false)}
+              disabled={!selectedQuestion?.label.trim()}
+            >
+              Done
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
