@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import WelcomeDashboard from "./pages/WelcomeDashboard";
 import CRM from "./pages/CRM";
 import Clients from "./pages/Clients";
+import ClientPortal from "./pages/ClientPortal";
 import Services from "./pages/Services";
 import Quotes from "./pages/Quotes";
 import QuoteDetail from "./pages/QuoteDetail";
@@ -21,8 +22,9 @@ import OnboardingWizard from "./pages/OnboardingWizard";
 import Subscription from "./pages/Subscription";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
+import Templates from "./pages/Templates";
+import TemplateDetail from "./pages/TemplateDetail";
 import PortalAuth from "./pages/portal/Auth";
-import PortalDashboard from "./pages/portal/Dashboard";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -138,6 +140,14 @@ const App = () => (
               }
             />
             <Route
+              path="/clients/:clientId"
+              element={
+                <ProtectedRoute>
+                  <ClientPortal />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/services"
               element={
                 <ProtectedRoute>
@@ -230,25 +240,22 @@ const App = () => (
               }
             />
             <Route
-              path="/documents"
+              path="/templates"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Documents"
-                    description="Document management and e-signature"
-                  />
+                  <Templates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/templates/:id"
+              element={
+                <ProtectedRoute>
+                  <TemplateDetail />
                 </ProtectedRoute>
               }
             />
             <Route path="/portal/auth" element={<PortalAuth />} />
-            <Route
-              path="/portal"
-              element={
-                <PortalRoute>
-                  <PortalDashboard />
-                </PortalRoute>
-              }
-            />
             <Route
               path="/subscription"
               element={

@@ -36,8 +36,7 @@ const navigation = [
   { name: "Jobs", href: "/jobs", icon: ClipboardList },
   { name: "Deadlines", href: "/deadlines", icon: Calendar },
   { name: "Filings", href: "/filings", icon: FileText },
-  { name: "Documents", href: "/documents", icon: FolderOpen },
-  { name: "Portal", href: "/portal", icon: Globe },
+  { name: "Templates", href: "/templates", icon: FolderOpen },
   { name: "Subscription", href: "/subscription", icon: CreditCard },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
