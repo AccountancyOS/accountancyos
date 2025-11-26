@@ -22,6 +22,7 @@ import {
   Wrench,
   Receipt,
   UserCheck,
+  CreditCard,
 } from "lucide-react";
 
 const navigation = [
@@ -37,6 +38,7 @@ const navigation = [
   { name: "Filings", href: "/filings", icon: FileText },
   { name: "Documents", href: "/documents", icon: FolderOpen },
   { name: "Portal", href: "/portal", icon: Globe },
+  { name: "Subscription", href: "/subscription", icon: CreditCard },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
