@@ -5,11 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, CheckCircle2, Circle, Clock, MessageCircle, FileText } from "lucide-react";
+import { CheckCircle2, Circle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { AddTaskDialog } from "./AddTaskDialog";
+import { NewMessageDialog } from "./NewMessageDialog";
 
 interface ClientPortalTabProps {
   clientId: string;
@@ -114,12 +116,7 @@ export default function ClientPortalTab({ clientId }: ClientPortalTabProps) {
                 {viewAsClient ? "Client-facing tasks" : "All tasks for this client"}
               </CardDescription>
             </div>
-            {!viewAsClient && (
-              <Button size="sm">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Task
-              </Button>
-            )}
+            {!viewAsClient && <AddTaskDialog clientId={clientId} />}
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleTasks && visibleTasks.length > 0 ? (
@@ -189,12 +186,7 @@ export default function ClientPortalTab({ clientId }: ClientPortalTabProps) {
                 {viewAsClient ? "Visible to client" : "All messages and notes"}
               </CardDescription>
             </div>
-            {!viewAsClient && (
-              <Button size="sm" variant="outline">
-                <MessageCircle className="mr-2 h-4 w-4" />
-                New Message
-              </Button>
-            )}
+            {!viewAsClient && <NewMessageDialog clientId={clientId} />}
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleMessages && visibleMessages.length > 0 ? (
