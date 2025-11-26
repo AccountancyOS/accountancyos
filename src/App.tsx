@@ -17,6 +17,7 @@ import QuoteDetail from "./pages/QuoteDetail";
 import Onboarding from "./pages/Onboarding";
 import OnboardingDetail from "./pages/OnboardingDetail";
 import OnboardingWizard from "./pages/OnboardingWizard";
+import Subscription from "./pages/Subscription";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -226,6 +227,14 @@ const App = () => (
                     title="Client Portal"
                     description="Shared workspace for clients and accountants"
                   />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/subscription"
+              element={
+                <ProtectedRoute>
+                  <Subscription />
                 </ProtectedRoute>
               }
             />
