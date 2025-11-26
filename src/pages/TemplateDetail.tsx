@@ -35,7 +35,7 @@ export default function TemplateDetail() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [service, setService] = useState("");
-  const [status, setStatus] = useState("draft");
+  const [status, setStatus] = useState("inactive");
   const [content, setContent] = useState<any>({});
   const [questionnaireView, setQuestionnaireView] = useState<"flow" | "list">("flow");
 
@@ -246,9 +246,8 @@ export default function TemplateDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="deprecated">Deprecated</SelectItem>
                 </SelectContent>
               </Select>
             </div>
