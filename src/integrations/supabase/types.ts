@@ -1186,6 +1186,247 @@ export type Database = {
           },
         ]
       }
+      invoice_lines: {
+        Row: {
+          account_id: string
+          created_at: string | null
+          description: string
+          gross_amount: number
+          id: string
+          invoice_id: string
+          line_number: number
+          net_amount: number
+          quantity: number
+          unit_price: number
+          vat_amount: number
+          vat_code_id: string | null
+          vat_rate: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string | null
+          description: string
+          gross_amount: number
+          id?: string
+          invoice_id: string
+          line_number: number
+          net_amount: number
+          quantity?: number
+          unit_price: number
+          vat_amount?: number
+          vat_code_id?: string | null
+          vat_rate?: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string | null
+          description?: string
+          gross_amount?: number
+          id?: string
+          invoice_id?: string
+          line_number?: number
+          net_amount?: number
+          quantity?: number
+          unit_price?: number
+          vat_amount?: number
+          vat_code_id?: string | null
+          vat_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_vat_code_id_fkey"
+            columns: ["vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_payments: {
+        Row: {
+          amount: number
+          bank_transaction_id: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          invoice_id: string
+          ledger_entry_id: string | null
+          payment_date: string
+          payment_method: string | null
+          reference: string | null
+        }
+        Insert: {
+          amount: number
+          bank_transaction_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          invoice_id: string
+          ledger_entry_id?: string | null
+          payment_date: string
+          payment_method?: string | null
+          reference?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_transaction_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          invoice_id?: string
+          ledger_entry_id?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_payments_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_payments_ledger_entry_id_fkey"
+            columns: ["ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_paid: number
+          client_id: string | null
+          company_id: string | null
+          contact_address: string | null
+          contact_email: string | null
+          contact_name: string
+          created_at: string | null
+          document_id: string | null
+          due_date: string
+          id: string
+          invoice_number: string | null
+          invoice_type: string
+          is_posted: boolean | null
+          issue_date: string
+          notes: string | null
+          organization_id: string
+          posted_at: string | null
+          posted_by: string | null
+          reference: string | null
+          status: string
+          total_gross: number
+          total_net: number
+          total_vat: number
+          updated_at: string | null
+        }
+        Insert: {
+          amount_paid?: number
+          client_id?: string | null
+          company_id?: string | null
+          contact_address?: string | null
+          contact_email?: string | null
+          contact_name: string
+          created_at?: string | null
+          document_id?: string | null
+          due_date: string
+          id?: string
+          invoice_number?: string | null
+          invoice_type: string
+          is_posted?: boolean | null
+          issue_date: string
+          notes?: string | null
+          organization_id: string
+          posted_at?: string | null
+          posted_by?: string | null
+          reference?: string | null
+          status?: string
+          total_gross?: number
+          total_net?: number
+          total_vat?: number
+          updated_at?: string | null
+        }
+        Update: {
+          amount_paid?: number
+          client_id?: string | null
+          company_id?: string | null
+          contact_address?: string | null
+          contact_email?: string | null
+          contact_name?: string
+          created_at?: string | null
+          document_id?: string | null
+          due_date?: string
+          id?: string
+          invoice_number?: string | null
+          invoice_type?: string
+          is_posted?: boolean | null
+          issue_date?: string
+          notes?: string | null
+          organization_id?: string
+          posted_at?: string | null
+          posted_by?: string | null
+          reference?: string | null
+          status?: string
+          total_gross?: number
+          total_net?: number
+          total_vat?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "job_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_conversations: {
         Row: {
           attachments: Json | null
