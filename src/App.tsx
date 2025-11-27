@@ -31,6 +31,7 @@ import JobDetail from "./pages/JobDetail";
 import Deadlines from "./pages/Deadlines";
 import Filings from "./pages/Filings";
 import Workpapers from "./pages/Workpapers";
+import Bookkeeping from "./pages/Bookkeeping";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -205,10 +206,7 @@ const App = () => (
               path="/bookkeeping"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Bookkeeping"
-                    description="Full double-entry ledger with P&L and Balance Sheet"
-                  />
+                  <Bookkeeping />
                 </ProtectedRoute>
               }
             />
