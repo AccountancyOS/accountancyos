@@ -305,65 +305,72 @@ export async function getRecentBankTransactions(
   category: string;
   amount: number;
 }>> {
-  // Get ledger entries for bank accounts
+  // First get bank account IDs for this entity
+  const { data: bankAccounts } = await supabase
+    .from('bookkeeping_accounts')
+    .select('id')
+    .eq(entityType === 'client' ? 'client_id' : 'company_id', entityId)
+    .eq('is_bank_account', true);
+
+  if (!bankAccounts || bankAccounts.length === 0) {
+    return [];
+  }
+
+  const bankAccountIds = bankAccounts.map(a => a.id);
+
+  // Get ledger entries for those bank accounts
   const { data, error } = await supabase
     .from('ledger_entries')
-    .select(`
-      id,
-      entry_date,
-      description,
-      debit,
-      credit,
-      journal_id,
-      bookkeeping_accounts!inner(id, name, is_bank_account)
-    `)
+    .select('id, transaction_date, description, debit, credit, source_id, account_id')
     .eq(entityType === 'client' ? 'client_id' : 'company_id', entityId)
-    .eq('bookkeeping_accounts.is_bank_account', true)
-    .order('entry_date', { ascending: false })
+    .in('account_id', bankAccountIds)
+    .order('transaction_date', { ascending: false })
     .limit(limit);
 
-  if (error) {
+  if (error || !data) {
     console.error('Error getting recent transactions:', error);
     return [];
   }
 
-  // For each entry, try to find the counterparty account name
-  const transactions = await Promise.all(
-    (data || []).map(async (entry: any) => {
-      let category = 'Uncategorised';
+  // Build transactions with categories
+  const transactions: Array<{
+    id: string;
+    date: string;
+    description: string;
+    category: string;
+    amount: number;
+  }> = [];
+
+  for (const entry of data) {
+    let category = 'Uncategorised';
+    
+    if (entry.source_id) {
+      // Find the counterparty account (other entries with same source_id)
+      const { data: counterEntries } = await supabase
+        .from('ledger_entries')
+        .select('account_id')
+        .eq('source_id', entry.source_id)
+        .neq('id', entry.id)
+        .limit(1);
       
-      // Try to find the non-bank leg of this journal entry - simplified to avoid TS issues
-      if (entry.journal_id) {
-        const journalEntries = await supabase
-          .from('ledger_entries')
-          .select('account_id')
-          .eq('journal_id', entry.journal_id)
-          .neq('id', entry.id)
-          .limit(1)
-          .then(res => res.data);
-        
-        if (journalEntries && journalEntries.length > 0) {
-          const accountData = await supabase
-            .from('bookkeeping_accounts')
-            .select('name')
-            .eq('id', journalEntries[0].account_id)
-            .single()
-            .then(res => res.data);
-          category = accountData?.name || 'Uncategorised';
-        }
+      if (counterEntries && counterEntries.length > 0) {
+        const { data: acct } = await supabase
+          .from('bookkeeping_accounts')
+          .select('name')
+          .eq('id', counterEntries[0].account_id)
+          .maybeSingle();
+        category = acct?.name || 'Uncategorised';
       }
+    }
 
-      const amount = (entry.debit || 0) - (entry.credit || 0);
-
-      return {
-        id: entry.id,
-        date: entry.entry_date,
-        description: entry.description || 'No description',
-        category,
-        amount
-      };
-    })
-  );
+    transactions.push({
+      id: entry.id,
+      date: entry.transaction_date,
+      description: entry.description || 'No description',
+      category,
+      amount: (entry.debit || 0) - (entry.credit || 0)
+    });
+  }
 
   return transactions;
 }

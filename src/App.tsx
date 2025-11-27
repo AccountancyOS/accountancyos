@@ -26,6 +26,13 @@ import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import QuestionnaireResponse from "./pages/QuestionnaireResponse";
 import PortalAuth from "./pages/portal/Auth";
+import PortalDashboard from "./pages/portal/Dashboard";
+import PortalFinancials from "./pages/portal/Financials";
+import PortalFilings from "./pages/portal/Filings";
+import PortalDocuments from "./pages/portal/Documents";
+import PortalTasks from "./pages/portal/Tasks";
+import PortalMessages from "./pages/portal/Messages";
+import PortalPreview from "./pages/portal/Preview";
 import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
 import Deadlines from "./pages/Deadlines";
@@ -270,7 +277,66 @@ const App = () => (
             {/* Questionnaire public response route - no auth required */}
             <Route path="/questionnaire/:instanceId" element={<QuestionnaireResponse />} />
             
+            {/* Portal routes for clients */}
             <Route path="/portal/auth" element={<PortalAuth />} />
+            <Route
+              path="/portal/dashboard"
+              element={
+                <PortalRoute>
+                  <PortalDashboard />
+                </PortalRoute>
+              }
+            />
+            <Route
+              path="/portal/financials"
+              element={
+                <PortalRoute>
+                  <PortalFinancials />
+                </PortalRoute>
+              }
+            />
+            <Route
+              path="/portal/filings"
+              element={
+                <PortalRoute>
+                  <PortalFilings />
+                </PortalRoute>
+              }
+            />
+            <Route
+              path="/portal/documents"
+              element={
+                <PortalRoute>
+                  <PortalDocuments />
+                </PortalRoute>
+              }
+            />
+            <Route
+              path="/portal/tasks"
+              element={
+                <PortalRoute>
+                  <PortalTasks />
+                </PortalRoute>
+              }
+            />
+            <Route
+              path="/portal/messages"
+              element={
+                <PortalRoute>
+                  <PortalMessages />
+                </PortalRoute>
+              }
+            />
+            
+            {/* Accountant preview route - protected, for previewing client portal */}
+            <Route
+              path="/portal/preview/:entityType/:entityId"
+              element={
+                <ProtectedRoute>
+                  <PortalPreview />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/subscription"
               element={
