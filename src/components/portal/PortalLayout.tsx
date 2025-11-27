@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Building2, User, LogOut, ChevronDown } from "lucide-react";
+import { PortalTabs } from "./PortalTabs";
 
 interface PortalLayoutProps {
   children: ReactNode;
@@ -73,6 +74,8 @@ export default function PortalLayout({ children }: PortalLayoutProps) {
           </div>
         </div>
       </header>
+
+      <PortalTabs />
 
       <main className="container mx-auto px-4 py-8">
         {children}

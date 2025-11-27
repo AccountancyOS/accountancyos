@@ -244,6 +244,7 @@ export type Database = {
           is_active: boolean | null
           is_bank_account: boolean | null
           is_control_account: boolean | null
+          is_revenue_account: boolean | null
           is_system_account: boolean | null
           name: string
           organization_id: string
@@ -261,6 +262,7 @@ export type Database = {
           is_active?: boolean | null
           is_bank_account?: boolean | null
           is_control_account?: boolean | null
+          is_revenue_account?: boolean | null
           is_system_account?: boolean | null
           name: string
           organization_id: string
@@ -278,6 +280,7 @@ export type Database = {
           is_active?: boolean | null
           is_bank_account?: boolean | null
           is_control_account?: boolean | null
+          is_revenue_account?: boolean | null
           is_system_account?: boolean | null
           name?: string
           organization_id?: string
@@ -2499,6 +2502,41 @@ export type Database = {
           },
         ]
       }
+      organization_settings: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          setting_key: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_users: {
         Row: {
           created_at: string
@@ -2682,6 +2720,76 @@ export type Database = {
           },
           {
             foreignKeyName: "portal_access_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_visibility_settings: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          organization_id: string
+          show_cash: boolean | null
+          show_ct_estimate: boolean | null
+          show_profit: boolean | null
+          show_receivables_payables: boolean | null
+          show_revenue: boolean | null
+          show_transactions: boolean | null
+          show_vat_position: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          organization_id: string
+          show_cash?: boolean | null
+          show_ct_estimate?: boolean | null
+          show_profit?: boolean | null
+          show_receivables_payables?: boolean | null
+          show_revenue?: boolean | null
+          show_transactions?: boolean | null
+          show_vat_position?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          organization_id?: string
+          show_cash?: boolean | null
+          show_ct_estimate?: boolean | null
+          show_profit?: boolean | null
+          show_receivables_payables?: boolean | null
+          show_revenue?: boolean | null
+          show_transactions?: boolean | null
+          show_vat_position?: boolean | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_visibility_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_visibility_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_visibility_settings_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
