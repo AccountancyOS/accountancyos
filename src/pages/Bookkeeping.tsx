@@ -2,6 +2,7 @@ import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EntitySelector, type BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
+import { BusinessOverviewTab } from "@/components/bookkeeping/BusinessOverviewTab";
 import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab";
 import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
 import { TrialBalanceTab } from "@/components/bookkeeping/TrialBalanceTab";
@@ -16,6 +17,7 @@ import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
 
 export default function Bookkeeping() {
   const [selectedEntity, setSelectedEntity] = useState<BookkeepingEntity | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
 
   return (
     <DashboardLayout>
@@ -41,8 +43,9 @@ export default function Bookkeeping() {
             </div>
           </div>
         ) : (
-          <Tabs defaultValue="trial-balance" className="space-y-4">
-            <TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList className="flex-wrap h-auto gap-1">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
               <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
               <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
@@ -55,6 +58,10 @@ export default function Bookkeeping() {
               <TabsTrigger value="vat-returns">VAT Returns</TabsTrigger>
               <TabsTrigger value="period-lock">Period Lock</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="overview" className="space-y-4">
+              <BusinessOverviewTab entity={selectedEntity} onTabChange={setActiveTab} />
+            </TabsContent>
 
             <TabsContent value="trial-balance" className="space-y-4">
               <TrialBalanceTab entity={selectedEntity} />
