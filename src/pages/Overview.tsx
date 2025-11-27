@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,13 +123,13 @@ const Overview = () => {
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button variant="outline" className="w-full justify-start" asChild>
-                  <a href="/crm">Add New Lead</a>
+                  <Link to="/crm">Add New Lead</Link>
                 </Button>
                 <Button variant="outline" className="w-full justify-start" asChild>
-                  <a href="/jobs">Create Job</a>
+                  <Link to="/jobs">Create Job</Link>
                 </Button>
                 <Button variant="outline" className="w-full justify-start" asChild>
-                  <a href="/documents">Upload Document</a>
+                  <Link to="/templates">Upload Document</Link>
                 </Button>
               </CardContent>
             </Card>
