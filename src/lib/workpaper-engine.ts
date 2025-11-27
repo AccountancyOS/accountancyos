@@ -43,20 +43,107 @@ export function applyQuestionnaireData(
 }
 
 /**
- * Pull bookkeeping data for workpaper (placeholder for future implementation)
+ * Pull bookkeeping data for workpaper from the Bookkeeping module
  */
 export async function pullBookkeepingData(
   workpaperId: string,
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  options?: {
+    clientId?: string;
+    companyId?: string;
+    organizationId?: string;
+  }
 ): Promise<{ success: boolean; message: string; data?: any }> {
-  // TODO: Implement bookkeeping module integration
-  // This will pull trial balance and transactions for the period
-  
-  return {
-    success: false,
-    message: "Bookkeeping integration coming soon. This will automatically pull trial balance data for Accounts, CT600, and VAT workpapers.",
-  };
+  try {
+    if (!options?.organizationId) {
+      return {
+        success: false,
+        message: "Organization ID is required",
+      };
+    }
+
+    // Import supabase dynamically to avoid circular dependencies
+    const { supabase } = await import("@/integrations/supabase/client");
+
+    // Build query for ledger entries
+    const query = supabase
+      .from("ledger_entries")
+      .select(`
+        *,
+        account:bookkeeping_accounts(id, code, name, account_type, account_subtype)
+      `)
+      .eq("organization_id", options.organizationId)
+      .gte("transaction_date", periodStart.toISOString().split("T")[0])
+      .lte("transaction_date", periodEnd.toISOString().split("T")[0]);
+
+    // Filter by entity
+    if (options.clientId) {
+      query.eq("client_id", options.clientId);
+    } else if (options.companyId) {
+      query.eq("company_id", options.companyId);
+    } else {
+      return {
+        success: false,
+        message: "Either client_id or company_id is required",
+      };
+    }
+
+    const { data: entries, error } = await query;
+
+    if (error) throw error;
+
+    if (!entries || entries.length === 0) {
+      return {
+        success: false,
+        message: "No bookkeeping data found for this period. Ensure journals have been posted.",
+      };
+    }
+
+    // Calculate trial balance
+    const accountMap = new Map<string, any>();
+
+    entries.forEach((entry: any) => {
+      if (!accountMap.has(entry.account.id)) {
+        accountMap.set(entry.account.id, {
+          account_id: entry.account.id,
+          code: entry.account.code,
+          name: entry.account.name,
+          type: entry.account.account_type,
+          subtype: entry.account.account_subtype,
+          debit: 0,
+          credit: 0,
+          balance: 0,
+        });
+      }
+
+      const account = accountMap.get(entry.account.id);
+      account.debit += entry.debit || 0;
+      account.credit += entry.credit || 0;
+      account.balance += (entry.debit || 0) - (entry.credit || 0);
+    });
+
+    const trialBalance = Array.from(accountMap.values()).sort((a, b) =>
+      a.code.localeCompare(b.code)
+    );
+
+    return {
+      success: true,
+      message: `Pulled ${entries.length} transactions from bookkeeping`,
+      data: {
+        trial_balance: trialBalance,
+        total_transactions: entries.length,
+        period_start: periodStart.toISOString(),
+        period_end: periodEnd.toISOString(),
+      },
+    };
+  } catch (error) {
+    console.error("Error pulling bookkeeping data:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to pull bookkeeping data",
+    };
+  }
 }
 
 /**

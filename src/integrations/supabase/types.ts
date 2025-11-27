@@ -71,6 +71,82 @@ export type Database = {
           },
         ]
       }
+      bookkeeping_accounts: {
+        Row: {
+          account_subtype: string | null
+          account_type: string
+          client_id: string | null
+          code: string
+          company_id: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          is_bank_account: boolean | null
+          is_control_account: boolean | null
+          is_system_account: boolean | null
+          name: string
+          organization_id: string
+          tax_mapping: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_subtype?: string | null
+          account_type: string
+          client_id?: string | null
+          code: string
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_bank_account?: boolean | null
+          is_control_account?: boolean | null
+          is_system_account?: boolean | null
+          name: string
+          organization_id: string
+          tax_mapping?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_subtype?: string | null
+          account_type?: string
+          client_id?: string | null
+          code?: string
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_bank_account?: boolean | null
+          is_control_account?: boolean | null
+          is_system_account?: boolean | null
+          name?: string
+          organization_id?: string
+          tax_mapping?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookkeeping_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookkeeping_accounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookkeeping_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_messages: {
         Row: {
           attachments: Json | null
@@ -1267,6 +1343,156 @@ export type Database = {
           },
         ]
       }
+      journal_lines: {
+        Row: {
+          account_id: string
+          created_at: string | null
+          credit: number | null
+          debit: number | null
+          description: string | null
+          id: string
+          journal_id: string
+          line_number: number
+          vat_code_id: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          id?: string
+          journal_id: string
+          line_number: number
+          vat_code_id?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          id?: string
+          journal_id?: string
+          line_number?: number
+          vat_code_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_lines_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_lines_vat_code_id_fkey"
+            columns: ["vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journals: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string
+          id: string
+          is_posted: boolean | null
+          is_reversed: boolean | null
+          journal_date: string
+          journal_type: string
+          organization_id: string
+          posted_at: string | null
+          reference: string | null
+          reverse_date: string | null
+          reverses_journal_id: string | null
+          total_credit: number | null
+          total_debit: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          id?: string
+          is_posted?: boolean | null
+          is_reversed?: boolean | null
+          journal_date: string
+          journal_type?: string
+          organization_id: string
+          posted_at?: string | null
+          reference?: string | null
+          reverse_date?: string | null
+          reverses_journal_id?: string | null
+          total_credit?: number | null
+          total_debit?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          id?: string
+          is_posted?: boolean | null
+          is_reversed?: boolean | null
+          journal_date?: string
+          journal_type?: string
+          organization_id?: string
+          posted_at?: string | null
+          reference?: string | null
+          reverse_date?: string | null
+          reverses_journal_id?: string | null
+          total_credit?: number | null
+          total_debit?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journals_reverses_journal_id_fkey"
+            columns: ["reverses_journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activities: {
         Row: {
           body: string | null
@@ -1379,6 +1605,112 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_entries: {
+        Row: {
+          account_id: string
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          created_by: string | null
+          credit: number | null
+          debit: number | null
+          description: string | null
+          document_id: string | null
+          id: string
+          is_locked: boolean | null
+          organization_id: string
+          source_id: string | null
+          source_type: string
+          transaction_date: string
+          updated_at: string | null
+          updated_by: string | null
+          vat_code_id: string | null
+        }
+        Insert: {
+          account_id: string
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          document_id?: string | null
+          id?: string
+          is_locked?: boolean | null
+          organization_id: string
+          source_id?: string | null
+          source_type: string
+          transaction_date: string
+          updated_at?: string | null
+          updated_by?: string | null
+          vat_code_id?: string | null
+        }
+        Update: {
+          account_id?: string
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          document_id?: string | null
+          id?: string
+          is_locked?: boolean | null
+          organization_id?: string
+          source_id?: string | null
+          source_type?: string
+          transaction_date?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          vat_code_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "job_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_vat_code_id_fkey"
+            columns: ["vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
             referencedColumns: ["id"]
           },
         ]
@@ -2425,6 +2757,70 @@ export type Database = {
           },
         ]
       }
+      vat_codes: {
+        Row: {
+          client_id: string | null
+          code: string
+          company_id: string | null
+          created_at: string | null
+          description: string
+          id: string
+          is_active: boolean | null
+          organization_id: string
+          rate: number
+          updated_at: string | null
+          vat_type: string
+        }
+        Insert: {
+          client_id?: string | null
+          code: string
+          company_id?: string | null
+          created_at?: string | null
+          description: string
+          id?: string
+          is_active?: boolean | null
+          organization_id: string
+          rate: number
+          updated_at?: string | null
+          vat_type: string
+        }
+        Update: {
+          client_id?: string | null
+          code?: string
+          company_id?: string | null
+          created_at?: string | null
+          description?: string
+          id?: string
+          is_active?: boolean | null
+          organization_id?: string
+          rate?: number
+          updated_at?: string | null
+          vat_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_codes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_codes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_codes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workpaper_instances: {
         Row: {
           client_id: string | null
@@ -2582,6 +2978,18 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      seed_default_chart_of_accounts: {
+        Args: {
+          p_client_id?: string
+          p_company_id?: string
+          p_organization_id: string
+        }
+        Returns: undefined
+      }
+      seed_default_vat_codes: {
+        Args: { p_organization_id: string }
+        Returns: undefined
       }
       user_has_org_role: {
         Args: {
