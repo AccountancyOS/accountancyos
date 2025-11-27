@@ -2585,6 +2585,61 @@ export type Database = {
         }
         Relationships: []
       }
+      period_locks: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          id: string
+          lock_date: string
+          locked_at: string
+          locked_by: string | null
+          organization_id: string
+          reason: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          id?: string
+          lock_date: string
+          locked_at?: string
+          locked_by?: string | null
+          organization_id: string
+          reason?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          id?: string
+          lock_date?: string
+          locked_at?: string
+          locked_by?: string | null
+          organization_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "period_locks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "period_locks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "period_locks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portal_access: {
         Row: {
           client_id: string | null
@@ -3435,6 +3490,106 @@ export type Database = {
           },
           {
             foreignKeyName: "vat_codes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vat_returns: {
+        Row: {
+          box_1_vat_due_sales: number
+          box_2_vat_due_acquisitions: number
+          box_3_total_vat_due: number
+          box_4_vat_reclaimed: number
+          box_5_net_vat: number
+          box_6_total_sales: number
+          box_7_total_purchases: number
+          box_8_total_supplies_eu: number
+          box_9_total_acquisitions_eu: number
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          due_date: string
+          hmrc_receipt: Json | null
+          id: string
+          notes: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          box_1_vat_due_sales?: number
+          box_2_vat_due_acquisitions?: number
+          box_3_total_vat_due?: number
+          box_4_vat_reclaimed?: number
+          box_5_net_vat?: number
+          box_6_total_sales?: number
+          box_7_total_purchases?: number
+          box_8_total_supplies_eu?: number
+          box_9_total_acquisitions_eu?: number
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          due_date: string
+          hmrc_receipt?: Json | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          box_1_vat_due_sales?: number
+          box_2_vat_due_acquisitions?: number
+          box_3_total_vat_due?: number
+          box_4_vat_reclaimed?: number
+          box_5_net_vat?: number
+          box_6_total_sales?: number
+          box_7_total_purchases?: number
+          box_8_total_supplies_eu?: number
+          box_9_total_acquisitions_eu?: number
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          due_date?: string
+          hmrc_receipt?: Json | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_returns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_returns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_returns_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
