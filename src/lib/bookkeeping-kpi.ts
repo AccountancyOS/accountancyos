@@ -11,12 +11,117 @@ export interface PeriodRange {
   end: Date;
 }
 
-export type PeriodOption = 'current_month' | 'current_quarter' | 'ytd' | 'last_12_months' | 'custom';
+export type PeriodOption = 
+  | 'current_month' 
+  | 'current_quarter' 
+  | 'ytd' 
+  | 'last_12_months' 
+  | 'last_financial_quarter'
+  | 'last_financial_year'
+  | 'tax_year'
+  | 'custom';
 
-export function getPeriodDates(option: PeriodOption, customStart?: Date, customEnd?: Date): PeriodRange {
+export interface EntityFinancialDates {
+  yearEndMonth?: number; // 1-12
+  yearEndDay?: number;   // 1-31
+}
+
+// Get the most recent financial year end date before or on a given date
+function getLastFinancialYearEnd(refDate: Date, yearEndMonth: number, yearEndDay: number): Date {
+  const year = refDate.getFullYear();
+  // Financial year end for this calendar year
+  let fyEnd = new Date(year, yearEndMonth - 1, yearEndDay);
+  
+  // If the FY end is in the future, use previous year
+  if (fyEnd > refDate) {
+    fyEnd = new Date(year - 1, yearEndMonth - 1, yearEndDay);
+  }
+  
+  return fyEnd;
+}
+
+// Get financial quarter dates based on entity year-end
+function getFinancialQuarterDates(refDate: Date, yearEndMonth: number, yearEndDay: number): PeriodRange {
+  const fyEnd = getLastFinancialYearEnd(refDate, yearEndMonth, yearEndDay);
+  const fyStart = new Date(fyEnd);
+  fyStart.setFullYear(fyStart.getFullYear() - 1);
+  fyStart.setDate(fyStart.getDate() + 1);
+  
+  // Calculate which quarter we're in (Q1 starts after FY end)
+  const quarterLength = 3; // months
+  let quarterStart = new Date(fyStart);
+  let quarterEnd: Date;
+  
+  for (let q = 0; q < 4; q++) {
+    quarterEnd = new Date(quarterStart);
+    quarterEnd.setMonth(quarterEnd.getMonth() + quarterLength);
+    quarterEnd.setDate(quarterEnd.getDate() - 1);
+    
+    if (refDate <= quarterEnd) {
+      // We're in this quarter, return the previous quarter
+      if (q === 0) {
+        // First quarter of FY, previous quarter is Q4 of previous FY
+        const prevFYEnd = new Date(fyStart);
+        prevFYEnd.setDate(prevFYEnd.getDate() - 1);
+        const prevQ4Start = new Date(prevFYEnd);
+        prevQ4Start.setMonth(prevQ4Start.getMonth() - 3);
+        prevQ4Start.setDate(prevQ4Start.getDate() + 1);
+        return { start: prevQ4Start, end: prevFYEnd };
+      } else {
+        // Return previous quarter
+        const prevQEnd = new Date(quarterStart);
+        prevQEnd.setDate(prevQEnd.getDate() - 1);
+        const prevQStart = new Date(prevQEnd);
+        prevQStart.setMonth(prevQStart.getMonth() - 3);
+        prevQStart.setDate(prevQStart.getDate() + 1);
+        return { start: prevQStart, end: prevQEnd };
+      }
+    }
+    
+    quarterStart = new Date(quarterEnd);
+    quarterStart.setDate(quarterStart.getDate() + 1);
+  }
+  
+  // Fallback: return the last quarter of the financial year
+  const lastQStart = new Date(fyEnd);
+  lastQStart.setMonth(lastQStart.getMonth() - 3);
+  lastQStart.setDate(lastQStart.getDate() + 1);
+  return { start: lastQStart, end: fyEnd };
+}
+
+// UK tax year runs 6 April to 5 April
+function getTaxYearDates(refDate: Date): PeriodRange {
+  const year = refDate.getFullYear();
+  const taxYearStart = new Date(year, 3, 6); // 6 April
+  
+  if (refDate >= taxYearStart) {
+    // Current tax year
+    return {
+      start: taxYearStart,
+      end: new Date(year + 1, 3, 5) // 5 April next year
+    };
+  } else {
+    // Previous tax year
+    return {
+      start: new Date(year - 1, 3, 6),
+      end: new Date(year, 3, 5)
+    };
+  }
+}
+
+export function getPeriodDates(
+  option: PeriodOption, 
+  entityDates?: EntityFinancialDates,
+  customStart?: Date, 
+  customEnd?: Date
+): PeriodRange {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
+  
+  // Default year-end to 31 March if not provided (common UK default)
+  const yearEndMonth = entityDates?.yearEndMonth || 3;
+  const yearEndDay = entityDates?.yearEndDay || 31;
   
   switch (option) {
     case 'current_month':
@@ -41,6 +146,17 @@ export function getPeriodDates(option: PeriodOption, customStart?: Date, customE
         start: new Date(currentYear - 1, currentMonth, 1),
         end: now
       };
+    case 'last_financial_quarter':
+      return getFinancialQuarterDates(now, yearEndMonth, yearEndDay);
+    case 'last_financial_year': {
+      const fyEnd = getLastFinancialYearEnd(now, yearEndMonth, yearEndDay);
+      const fyStart = new Date(fyEnd);
+      fyStart.setFullYear(fyStart.getFullYear() - 1);
+      fyStart.setDate(fyStart.getDate() + 1);
+      return { start: fyStart, end: fyEnd };
+    }
+    case 'tax_year':
+      return getTaxYearDates(now);
     case 'custom':
       return {
         start: customStart || new Date(currentYear, 0, 1),
