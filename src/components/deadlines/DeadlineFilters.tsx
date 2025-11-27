@@ -80,12 +80,12 @@ export const DeadlineFilters = ({ filters, onFiltersChange }: DeadlineFiltersPro
 
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Client/Company</Label>
-            <Select value={filters.clientId} onValueChange={(value) => updateFilter("clientId", value)}>
+            <Select value={filters.clientId || "all"} onValueChange={(value) => updateFilter("clientId", value === "all" ? "" : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All clients" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All clients</SelectItem>
+                <SelectItem value="all">All clients</SelectItem>
                 {clients?.map((client) => (
                   <SelectItem key={client.id} value={client.id}>
                     {client.first_name} {client.last_name}
@@ -102,12 +102,12 @@ export const DeadlineFilters = ({ filters, onFiltersChange }: DeadlineFiltersPro
 
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Deadline Type</Label>
-            <Select value={filters.deadlineType} onValueChange={(value) => updateFilter("deadlineType", value)}>
+            <Select value={filters.deadlineType || "all"} onValueChange={(value) => updateFilter("deadlineType", value === "all" ? "" : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="all">All types</SelectItem>
                 <SelectItem value="statutory">Statutory</SelectItem>
                 <SelectItem value="internal">Internal</SelectItem>
                 <SelectItem value="custom">Custom</SelectItem>
@@ -117,12 +117,12 @@ export const DeadlineFilters = ({ filters, onFiltersChange }: DeadlineFiltersPro
 
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Filing Body</Label>
-            <Select value={filters.filingBody} onValueChange={(value) => updateFilter("filingBody", value)}>
+            <Select value={filters.filingBody || "all"} onValueChange={(value) => updateFilter("filingBody", value === "all" ? "" : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All bodies" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All bodies</SelectItem>
+                <SelectItem value="all">All bodies</SelectItem>
                 <SelectItem value="HMRC">HMRC</SelectItem>
                 <SelectItem value="COMPANIES_HOUSE">Companies House</SelectItem>
                 <SelectItem value="INTERNAL">Internal</SelectItem>
@@ -133,12 +133,12 @@ export const DeadlineFilters = ({ filters, onFiltersChange }: DeadlineFiltersPro
 
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Status</Label>
-            <Select value={filters.status} onValueChange={(value) => updateFilter("status", value)}>
+            <Select value={filters.status || "all"} onValueChange={(value) => updateFilter("status", value === "all" ? "" : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All statuses</SelectItem>
+                <SelectItem value="all">All statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="in_progress">In Progress</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
