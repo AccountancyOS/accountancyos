@@ -28,6 +28,7 @@ import QuestionnaireResponse from "./pages/QuestionnaireResponse";
 import PortalAuth from "./pages/portal/Auth";
 import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
+import Deadlines from "./pages/Deadlines";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -229,10 +230,7 @@ const App = () => (
               path="/deadlines"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Deadlines"
-                    description="Track all statutory and internal deadlines"
-                  />
+                  <Deadlines />
                 </ProtectedRoute>
               }
             />

@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
 import { useOrganization } from "@/lib/organization-context";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import {
   LayoutDashboard,
   Users,
@@ -118,7 +119,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {children}
+        {/* Top bar with notification bell */}
+        <div className="h-16 border-b border-border bg-card flex items-center justify-end px-6">
+          <NotificationBell />
+        </div>
+        <div className="flex-1 overflow-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
