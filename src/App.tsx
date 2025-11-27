@@ -29,6 +29,7 @@ import PortalAuth from "./pages/portal/Auth";
 import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
 import Deadlines from "./pages/Deadlines";
+import Filings from "./pages/Filings";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -238,10 +239,7 @@ const App = () => (
               path="/filings"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Filings"
-                    description="HMRC and Companies House submissions"
-                  />
+                  <Filings />
                 </ProtectedRoute>
               }
             />
