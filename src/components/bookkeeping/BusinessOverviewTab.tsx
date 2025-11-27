@@ -31,10 +31,12 @@ import {
   getAgedPayables,
   getEntityDeadlinesAndJobs,
   getPeriodDates,
-  type PeriodOption
+  type PeriodOption,
+  type EntityFinancialDates
 } from "@/lib/bookkeeping-kpi";
 import { usePortalVisibility } from "@/hooks/usePortalVisibility";
 import type { BookkeepingEntity } from "./EntitySelector";
+import { supabase } from "@/integrations/supabase/client";
 
 interface BusinessOverviewTabProps {
   entity: BookkeepingEntity;
@@ -44,11 +46,33 @@ interface BusinessOverviewTabProps {
 export function BusinessOverviewTab({ entity, onTabChange }: BusinessOverviewTabProps) {
   const navigate = useNavigate();
   const [periodOption, setPeriodOption] = useState<PeriodOption>('current_month');
-  const { start: periodStart, end: periodEnd } = getPeriodDates(periodOption);
-  const { start: ytdStart, end: ytdEnd } = getPeriodDates('ytd');
 
   const entityType = entity.type;
   const entityId = entity.id;
+
+  // Fetch entity financial dates (year-end) from companies table
+  const { data: entityFinancialDates } = useQuery({
+    queryKey: ['entity-financial-dates', entityType, entityId],
+    queryFn: async (): Promise<EntityFinancialDates> => {
+      if (entityType === 'company') {
+        const { data } = await supabase
+          .from('companies')
+          .select('year_end_month, year_end_day')
+          .eq('id', entityId)
+          .maybeSingle();
+        return {
+          yearEndMonth: data?.year_end_month || undefined,
+          yearEndDay: data?.year_end_day || undefined
+        };
+      }
+      // For clients (individuals), default to tax year (5 April)
+      return { yearEndMonth: 4, yearEndDay: 5 };
+    },
+    enabled: !!entityId
+  });
+
+  const { start: periodStart, end: periodEnd } = getPeriodDates(periodOption, entityFinancialDates);
+  const { start: ytdStart, end: ytdEnd } = getPeriodDates('ytd', entityFinancialDates);
 
   const { data: visibility } = usePortalVisibility(entityType, entityId);
 
@@ -174,7 +198,7 @@ export function BusinessOverviewTab({ entity, onTabChange }: BusinessOverviewTab
         </div>
         <div className="flex items-center gap-3">
           <Select value={periodOption} onValueChange={(v) => setPeriodOption(v as PeriodOption)}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select period" />
             </SelectTrigger>
             <SelectContent>
@@ -182,6 +206,11 @@ export function BusinessOverviewTab({ entity, onTabChange }: BusinessOverviewTab
               <SelectItem value="current_quarter">Current Quarter</SelectItem>
               <SelectItem value="ytd">Year to Date</SelectItem>
               <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+              <SelectItem value="last_financial_quarter">Last Financial Quarter</SelectItem>
+              <SelectItem value="last_financial_year">Last Financial Year</SelectItem>
+              {entityType === 'client' && (
+                <SelectItem value="tax_year">Tax Year</SelectItem>
+              )}
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handleViewAsClient}>
