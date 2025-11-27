@@ -30,6 +30,7 @@ import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
 import Deadlines from "./pages/Deadlines";
 import Filings from "./pages/Filings";
+import Workpapers from "./pages/Workpapers";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -240,6 +241,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Filings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workpapers"
+              element={
+                <ProtectedRoute>
+                  <Workpapers />
                 </ProtectedRoute>
               }
             />

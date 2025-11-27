@@ -20,6 +20,7 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
   const queryClient = useQueryClient();
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+  const [selectedSection, setSelectedSection] = useState<string | null>(null);
 
   const { data: workpaper, isLoading } = useQuery({
     queryKey: ["job-workpaper", jobId],
@@ -139,15 +140,30 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
   }
 
   const isLocked = workpaper.status === "finalised";
+  
+  // Get sections from template or use default
+  const sections = [
+    { id: "income", title: "Income", fields: Object.keys(fieldValues).slice(0, Math.ceil(Object.keys(fieldValues).length / 3)) },
+    { id: "deductions", title: "Deductions & Reliefs", fields: Object.keys(fieldValues).slice(Math.ceil(Object.keys(fieldValues).length / 3), Math.ceil(Object.keys(fieldValues).length * 2 / 3)) },
+    { id: "calculations", title: "Tax Calculations", fields: Object.keys(fieldValues).slice(Math.ceil(Object.keys(fieldValues).length * 2 / 3)) },
+  ];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">{workpaper.name}</h3>
-          <p className="text-sm text-muted-foreground">
-            {workpaper.period_label} • Created {format(new Date(workpaper.created_at), "d MMM yyyy")}
-          </p>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+            <span>{workpaper.period_label} • Created {format(new Date(workpaper.created_at), "d MMM yyyy")}</span>
+            {workpaper.data_source && (
+              <Badge variant="secondary">
+                Source: {workpaper.data_source}
+              </Badge>
+            )}
+            {workpaper.last_data_sync_at && (
+              <span>Last synced: {format(new Date(workpaper.last_data_sync_at), "d MMM yyyy HH:mm")}</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge className={getStatusColor(workpaper.status)}>
@@ -171,6 +187,20 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
         </div>
       </div>
 
+      {/* Section Navigation */}
+      <div className="flex gap-2 border-b pb-2">
+        {sections.map((section) => (
+          <Button
+            key={section.id}
+            variant={selectedSection === section.id ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setSelectedSection(section.id)}
+          >
+            {section.title}
+          </Button>
+        ))}
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Workpaper Fields</CardTitle>
@@ -180,46 +210,83 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {Object.entries(fieldValues).map(([fieldName, value]) => (
-              <div key={fieldName} className="border rounded-lg p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <Label className="text-sm font-medium capitalize">
-                    {fieldName.replace(/_/g, " ")}
-                  </Label>
-                  {!isLocked && editingField !== fieldName && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setEditingField(fieldName)}
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-                {editingField === fieldName ? (
-                  <div className="space-y-2">
-                    <Input
-                      value={value}
-                      onChange={(e) => handleFieldUpdate(fieldName, e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleSaveField(fieldName)}>
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditingField(null)}
-                      >
-                        Cancel
-                      </Button>
+            {Object.entries(fieldValues)
+              .filter(([fieldName]) => {
+                if (!selectedSection) return true;
+                const section = sections.find(s => s.id === selectedSection);
+                return section?.fields.includes(fieldName);
+              })
+              .map(([fieldName, value]) => {
+                const isOverridden = workpaper.field_overrides?.[fieldName] !== undefined;
+                const hasNote = workpaper.field_notes?.[fieldName];
+                
+                return (
+                  <div key={fieldName} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-medium capitalize">
+                            {fieldName.replace(/_/g, " ")}
+                          </Label>
+                          {isOverridden && (
+                            <Badge variant="outline" className="text-xs">
+                              Overridden
+                            </Badge>
+                          )}
+                          {workpaper.source_data?.[fieldName] && (
+                            <Badge variant="secondary" className="text-xs">
+                              From {workpaper.data_source}
+                            </Badge>
+                          )}
+                        </div>
+                        {hasNote && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Note: {hasNote}
+                          </p>
+                        )}
+                      </div>
+                      {!isLocked && editingField !== fieldName && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingField(fieldName)}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
+                     {editingField === fieldName ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={value}
+                          onChange={(e) => handleFieldUpdate(fieldName, e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleSaveField(fieldName)}>
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingField(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm text-muted-foreground">{value || "Not provided"}</p>
+                        {isOverridden && workpaper.source_data?.[fieldName] && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Original: {workpaper.source_data[fieldName]}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{value || "Not provided"}</p>
-                )}
-              </div>
-            ))}
+                );
+              })}
           </div>
         </CardContent>
       </Card>

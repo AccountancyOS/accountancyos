@@ -24,14 +24,14 @@ export function FilingPipelineStatus({
   ): "completed" | "in_progress" | "pending" | "failed" => {
     switch (stepType) {
       case "questionnaire":
-        if (currentStatus === "submitted") return "completed";
+        if (currentStatus === "submitted" || currentStatus === "reviewed") return "completed";
         if (currentStatus === "in_progress" || currentStatus === "started") return "in_progress";
         if (currentStatus === "sent") return "in_progress";
         return "pending";
       case "workpaper":
         if (currentStatus === "finalised") return "completed";
-        if (currentStatus === "ready_for_review" || currentStatus === "in_progress")
-          return "in_progress";
+        if (currentStatus === "ready_for_review") return "in_progress";
+        if (currentStatus === "in_progress" || currentStatus === "draft") return "in_progress";
         return "pending";
       case "filing":
         if (currentStatus === "filed") return "completed";
@@ -39,7 +39,8 @@ export function FilingPipelineStatus({
         if (
           currentStatus === "awaiting_approval" ||
           currentStatus === "approved" ||
-          currentStatus === "ready_to_file"
+          currentStatus === "ready_to_file" ||
+          currentStatus === "draft"
         )
           return "in_progress";
         return "pending";

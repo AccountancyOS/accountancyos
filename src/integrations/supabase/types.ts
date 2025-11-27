@@ -2429,7 +2429,9 @@ export type Database = {
         Row: {
           client_id: string | null
           company_id: string | null
+          computed_data: Json | null
           created_at: string | null
+          data_source: string | null
           field_notes: Json | null
           field_overrides: Json | null
           field_values: Json
@@ -2437,13 +2439,16 @@ export type Database = {
           finalised_by: string | null
           id: string
           job_id: string
+          last_data_sync_at: string | null
           name: string
           organization_id: string
+          owner_user_id: string | null
           period_end: string | null
           period_label: string | null
           period_start: string | null
           questionnaire_instance_id: string | null
           service_type: string
+          source_data: Json | null
           status: string
           template_id: string | null
           updated_at: string | null
@@ -2451,7 +2456,9 @@ export type Database = {
         Insert: {
           client_id?: string | null
           company_id?: string | null
+          computed_data?: Json | null
           created_at?: string | null
+          data_source?: string | null
           field_notes?: Json | null
           field_overrides?: Json | null
           field_values?: Json
@@ -2459,13 +2466,16 @@ export type Database = {
           finalised_by?: string | null
           id?: string
           job_id: string
+          last_data_sync_at?: string | null
           name: string
           organization_id: string
+          owner_user_id?: string | null
           period_end?: string | null
           period_label?: string | null
           period_start?: string | null
           questionnaire_instance_id?: string | null
           service_type: string
+          source_data?: Json | null
           status?: string
           template_id?: string | null
           updated_at?: string | null
@@ -2473,7 +2483,9 @@ export type Database = {
         Update: {
           client_id?: string | null
           company_id?: string | null
+          computed_data?: Json | null
           created_at?: string | null
+          data_source?: string | null
           field_notes?: Json | null
           field_overrides?: Json | null
           field_values?: Json
@@ -2481,13 +2493,16 @@ export type Database = {
           finalised_by?: string | null
           id?: string
           job_id?: string
+          last_data_sync_at?: string | null
           name?: string
           organization_id?: string
+          owner_user_id?: string | null
           period_end?: string | null
           period_label?: string | null
           period_start?: string | null
           questionnaire_instance_id?: string | null
           service_type?: string
+          source_data?: Json | null
           status?: string
           template_id?: string | null
           updated_at?: string | null
