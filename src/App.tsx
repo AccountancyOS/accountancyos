@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { OrganizationProvider } from "@/lib/organization-context";
-import { PortalProvider } from "@/lib/portal-context";
 import Auth from "./pages/Auth";
 import Overview from "./pages/Overview";
 import Index from "./pages/Index";
@@ -25,13 +24,6 @@ import NotFound from "./pages/NotFound";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
 import QuestionnaireResponse from "./pages/QuestionnaireResponse";
-import PortalAuth from "./pages/portal/Auth";
-import PortalDashboard from "./pages/portal/Dashboard";
-import PortalFinancials from "./pages/portal/Financials";
-import PortalFilings from "./pages/portal/Filings";
-import PortalDocuments from "./pages/portal/Documents";
-import PortalTasks from "./pages/portal/Tasks";
-import PortalMessages from "./pages/portal/Messages";
 import PortalPreview from "./pages/portal/Preview";
 import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
@@ -77,24 +69,6 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   return <>{children}</>;
-};
-
-const PortalRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/portal/auth" replace />;
-  }
-
-  return <PortalProvider>{children}</PortalProvider>;
 };
 
 const App = () => (
@@ -277,58 +251,7 @@ const App = () => (
             {/* Questionnaire public response route - no auth required */}
             <Route path="/questionnaire/:instanceId" element={<QuestionnaireResponse />} />
             
-            {/* Portal routes for clients */}
-            <Route path="/portal/auth" element={<PortalAuth />} />
-            <Route
-              path="/portal/dashboard"
-              element={
-                <PortalRoute>
-                  <PortalDashboard />
-                </PortalRoute>
-              }
-            />
-            <Route
-              path="/portal/financials"
-              element={
-                <PortalRoute>
-                  <PortalFinancials />
-                </PortalRoute>
-              }
-            />
-            <Route
-              path="/portal/filings"
-              element={
-                <PortalRoute>
-                  <PortalFilings />
-                </PortalRoute>
-              }
-            />
-            <Route
-              path="/portal/documents"
-              element={
-                <PortalRoute>
-                  <PortalDocuments />
-                </PortalRoute>
-              }
-            />
-            <Route
-              path="/portal/tasks"
-              element={
-                <PortalRoute>
-                  <PortalTasks />
-                </PortalRoute>
-              }
-            />
-            <Route
-              path="/portal/messages"
-              element={
-                <PortalRoute>
-                  <PortalMessages />
-                </PortalRoute>
-              }
-            />
-            
-            {/* Accountant preview route - protected, for previewing client portal */}
+            {/* Accountant preview route - for previewing what clients see */}
             <Route
               path="/portal/preview/:entityType/:entityId"
               element={
