@@ -320,7 +320,10 @@ export type Database = {
           postcode: string | null
           tags: Json | null
           updated_at: string
+          vat_frequency: string | null
           vat_number: string | null
+          vat_scheme: string | null
+          vat_stagger_group: number | null
           year_end_day: number | null
           year_end_month: number | null
         }
@@ -341,7 +344,10 @@ export type Database = {
           postcode?: string | null
           tags?: Json | null
           updated_at?: string
+          vat_frequency?: string | null
           vat_number?: string | null
+          vat_scheme?: string | null
+          vat_stagger_group?: number | null
           year_end_day?: number | null
           year_end_month?: number | null
         }
@@ -362,7 +368,10 @@ export type Database = {
           postcode?: string | null
           tags?: Json | null
           updated_at?: string
+          vat_frequency?: string | null
           vat_number?: string | null
+          vat_scheme?: string | null
+          vat_stagger_group?: number | null
           year_end_day?: number | null
           year_end_month?: number | null
         }
@@ -372,6 +381,223 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deadlines: {
+        Row: {
+          active_window_start: string | null
+          client_id: string | null
+          company_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          deadline_type: string
+          description: string | null
+          due_date: string
+          engagement_id: string | null
+          filed_at: string | null
+          filing_body: string | null
+          id: string
+          job_id: string | null
+          metadata: Json | null
+          name: string
+          organization_id: string
+          owner_id: string | null
+          parent_deadline_id: string | null
+          payment_date: string | null
+          period_end: string | null
+          period_start: string | null
+          recurrence_rule: Json | null
+          required_documents: Json | null
+          risk_factors: Json | null
+          risk_score: number | null
+          service_code: string | null
+          status: string
+          tags: Json | null
+          updated_at: string | null
+          warning_date: string | null
+        }
+        Insert: {
+          active_window_start?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          deadline_type: string
+          description?: string | null
+          due_date: string
+          engagement_id?: string | null
+          filed_at?: string | null
+          filing_body?: string | null
+          id?: string
+          job_id?: string | null
+          metadata?: Json | null
+          name: string
+          organization_id: string
+          owner_id?: string | null
+          parent_deadline_id?: string | null
+          payment_date?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          recurrence_rule?: Json | null
+          required_documents?: Json | null
+          risk_factors?: Json | null
+          risk_score?: number | null
+          service_code?: string | null
+          status?: string
+          tags?: Json | null
+          updated_at?: string | null
+          warning_date?: string | null
+        }
+        Update: {
+          active_window_start?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          deadline_type?: string
+          description?: string | null
+          due_date?: string
+          engagement_id?: string | null
+          filed_at?: string | null
+          filing_body?: string | null
+          id?: string
+          job_id?: string | null
+          metadata?: Json | null
+          name?: string
+          organization_id?: string
+          owner_id?: string | null
+          parent_deadline_id?: string | null
+          payment_date?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          recurrence_rule?: Json | null
+          required_documents?: Json | null
+          risk_factors?: Json | null
+          risk_score?: number | null
+          service_code?: string | null
+          status?: string
+          tags?: Json | null
+          updated_at?: string | null
+          warning_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deadlines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_engagement_id_fkey"
+            columns: ["engagement_id"]
+            isOneToOne: false
+            referencedRelation: "engagements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_parent_deadline_id_fkey"
+            columns: ["parent_deadline_id"]
+            isOneToOne: false
+            referencedRelation: "deadlines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_queue: {
+        Row: {
+          body_html: string | null
+          body_text: string | null
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          error_message: string | null
+          id: string
+          merge_data: Json | null
+          organization_id: string
+          retry_count: number | null
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string | null
+          subject: string
+          template_id: string | null
+          to_email: string
+          to_name: string | null
+        }
+        Insert: {
+          body_html?: string | null
+          body_text?: string | null
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          error_message?: string | null
+          id?: string
+          merge_data?: Json | null
+          organization_id: string
+          retry_count?: number | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject: string
+          template_id?: string | null
+          to_email: string
+          to_name?: string | null
+        }
+        Update: {
+          body_html?: string | null
+          body_text?: string | null
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          error_message?: string | null
+          id?: string
+          merge_data?: Json | null
+          organization_id?: string
+          retry_count?: number | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject?: string
+          template_id?: string | null
+          to_email?: string
+          to_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_queue_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_queue_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
             referencedColumns: ["id"]
           },
         ]
@@ -388,6 +614,7 @@ export type Database = {
           id: string
           organization_id: string
           quote_id: string | null
+          service_config: Json | null
           service_id: string
           start_date: string
           updated_at: string
@@ -403,6 +630,7 @@ export type Database = {
           id?: string
           organization_id: string
           quote_id?: string | null
+          service_config?: Json | null
           service_id: string
           start_date: string
           updated_at?: string
@@ -418,6 +646,7 @@ export type Database = {
           id?: string
           organization_id?: string
           quote_id?: string | null
+          service_config?: Json | null
           service_id?: string
           start_date?: string
           updated_at?: string
@@ -1056,6 +1285,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "message_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          is_read: boolean | null
+          message: string | null
+          organization_id: string
+          payload: Json | null
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          organization_id: string
+          payload?: Json | null
+          read_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          organization_id?: string
+          payload?: Json | null
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
