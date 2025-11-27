@@ -12,6 +12,7 @@ import { BankReconciliationTab } from "@/components/bookkeeping/BankReconciliati
 import { InvoicesTab } from "@/components/bookkeeping/InvoicesTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
+import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
 
 export default function Bookkeeping() {
   const [selectedEntity, setSelectedEntity] = useState<BookkeepingEntity | null>(null);
@@ -50,6 +51,7 @@ export default function Bookkeeping() {
               <TabsTrigger value="bank-feeds">Bank Feeds</TabsTrigger>
               <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
+              <TabsTrigger value="receipts">Receipts</TabsTrigger>
               <TabsTrigger value="vat-returns">VAT Returns</TabsTrigger>
               <TabsTrigger value="period-lock">Period Lock</TabsTrigger>
             </TabsList>
@@ -84,6 +86,10 @@ export default function Bookkeeping() {
 
             <TabsContent value="invoices" className="space-y-4">
               <InvoicesTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="receipts" className="space-y-4">
+              <ReceiptsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
             </TabsContent>
 
             <TabsContent value="vat-returns" className="space-y-4">
