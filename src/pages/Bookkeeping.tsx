@@ -6,6 +6,9 @@ import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab"
 import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
 import { TrialBalanceTab } from "@/components/bookkeeping/TrialBalanceTab";
 import { JournalsTab } from "@/components/bookkeeping/JournalsTab";
+import { BankAccountsTab } from "@/components/bookkeeping/BankAccountsTab";
+import { BankFeedsTab } from "@/components/bookkeeping/BankFeedsTab";
+import { BankReconciliationTab } from "@/components/bookkeeping/BankReconciliationTab";
 
 export default function Bookkeeping() {
   const [selectedEntity, setSelectedEntity] = useState<BookkeepingEntity | null>(null);
@@ -40,6 +43,9 @@ export default function Bookkeeping() {
               <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
               <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
               <TabsTrigger value="journals">Journals</TabsTrigger>
+              <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
+              <TabsTrigger value="bank-feeds">Bank Feeds</TabsTrigger>
+              <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
             </TabsList>
 
             <TabsContent value="trial-balance" className="space-y-4">
@@ -56,6 +62,18 @@ export default function Bookkeeping() {
 
             <TabsContent value="journals" className="space-y-4">
               <JournalsTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="bank-accounts" className="space-y-4">
+              <BankAccountsTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="bank-feeds" className="space-y-4">
+              <BankFeedsTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="bank-reconciliation" className="space-y-4">
+              <BankReconciliationTab entity={selectedEntity} />
             </TabsContent>
           </Tabs>
         )}
