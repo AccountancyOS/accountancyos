@@ -3054,6 +3054,127 @@ export type Database = {
           },
         ]
       }
+      receipts: {
+        Row: {
+          bank_transaction_id: string | null
+          category: string | null
+          client_id: string | null
+          company_id: string | null
+          currency: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          invoice_id: string | null
+          ledger_entry_id: string | null
+          mime_type: string | null
+          notes: string | null
+          ocr_data: Json | null
+          ocr_status: string | null
+          organization_id: string
+          processed_at: string | null
+          receipt_date: string | null
+          total_amount: number | null
+          uploaded_at: string
+          uploaded_by: string | null
+          vat_amount: number | null
+          vendor_name: string | null
+        }
+        Insert: {
+          bank_transaction_id?: string | null
+          category?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          currency?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          invoice_id?: string | null
+          ledger_entry_id?: string | null
+          mime_type?: string | null
+          notes?: string | null
+          ocr_data?: Json | null
+          ocr_status?: string | null
+          organization_id: string
+          processed_at?: string | null
+          receipt_date?: string | null
+          total_amount?: number | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          vat_amount?: number | null
+          vendor_name?: string | null
+        }
+        Update: {
+          bank_transaction_id?: string | null
+          category?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          currency?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          invoice_id?: string | null
+          ledger_entry_id?: string | null
+          mime_type?: string | null
+          notes?: string | null
+          ocr_data?: Json | null
+          ocr_status?: string | null
+          organization_id?: string
+          processed_at?: string | null
+          receipt_date?: string | null
+          total_amount?: number | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          vat_amount?: number | null
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_ledger_entry_id_fkey"
+            columns: ["ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reconciliation_lines: {
         Row: {
           amount: number
