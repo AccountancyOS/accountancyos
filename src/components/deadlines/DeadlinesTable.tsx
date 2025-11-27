@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { Badge } from "@/components/ui/badge";
@@ -196,10 +197,10 @@ export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
                 <td className="p-3">
                   {deadline.jobs ? (
                     <Button variant="ghost" size="sm" asChild>
-                      <a href={`/jobs/${deadline.job_id}`} className="flex items-center gap-1">
+                      <Link to={`/jobs/${deadline.job_id}`} className="flex items-center gap-1">
                         {deadline.jobs.job_name}
                         <ExternalLink className="h-3 w-3" />
-                      </a>
+                      </Link>
                     </Button>
                   ) : (
                     <span className="text-muted-foreground text-sm">—</span>
