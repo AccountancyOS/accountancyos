@@ -25,9 +25,11 @@ import { Plus } from "lucide-react";
 
 interface SendQuestionnaireDialogProps {
   clientId: string;
+  jobId?: string;
+  onClose?: () => void;
 }
 
-export function SendQuestionnaireDialog({ clientId }: SendQuestionnaireDialogProps) {
+export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuestionnaireDialogProps) {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -76,6 +78,7 @@ export function SendQuestionnaireDialog({ clientId }: SendQuestionnaireDialogPro
         .insert({
           organization_id: organization.id,
           client_id: clientId,
+          job_id: jobId || null,
           template_id: form.template_id,
           name: form.name || template.name,
           period_label: form.period_label || null,
@@ -94,8 +97,10 @@ export function SendQuestionnaireDialog({ clientId }: SendQuestionnaireDialogPro
       });
 
       queryClient.invalidateQueries({ queryKey: ["questionnaire-instances", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["job-questionnaires", jobId] });
       setOpen(false);
       setForm({ template_id: "", name: "", period_label: "" });
+      if (onClose) onClose();
     } catch (error: any) {
       toast({
         title: "Error sending questionnaire",

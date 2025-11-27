@@ -13,6 +13,10 @@ import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
 import JobTimelineTab from "@/components/jobs/JobTimelineTab";
 import JobSettingsTab from "@/components/jobs/JobSettingsTab";
+import { JobQuestionnaireTab } from "@/components/jobs/JobQuestionnaireTab";
+import { JobWorkpaperTab } from "@/components/jobs/JobWorkpaperTab";
+import { JobFilingTab } from "@/components/jobs/JobFilingTab";
+import { FilingPipelineStatus } from "@/components/jobs/FilingPipelineStatus";
 import { toast } from "sonner";
 
 export default function JobDetail() {
@@ -176,14 +180,38 @@ export default function JobDetail() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="tasks" className="space-y-6">
+        <Tabs defaultValue="pipeline" className="space-y-6">
           <TabsList>
+            <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
+            <TabsTrigger value="workpaper">Workpaper</TabsTrigger>
+            <TabsTrigger value="filing">Filing</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="conversation">Job Conversation</TabsTrigger>
+            <TabsTrigger value="conversation">Conversation</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="pipeline">
+            <FilingPipelineStatus />
+          </TabsContent>
+
+          <TabsContent value="questionnaire">
+            <JobQuestionnaireTab 
+              jobId={job.id}
+              clientId={job.client_id || undefined}
+              companyId={job.company_id || undefined}
+            />
+          </TabsContent>
+
+          <TabsContent value="workpaper">
+            <JobWorkpaperTab jobId={job.id} />
+          </TabsContent>
+
+          <TabsContent value="filing">
+            <JobFilingTab jobId={job.id} />
+          </TabsContent>
 
           <TabsContent value="tasks">
             <JobTasksTab jobId={job.id} />

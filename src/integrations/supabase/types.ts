@@ -730,6 +730,138 @@ export type Database = {
           },
         ]
       }
+      filings: {
+        Row: {
+          approval_requested_at: string | null
+          approved_at: string | null
+          approved_by: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          filed_at: string | null
+          filed_by: string | null
+          filing_body: string
+          filing_data: Json
+          filing_receipt: Json | null
+          filing_reference: string | null
+          filing_type: string
+          generated_documents: Json | null
+          id: string
+          is_locked: boolean | null
+          job_id: string
+          organization_id: string
+          payment_deadline: string | null
+          period_end: string | null
+          period_start: string | null
+          rejection_reason: string | null
+          second_payment_date: string | null
+          status: string
+          tax_due: number | null
+          tax_refund: number | null
+          tax_year: string | null
+          updated_at: string | null
+          workpaper_instance_id: string | null
+        }
+        Insert: {
+          approval_requested_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          filed_at?: string | null
+          filed_by?: string | null
+          filing_body: string
+          filing_data?: Json
+          filing_receipt?: Json | null
+          filing_reference?: string | null
+          filing_type: string
+          generated_documents?: Json | null
+          id?: string
+          is_locked?: boolean | null
+          job_id: string
+          organization_id: string
+          payment_deadline?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          rejection_reason?: string | null
+          second_payment_date?: string | null
+          status?: string
+          tax_due?: number | null
+          tax_refund?: number | null
+          tax_year?: string | null
+          updated_at?: string | null
+          workpaper_instance_id?: string | null
+        }
+        Update: {
+          approval_requested_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          filed_at?: string | null
+          filed_by?: string | null
+          filing_body?: string
+          filing_data?: Json
+          filing_receipt?: Json | null
+          filing_reference?: string | null
+          filing_type?: string
+          generated_documents?: Json | null
+          id?: string
+          is_locked?: boolean | null
+          job_id?: string
+          organization_id?: string
+          payment_deadline?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          rejection_reason?: string | null
+          second_payment_date?: string | null
+          status?: string
+          tax_due?: number | null
+          tax_refund?: number | null
+          tax_year?: string | null
+          updated_at?: string | null
+          workpaper_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_workpaper_instance_id_fkey"
+            columns: ["workpaper_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_conversations: {
         Row: {
           attachments: Json | null
@@ -2289,6 +2421,118 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workpaper_instances: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          field_notes: Json | null
+          field_overrides: Json | null
+          field_values: Json
+          finalised_at: string | null
+          finalised_by: string | null
+          id: string
+          job_id: string
+          name: string
+          organization_id: string
+          period_end: string | null
+          period_label: string | null
+          period_start: string | null
+          questionnaire_instance_id: string | null
+          service_type: string
+          status: string
+          template_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          field_notes?: Json | null
+          field_overrides?: Json | null
+          field_values?: Json
+          finalised_at?: string | null
+          finalised_by?: string | null
+          id?: string
+          job_id: string
+          name: string
+          organization_id: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
+          questionnaire_instance_id?: string | null
+          service_type: string
+          status?: string
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          field_notes?: Json | null
+          field_overrides?: Json | null
+          field_values?: Json
+          finalised_at?: string | null
+          finalised_by?: string | null
+          id?: string
+          job_id?: string
+          name?: string
+          organization_id?: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
+          questionnaire_instance_id?: string | null
+          service_type?: string
+          status?: string
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workpaper_instances_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workpaper_instances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workpaper_instances_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workpaper_instances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workpaper_instances_questionnaire_instance_id_fkey"
+            columns: ["questionnaire_instance_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workpaper_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
             referencedColumns: ["id"]
           },
         ]
