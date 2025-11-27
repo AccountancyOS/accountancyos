@@ -31,6 +31,8 @@ interface WorkpaperTemplateEditorProps {
 
 export default function WorkpaperTemplateEditor({ content, onChange }: WorkpaperTemplateEditorProps) {
   const sections: WorkpaperSection[] = content.sections || [];
+  const mappings: Record<string, any> = content.mappings || {};
+  const [showMappings, setShowMappings] = useState(false);
 
   const addSection = () => {
     const newSection: WorkpaperSection = {
@@ -83,14 +85,29 @@ export default function WorkpaperTemplateEditor({ content, onChange }: Workpaper
     });
   };
 
+  const updateFieldMapping = (fieldId: string, mapping: any) => {
+    const newMappings = { ...mappings, [fieldId]: mapping };
+    onChange({ ...content, mappings: newMappings });
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Workpaper Builder</CardTitle>
-        <Button onClick={addSection}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Section
-        </Button>
+        <div>
+          <CardTitle>Workpaper Builder</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Define sections, fields, and data mappings for this workpaper template
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowMappings(!showMappings)}>
+            {showMappings ? "Hide" : "Show"} Mappings
+          </Button>
+          <Button onClick={addSection}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Section
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {sections.length === 0 ? (
@@ -139,48 +156,130 @@ export default function WorkpaperTemplateEditor({ content, onChange }: Workpaper
                 {section.fields.map((field) => (
                   <div key={field.id} className="flex items-start gap-4 p-4 border rounded-lg">
                     <GripVertical className="h-5 w-5 text-muted-foreground mt-2" />
-                    <div className="flex-1 grid gap-4 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label>Field Label</Label>
-                        <Input
-                          value={field.label}
-                          onChange={(e) =>
-                            updateField(section.id, field.id, { label: e.target.value })
-                          }
-                        />
+                    <div className="flex-1 space-y-4">
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Field Label</Label>
+                          <Input
+                            value={field.label}
+                            onChange={(e) =>
+                              updateField(section.id, field.id, { label: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Field Type</Label>
+                          <Select
+                            value={field.type}
+                            onValueChange={(value) =>
+                              updateField(section.id, field.id, { type: value as any })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="dropdown">Dropdown</SelectItem>
+                              <SelectItem value="checkbox">Checkbox</SelectItem>
+                              <SelectItem value="file">File Upload</SelectItem>
+                              <SelectItem value="date">Date</SelectItem>
+                              <SelectItem value="yesno">Yes/No</SelectItem>
+                              <SelectItem value="calculation">Calculation</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2 flex items-center gap-2 pt-8">
+                          <Switch
+                            checked={field.required}
+                            onCheckedChange={(checked) =>
+                              updateField(section.id, field.id, { required: checked })
+                            }
+                          />
+                          <Label>Required</Label>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Field Type</Label>
-                        <Select
-                          value={field.type}
-                          onValueChange={(value) =>
-                            updateField(section.id, field.id, { type: value as any })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="number">Number</SelectItem>
-                            <SelectItem value="dropdown">Dropdown</SelectItem>
-                            <SelectItem value="checkbox">Checkbox</SelectItem>
-                            <SelectItem value="file">File Upload</SelectItem>
-                            <SelectItem value="date">Date</SelectItem>
-                            <SelectItem value="yesno">Yes/No</SelectItem>
-                            <SelectItem value="calculation">Calculation</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2 flex items-center gap-2 pt-8">
-                        <Switch
-                          checked={field.required}
-                          onCheckedChange={(checked) =>
-                            updateField(section.id, field.id, { required: checked })
-                          }
-                        />
-                        <Label>Required</Label>
-                      </div>
+
+                      {/* Data Mapping Configuration */}
+                      {showMappings && (
+                        <div className="p-3 bg-muted rounded-md space-y-3">
+                          <Label className="text-xs font-semibold">Data Source Mapping</Label>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Source</Label>
+                              <Select
+                                value={mappings[field.id]?.source || "manual"}
+                                onValueChange={(value) =>
+                                  updateFieldMapping(field.id, {
+                                    ...mappings[field.id],
+                                    source: value,
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="manual">Manual Entry</SelectItem>
+                                  <SelectItem value="questionnaire">Questionnaire</SelectItem>
+                                  <SelectItem value="bookkeeping">Bookkeeping</SelectItem>
+                                  <SelectItem value="payroll">Payroll</SelectItem>
+                                  <SelectItem value="calculation">Calculation</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {mappings[field.id]?.source === "questionnaire" && (
+                              <div className="space-y-2">
+                                <Label className="text-xs">Question Path</Label>
+                                <Input
+                                  className="h-8 text-xs"
+                                  placeholder="e.g., responses.employment.income"
+                                  value={mappings[field.id]?.field_path || ""}
+                                  onChange={(e) =>
+                                    updateFieldMapping(field.id, {
+                                      ...mappings[field.id],
+                                      field_path: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                            )}
+                            {mappings[field.id]?.source === "bookkeeping" && (
+                              <div className="space-y-2">
+                                <Label className="text-xs">Account Code</Label>
+                                <Input
+                                  className="h-8 text-xs"
+                                  placeholder="e.g., 4000"
+                                  value={mappings[field.id]?.account_code || ""}
+                                  onChange={(e) =>
+                                    updateFieldMapping(field.id, {
+                                      ...mappings[field.id],
+                                      account_code: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                            )}
+                            {mappings[field.id]?.source === "calculation" && (
+                              <div className="space-y-2">
+                                <Label className="text-xs">Formula</Label>
+                                <Input
+                                  className="h-8 text-xs"
+                                  placeholder="e.g., field1 + field2"
+                                  value={mappings[field.id]?.formula || ""}
+                                  onChange={(e) =>
+                                    updateFieldMapping(field.id, {
+                                      ...mappings[field.id],
+                                      formula: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <Button
                       variant="ghost"
