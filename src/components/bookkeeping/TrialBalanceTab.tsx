@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import type { BookkeepingEntity } from "./EntitySelector";
@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { FileDown } from "lucide-react";
+import { FileDown, Camera, Upload, Database } from "lucide-react";
 import { formatCurrency, getAccountTypeLabel } from "@/lib/bookkeeping-utils";
 import {
   Table,
@@ -24,19 +24,23 @@ import {
   TableRow,
   TableFooter,
 } from "@/components/ui/table";
-import { useNavigate } from "react-router-dom";
+import { ImportTrialBalanceDialog } from "./ImportTrialBalanceDialog";
+import { CreateSnapshotDialog } from "./CreateSnapshotDialog";
+import { SnapshotHistoryPanel } from "./SnapshotHistoryPanel";
+import { Badge } from "@/components/ui/badge";
 
 interface TrialBalanceTabProps {
   entity: BookkeepingEntity;
 }
 
 export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
-  const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear.toString());
   const [period, setPeriod] = useState("year");
   const { organization } = useOrganization();
-  const queryClient = useQueryClient();
+  
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
 
   // Calculate period dates
   const getPeriodDates = () => {
@@ -56,6 +60,7 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
 
   const periodDates = getPeriodDates();
 
+  // Fetch live trial balance from ledger
   const { data: trialBalance, isLoading } = useQuery({
     queryKey: [
       "trial-balance",
@@ -152,15 +157,46 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
     enabled: !!organization?.id,
   });
 
-  const sendToWorkpapersMutation = useMutation({
-    mutationFn: async () => {
-      if (!trialBalance) throw new Error("No trial balance data");
+  // Check for existing snapshot for this period
+  const { data: existingSnapshot } = useQuery({
+    queryKey: ["tb-snapshot-current", organization?.id, entity.type, entity.id, periodDates.start.toISOString(), periodDates.end.toISOString()],
+    queryFn: async () => {
+      if (!organization?.id) return null;
 
-      toast.success("TB sent to Workpapers", {
-        description: "Workpaper integration coming in Phase 2",
-      });
+      const query = supabase
+        .from("trial_balance_snapshots")
+        .select("*")
+        .eq("organization_id", organization.id)
+        .eq("period_start", periodDates.start.toISOString().split("T")[0])
+        .eq("period_end", periodDates.end.toISOString().split("T")[0])
+        .neq("status", "superseded")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (entity.type === "client") {
+        query.eq("client_id", entity.id);
+      } else {
+        query.eq("company_id", entity.id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data?.[0] || null;
     },
+    enabled: !!organization?.id,
   });
+
+  const handleSendToWorkpapers = () => {
+    if (!existingSnapshot) {
+      toast.error("Create a snapshot first", {
+        description: "You need to create a TB snapshot before sending to workpapers",
+      });
+      return;
+    }
+    toast.success("TB sent to Workpapers", {
+      description: "Workpaper creation from TB coming in Phase 3",
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -205,23 +241,60 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
               </SelectContent>
             </Select>
           </div>
-
-          <Button onClick={() => sendToWorkpapersMutation.mutate()}>
-            <FileDown className="h-4 w-4 mr-2" />
-            Send to Workpapers
-          </Button>
         </div>
       </div>
 
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Import TB
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          onClick={() => setSnapshotDialogOpen(true)}
+          disabled={!trialBalance || trialBalance.accounts.length === 0}
+        >
+          <Camera className="h-4 w-4 mr-2" />
+          Create Snapshot
+        </Button>
+
+        <SnapshotHistoryPanel entity={entity} />
+
+        <div className="flex-1" />
+
+        {existingSnapshot && (
+          <Badge variant="secondary" className="gap-1">
+            <Database className="h-3 w-3" />
+            Snapshot exists for this period
+          </Badge>
+        )}
+
+        <Button 
+          onClick={handleSendToWorkpapers}
+          disabled={!existingSnapshot}
+        >
+          <FileDown className="h-4 w-4 mr-2" />
+          Send to Workpapers
+        </Button>
+      </div>
+
       {isLoading ? (
-        <div>Loading trial balance...</div>
+        <div className="flex items-center justify-center h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
       ) : !trialBalance || trialBalance.accounts.length === 0 ? (
         <div className="flex items-center justify-center h-[400px] border border-dashed rounded-lg">
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-4">
             <p className="text-lg font-medium">No transactions in this period</p>
             <p className="text-sm text-muted-foreground">
-              Post journals to see trial balance
+              Post journals or import a trial balance to get started
             </p>
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import Trial Balance
+            </Button>
           </div>
         </div>
       ) : (
@@ -287,6 +360,24 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
           </Table>
         </div>
       )}
+
+      {/* Dialogs */}
+      <ImportTrialBalanceDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        entity={entity}
+        periodStart={periodDates.start}
+        periodEnd={periodDates.end}
+      />
+
+      <CreateSnapshotDialog
+        open={snapshotDialogOpen}
+        onOpenChange={setSnapshotDialogOpen}
+        entity={entity}
+        periodStart={periodDates.start}
+        periodEnd={periodDates.end}
+        trialBalanceData={trialBalance}
+      />
     </div>
   );
 }
