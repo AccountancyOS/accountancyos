@@ -3465,6 +3465,70 @@ export type Database = {
           },
         ]
       }
+      tb_account_mappings: {
+        Row: {
+          client_id: string | null
+          column_config: Json | null
+          company_id: string | null
+          created_at: string
+          id: string
+          is_default: boolean | null
+          mappings: Json
+          organization_id: string
+          source_type: string
+          template_name: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          column_config?: Json | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          mappings?: Json
+          organization_id: string
+          source_type: string
+          template_name: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          column_config?: Json | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          mappings?: Json
+          organization_id?: string
+          source_type?: string
+          template_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tb_account_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tb_account_mappings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tb_account_mappings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_invitations: {
         Row: {
           accepted_at: string | null
@@ -3623,6 +3687,88 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_balance_snapshots: {
+        Row: {
+          balances: Json
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          finalised_at: string | null
+          finalised_by: string | null
+          id: string
+          metadata: Json | null
+          notes: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          snapshot_date: string
+          source_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          balances?: Json
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          finalised_at?: string | null
+          finalised_by?: string | null
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          snapshot_date?: string
+          source_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          balances?: Json
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          finalised_at?: string | null
+          finalised_by?: string | null
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          snapshot_date?: string
+          source_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_balance_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trial_balance_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trial_balance_snapshots_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -3826,6 +3972,56 @@ export type Database = {
           },
         ]
       }
+      workpaper_category_mappings: {
+        Row: {
+          account_code_pattern: string | null
+          account_subtype: string | null
+          account_type: string | null
+          created_at: string
+          id: string
+          is_default: boolean | null
+          mapping_type: string
+          organization_id: string
+          priority: number | null
+          workpaper_category: string
+          workpaper_subcategory: string | null
+        }
+        Insert: {
+          account_code_pattern?: string | null
+          account_subtype?: string | null
+          account_type?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          mapping_type: string
+          organization_id: string
+          priority?: number | null
+          workpaper_category: string
+          workpaper_subcategory?: string | null
+        }
+        Update: {
+          account_code_pattern?: string | null
+          account_subtype?: string | null
+          account_type?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          mapping_type?: string
+          organization_id?: string
+          priority?: number | null
+          workpaper_category?: string
+          workpaper_subcategory?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workpaper_category_mappings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workpaper_instances: {
         Row: {
           client_id: string | null
@@ -3850,8 +4046,10 @@ export type Database = {
           questionnaire_instance_id: string | null
           service_type: string
           source_data: Json | null
+          source_type: string | null
           status: string
           template_id: string | null
+          trial_balance_snapshot_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -3877,8 +4075,10 @@ export type Database = {
           questionnaire_instance_id?: string | null
           service_type: string
           source_data?: Json | null
+          source_type?: string | null
           status?: string
           template_id?: string | null
+          trial_balance_snapshot_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -3904,8 +4104,10 @@ export type Database = {
           questionnaire_instance_id?: string | null
           service_type?: string
           source_data?: Json | null
+          source_type?: string | null
           status?: string
           template_id?: string | null
+          trial_balance_snapshot_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -3949,6 +4151,13 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workpaper_instances_trial_balance_snapshot_id_fkey"
+            columns: ["trial_balance_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "trial_balance_snapshots"
             referencedColumns: ["id"]
           },
         ]

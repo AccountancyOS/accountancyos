@@ -185,8 +185,8 @@ export async function calculateRevenue(
     `)
     .eq(entityType === 'client' ? 'client_id' : 'company_id', entityId)
     .eq('bookkeeping_accounts.account_type', 'INCOME')
-    .gte('entry_date', periodStart.toISOString().split('T')[0])
-    .lte('entry_date', periodEnd.toISOString().split('T')[0]);
+    .gte('transaction_date', periodStart.toISOString().split('T')[0])
+    .lte('transaction_date', periodEnd.toISOString().split('T')[0]);
 
   if (error) {
     console.error('Error calculating revenue:', error);
@@ -214,8 +214,8 @@ export async function calculateNetProfit(
     `)
     .eq(entityType === 'client' ? 'client_id' : 'company_id', entityId)
     .in('bookkeeping_accounts.account_type', ['INCOME', 'EXPENSE'])
-    .gte('entry_date', periodStart.toISOString().split('T')[0])
-    .lte('entry_date', periodEnd.toISOString().split('T')[0]);
+    .gte('transaction_date', periodStart.toISOString().split('T')[0])
+    .lte('transaction_date', periodEnd.toISOString().split('T')[0]);
 
   if (error) {
     console.error('Error calculating net profit:', error);
