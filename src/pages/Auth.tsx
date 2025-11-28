@@ -62,28 +62,21 @@ const Auth = () => {
         },
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        // Handle case where user already exists
+        if (authError.message.includes("already registered")) {
+          throw new Error("This email is already registered. Please sign in instead.");
+        }
+        throw authError;
+      }
       if (!authData.user) throw new Error("No user returned");
 
-      // Create organization
-      const { data: orgData, error: orgError } = await supabase
-        .from("organizations")
-        .insert({ name: organizationName })
-        .select()
-        .single();
+      // Create organization and link user as owner atomically
+      // Uses SECURITY DEFINER function to bypass RLS during signup
+      const { data: orgId, error: orgError } = await supabase
+        .rpc('create_organization_with_owner', { org_name: organizationName });
 
       if (orgError) throw orgError;
-
-      // Link user to organization as owner
-      const { error: linkError } = await supabase
-        .from("organization_users")
-        .insert({
-          organization_id: orgData.id,
-          user_id: authData.user.id,
-          role: "owner",
-        });
-
-      if (linkError) throw linkError;
 
       toast({
         title: "Welcome to AccountancyOS",
@@ -95,7 +88,7 @@ const Auth = () => {
         "stripe-checkout",
         {
           body: {
-            organizationId: orgData.id,
+            organizationId: orgId,
             organizationName: organizationName,
           },
         }
