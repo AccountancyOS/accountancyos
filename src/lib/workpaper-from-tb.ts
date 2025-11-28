@@ -278,7 +278,32 @@ export function calculateWorkpaperFields(lines: WorkpaperLine[]): WorkpaperLine[
 }
 
 /**
- * Create workpaper instance from TB snapshot
+ * Check if a workpaper already exists for the given snapshot and type (idempotent check)
+ */
+async function findExistingWorkpaper(
+  snapshotId: string,
+  serviceType: string
+): Promise<{ exists: boolean; workpaperId?: string }> {
+  const { data, error } = await supabase
+    .from("workpaper_instances")
+    .select("id")
+    .eq("trial_balance_snapshot_id", snapshotId)
+    .eq("service_type", serviceType)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error checking existing workpaper:", error);
+    return { exists: false };
+  }
+
+  return {
+    exists: !!data,
+    workpaperId: data?.id,
+  };
+}
+
+/**
+ * Create workpaper instance from TB snapshot (idempotent - updates if exists)
  */
 export async function createWorkpaperFromSnapshot(
   snapshotId: string,
@@ -286,9 +311,28 @@ export async function createWorkpaperFromSnapshot(
   options: {
     jobId?: string;
     name?: string;
+    forceRecreate?: boolean;
   } = {}
-): Promise<{ success: boolean; workpaperId?: string; error?: string }> {
+): Promise<{ success: boolean; workpaperId?: string; error?: string; wasUpdated?: boolean }> {
   try {
+    // Determine service type for the workpaper
+    const serviceTypeMap: Record<string, string> = {
+      company_accounts: "accounts",
+      ct600: "ct600",
+      self_assessment: "self_assessment",
+      vat_return: "vat_return",
+    };
+    const serviceType = serviceTypeMap[workpaperType];
+
+    // Idempotent check - see if workpaper already exists for this snapshot+type
+    if (!options.forceRecreate) {
+      const existing = await findExistingWorkpaper(snapshotId, serviceType);
+      if (existing.exists && existing.workpaperId) {
+        // Update existing workpaper instead of creating new one
+        return updateWorkpaperFromSnapshot(existing.workpaperId, snapshotId, workpaperType);
+      }
+    }
+
     // Fetch the snapshot
     const { data: snapshot, error: snapshotError } = await supabase
       .from("trial_balance_snapshots")
@@ -332,14 +376,6 @@ export async function createWorkpaperFromSnapshot(
       };
     });
 
-    // Determine service type for the workpaper
-    const serviceTypeMap: Record<string, string> = {
-      company_accounts: "accounts",
-      ct600: "ct600",
-      self_assessment: "self_assessment",
-      vat_return: "vat_return",
-    };
-
     // Create workpaper name
     const workpaperName = options.name || 
       `${workpaperType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())} - ${
@@ -348,6 +384,9 @@ export async function createWorkpaperFromSnapshot(
           year: "numeric" 
         })
       }`;
+
+    // Get current user for prepared_by
+    const { data: { user } } = await supabase.auth.getUser();
 
     // Create workpaper instance
     const { data: workpaper, error: workpaperError } = await supabase
@@ -360,7 +399,7 @@ export async function createWorkpaperFromSnapshot(
         trial_balance_snapshot_id: snapshotId,
         source_type: snapshot.source_type as any,
         name: workpaperName,
-        service_type: serviceTypeMap[workpaperType],
+        service_type: serviceType,
         period_start: snapshot.period_start,
         period_end: snapshot.period_end,
         period_label: `YE ${new Date(snapshot.period_end as string).toLocaleDateString("en-GB", { 
@@ -374,6 +413,8 @@ export async function createWorkpaperFromSnapshot(
         field_overrides: fieldOverrides as any,
         source_data: { snapshotId, balances } as any,
         last_data_sync_at: new Date().toISOString(),
+        prepared_by: user?.id,
+        prepared_at: new Date().toISOString(),
       }])
       .select()
       .single();
@@ -392,6 +433,79 @@ export async function createWorkpaperFromSnapshot(
     return { success: true, workpaperId: workpaper.id };
   } catch (error) {
     console.error("Error creating workpaper from snapshot:", error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Unknown error" 
+    };
+  }
+}
+
+/**
+ * Update existing workpaper from TB snapshot (idempotent update)
+ */
+async function updateWorkpaperFromSnapshot(
+  workpaperId: string,
+  snapshotId: string,
+  workpaperType: "company_accounts" | "ct600" | "self_assessment" | "vat_return"
+): Promise<{ success: boolean; workpaperId?: string; error?: string; wasUpdated?: boolean }> {
+  try {
+    // Fetch the snapshot
+    const { data: snapshot, error: snapshotError } = await supabase
+      .from("trial_balance_snapshots")
+      .select("*")
+      .eq("id", snapshotId)
+      .single();
+
+    if (snapshotError || !snapshot) {
+      return { success: false, error: "Snapshot not found" };
+    }
+
+    // Parse balances
+    const balances = (snapshot.balances as any[]).map(b => ({
+      ...b,
+      accountSubtype: b.accountSubtype || b.account_subtype,
+      isBankAccount: b.isBankAccount || b.is_bank_account,
+    })) as TBBalance[];
+
+    // Map to workpaper lines
+    let lines = mapTBToWorkpaperLines(balances, workpaperType);
+    lines = calculateWorkpaperFields(lines);
+
+    // Convert to field_values
+    const fieldValues: Record<string, any> = {};
+    lines.forEach(line => {
+      const key = line.subcategory 
+        ? `${line.category}_${line.subcategory}`
+        : line.category;
+      
+      fieldValues[key] = {
+        label: line.label,
+        amount: line.amount,
+        source: line.source,
+        sourceReference: line.sourceReference,
+        isKeyField: line.isKeyField,
+        displayOrder: line.displayOrder,
+      };
+    });
+
+    // Update existing workpaper
+    const { error: updateError } = await supabase
+      .from("workpaper_instances")
+      .update({
+        field_values: fieldValues as any,
+        source_data: { snapshotId, balances } as any,
+        last_data_sync_at: new Date().toISOString(),
+      })
+      .eq("id", workpaperId)
+      .eq("locked", false); // Only update if not locked
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    return { success: true, workpaperId, wasUpdated: true };
+  } catch (error) {
+    console.error("Error updating workpaper from snapshot:", error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : "Unknown error" 
