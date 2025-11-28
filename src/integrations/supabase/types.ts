@@ -3967,6 +3967,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_organization_with_owner: {
+        Args: { org_name: string }
+        Returns: string
+      }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
       get_user_organization_id:

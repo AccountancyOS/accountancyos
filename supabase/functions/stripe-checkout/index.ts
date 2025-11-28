@@ -52,7 +52,7 @@ serve(async (req) => {
       },
       customer_email: null,
       client_reference_id: organizationId,
-      success_url: `${req.headers.get('origin')}/onboarding/wizard?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${req.headers.get('origin')}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get('origin')}/auth?canceled=true`,
       metadata: {
         organization_id: organizationId,
