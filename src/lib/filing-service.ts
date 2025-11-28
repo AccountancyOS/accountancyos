@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { logAudit, checkCanFinalise } from "@/lib/audit-service";
 
 export type FilingStatus = 
   | "not_started" 
@@ -234,6 +235,23 @@ export async function markFilingAsFiled(
   filingReference?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Get filing to check organization_id and current status
+    const { data: filing, error: fetchError } = await supabase
+      .from("filings")
+      .select("organization_id, status")
+      .eq("id", filingId)
+      .single();
+
+    if (fetchError || !filing) {
+      return { success: false, error: "Filing not found" };
+    }
+
+    // Check permission
+    const canFile = await checkCanFinalise(filing.organization_id);
+    if (!canFile) {
+      return { success: false, error: "You don't have permission to mark filings as filed" };
+    }
+
     const { error } = await supabase
       .from("filings")
       .update({
@@ -248,6 +266,18 @@ export async function markFilingAsFiled(
     if (error) {
       return { success: false, error: error.message };
     }
+
+    // Log audit
+    await logAudit({
+      organizationId: filing.organization_id,
+      entityType: "filing",
+      entityId: filingId,
+      action: "file",
+      fieldName: "status",
+      oldValue: filing.status,
+      newValue: "filed",
+      metadata: { filing_reference: filingReference },
+    });
 
     return { success: true };
   } catch (err: any) {

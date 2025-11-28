@@ -1,8 +1,9 @@
 /**
  * Workpaper Status Actions Component
  * Provides status action buttons: Mark as In Review, Finalise, Reopen
+ * Includes permission checks and audit logging
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,15 +28,16 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Lock,
-  Unlock,
   CheckCircle,
   Eye,
   MoreHorizontal,
   FileCheck,
   RotateCcw,
-  Send,
+  ShieldAlert,
 } from "lucide-react";
 import { format } from "date-fns";
+import { logAudit, checkCanFinalise } from "@/lib/audit-service";
+import { useOrganization } from "@/lib/organization-context";
 
 interface WorkpaperStatusActionsProps {
   workpaperId: string;
@@ -74,6 +76,14 @@ export function WorkpaperStatusActions({
 }: WorkpaperStatusActionsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { organization } = useOrganization();
+
+  // Check if user can finalise (owner/admin only)
+  const { data: canFinalise } = useQuery({
+    queryKey: ["can-finalise", organization?.id],
+    queryFn: () => organization?.id ? checkCanFinalise(organization.id) : Promise.resolve(false),
+    enabled: !!organization?.id,
+  });
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({
@@ -106,16 +116,36 @@ export function WorkpaperStatusActions({
         updates.locked = false;
       }
 
+      const { data: workpaper } = await supabase
+        .from("workpaper_instances")
+        .select("organization_id, status")
+        .eq("id", workpaperId)
+        .single();
+
       const { error } = await supabase
         .from("workpaper_instances")
         .update(updates)
         .eq("id", workpaperId);
 
       if (error) throw error;
+
+      // Log audit entry
+      if (workpaper?.organization_id) {
+        await logAudit({
+          organizationId: workpaper.organization_id,
+          entityType: "workpaper_instance",
+          entityId: workpaperId,
+          action: status === "finalised" ? "finalise" : status === "in_review" && workpaper.status === "finalised" ? "reopen" : "update",
+          fieldName: "status",
+          oldValue: workpaper.status,
+          newValue: status,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["job-workpaper", jobId] });
       queryClient.invalidateQueries({ queryKey: ["workpapers"] });
+      queryClient.invalidateQueries({ queryKey: ["job-audit-trail", jobId] });
       onStatusChange?.();
       toast({ title: "Workpaper status updated" });
     },
@@ -130,6 +160,11 @@ export function WorkpaperStatusActions({
 
   const finaliseAndCreateFilingMutation = useMutation({
     mutationFn: async () => {
+      // Check permission
+      if (!canFinalise) {
+        throw new Error("You don't have permission to finalise workpapers");
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
 
       // First, get the workpaper data
@@ -155,7 +190,7 @@ export function WorkpaperStatusActions({
       if (updateError) throw updateError;
 
       // Create filing record
-      const { error: filingError } = await supabase.from("filings").insert({
+      const { data: filing, error: filingError } = await supabase.from("filings").insert({
         organization_id: workpaper.organization_id,
         job_id: workpaper.job_id,
         workpaper_instance_id: workpaper.id,
@@ -167,15 +202,36 @@ export function WorkpaperStatusActions({
         period_end: workpaper.period_end,
         tax_year: workpaper.period_label,
         filing_data: workpaper.field_values,
-        status: "not_started",
-      });
+        status: "draft",
+      }).select("id").single();
 
       if (filingError) throw filingError;
+
+      // Log audit entries
+      await logAudit({
+        organizationId: workpaper.organization_id,
+        entityType: "workpaper_instance",
+        entityId: workpaperId,
+        action: "finalise",
+        fieldName: "status",
+        oldValue: workpaper.status,
+        newValue: "finalised",
+      });
+
+      if (filing) {
+        await logAudit({
+          organizationId: workpaper.organization_id,
+          entityType: "filing",
+          entityId: filing.id,
+          action: "create",
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["job-workpaper", jobId] });
       queryClient.invalidateQueries({ queryKey: ["job-filing", jobId] });
       queryClient.invalidateQueries({ queryKey: ["workpapers"] });
+      queryClient.invalidateQueries({ queryKey: ["job-audit-trail", jobId] });
       onStatusChange?.();
       toast({ title: "Workpaper finalised and filing created" });
     },
@@ -244,34 +300,41 @@ export function WorkpaperStatusActions({
       )}
 
       {currentStatus === "in_review" && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              size="sm"
-              disabled={finaliseAndCreateFilingMutation.isPending}
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Finalise & Create Filing
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Finalise Workpaper?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will lock the workpaper and create a filing record. The
-                workpaper cannot be edited after finalisation without reopening.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => finaliseAndCreateFilingMutation.mutate()}
+        canFinalise ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                disabled={finaliseAndCreateFilingMutation.isPending}
               >
-                Finalise
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Finalise & Create Filing
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Finalise Workpaper?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will lock the workpaper and create a filing record. The
+                  workpaper cannot be edited after finalisation without reopening.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => finaliseAndCreateFilingMutation.mutate()}
+                >
+                  Finalise
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : (
+          <Button size="sm" variant="outline" disabled className="gap-2">
+            <ShieldAlert className="h-4 w-4" />
+            Requires Manager/Admin
+          </Button>
+        )
       )}
 
       {/* More actions dropdown */}

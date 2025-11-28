@@ -4216,6 +4216,10 @@ export type Database = {
         }
         Returns: string
       }
+      can_finalise: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       create_organization_with_owner: {
         Args: { org_name: string }
         Returns: string
