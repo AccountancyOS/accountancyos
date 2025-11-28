@@ -63,7 +63,6 @@ const Auth = () => {
       });
 
       if (authError) {
-        // Handle case where user already exists
         if (authError.message.includes("already registered")) {
           throw new Error("This email is already registered. Please sign in instead.");
         }
@@ -71,12 +70,35 @@ const Auth = () => {
       }
       if (!authData.user) throw new Error("No user returned");
 
-      // Create organization and link user as owner atomically
-      // Uses SECURITY DEFINER function to bypass RLS during signup
+      // CRITICAL FIX: Explicitly set the session before making any other Supabase calls
+      // This ensures auth.uid() works correctly in the RPC function
+      if (authData.session) {
+        await supabase.auth.setSession({
+          access_token: authData.session.access_token,
+          refresh_token: authData.session.refresh_token,
+        });
+      } else {
+        // If no session returned, email confirmation might be required
+        toast({
+          title: "Check your email",
+          description: "Please check your email to confirm your account before continuing.",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Now the RPC call will have proper authentication
       const { data: orgId, error: orgError } = await supabase
         .rpc('create_organization_with_owner', { org_name: organizationName });
 
-      if (orgError) throw orgError;
+      if (orgError) {
+        console.error("Organization creation error:", orgError);
+        throw new Error("Failed to create organization. Please try again.");
+      }
+
+      if (!orgId) {
+        throw new Error("Organization was not created properly. Please contact support.");
+      }
 
       toast({
         title: "Welcome to AccountancyOS",
@@ -94,7 +116,10 @@ const Auth = () => {
         }
       );
 
-      if (checkoutError) throw checkoutError;
+      if (checkoutError) {
+        console.error("Stripe checkout error:", checkoutError);
+        throw new Error("Failed to start payment setup. Please try again.");
+      }
 
       if (checkoutData?.url) {
         window.location.href = checkoutData.url;
@@ -102,6 +127,7 @@ const Auth = () => {
         throw new Error("No checkout URL returned");
       }
     } catch (error: any) {
+      console.error("Signup error:", error);
       toast({
         title: "Error creating account",
         description: error.message,

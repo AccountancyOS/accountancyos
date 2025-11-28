@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./auth-context";
+import { useToast } from "@/hooks/use-toast";
 
 interface Organization {
   id: string;
@@ -21,6 +22,7 @@ interface OrganizationContextType {
   organization: Organization | null;
   role: "owner" | "admin" | "staff" | null;
   loading: boolean;
+  error: string | null;
   refreshOrganization: () => Promise<void>;
 }
 
@@ -28,6 +30,7 @@ const OrganizationContext = createContext<OrganizationContextType>({
   organization: null,
   role: null,
   loading: true,
+  error: null,
   refreshOrganization: async () => {},
 });
 
@@ -35,20 +38,24 @@ export const useOrganization = () => useContext(OrganizationContext);
 
 export const OrganizationProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [role, setRole] = useState<"owner" | "admin" | "staff" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const loadOrganization = async () => {
     if (!user) {
       setOrganization(null);
       setRole(null);
       setLoading(false);
+      setError(null);
       return;
     }
 
     try {
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: queryError } = await supabase
         .from("organization_users")
         .select(`
           organization_id,
@@ -58,19 +65,28 @@ export const OrganizationProvider = ({ children }: { children: ReactNode }) => {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (error) throw error;
+      if (queryError) {
+        console.error("Error loading organization:", queryError);
+        setError("Failed to load organization data");
+        toast({
+          title: "Error loading organization",
+          description: "Please try refreshing the page. If the problem persists, contact support.",
+          variant: "destructive",
+        });
+        throw queryError;
+      }
 
       if (data) {
         const orgUser = data as unknown as OrganizationUser;
         setOrganization(orgUser.organization);
         setRole(orgUser.role);
       } else {
-        // User has no organization yet
+        // User has no organization yet - this is not an error, just means they need to complete signup
         setOrganization(null);
         setRole(null);
       }
-    } catch (error) {
-      console.error("Error loading organization:", error);
+    } catch (err) {
+      console.error("Error loading organization:", err);
       setOrganization(null);
       setRole(null);
     } finally {
@@ -88,6 +104,7 @@ export const OrganizationProvider = ({ children }: { children: ReactNode }) => {
         organization,
         role,
         loading,
+        error,
         refreshOrganization: loadOrganization,
       }}
     >

@@ -36,8 +36,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [checkingSubscription, setCheckingSubscription] = useState(false);
   const navigate = useNavigate();
 
-  const checkSubscription = async () => {
-    if (!session) {
+  // CRITICAL FIX: Accept session as parameter to avoid stale closure issues
+  const checkSubscription = async (sessionToCheck?: Session | null) => {
+    const activeSession = sessionToCheck ?? session;
+    
+    if (!activeSession) {
       setSubscribed(false);
       setSubscriptionEnd(null);
       return;
@@ -47,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase.functions.invoke('check-subscription', {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${activeSession.access_token}`,
         },
       });
 
@@ -67,16 +70,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     // Set up auth state listener FIRST - must be synchronous to avoid deadlock
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (_event, newSession) => {
         // Only synchronous state updates here
-        setSession(session);
-        setUser(session?.user ?? null);
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setLoading(false);
         
         // Defer Supabase calls with setTimeout to prevent deadlock
-        if (session) {
+        // CRITICAL FIX: Pass the session directly to avoid stale closure
+        if (newSession) {
           setTimeout(() => {
-            checkSubscription();
+            checkSubscription(newSession);
           }, 0);
         } else {
           setSubscribed(false);
@@ -86,15 +90,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
       setLoading(false);
       
-      // Defer subscription check
-      if (session) {
+      // Defer subscription check - pass session directly
+      if (existingSession) {
         setTimeout(() => {
-          checkSubscription();
+          checkSubscription(existingSession);
         }, 0);
       }
     });
@@ -106,7 +110,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!session) return;
 
     const interval = setInterval(() => {
-      checkSubscription();
+      checkSubscription(session);
     }, 60000);
 
     return () => clearInterval(interval);
@@ -125,7 +129,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       subscribed, 
       subscriptionEnd, 
       checkingSubscription,
-      checkSubscription,
+      checkSubscription: () => checkSubscription(session),
       signOut 
     }}>
       {children}

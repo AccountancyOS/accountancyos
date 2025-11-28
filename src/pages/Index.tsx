@@ -18,8 +18,9 @@ const Index = () => {
     }
 
     if (!organization) {
-      // User has no organization yet - should go through signup flow
-      navigate("/auth");
+      // CRITICAL FIX: User exists but has no organization - redirect to onboarding wizard
+      // NOT back to /auth which would cause an infinite redirect loop
+      navigate("/onboarding-wizard");
       return;
     }
 
