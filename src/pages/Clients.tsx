@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,15 +14,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Building2, User } from "lucide-react";
+import { Building2, User, Link2, UserPlus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AddClientDialog } from "@/components/clients/AddClientDialog";
 import DashboardLayout from "@/components/DashboardLayout";
+import LinkedClientsTab from "@/components/accountant-linking/LinkedClientsTab";
+import LinkToExistingClientDialog from "@/components/accountant-linking/LinkToExistingClientDialog";
 
 const Clients = () => {
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const [searchTerm, setSearchTerm] = useState("");
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
 
   const { data: clients, isLoading: clientsLoading } = useQuery({
     queryKey: ["clients", organization?.id],
@@ -69,14 +72,20 @@ const Clients = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
           <p className="text-muted-foreground mt-1">
             Manage your client relationships
           </p>
         </div>
-        <AddClientDialog />
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowLinkDialog(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Link Existing
+          </Button>
+          <AddClientDialog />
+        </div>
       </div>
 
       <div className="flex gap-4">
@@ -97,6 +106,10 @@ const Clients = () => {
           <TabsTrigger value="companies">
             <Building2 className="h-4 w-4 mr-2" />
             Companies ({companies?.length || 0})
+          </TabsTrigger>
+          <TabsTrigger value="linked">
+            <Link2 className="h-4 w-4 mr-2" />
+            Portal Links
           </TabsTrigger>
         </TabsList>
 
@@ -185,7 +198,16 @@ const Clients = () => {
             </div>
           )}
         </TabsContent>
+
+        <TabsContent value="linked">
+          <LinkedClientsTab />
+        </TabsContent>
         </Tabs>
+
+        <LinkToExistingClientDialog 
+          open={showLinkDialog} 
+          onOpenChange={setShowLinkDialog} 
+        />
       </div>
     </DashboardLayout>
   );

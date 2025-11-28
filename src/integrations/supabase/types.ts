@@ -14,6 +14,76 @@ export type Database = {
   }
   public: {
     Tables: {
+      accountant_client_links: {
+        Row: {
+          activated_at: string | null
+          client_id: string | null
+          client_user_id: string | null
+          company_id: string | null
+          created_at: string
+          decline_reason: string | null
+          ended_at: string | null
+          id: string
+          initiated_by: Database["public"]["Enums"]["link_initiator"]
+          notes: string | null
+          practice_id: string
+          status: Database["public"]["Enums"]["accountant_client_link_status"]
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          client_id?: string | null
+          client_user_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          decline_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          initiated_by?: Database["public"]["Enums"]["link_initiator"]
+          notes?: string | null
+          practice_id: string
+          status?: Database["public"]["Enums"]["accountant_client_link_status"]
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          client_id?: string | null
+          client_user_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          decline_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          initiated_by?: Database["public"]["Enums"]["link_initiator"]
+          notes?: string | null
+          practice_id?: string
+          status?: Database["public"]["Enums"]["accountant_client_link_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accountant_client_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accountant_client_links_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accountant_client_links_practice_id_fkey"
+            columns: ["practice_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_rules: {
         Row: {
           action_config: Json
@@ -2577,11 +2647,14 @@ export type Database = {
           country: string | null
           created_at: string
           email_domain: string | null
+          firm_code: string | null
           id: string
+          is_public_listed: boolean | null
           logo_url: string | null
           name: string
           onboarding_completed: boolean | null
           postcode: string | null
+          practice_description: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           timezone: string | null
@@ -2594,11 +2667,14 @@ export type Database = {
           country?: string | null
           created_at?: string
           email_domain?: string | null
+          firm_code?: string | null
           id?: string
+          is_public_listed?: boolean | null
           logo_url?: string | null
           name: string
           onboarding_completed?: boolean | null
           postcode?: string | null
+          practice_description?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           timezone?: string | null
@@ -2611,17 +2687,68 @@ export type Database = {
           country?: string | null
           created_at?: string
           email_domain?: string | null
+          firm_code?: string | null
           id?: string
+          is_public_listed?: boolean | null
           logo_url?: string | null
           name?: string
           onboarding_completed?: boolean | null
           postcode?: string | null
+          practice_description?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           timezone?: string | null
           updated_at?: string
         }
         Relationships: []
+      }
+      pending_practice_signups: {
+        Row: {
+          accountant_email: string
+          client_id: string | null
+          company_id: string | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          proposed_practice_name: string | null
+          status: string
+        }
+        Insert: {
+          accountant_email: string
+          client_id?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          proposed_practice_name?: string | null
+          status?: string
+        }
+        Update: {
+          accountant_email?: string
+          client_id?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          proposed_practice_name?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_practice_signups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_practice_signups_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       period_locks: {
         Row: {
@@ -4271,6 +4398,15 @@ export type Database = {
       }
     }
     Enums: {
+      accountant_client_link_status:
+        | "pending_client_approval"
+        | "pending_practice_approval"
+        | "active"
+        | "declined"
+        | "revoked_by_client"
+        | "revoked_by_practice"
+        | "switched_out"
+      link_initiator: "client" | "practice"
       portal_role: "accountant" | "client"
     }
     CompositeTypes: {
@@ -4399,6 +4535,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      accountant_client_link_status: [
+        "pending_client_approval",
+        "pending_practice_approval",
+        "active",
+        "declined",
+        "revoked_by_client",
+        "revoked_by_practice",
+        "switched_out",
+      ],
+      link_initiator: ["client", "practice"],
       portal_role: ["accountant", "client"],
     },
   },
