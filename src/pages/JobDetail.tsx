@@ -16,14 +16,17 @@ import JobSettingsTab from "@/components/jobs/JobSettingsTab";
 import { JobQuestionnaireTab } from "@/components/jobs/JobQuestionnaireTab";
 import { JobWorkpaperTab } from "@/components/jobs/JobWorkpaperTab";
 import { JobFilingTab } from "@/components/jobs/JobFilingTab";
-import { FilingPipelineStatus } from "@/components/jobs/FilingPipelineStatus";
+import { JobPipelineOverview } from "@/components/jobs/JobPipelineOverview";
+import { JobAuditTrail } from "@/components/jobs/JobAuditTrail";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export default function JobDetail() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("pipeline");
 
   const { data: job, isLoading } = useQuery({
     queryKey: ["job", jobId],
@@ -180,7 +183,7 @@ export default function JobDetail() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="pipeline" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
@@ -194,7 +197,10 @@ export default function JobDetail() {
           </TabsList>
 
           <TabsContent value="pipeline">
-            <FilingPipelineStatus />
+            <div className="space-y-6">
+              <JobPipelineOverview jobId={job.id} onNavigate={setActiveTab} />
+              <JobAuditTrail jobId={job.id} />
+            </div>
           </TabsContent>
 
           <TabsContent value="questionnaire">
