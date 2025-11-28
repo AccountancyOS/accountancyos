@@ -7,6 +7,7 @@ import { Loader2, CreditCard, Calendar, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function Subscription() {
   const { subscribed, subscriptionEnd, checkingSubscription, checkSubscription, session } = useAuth();
@@ -45,8 +46,9 @@ export default function Subscription() {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <DashboardLayout>
+      <div className="container mx-auto py-8 px-4">
+        <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Subscription</h1>
           <p className="text-muted-foreground mt-2">
@@ -160,8 +162,9 @@ export default function Subscription() {
               </p>
             )}
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
