@@ -65,14 +65,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    // Set up auth state listener FIRST - must be synchronous to avoid deadlock
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        // Only synchronous state updates here
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
         
+        // Defer Supabase calls with setTimeout to prevent deadlock
         if (session) {
-          await checkSubscription();
+          setTimeout(() => {
+            checkSubscription();
+          }, 0);
         } else {
           setSubscribed(false);
           setSubscriptionEnd(null);
@@ -80,13 +85,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
       
+      // Defer subscription check
       if (session) {
-        await checkSubscription();
+        setTimeout(() => {
+          checkSubscription();
+        }, 0);
       }
     });
 
