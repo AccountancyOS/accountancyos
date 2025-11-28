@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import type { BookkeepingEntity } from "./EntitySelector";
+import { createWorkpaperFromSnapshot, UK_WORKPAPER_CATEGORIES } from "@/lib/workpaper-from-tb";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +15,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Camera, Check, AlertCircle } from "lucide-react";
+import { Camera, Check, AlertCircle, FileSpreadsheet } from "lucide-react";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 
 interface CreateSnapshotDialogProps {
@@ -30,6 +39,13 @@ interface CreateSnapshotDialogProps {
   } | null;
 }
 
+const WORKPAPER_TYPES = [
+  { value: "company_accounts", label: "Company Accounts", forCompany: true },
+  { value: "ct600", label: "CT600 Tax Computation", forCompany: true },
+  { value: "self_assessment", label: "Self Assessment", forCompany: false },
+  { value: "vat_return", label: "VAT Return", forCompany: true },
+];
+
 export function CreateSnapshotDialog({
   open,
   onOpenChange,
@@ -41,21 +57,30 @@ export function CreateSnapshotDialog({
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState("");
+  const [createWorkpaper, setCreateWorkpaper] = useState(false);
+  const [workpaperType, setWorkpaperType] = useState<string>("");
 
   const isBalanced = trialBalanceData 
     ? Math.abs(trialBalanceData.totals.periodDebit - trialBalanceData.totals.periodCredit) < 0.01
     : false;
 
+  const filteredWorkpaperTypes = WORKPAPER_TYPES.filter(type => {
+    if (entity.type === "company") return type.forCompany;
+    return !type.forCompany || type.value === "vat_return";
+  });
+
   const createSnapshotMutation = useMutation({
     mutationFn: async () => {
       if (!organization?.id || !trialBalanceData) throw new Error("Missing data");
 
-      // Build balances array from current TB
+      // Build balances array from current TB with additional metadata
       const balances = trialBalanceData.accounts.map(account => ({
         accountId: account.id,
         accountCode: account.code,
         accountName: account.name,
         accountType: account.account_type,
+        accountSubtype: account.account_subtype,
+        isBankAccount: account.is_bank_account,
         openingBalance: account.openingBalance,
         debit: account.periodDebit,
         credit: account.periodCredit,
@@ -84,15 +109,39 @@ export function CreateSnapshotDialog({
         .single();
 
       if (error) throw error;
-      return data;
+
+      // Optionally create workpaper
+      if (createWorkpaper && workpaperType) {
+        const result = await createWorkpaperFromSnapshot(
+          data.id,
+          workpaperType as keyof typeof UK_WORKPAPER_CATEGORIES
+        );
+        if (!result.success) {
+          throw new Error(result.error || "Failed to create workpaper");
+        }
+        return { snapshot: data, workpaperCreated: true };
+      }
+
+      return { snapshot: data, workpaperCreated: false };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["trial-balance-snapshots"] });
-      toast.success("TB Snapshot created", {
-        description: "You can now create workpapers from this snapshot",
-      });
+      queryClient.invalidateQueries({ queryKey: ["workpapers"] });
+      
+      if (result.workpaperCreated) {
+        toast.success("Snapshot & Workpaper created", {
+          description: "TB data has been mapped to workpaper categories",
+        });
+      } else {
+        toast.success("TB Snapshot created", {
+          description: "You can now create workpapers from this snapshot",
+        });
+      }
+      
       onOpenChange(false);
       setNotes("");
+      setCreateWorkpaper(false);
+      setWorkpaperType("");
     },
     onError: (error: any) => {
       toast.error("Failed to create snapshot", { description: error.message });
@@ -148,7 +197,7 @@ export function CreateSnapshotDialog({
 
           {/* Balance check */}
           <div className={`flex items-center gap-2 p-3 rounded-lg ${
-            isBalanced ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
+            isBalanced ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
           }`}>
             {isBalanced ? (
               <>
@@ -174,8 +223,41 @@ export function CreateSnapshotDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add any notes about this snapshot..."
-              rows={3}
+              rows={2}
             />
+          </div>
+
+          {/* Create workpaper option */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="create-workpaper"
+                checked={createWorkpaper}
+                onCheckedChange={(checked) => setCreateWorkpaper(checked as boolean)}
+              />
+              <Label htmlFor="create-workpaper" className="flex items-center gap-2 cursor-pointer">
+                <FileSpreadsheet className="h-4 w-4" />
+                Also create workpaper from this snapshot
+              </Label>
+            </div>
+
+            {createWorkpaper && (
+              <div className="space-y-2 pl-6">
+                <Label htmlFor="workpaper-type">Workpaper Type</Label>
+                <Select value={workpaperType} onValueChange={setWorkpaperType}>
+                  <SelectTrigger id="workpaper-type">
+                    <SelectValue placeholder="Select workpaper type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredWorkpaperTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -185,10 +267,15 @@ export function CreateSnapshotDialog({
           </Button>
           <Button
             onClick={() => createSnapshotMutation.mutate()}
-            disabled={createSnapshotMutation.isPending}
+            disabled={createSnapshotMutation.isPending || (createWorkpaper && !workpaperType)}
           >
             <Camera className="h-4 w-4 mr-2" />
-            {createSnapshotMutation.isPending ? "Creating..." : "Create Snapshot"}
+            {createSnapshotMutation.isPending 
+              ? "Creating..." 
+              : createWorkpaper 
+                ? "Create Snapshot & Workpaper"
+                : "Create Snapshot"
+            }
           </Button>
         </DialogFooter>
       </DialogContent>
