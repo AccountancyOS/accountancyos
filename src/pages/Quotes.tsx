@@ -16,6 +16,7 @@ import { Plus, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import CreateQuoteDialog from "@/components/quotes/CreateQuoteDialog";
+import DashboardLayout from "@/components/DashboardLayout";
 
 interface Quote {
   id: string;
@@ -58,8 +59,9 @@ const Quotes = () => {
   } as const;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Quotes</h1>
           <p className="text-muted-foreground mt-1">
@@ -134,11 +136,12 @@ const Quotes = () => {
         </div>
       )}
 
-      <CreateQuoteDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-      />
-    </div>
+        <CreateQuoteDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+        />
+      </div>
+    </DashboardLayout>
   );
 };
 

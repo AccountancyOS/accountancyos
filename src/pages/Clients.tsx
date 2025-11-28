@@ -17,6 +17,7 @@ import {
 import { Building2, User } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AddClientDialog } from "@/components/clients/AddClientDialog";
+import DashboardLayout from "@/components/DashboardLayout";
 
 const Clients = () => {
   const navigate = useNavigate();
@@ -66,8 +67,9 @@ const Clients = () => {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
           <p className="text-muted-foreground mt-1">
@@ -183,8 +185,9 @@ const Clients = () => {
             </div>
           )}
         </TabsContent>
-      </Tabs>
-    </div>
+        </Tabs>
+      </div>
+    </DashboardLayout>
   );
 };
 

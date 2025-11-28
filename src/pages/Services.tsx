@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import DashboardLayout from "@/components/DashboardLayout";
 
 interface Service {
   id: string;
@@ -191,8 +192,9 @@ const Services = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Services Catalog</h1>
           <p className="text-muted-foreground mt-1">
@@ -412,8 +414,9 @@ const Services = () => {
             </TableBody>
           </Table>
         </div>
-      )}
-    </div>
+        )}
+      </div>
+    </DashboardLayout>
   );
 };
 
