@@ -29,6 +29,7 @@ import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
 import Deadlines from "./pages/Deadlines";
 import Filings from "./pages/Filings";
+import FilingDetail from "./pages/FilingDetail";
 import Workpapers from "./pages/Workpapers";
 import Bookkeeping from "./pages/Bookkeeping";
 import { Loader2 } from "lucide-react";
@@ -220,6 +221,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Filings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/filings/:filingId"
+              element={
+                <ProtectedRoute>
+                  <FilingDetail />
                 </ProtectedRoute>
               }
             />
