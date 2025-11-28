@@ -3,13 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { FileSpreadsheet, Lock, Edit, CheckCircle } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, FolderOpen } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { WorkpaperLineItem, WorkpaperLineValue } from "@/components/workpaper/WorkpaperLineItem";
+import { WorkpaperDocumentPanel } from "@/components/workpaper/WorkpaperDocumentPanel";
+import { WorkpaperStatusActions } from "@/components/workpaper/WorkpaperStatusActions";
 
 interface JobWorkpaperTabProps {
   jobId: string;
@@ -18,9 +18,10 @@ interface JobWorkpaperTabProps {
 export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [editingField, setEditingField] = useState<string | null>(null);
-  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [documentPanelOpen, setDocumentPanelOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [selectedCategoryLabel, setSelectedCategoryLabel] = useState<string | undefined>();
 
   const { data: workpaper, isLoading } = useQuery({
     queryKey: ["job-workpaper", jobId],
@@ -32,15 +33,12 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
         .maybeSingle();
 
       if (error) throw error;
-      if (data) {
-        setFieldValues(data.field_values as Record<string, any>);
-      }
       return data;
     },
   });
 
   const updateWorkpaperMutation = useMutation({
-    mutationFn: async (updates: { field_values?: any; status?: string }) => {
+    mutationFn: async (updates: { field_values?: any; field_overrides?: any; field_notes?: any }) => {
       if (!workpaper) return;
 
       const { error } = await supabase
@@ -52,75 +50,154 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["job-workpaper", jobId] });
-      toast({ title: "Workpaper updated successfully" });
+      toast({ title: "Workpaper updated" });
     },
     onError: () => {
       toast({ title: "Failed to update workpaper", variant: "destructive" });
     },
   });
 
-  const finaliseWorkpaperMutation = useMutation({
-    mutationFn: async () => {
-      if (!workpaper) return;
+  const handleFieldEdit = (fieldName: string, value: any, note?: string) => {
+    if (!workpaper) return;
 
-      const { error } = await supabase
-        .from("workpaper_instances")
-        .update({
-          status: "finalised",
-          finalised_at: new Date().toISOString(),
-        })
-        .eq("id", workpaper.id);
+    const currentFieldValues = workpaper.field_values as Record<string, any> || {};
+    const currentOverrides = workpaper.field_overrides as Record<string, any> || {};
+    const currentNotes = workpaper.field_notes as Record<string, any> || {};
 
-      if (error) throw error;
+    // Track original value if this is an override
+    const originalValue = currentFieldValues[fieldName];
+    const isOverride = JSON.stringify(originalValue) !== JSON.stringify(value);
 
-      // Auto-create filing
-      const { error: filingError } = await supabase
-        .from("filings")
-        .insert({
-          organization_id: workpaper.organization_id,
-          job_id: workpaper.job_id,
-          workpaper_instance_id: workpaper.id,
-          client_id: workpaper.client_id,
-          company_id: workpaper.company_id,
-          filing_type: workpaper.service_type,
-          filing_body: "HMRC",
-          period_start: workpaper.period_start,
-          period_end: workpaper.period_end,
-          tax_year: workpaper.period_label,
-          filing_data: workpaper.field_values,
-        });
+    const newFieldValues = {
+      ...currentFieldValues,
+      [fieldName]: value,
+    };
 
-      if (filingError) throw filingError;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["job-workpaper", jobId] });
-      queryClient.invalidateQueries({ queryKey: ["job-filing", jobId] });
-      toast({ title: "Workpaper finalised and filing created" });
-    },
-  });
+    const newOverrides = isOverride
+      ? { ...currentOverrides, [fieldName]: originalValue }
+      : currentOverrides;
 
-  const handleFieldUpdate = (fieldName: string, value: any) => {
-    const newValues = { ...fieldValues, [fieldName]: value };
-    setFieldValues(newValues);
+    const newNotes = note
+      ? { ...currentNotes, [fieldName]: note }
+      : currentNotes;
+
+    updateWorkpaperMutation.mutate({
+      field_values: newFieldValues,
+      field_overrides: newOverrides,
+      field_notes: newNotes,
+    });
   };
 
-  const handleSaveField = (fieldName: string) => {
-    updateWorkpaperMutation.mutate({ field_values: fieldValues });
-    setEditingField(null);
+  const handleDocumentClick = (fieldName: string, label: string) => {
+    setSelectedCategory(fieldName);
+    setSelectedCategoryLabel(label);
+    setDocumentPanelOpen(true);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "finalised":
-        return "bg-green-500";
-      case "ready_for_review":
-        return "bg-blue-500";
-      case "in_progress":
-        return "bg-yellow-500";
-      default:
-        return "bg-gray-500";
+  // Organize fields into sections
+  const sections = useMemo(() => {
+    if (!workpaper?.field_values) return [];
+    
+    const fieldValues = workpaper.field_values as unknown as Record<string, WorkpaperLineValue>;
+    const entries = Object.entries(fieldValues);
+    
+    // Group by key fields vs detail lines
+    const keyFields = entries.filter(([_, v]) => v.isKeyField);
+    const detailFields = entries.filter(([_, v]) => !v.isKeyField);
+
+    // Create sections based on workpaper type
+    const serviceType = workpaper.service_type;
+    
+    if (serviceType === "accounts" || serviceType === "ct600") {
+      return [
+        {
+          id: "pnl",
+          title: "Profit & Loss",
+          fields: keyFields
+            .filter(([k]) => 
+              ["turnover", "other_income", "cost_of_sales", "gross_profit", 
+               "administrative_expenses", "directors_remuneration", "depreciation",
+               "operating_profit", "interest_payable", "profit_before_tax"].includes(k)
+            )
+            .sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+        },
+        {
+          id: "balance_sheet",
+          title: "Balance Sheet",
+          fields: keyFields
+            .filter(([k]) => 
+              ["fixed_assets", "current_assets", "trade_debtors", "bank",
+               "trade_creditors", "other_creditors", "net_current_assets",
+               "long_term_liabilities", "net_assets", "share_capital",
+               "retained_earnings", "shareholders_funds"].includes(k)
+            )
+            .sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+        },
+        {
+          id: "tax_comp",
+          title: "Tax Computation",
+          fields: keyFields
+            .filter(([k]) => 
+              ["accounting_profit", "depreciation_addback", "capital_allowances",
+               "disallowable_expenses", "trading_profit", "property_income",
+               "chargeable_gains", "total_profits", "qualifying_donations",
+               "profits_chargeable", "corporation_tax"].includes(k)
+            )
+            .sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+        },
+        {
+          id: "details",
+          title: "Account Details",
+          fields: detailFields.sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+        },
+      ].filter(s => s.fields.length > 0);
     }
-  };
+
+    if (serviceType === "vat_return") {
+      return [
+        {
+          id: "vat_boxes",
+          title: "VAT Return Boxes",
+          fields: keyFields.sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+        },
+        {
+          id: "details",
+          title: "Account Details",
+          fields: detailFields.sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+        },
+      ].filter(s => s.fields.length > 0);
+    }
+
+    // Default sections for self_assessment and others
+    return [
+      {
+        id: "income",
+        title: "Income",
+        fields: keyFields
+          .filter(([k]) => k.includes("income") || k.includes("turnover") || k.includes("dividends"))
+          .sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+      },
+      {
+        id: "expenses",
+        title: "Expenses & Deductions",
+        fields: keyFields
+          .filter(([k]) => k.includes("expense") || k.includes("deduction") || k.includes("pension") || k.includes("gift"))
+          .sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+      },
+      {
+        id: "calculations",
+        title: "Tax Calculations",
+        fields: keyFields
+          .filter(([k]) => k.includes("tax") || k.includes("allowance") || k.includes("profit") || k.includes("national_insurance"))
+          .sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+      },
+      {
+        id: "details",
+        title: "Details",
+        fields: detailFields.sort((a, b) => (a[1].displayOrder || 0) - (b[1].displayOrder || 0)),
+      },
+    ].filter(s => s.fields.length > 0);
+  }, [workpaper]);
 
   if (isLoading) {
     return <div className="text-center py-8">Loading workpaper...</div>;
@@ -132,63 +209,65 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
         <CardContent className="py-8 text-center">
           <FileSpreadsheet className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground">
-            Workpaper will be created automatically when questionnaire is submitted
+            Workpaper will be created from Trial Balance snapshot or questionnaire
           </p>
         </CardContent>
       </Card>
     );
   }
 
-  const isLocked = workpaper.status === "finalised";
-  
-  // Get sections from template or use default
-  const sections = [
-    { id: "income", title: "Income", fields: Object.keys(fieldValues).slice(0, Math.ceil(Object.keys(fieldValues).length / 3)) },
-    { id: "deductions", title: "Deductions & Reliefs", fields: Object.keys(fieldValues).slice(Math.ceil(Object.keys(fieldValues).length / 3), Math.ceil(Object.keys(fieldValues).length * 2 / 3)) },
-    { id: "calculations", title: "Tax Calculations", fields: Object.keys(fieldValues).slice(Math.ceil(Object.keys(fieldValues).length * 2 / 3)) },
-  ];
+  const isLocked = workpaper.locked || workpaper.status === "finalised";
+  const fieldValues = (workpaper.field_values as unknown as Record<string, WorkpaperLineValue>) || {};
+  const fieldOverrides = (workpaper.field_overrides as unknown as Record<string, any>) || {};
+  const fieldNotes = (workpaper.field_notes as unknown as Record<string, string>) || {};
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
           <h3 className="text-lg font-semibold">{workpaper.name}</h3>
           <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-            <span>{workpaper.period_label} • Created {format(new Date(workpaper.created_at), "d MMM yyyy")}</span>
-            {workpaper.data_source && (
-              <Badge variant="secondary">
-                Source: {workpaper.data_source}
-              </Badge>
+            <span>
+              {workpaper.period_label} • Created{" "}
+              {format(new Date(workpaper.created_at), "d MMM yyyy")}
+            </span>
+            {workpaper.source_type && (
+              <Badge variant="secondary">Source: {workpaper.source_type}</Badge>
             )}
             {workpaper.last_data_sync_at && (
-              <span>Last synced: {format(new Date(workpaper.last_data_sync_at), "d MMM yyyy HH:mm")}</span>
+              <span>
+                Last synced:{" "}
+                {format(new Date(workpaper.last_data_sync_at), "d MMM yyyy HH:mm")}
+              </span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge className={getStatusColor(workpaper.status)}>
-            {workpaper.status}
-          </Badge>
-          {!isLocked && workpaper.status !== "finalised" && (
-            <Button
-              onClick={() => finaliseWorkpaperMutation.mutate()}
-              disabled={finaliseWorkpaperMutation.isPending}
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Finalise & Create Filing
-            </Button>
-          )}
-          {isLocked && (
-            <Badge variant="outline">
-              <Lock className="mr-1 h-3 w-3" />
-              Locked
-            </Badge>
-          )}
-        </div>
+
+        {/* Status Actions */}
+        <WorkpaperStatusActions
+          workpaperId={workpaper.id}
+          jobId={jobId}
+          currentStatus={workpaper.status}
+          isLocked={isLocked}
+          preparedBy={workpaper.prepared_by || undefined}
+          preparedAt={workpaper.prepared_at || undefined}
+          reviewedBy={workpaper.reviewed_by || undefined}
+          reviewedAt={workpaper.reviewed_at || undefined}
+          finalisedBy={workpaper.finalised_by || undefined}
+          finalisedAt={workpaper.finalised_at || undefined}
+        />
       </div>
 
       {/* Section Navigation */}
-      <div className="flex gap-2 border-b pb-2">
+      <div className="flex gap-2 border-b pb-2 overflow-x-auto">
+        <Button
+          variant={selectedSection === null ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setSelectedSection(null)}
+        >
+          All
+        </Button>
         {sections.map((section) => (
           <Button
             key={section.id}
@@ -199,107 +278,87 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
             {section.title}
           </Button>
         ))}
+        <div className="flex-1" />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSelectedCategory(undefined);
+            setSelectedCategoryLabel(undefined);
+            setDocumentPanelOpen(true);
+          }}
+        >
+          <FolderOpen className="mr-2 h-4 w-4" />
+          All Documents
+        </Button>
       </div>
 
+      {/* Workpaper Lines */}
       <Card>
         <CardHeader>
-          <CardTitle>Workpaper Fields</CardTitle>
+          <CardTitle>
+            {selectedSection
+              ? sections.find((s) => s.id === selectedSection)?.title
+              : "Workpaper Fields"}
+          </CardTitle>
           <CardDescription>
-            Review and edit values from questionnaire responses
+            Click the source icon for details. Edit values to create overrides.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {Object.entries(fieldValues)
-              .filter(([fieldName]) => {
-                if (!selectedSection) return true;
-                const section = sections.find(s => s.id === selectedSection);
-                return section?.fields.includes(fieldName);
-              })
-              .map(([fieldName, value]) => {
-                const isOverridden = workpaper.field_overrides?.[fieldName] !== undefined;
-                const hasNote = workpaper.field_notes?.[fieldName];
-                
-                return (
-                  <div key={fieldName} className="border rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <Label className="text-sm font-medium capitalize">
-                            {fieldName.replace(/_/g, " ")}
-                          </Label>
-                          {isOverridden && (
-                            <Badge variant="outline" className="text-xs">
-                              Overridden
-                            </Badge>
-                          )}
-                          {workpaper.source_data?.[fieldName] && (
-                            <Badge variant="secondary" className="text-xs">
-                              From {workpaper.data_source}
-                            </Badge>
-                          )}
-                        </div>
-                        {hasNote && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Note: {hasNote}
-                          </p>
-                        )}
-                      </div>
-                      {!isLocked && editingField !== fieldName && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditingField(fieldName)}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                     {editingField === fieldName ? (
-                      <div className="space-y-2">
-                        <Input
-                          value={value}
-                          onChange={(e) => handleFieldUpdate(fieldName, e.target.value)}
-                        />
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => handleSaveField(fieldName)}>
-                            Save
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditingField(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-sm text-muted-foreground">{value || "Not provided"}</p>
-                        {isOverridden && workpaper.source_data?.[fieldName] && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Original: {workpaper.source_data[fieldName]}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          <div className="space-y-3">
+            {sections
+              .filter((s) => selectedSection === null || s.id === selectedSection)
+              .map((section) => (
+                <div key={section.id} className="space-y-2">
+                  {selectedSection === null && (
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide mt-4 mb-2">
+                      {section.title}
+                    </h4>
+                  )}
+                  {section.fields.map(([fieldName, value]) => (
+                    <WorkpaperLineItem
+                      key={fieldName}
+                      fieldName={fieldName}
+                      value={value}
+                      isOverridden={fieldOverrides[fieldName] !== undefined}
+                      originalValue={fieldOverrides[fieldName]}
+                      note={fieldNotes[fieldName]}
+                      isLocked={isLocked}
+                      onEdit={handleFieldEdit}
+                      onDocumentClick={() =>
+                        handleDocumentClick(fieldName, value.label)
+                      }
+                      isDetailLine={!value.isKeyField}
+                    />
+                  ))}
+                </div>
+              ))}
           </div>
         </CardContent>
       </Card>
 
+      {/* Finalisation info */}
       {workpaper.finalised_at && (
         <Card>
           <CardContent className="py-4">
             <p className="text-sm text-muted-foreground">
-              Finalised on {format(new Date(workpaper.finalised_at), "d MMM yyyy HH:mm")}
+              Finalised on{" "}
+              {format(new Date(workpaper.finalised_at), "d MMM yyyy HH:mm")}
             </p>
           </CardContent>
         </Card>
       )}
+
+      {/* Document Panel */}
+      <WorkpaperDocumentPanel
+        isOpen={documentPanelOpen}
+        onClose={() => setDocumentPanelOpen(false)}
+        workpaperId={workpaper.id}
+        jobId={jobId}
+        selectedCategory={selectedCategory}
+        categoryLabel={selectedCategoryLabel}
+      />
     </div>
   );
 }
