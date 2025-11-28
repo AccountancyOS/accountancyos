@@ -59,6 +59,7 @@ export function CreateSnapshotDialog({
   const [notes, setNotes] = useState("");
   const [createWorkpaper, setCreateWorkpaper] = useState(false);
   const [workpaperType, setWorkpaperType] = useState<string>("");
+  const [finaliseImmediately, setFinaliseImmediately] = useState(false);
 
   const isBalanced = trialBalanceData 
     ? Math.abs(trialBalanceData.totals.periodDebit - trialBalanceData.totals.periodCredit) < 0.01
@@ -96,9 +97,14 @@ export function CreateSnapshotDialog({
           period_start: periodStart.toISOString().split("T")[0],
           period_end: periodEnd.toISOString().split("T")[0],
           source_type: "native",
-          status: "draft",
+          status: finaliseImmediately ? "finalised" : "draft",
+          locked: finaliseImmediately,
+          finalised_at: finaliseImmediately ? new Date().toISOString() : null,
           balances,
           notes,
+          total_debit: trialBalanceData.totals.periodDebit,
+          total_credit: trialBalanceData.totals.periodCredit,
+          is_balanced: isBalanced,
           metadata: {
             createdAt: new Date().toISOString(),
             accountCount: trialBalanceData.accounts.length,
@@ -257,6 +263,26 @@ export function CreateSnapshotDialog({
                   </SelectContent>
                 </Select>
               </div>
+            )}
+          </div>
+
+          {/* Finalise option */}
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="finalise-immediately"
+                checked={finaliseImmediately}
+                onCheckedChange={(checked) => setFinaliseImmediately(checked as boolean)}
+                disabled={!isBalanced}
+              />
+              <Label htmlFor="finalise-immediately" className="cursor-pointer">
+                Finalise snapshot immediately (lock for changes)
+              </Label>
+            </div>
+            {!isBalanced && (
+              <p className="text-xs text-muted-foreground mt-2 ml-6">
+                Cannot finalise - TB must balance first
+              </p>
             )}
           </div>
         </div>

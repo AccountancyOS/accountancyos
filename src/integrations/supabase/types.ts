@@ -3473,6 +3473,7 @@ export type Database = {
           created_at: string
           id: string
           is_default: boolean | null
+          is_global: boolean
           mappings: Json
           organization_id: string
           source_type: string
@@ -3486,6 +3487,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean | null
+          is_global?: boolean
           mappings?: Json
           organization_id: string
           source_type: string
@@ -3499,6 +3501,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean | null
+          is_global?: boolean
           mappings?: Json
           organization_id?: string
           source_type?: string
@@ -3704,6 +3707,9 @@ export type Database = {
           finalised_at: string | null
           finalised_by: string | null
           id: string
+          is_balanced: boolean | null
+          job_id: string | null
+          locked: boolean
           metadata: Json | null
           notes: string | null
           organization_id: string
@@ -3712,6 +3718,8 @@ export type Database = {
           snapshot_date: string
           source_type: string
           status: string
+          total_credit: number | null
+          total_debit: number | null
           updated_at: string
         }
         Insert: {
@@ -3723,6 +3731,9 @@ export type Database = {
           finalised_at?: string | null
           finalised_by?: string | null
           id?: string
+          is_balanced?: boolean | null
+          job_id?: string | null
+          locked?: boolean
           metadata?: Json | null
           notes?: string | null
           organization_id: string
@@ -3731,6 +3742,8 @@ export type Database = {
           snapshot_date?: string
           source_type?: string
           status?: string
+          total_credit?: number | null
+          total_debit?: number | null
           updated_at?: string
         }
         Update: {
@@ -3742,6 +3755,9 @@ export type Database = {
           finalised_at?: string | null
           finalised_by?: string | null
           id?: string
+          is_balanced?: boolean | null
+          job_id?: string | null
+          locked?: boolean
           metadata?: Json | null
           notes?: string | null
           organization_id?: string
@@ -3750,6 +3766,8 @@ export type Database = {
           snapshot_date?: string
           source_type?: string
           status?: string
+          total_credit?: number | null
+          total_debit?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -3765,6 +3783,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trial_balance_snapshots_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
@@ -4037,13 +4062,18 @@ export type Database = {
           id: string
           job_id: string
           last_data_sync_at: string | null
+          locked: boolean
           name: string
           organization_id: string
           owner_user_id: string | null
           period_end: string | null
           period_label: string | null
           period_start: string | null
+          prepared_at: string | null
+          prepared_by: string | null
           questionnaire_instance_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           service_type: string
           source_data: Json | null
           source_type: string | null
@@ -4066,13 +4096,18 @@ export type Database = {
           id?: string
           job_id: string
           last_data_sync_at?: string | null
+          locked?: boolean
           name: string
           organization_id: string
           owner_user_id?: string | null
           period_end?: string | null
           period_label?: string | null
           period_start?: string | null
+          prepared_at?: string | null
+          prepared_by?: string | null
           questionnaire_instance_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           service_type: string
           source_data?: Json | null
           source_type?: string | null
@@ -4095,13 +4130,18 @@ export type Database = {
           id?: string
           job_id?: string
           last_data_sync_at?: string | null
+          locked?: boolean
           name?: string
           organization_id?: string
           owner_user_id?: string | null
           period_end?: string | null
           period_label?: string | null
           period_start?: string | null
+          prepared_at?: string | null
+          prepared_by?: string | null
           questionnaire_instance_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           service_type?: string
           source_data?: Json | null
           source_type?: string | null

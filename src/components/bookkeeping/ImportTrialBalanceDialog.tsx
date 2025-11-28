@@ -99,6 +99,8 @@ export function ImportTrialBalanceDialog({
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [saveMapping, setSaveMapping] = useState(true);
   const [mappingTemplateName, setMappingTemplateName] = useState("");
+  const [isGlobalTemplate, setIsGlobalTemplate] = useState(false);
+  const [finaliseImmediately, setFinaliseImmediately] = useState(false);
 
   // Fetch existing accounts for mapping
   const { data: existingAccounts } = useQuery({
@@ -125,24 +127,19 @@ export function ImportTrialBalanceDialog({
     enabled: !!organization?.id && open,
   });
 
-  // Fetch saved mappings for this entity
+  // Fetch saved mappings for this entity (including global templates)
   const { data: savedMappings } = useQuery({
     queryKey: ["tb-account-mappings", organization?.id, entity.type, entity.id],
     queryFn: async () => {
       if (!organization?.id) return [];
       
-      const query = supabase
+      // Fetch entity-specific and global templates
+      const { data, error } = await supabase
         .from("tb_account_mappings")
         .select("*")
-        .eq("organization_id", organization.id);
+        .eq("organization_id", organization.id)
+        .or(`is_global.eq.true,${entity.type === "client" ? "client_id" : "company_id"}.eq.${entity.id}`);
       
-      if (entity.type === "client") {
-        query.eq("client_id", entity.id);
-      } else {
-        query.eq("company_id", entity.id);
-      }
-      
-      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -280,6 +277,9 @@ export function ImportTrialBalanceDialog({
         sourceCode: row.code,
         sourceName: row.name,
       }));
+
+      // Validate balance
+      const isBalanced = Math.abs(totals.debit - totals.credit) < 0.01;
       
       // Create snapshot
       const { data: snapshot, error: snapshotError } = await supabase
@@ -291,8 +291,13 @@ export function ImportTrialBalanceDialog({
           period_start: periodStart.toISOString().split("T")[0],
           period_end: periodEnd.toISOString().split("T")[0],
           source_type: sourceType === "csv" ? "manual_import" : sourceType,
-          status: "draft",
+          status: finaliseImmediately ? "finalised" : "draft",
+          locked: finaliseImmediately,
+          finalised_at: finaliseImmediately ? new Date().toISOString() : null,
           balances,
+          total_debit: totals.debit,
+          total_credit: totals.credit,
+          is_balanced: isBalanced,
           metadata: {
             importedAt: new Date().toISOString(),
             fileName: file?.name,
@@ -318,11 +323,12 @@ export function ImportTrialBalanceDialog({
           .from("tb_account_mappings")
           .insert([{
             organization_id: organization.id,
-            client_id: entity.type === "client" ? entity.id : null,
-            company_id: entity.type === "company" ? entity.id : null,
+            client_id: isGlobalTemplate ? null : (entity.type === "client" ? entity.id : null),
+            company_id: isGlobalTemplate ? null : (entity.type === "company" ? entity.id : null),
             source_type: sourceType,
             template_name: mappingTemplateName,
-            is_default: true,
+            is_default: !isGlobalTemplate,
+            is_global: isGlobalTemplate,
             mappings: mappingData as any,
             column_config: columnMapping as any,
           }]);
@@ -332,7 +338,7 @@ export function ImportTrialBalanceDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trial-balance-snapshots"] });
-      toast.success("Trial Balance imported successfully");
+      toast.success(finaliseImmediately ? "Trial Balance imported and finalised" : "Trial Balance imported as draft");
       resetDialog();
       onOpenChange(false);
     },
@@ -350,6 +356,8 @@ export function ImportTrialBalanceDialog({
     setParsedRows([]);
     setSaveMapping(true);
     setMappingTemplateName("");
+    setIsGlobalTemplate(false);
+    setFinaliseImmediately(false);
   };
 
   const totals = parsedRows.reduce(
@@ -620,15 +628,45 @@ export function ImportTrialBalanceDialog({
               </div>
               
               {saveMapping && (
-                <div className="ml-6">
-                  <Label className="text-sm">Template Name</Label>
-                  <Input
-                    value={mappingTemplateName}
-                    onChange={(e) => setMappingTemplateName(e.target.value)}
-                    placeholder={`${entity.name} - ${sourceLabels[sourceType]}`}
-                    className="max-w-sm mt-1"
-                  />
+                <div className="ml-6 space-y-3">
+                  <div>
+                    <Label className="text-sm">Template Name</Label>
+                    <Input
+                      value={mappingTemplateName}
+                      onChange={(e) => setMappingTemplateName(e.target.value)}
+                      placeholder={`${entity.name} - ${sourceLabels[sourceType]}`}
+                      className="max-w-sm mt-1"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="is-global"
+                      checked={isGlobalTemplate}
+                      onCheckedChange={(c) => setIsGlobalTemplate(c === true)}
+                    />
+                    <Label htmlFor="is-global" className="text-sm">
+                      Make this a global template (available for all entities using {sourceLabels[sourceType]})
+                    </Label>
+                  </div>
                 </div>
+              )}
+            </div>
+
+            {/* Finalise option */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="finalise-immediately"
+                  checked={finaliseImmediately}
+                  onCheckedChange={(c) => setFinaliseImmediately(c === true)}
+                  disabled={Math.abs(totals.debit - totals.credit) > 0.01}
+                />
+                <Label htmlFor="finalise-immediately">Finalise snapshot immediately (lock for workpapers)</Label>
+              </div>
+              {Math.abs(totals.debit - totals.credit) > 0.01 && (
+                <p className="text-xs text-muted-foreground ml-6">
+                  Cannot finalise - TB must balance first
+                </p>
               )}
             </div>
 
