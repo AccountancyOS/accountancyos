@@ -147,7 +147,7 @@ export function JobAuditTrail({ jobId }: JobAuditTrailProps) {
                       </span>
                       {entry.metadata?.level && (
                         <Badge variant="secondary" className="text-xs">
-                          {entry.metadata.level}
+                          {String(entry.metadata.level)}
                         </Badge>
                       )}
                     </div>

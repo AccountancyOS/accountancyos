@@ -2811,6 +2811,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           id: string
+          is_active: boolean | null
           organization_id: string
           user_id: string
         }
@@ -2819,6 +2820,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           id?: string
+          is_active?: boolean | null
           organization_id: string
           user_id: string
         }
@@ -2827,6 +2829,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           id?: string
+          is_active?: boolean | null
           organization_id?: string
           user_id?: string
         }
@@ -4345,6 +4348,14 @@ export type Database = {
       }
       can_finalise: {
         Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      client_has_portal_access: {
+        Args: {
+          check_client_id?: string
+          check_company_id?: string
+          check_user_id: string
+        }
         Returns: boolean
       }
       create_organization_with_owner: {

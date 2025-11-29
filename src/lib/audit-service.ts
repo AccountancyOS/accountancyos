@@ -13,7 +13,7 @@ export interface AuditLogEntry {
   old_value?: string | null;
   new_value?: string | null;
   user_id?: string | null;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -43,8 +43,10 @@ export async function logAudit(params: {
       metadata: params.metadata || {},
     };
 
-    // Use any to bypass type checking for new table
-    const { data, error } = await (supabase as any)
+    // Insert audit log entry using rpc or direct query
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = supabase as any;
+    const { data, error } = await client
       .from("audit_log")
       .insert(insertData)
       .select("id")
@@ -87,7 +89,9 @@ export async function getAuditLog(
   entityType: AuditEntityType,
   entityId: string
 ): Promise<AuditLogEntry[]> {
-  const { data, error } = await (supabase as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+  const { data, error } = await client
     .from("audit_log")
     .select("*")
     .eq("entity_type", entityType)
@@ -99,7 +103,7 @@ export async function getAuditLog(
     return [];
   }
 
-  return (data || []) as unknown as AuditLogEntry[];
+  return (data || []) as AuditLogEntry[];
 }
 
 export async function getEntityAuditTrail(
@@ -120,7 +124,9 @@ export async function getEntityAuditTrail(
 
   if (entityIds.length === 0) return [];
 
-  const { data, error } = await (supabase as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+  const { data, error } = await client
     .from("audit_log")
     .select("*")
     .in("entity_id", entityIds)
@@ -131,7 +137,7 @@ export async function getEntityAuditTrail(
     return [];
   }
 
-  return (data || []) as unknown as AuditLogEntry[];
+  return (data || []) as AuditLogEntry[];
 }
 
 export async function checkCanFinalise(organizationId: string): Promise<boolean> {
