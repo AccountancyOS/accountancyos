@@ -2898,27 +2898,36 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           created_at: string
+          created_by: string | null
           id: string
           is_active: boolean | null
           organization_id: string
+          role: string
+          updated_at: string
           user_id: string
         }
         Insert: {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          created_by?: string | null
           id?: string
           is_active?: boolean | null
           organization_id: string
+          role?: string
+          updated_at?: string
           user_id: string
         }
         Update: {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          created_by?: string | null
           id?: string
           is_active?: boolean | null
           organization_id?: string
+          role?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -2952,13 +2961,17 @@ export type Database = {
           created_at: string
           id: string
           organization_id: string
-          show_cash: boolean | null
-          show_ct_estimate: boolean | null
-          show_profit: boolean | null
-          show_receivables_payables: boolean | null
-          show_revenue: boolean | null
-          show_transactions: boolean | null
-          show_vat_position: boolean | null
+          show_bank_accounts: boolean
+          show_cash: boolean
+          show_ct_estimate: boolean
+          show_detailed_ledger: boolean
+          show_invoices: boolean
+          show_profit: boolean
+          show_receivables_payables: boolean
+          show_revenue: boolean
+          show_transactions: boolean
+          show_trial_balance: boolean
+          show_vat_position: boolean
           updated_at: string
         }
         Insert: {
@@ -2967,13 +2980,17 @@ export type Database = {
           created_at?: string
           id?: string
           organization_id: string
-          show_cash?: boolean | null
-          show_ct_estimate?: boolean | null
-          show_profit?: boolean | null
-          show_receivables_payables?: boolean | null
-          show_revenue?: boolean | null
-          show_transactions?: boolean | null
-          show_vat_position?: boolean | null
+          show_bank_accounts?: boolean
+          show_cash?: boolean
+          show_ct_estimate?: boolean
+          show_detailed_ledger?: boolean
+          show_invoices?: boolean
+          show_profit?: boolean
+          show_receivables_payables?: boolean
+          show_revenue?: boolean
+          show_transactions?: boolean
+          show_trial_balance?: boolean
+          show_vat_position?: boolean
           updated_at?: string
         }
         Update: {
@@ -2982,13 +2999,17 @@ export type Database = {
           created_at?: string
           id?: string
           organization_id?: string
-          show_cash?: boolean | null
-          show_ct_estimate?: boolean | null
-          show_profit?: boolean | null
-          show_receivables_payables?: boolean | null
-          show_revenue?: boolean | null
-          show_transactions?: boolean | null
-          show_vat_position?: boolean | null
+          show_bank_accounts?: boolean
+          show_cash?: boolean
+          show_ct_estimate?: boolean
+          show_detailed_ledger?: boolean
+          show_invoices?: boolean
+          show_profit?: boolean
+          show_receivables_payables?: boolean
+          show_revenue?: boolean
+          show_transactions?: boolean
+          show_trial_balance?: boolean
+          show_vat_position?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -4485,6 +4506,50 @@ export type Database = {
       }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
+      get_portal_entities_for_user: {
+        Args: { _user_id: string }
+        Returns: {
+          display_name: string
+          entity_id: string
+          entity_type: string
+          organization_id: string
+          registration_number: string
+          tax_reference: string
+        }[]
+      }
+      get_portal_kpis_for_entity: {
+        Args: {
+          _client_id?: string
+          _company_id?: string
+          _period_end?: string
+          _period_start?: string
+          _user_id: string
+        }
+        Returns: {
+          cash_balance: number
+          corporation_tax_estimate: number
+          expenses: number
+          net_profit: number
+          revenue: number
+          vat_position: number
+        }[]
+      }
+      get_portal_visibility_for_entity: {
+        Args: { _client_id?: string; _company_id?: string; _user_id: string }
+        Returns: {
+          show_bank_accounts: boolean
+          show_cash: boolean
+          show_ct_estimate: boolean
+          show_detailed_ledger: boolean
+          show_invoices: boolean
+          show_profit: boolean
+          show_receivables_payables: boolean
+          show_revenue: boolean
+          show_transactions: boolean
+          show_trial_balance: boolean
+          show_vat_position: boolean
+        }[]
+      }
       get_user_organization_id:
         | { Args: { check_user_id: string }; Returns: string }
         | { Args: never; Returns: string }
