@@ -5,3 +5,12 @@ verify_jwt = false
 
 [functions.send-email]
 verify_jwt = true
+
+[functions.truelayer-auth]
+verify_jwt = true
+
+[functions.truelayer-callback]
+verify_jwt = false
+
+[functions.truelayer-sync]
+verify_jwt = true

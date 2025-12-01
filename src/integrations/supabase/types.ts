@@ -151,8 +151,11 @@ export type Database = {
           external_identifier: string | null
           id: string
           is_active: boolean | null
+          last_synced_at: string | null
           name: string
           organization_id: string
+          provider: string | null
+          truelayer_account_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -164,8 +167,11 @@ export type Database = {
           external_identifier?: string | null
           id?: string
           is_active?: boolean | null
+          last_synced_at?: string | null
           name: string
           organization_id: string
+          provider?: string | null
+          truelayer_account_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -177,8 +183,11 @@ export type Database = {
           external_identifier?: string | null
           id?: string
           is_active?: boolean | null
+          last_synced_at?: string | null
           name?: string
           organization_id?: string
+          provider?: string | null
+          truelayer_account_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -212,6 +221,79 @@ export type Database = {
           },
         ]
       }
+      bank_connections: {
+        Row: {
+          access_token: string | null
+          bank_logo_url: string | null
+          bank_name: string | null
+          client_id: string | null
+          company_id: string | null
+          consent_expires_at: string | null
+          created_at: string | null
+          id: string
+          organization_id: string
+          provider: string
+          provider_connection_id: string | null
+          refresh_token: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          bank_logo_url?: string | null
+          bank_name?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          consent_expires_at?: string | null
+          created_at?: string | null
+          id?: string
+          organization_id: string
+          provider?: string
+          provider_connection_id?: string | null
+          refresh_token?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          bank_logo_url?: string | null
+          bank_name?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          consent_expires_at?: string | null
+          created_at?: string | null
+          id?: string
+          organization_id?: string
+          provider?: string
+          provider_connection_id?: string | null
+          refresh_token?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_connections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_transactions: {
         Row: {
           amount: number
@@ -226,9 +308,11 @@ export type Database = {
           import_source: string | null
           matched_ledger_entry_id: string | null
           organization_id: string
+          provider: string | null
           rule_id: string | null
           status: string
           transaction_date: string
+          truelayer_transaction_id: string | null
         }
         Insert: {
           amount: number
@@ -243,9 +327,11 @@ export type Database = {
           import_source?: string | null
           matched_ledger_entry_id?: string | null
           organization_id: string
+          provider?: string | null
           rule_id?: string | null
           status?: string
           transaction_date: string
+          truelayer_transaction_id?: string | null
         }
         Update: {
           amount?: number
@@ -260,9 +346,11 @@ export type Database = {
           import_source?: string | null
           matched_ledger_entry_id?: string | null
           organization_id?: string
+          provider?: string | null
           rule_id?: string | null
           status?: string
           transaction_date?: string
+          truelayer_transaction_id?: string | null
         }
         Relationships: [
           {
@@ -3930,6 +4018,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      truelayer_auth_states: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          organization_id: string
+          redirect_path: string | null
+          state: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          organization_id: string
+          redirect_path?: string | null
+          state: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          organization_id?: string
+          redirect_path?: string | null
+          state?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
