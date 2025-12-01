@@ -3121,7 +3121,7 @@ export type Database = {
           role: string
           status: string
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           accepted_at?: string | null
@@ -3140,7 +3140,7 @@ export type Database = {
           role?: string
           status?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           accepted_at?: string | null
@@ -3159,7 +3159,7 @@ export type Database = {
           role?: string
           status?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -4744,6 +4744,7 @@ export type Database = {
         Args: { org_name: string }
         Returns: string
       }
+      generate_invite_token: { Args: never; Returns: string }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
       get_portal_bank_accounts_for_entity: {
@@ -4818,6 +4819,21 @@ export type Database = {
         }
         Returns: boolean
       }
+      lifecycle_accept_quote: { Args: { p_quote_id: string }; Returns: Json }
+      lifecycle_approve_onboarding: {
+        Args: { p_onboarding_id: string }
+        Returns: Json
+      }
+      lifecycle_grant_portal_access: {
+        Args: {
+          p_email: string
+          p_entity_id: string
+          p_entity_type: string
+          p_role?: string
+        }
+        Returns: Json
+      }
+      lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
       seed_default_chart_of_accounts: {
         Args: {
           p_client_id?: string
