@@ -84,6 +84,56 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          field_name: string | null
+          id: string
+          metadata: Json | null
+          new_value: string | null
+          old_value: string | null
+          organization_id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          field_name?: string | null
+          id?: string
+          metadata?: Json | null
+          new_value?: string | null
+          old_value?: string | null
+          organization_id: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          field_name?: string | null
+          id?: string
+          metadata?: Json | null
+          new_value?: string | null
+          old_value?: string | null
+          organization_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_rules: {
         Row: {
           action_config: Json
@@ -745,12 +795,15 @@ export type Database = {
       }
       clients: {
         Row: {
+          activated_at: string | null
           address_line_1: string | null
           address_line_2: string | null
+          archived_at: string | null
           city: string | null
           country: string | null
           created_at: string
           date_of_birth: string | null
+          disengaged_at: string | null
           email: string
           first_name: string
           id: string
@@ -760,17 +813,21 @@ export type Database = {
           organization_id: string
           phone: string | null
           postcode: string | null
+          status: string
           tags: Json | null
           updated_at: string
           utr: string | null
         }
         Insert: {
+          activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          archived_at?: string | null
           city?: string | null
           country?: string | null
           created_at?: string
           date_of_birth?: string | null
+          disengaged_at?: string | null
           email: string
           first_name: string
           id?: string
@@ -780,17 +837,21 @@ export type Database = {
           organization_id: string
           phone?: string | null
           postcode?: string | null
+          status?: string
           tags?: Json | null
           updated_at?: string
           utr?: string | null
         }
         Update: {
+          activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          archived_at?: string | null
           city?: string | null
           country?: string | null
           created_at?: string
           date_of_birth?: string | null
+          disengaged_at?: string | null
           email?: string
           first_name?: string
           id?: string
@@ -800,6 +861,7 @@ export type Database = {
           organization_id?: string
           phone?: string | null
           postcode?: string | null
+          status?: string
           tags?: Json | null
           updated_at?: string
           utr?: string | null
@@ -816,13 +878,16 @@ export type Database = {
       }
       companies: {
         Row: {
+          activated_at: string | null
           address_line_1: string | null
           address_line_2: string | null
+          archived_at: string | null
           city: string | null
           company_name: string
           company_number: string | null
           country: string | null
           created_at: string
+          disengaged_at: string | null
           email: string
           id: string
           incorporation_date: string | null
@@ -830,6 +895,7 @@ export type Database = {
           organization_id: string
           phone: string | null
           postcode: string | null
+          status: string
           tags: Json | null
           updated_at: string
           vat_frequency: string | null
@@ -840,13 +906,16 @@ export type Database = {
           year_end_month: number | null
         }
         Insert: {
+          activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          archived_at?: string | null
           city?: string | null
           company_name: string
           company_number?: string | null
           country?: string | null
           created_at?: string
+          disengaged_at?: string | null
           email: string
           id?: string
           incorporation_date?: string | null
@@ -854,6 +923,7 @@ export type Database = {
           organization_id: string
           phone?: string | null
           postcode?: string | null
+          status?: string
           tags?: Json | null
           updated_at?: string
           vat_frequency?: string | null
@@ -864,13 +934,16 @@ export type Database = {
           year_end_month?: number | null
         }
         Update: {
+          activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          archived_at?: string | null
           city?: string | null
           company_name?: string
           company_number?: string | null
           country?: string | null
           created_at?: string
+          disengaged_at?: string | null
           email?: string
           id?: string
           incorporation_date?: string | null
@@ -878,6 +951,7 @@ export type Database = {
           organization_id?: string
           phone?: string | null
           postcode?: string | null
+          status?: string
           tags?: Json | null
           updated_at?: string
           vat_frequency?: string | null
@@ -1114,8 +1188,82 @@ export type Database = {
           },
         ]
       }
+      engagement_letters: {
+        Row: {
+          created_at: string
+          document_content: string | null
+          id: string
+          onboarding_application_id: string
+          organization_id: string
+          sent_at: string | null
+          signature_ip: string | null
+          signature_token: string | null
+          signature_user_agent: string | null
+          signed_at: string | null
+          template_id: string | null
+          token_expires_at: string | null
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          document_content?: string | null
+          id?: string
+          onboarding_application_id: string
+          organization_id: string
+          sent_at?: string | null
+          signature_ip?: string | null
+          signature_token?: string | null
+          signature_user_agent?: string | null
+          signed_at?: string | null
+          template_id?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          document_content?: string | null
+          id?: string
+          onboarding_application_id?: string
+          organization_id?: string
+          sent_at?: string | null
+          signature_ip?: string | null
+          signature_token?: string | null
+          signature_user_agent?: string | null
+          signed_at?: string | null
+          template_id?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagement_letters_onboarding_application_id_fkey"
+            columns: ["onboarding_application_id"]
+            isOneToOne: false
+            referencedRelation: "onboarding_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_letters_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_letters_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       engagements: {
         Row: {
+          activated_at: string | null
           active: boolean | null
           billing_notes: string | null
           client_id: string | null
@@ -1129,9 +1277,14 @@ export type Database = {
           service_config: Json | null
           service_id: string
           start_date: string
+          status: string
+          suspended_at: string | null
+          terminated_at: string | null
+          termination_reason: string | null
           updated_at: string
         }
         Insert: {
+          activated_at?: string | null
           active?: boolean | null
           billing_notes?: string | null
           client_id?: string | null
@@ -1145,9 +1298,14 @@ export type Database = {
           service_config?: Json | null
           service_id: string
           start_date: string
+          status?: string
+          suspended_at?: string | null
+          terminated_at?: string | null
+          termination_reason?: string | null
           updated_at?: string
         }
         Update: {
+          activated_at?: string | null
           active?: boolean | null
           billing_notes?: string | null
           client_id?: string | null
@@ -1161,6 +1319,10 @@ export type Database = {
           service_config?: Json | null
           service_id?: string
           start_date?: string
+          status?: string
+          suspended_at?: string | null
+          terminated_at?: string | null
+          termination_reason?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2230,12 +2392,14 @@ export type Database = {
       leads: {
         Row: {
           assigned_to: string | null
+          converted_at: string | null
           created_at: string
           email: string
           estimated_monthly_value: number | null
           first_name: string
           id: string
           last_name: string
+          lost_reason: string | null
           notes: string | null
           organization_id: string
           phone: string | null
@@ -2246,12 +2410,14 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          converted_at?: string | null
           created_at?: string
           email: string
           estimated_monthly_value?: number | null
           first_name: string
           id?: string
           last_name: string
+          lost_reason?: string | null
           notes?: string | null
           organization_id: string
           phone?: string | null
@@ -2262,12 +2428,14 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          converted_at?: string | null
           created_at?: string
           email?: string
           estimated_monthly_value?: number | null
           first_name?: string
           id?: string
           last_name?: string
+          lost_reason?: string | null
           notes?: string | null
           organization_id?: string
           phone?: string | null
@@ -2493,6 +2661,7 @@ export type Database = {
           address_line_2: string | null
           aml_notes: string | null
           aml_status: string | null
+          aml_submitted_at: string | null
           aml_verified_at: string | null
           application_type: string
           approved_at: string | null
@@ -2502,9 +2671,12 @@ export type Database = {
           company_id: string | null
           company_name: string | null
           company_number: string | null
+          contracts_sent_at: string | null
+          contracts_signed_at: string | null
           country: string | null
           created_at: string
           date_of_birth: string | null
+          documents_requested_at: string | null
           email: string | null
           first_name: string | null
           id: string
@@ -2519,6 +2691,7 @@ export type Database = {
           proof_of_address_uploaded: boolean | null
           quote_id: string | null
           rejection_reason: string | null
+          signature_data: Json | null
           status: string
           updated_at: string
           vat_number: string | null
@@ -2529,6 +2702,7 @@ export type Database = {
           address_line_2?: string | null
           aml_notes?: string | null
           aml_status?: string | null
+          aml_submitted_at?: string | null
           aml_verified_at?: string | null
           application_type: string
           approved_at?: string | null
@@ -2538,9 +2712,12 @@ export type Database = {
           company_id?: string | null
           company_name?: string | null
           company_number?: string | null
+          contracts_sent_at?: string | null
+          contracts_signed_at?: string | null
           country?: string | null
           created_at?: string
           date_of_birth?: string | null
+          documents_requested_at?: string | null
           email?: string | null
           first_name?: string | null
           id?: string
@@ -2555,6 +2732,7 @@ export type Database = {
           proof_of_address_uploaded?: boolean | null
           quote_id?: string | null
           rejection_reason?: string | null
+          signature_data?: Json | null
           status?: string
           updated_at?: string
           vat_number?: string | null
@@ -2565,6 +2743,7 @@ export type Database = {
           address_line_2?: string | null
           aml_notes?: string | null
           aml_status?: string | null
+          aml_submitted_at?: string | null
           aml_verified_at?: string | null
           application_type?: string
           approved_at?: string | null
@@ -2574,9 +2753,12 @@ export type Database = {
           company_id?: string | null
           company_name?: string | null
           company_number?: string | null
+          contracts_sent_at?: string | null
+          contracts_signed_at?: string | null
           country?: string | null
           created_at?: string
           date_of_birth?: string | null
+          documents_requested_at?: string | null
           email?: string | null
           first_name?: string | null
           id?: string
@@ -2591,6 +2773,7 @@ export type Database = {
           proof_of_address_uploaded?: boolean | null
           quote_id?: string | null
           rejection_reason?: string | null
+          signature_data?: Json | null
           status?: string
           updated_at?: string
           vat_number?: string | null
@@ -2922,38 +3105,59 @@ export type Database = {
       }
       portal_access: {
         Row: {
+          accepted_at: string | null
           client_id: string | null
           company_id: string | null
           created_at: string
           created_by: string | null
           id: string
+          invite_expires_at: string | null
+          invite_token: string | null
+          invited_at: string | null
           is_active: boolean | null
           organization_id: string
+          revoked_at: string | null
+          revoked_reason: string | null
           role: string
+          status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          accepted_at?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          invite_expires_at?: string | null
+          invite_token?: string | null
+          invited_at?: string | null
           is_active?: boolean | null
           organization_id: string
+          revoked_at?: string | null
+          revoked_reason?: string | null
           role?: string
+          status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          accepted_at?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          invite_expires_at?: string | null
+          invite_token?: string | null
+          invited_at?: string | null
           is_active?: boolean | null
           organization_id?: string
+          revoked_at?: string | null
+          revoked_reason?: string | null
           role?: string
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -3360,6 +3564,9 @@ export type Database = {
           notes: string | null
           organization_id: string
           quote_number: string
+          rejected_at: string | null
+          rejection_reason: string | null
+          sent_at: string | null
           status: string
           total_amount: number
           updated_at: string
@@ -3376,6 +3583,9 @@ export type Database = {
           notes?: string | null
           organization_id: string
           quote_number: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          sent_at?: string | null
           status?: string
           total_amount?: number
           updated_at?: string
@@ -3392,6 +3602,9 @@ export type Database = {
           notes?: string | null
           organization_id?: string
           quote_number?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          sent_at?: string | null
           status?: string
           total_amount?: number
           updated_at?: string
