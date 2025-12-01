@@ -32,6 +32,7 @@ import Filings from "./pages/Filings";
 import FilingDetail from "./pages/FilingDetail";
 import Workpapers from "./pages/Workpapers";
 import Bookkeeping from "./pages/Bookkeeping";
+import Settings from "./pages/Settings";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -281,10 +282,7 @@ const App = () => (
               path="/settings"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Settings"
-                    description="Organization settings and preferences"
-                  />
+                  <Settings />
                 </ProtectedRoute>
               }
             />
