@@ -2,3 +2,6 @@ project_id = "moxpdejnucjjcplleefn"
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.send-email]
+verify_jwt = true
