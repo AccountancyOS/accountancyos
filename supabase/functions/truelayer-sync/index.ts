@@ -175,6 +175,15 @@ serve(async (req) => {
     // Refresh token if needed
     const accessToken = await refreshTokenIfNeeded(supabase, connection);
     if (!accessToken) {
+      // Mark connection as error
+      await supabase
+        .from('bank_connections')
+        .update({
+          status: 'error',
+          last_error: 'Failed to get valid access token',
+        })
+        .eq('id', connection.id);
+      
       return new Response(JSON.stringify({ error: 'Failed to get valid access token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -227,7 +236,18 @@ serve(async (req) => {
         });
 
         if (!transactionsResponse.ok) {
-          console.error('Failed to fetch transactions for account:', ba.truelayer_account_id, await transactionsResponse.text());
+          const errorText = await transactionsResponse.text();
+          console.error('Failed to fetch transactions for account:', ba.truelayer_account_id, errorText);
+          
+          // Update connection with error status
+          await supabase
+            .from('bank_connections')
+            .update({
+              status: 'error',
+              last_error: `Failed to fetch transactions: ${errorText}`,
+            })
+            .eq('id', connection.id);
+          
           continue;
         }
 
@@ -236,7 +256,7 @@ serve(async (req) => {
 
         console.log(`Fetched ${transactions.length} transactions for account ${ba.truelayer_account_id}`);
 
-        // Upsert transactions
+        // Upsert transactions with category and raw_json
         for (const txn of transactions) {
           const transactionData: Record<string, unknown> = {
             organization_id: ba.organization_id,
@@ -246,6 +266,9 @@ serve(async (req) => {
             description: txn.description || 'No description',
             amount: txn.amount,
             balance: txn.running_balance?.amount || null,
+            currency: txn.currency || 'GBP',
+            category: txn.transaction_category || null,
+            raw_json: txn,
             status: 'UNREVIEWED',
             provider: 'TRUELAYER',
             import_source: 'TRUELAYER',
@@ -270,6 +293,10 @@ serve(async (req) => {
               .from('bank_transactions')
               .update({
                 balance: transactionData.balance,
+                currency: transactionData.currency,
+                category: transactionData.category,
+                raw_json: transactionData.raw_json,
+                updated_at: new Date().toISOString(),
               })
               .eq('id', existing.id);
             totalUpdatedTransactions++;
@@ -290,8 +317,27 @@ serve(async (req) => {
 
       } catch (accountError) {
         console.error('Error syncing account:', ba.id, accountError);
+        
+        // Update connection with error
+        await supabase
+          .from('bank_connections')
+          .update({
+            status: 'error',
+            last_error: accountError instanceof Error ? accountError.message : 'Unknown sync error',
+          })
+          .eq('id', connection.id);
       }
     }
+
+    // Update connection last_synced_at and clear any error status on success
+    await supabase
+      .from('bank_connections')
+      .update({
+        last_synced_at: new Date().toISOString(),
+        status: 'active',
+        last_error: null,
+      })
+      .eq('id', connection.id);
 
     console.log(`Sync complete: ${totalNewTransactions} new, ${totalUpdatedTransactions} updated`);
 

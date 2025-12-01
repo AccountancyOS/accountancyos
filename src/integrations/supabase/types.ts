@@ -144,6 +144,7 @@ export type Database = {
       bank_accounts: {
         Row: {
           account_id: string
+          account_number: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
@@ -155,11 +156,13 @@ export type Database = {
           name: string
           organization_id: string
           provider: string | null
+          sort_code: string | null
           truelayer_account_id: string | null
           updated_at: string | null
         }
         Insert: {
           account_id: string
+          account_number?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -171,11 +174,13 @@ export type Database = {
           name: string
           organization_id: string
           provider?: string | null
+          sort_code?: string | null
           truelayer_account_id?: string | null
           updated_at?: string | null
         }
         Update: {
           account_id?: string
+          account_number?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -187,6 +192,7 @@ export type Database = {
           name?: string
           organization_id?: string
           provider?: string | null
+          sort_code?: string | null
           truelayer_account_id?: string | null
           updated_at?: string | null
         }
@@ -231,10 +237,13 @@ export type Database = {
           consent_expires_at: string | null
           created_at: string | null
           id: string
+          last_error: string | null
+          last_synced_at: string | null
           organization_id: string
           provider: string
           provider_connection_id: string | null
           refresh_token: string | null
+          scope: string | null
           status: string
           updated_at: string | null
         }
@@ -247,10 +256,13 @@ export type Database = {
           consent_expires_at?: string | null
           created_at?: string | null
           id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
           organization_id: string
           provider?: string
           provider_connection_id?: string | null
           refresh_token?: string | null
+          scope?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -263,10 +275,13 @@ export type Database = {
           consent_expires_at?: string | null
           created_at?: string | null
           id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
           organization_id?: string
           provider?: string
           provider_connection_id?: string | null
           refresh_token?: string | null
+          scope?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -299,9 +314,11 @@ export type Database = {
           amount: number
           balance: number | null
           bank_account_id: string
+          category: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
+          currency: string | null
           description: string
           id: string
           import_batch_id: string | null
@@ -309,18 +326,22 @@ export type Database = {
           matched_ledger_entry_id: string | null
           organization_id: string
           provider: string | null
+          raw_json: Json | null
           rule_id: string | null
           status: string
           transaction_date: string
           truelayer_transaction_id: string | null
+          updated_at: string | null
         }
         Insert: {
           amount: number
           balance?: number | null
           bank_account_id: string
+          category?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          currency?: string | null
           description: string
           id?: string
           import_batch_id?: string | null
@@ -328,18 +349,22 @@ export type Database = {
           matched_ledger_entry_id?: string | null
           organization_id: string
           provider?: string | null
+          raw_json?: Json | null
           rule_id?: string | null
           status?: string
           transaction_date: string
           truelayer_transaction_id?: string | null
+          updated_at?: string | null
         }
         Update: {
           amount?: number
           balance?: number | null
           bank_account_id?: string
+          category?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          currency?: string | null
           description?: string
           id?: string
           import_batch_id?: string | null
@@ -347,10 +372,12 @@ export type Database = {
           matched_ledger_entry_id?: string | null
           organization_id?: string
           provider?: string | null
+          raw_json?: Json | null
           rule_id?: string | null
           status?: string
           transaction_date?: string
           truelayer_transaction_id?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -4506,6 +4533,19 @@ export type Database = {
       }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
+      get_portal_bank_accounts_for_entity: {
+        Args: { _client_id?: string; _company_id?: string; _user_id: string }
+        Returns: {
+          account_number: string
+          connection_status: string
+          currency: string
+          id: string
+          last_synced_at: string
+          name: string
+          provider: string
+          sort_code: string
+        }[]
+      }
       get_portal_entities_for_user: {
         Args: { _user_id: string }
         Returns: {
