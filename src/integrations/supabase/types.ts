@@ -4760,6 +4760,17 @@ export type Database = {
           sort_code: string
         }[]
       }
+      get_portal_entities_for_current_user: {
+        Args: never
+        Returns: {
+          display_name: string
+          entity_id: string
+          entity_type: string
+          organization_id: string
+          registration_number: string
+          tax_reference: string
+        }[]
+      }
       get_portal_entities_for_user: {
         Args: { _user_id: string }
         Returns: {
@@ -4771,6 +4782,7 @@ export type Database = {
           tax_reference: string
         }[]
       }
+      get_portal_invite_details: { Args: { p_token: string }; Returns: Json }
       get_portal_kpis_for_entity: {
         Args: {
           _client_id?: string
@@ -4818,6 +4830,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      lifecycle_accept_portal_invitation: {
+        Args: { p_token: string }
+        Returns: Json
       }
       lifecycle_accept_quote: { Args: { p_quote_id: string }; Returns: Json }
       lifecycle_approve_onboarding: {
