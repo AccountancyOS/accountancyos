@@ -39,13 +39,32 @@ serve(async (req) => {
       });
     }
 
-    const { entity_type, entity_id, organization_id, redirect_path = '/bookkeeping' } = await req.json();
+    const { entity_type, entity_id, organization_id: providedOrgId, redirect_path = '/bookkeeping' } = await req.json();
 
-    if (!entity_type || !entity_id || !organization_id) {
-      return new Response(JSON.stringify({ error: 'Missing required parameters: entity_type, entity_id, organization_id' }), {
+    if (!entity_type || !entity_id) {
+      return new Response(JSON.stringify({ error: 'Missing required parameters: entity_type, entity_id' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Derive organization_id from entity if not provided
+    let organization_id = providedOrgId;
+    if (!organization_id) {
+      const entityTable = entity_type === 'client' ? 'clients' : 'companies';
+      const { data: entity, error: entityError } = await supabase
+        .from(entityTable)
+        .select('organization_id')
+        .eq('id', entity_id)
+        .single();
+      
+      if (entityError || !entity) {
+        return new Response(JSON.stringify({ error: 'Entity not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      organization_id = entity.organization_id;
     }
 
     // Generate a secure random state

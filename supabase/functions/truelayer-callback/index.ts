@@ -72,6 +72,9 @@ serve(async (req) => {
 
     const tokens = await tokenResponse.json();
     console.log('Token exchange successful, access_token received');
+    
+    // Extract scope from token response
+    const tokenScope = tokens.scope || 'info accounts balance transactions offline_access';
 
     // Fetch the connected accounts from TrueLayer
     const accountsResponse = await fetch(`${TRUELAYER_API_URL}/data/v1/accounts`, {
@@ -99,7 +102,7 @@ serve(async (req) => {
     const providerName = accounts[0]?.provider?.display_name || 'Unknown Bank';
     const providerLogo = accounts[0]?.provider?.logo_uri || null;
 
-    // Create the bank connection record
+    // Create the bank connection record with scope and last_synced_at
     const connectionData: Record<string, unknown> = {
       organization_id: authState.organization_id,
       provider: 'TRUELAYER',
@@ -107,9 +110,11 @@ serve(async (req) => {
       status: 'ACTIVE',
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
+      scope: tokenScope,
       consent_expires_at: consentExpiresAt.toISOString(),
       bank_name: providerName,
       bank_logo_url: providerLogo,
+      last_synced_at: new Date().toISOString(),
     };
 
     if (authState.client_id) {
@@ -181,11 +186,13 @@ serve(async (req) => {
           bookkeepingAccountId = newBookkeepingAccount.id;
         }
 
-        // Create the bank account record
+        // Create the bank account record with account_number and sort_code
         const bankAccountData: Record<string, unknown> = {
           organization_id: authState.organization_id,
           account_id: bookkeepingAccountId,
           name: account.display_name || `${providerName} Account`,
+          account_number: account.account_number?.number || null,
+          sort_code: account.account_number?.sort_code || null,
           currency: account.currency || 'GBP',
           provider: 'TRUELAYER',
           truelayer_account_id: account.account_id,
