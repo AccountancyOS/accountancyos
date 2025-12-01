@@ -55,6 +55,31 @@ const QuoteDetail = () => {
     enabled: !!id,
   });
 
+  const sendQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('lifecycle_send_quote', {
+        p_quote_id: id
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quote", id] });
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast({ 
+        title: "Quote sent successfully",
+        description: `Email queued for ${recipientEmail || recipientName}`
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to send quote",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
       const { error } = await supabase
@@ -213,12 +238,17 @@ const QuoteDetail = () => {
         {quote.status === "draft" && (
           <div className="flex gap-2">
             <Button
-              onClick={() => updateStatusMutation.mutate("sent")}
-              disabled={updateStatusMutation.isPending}
+              onClick={() => sendQuoteMutation.mutate()}
+              disabled={sendQuoteMutation.isPending}
             >
               <Send className="h-4 w-4 mr-2" />
-              Mark as Sent
+              Send Quote
             </Button>
+            {recipientEmail && (
+              <p className="text-sm text-muted-foreground flex items-center">
+                Will be sent to: {recipientEmail}
+              </p>
+            )}
           </div>
         )}
 
