@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import type { BookkeepingEntity } from "./EntitySelector";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Archive, ArchiveRestore, Link2, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, Pencil, Archive, ArchiveRestore, RefreshCw, Loader2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AddBankAccountDialog } from "./AddBankAccountDialog";
-import { ConnectBankDialog } from "./ConnectBankDialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -26,7 +25,6 @@ interface BankAccountsTabProps {
 
 export function BankAccountsTab({ entity }: BankAccountsTabProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<any>(null);
   const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null);
   const { organization } = useOrganization();
@@ -65,30 +63,6 @@ export function BankAccountsTab({ entity }: BankAccountsTabProps) {
         `)
         .eq("organization_id", organization.id)
         .order("name");
-
-      if (entity.type === "client") {
-        query.eq("client_id", entity.id);
-      } else {
-        query.eq("company_id", entity.id);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!organization?.id,
-  });
-
-  const { data: bankConnections } = useQuery({
-    queryKey: ["bank-connections", organization?.id, entity.type, entity.id],
-    queryFn: async () => {
-      if (!organization?.id) return [];
-
-      const query = supabase
-        .from("bank_connections")
-        .select("*")
-        .eq("organization_id", organization.id)
-        .eq("status", "ACTIVE");
 
       if (entity.type === "client") {
         query.eq("client_id", entity.id);
@@ -147,8 +121,6 @@ export function BankAccountsTab({ entity }: BankAccountsTabProps) {
     syncMutation.mutate(accountId);
   };
 
-  const hasActiveConnection = bankConnections && bankConnections.length > 0;
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -158,36 +130,12 @@ export function BankAccountsTab({ entity }: BankAccountsTabProps) {
             Manage bank accounts for {entity.name}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setConnectDialogOpen(true)}>
-            <Link2 className="h-4 w-4 mr-2" />
-            Connect Bank
-          </Button>
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Manual Account
-          </Button>
-        </div>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Manual Account
+        </Button>
       </div>
 
-      {hasActiveConnection && (
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Link2 className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium">{bankConnections[0].bank_name || 'Connected Bank'}</p>
-                <p className="text-sm text-muted-foreground">
-                  Open Banking • Connected {format(new Date(bankConnections[0].created_at), 'dd MMM yyyy')}
-                </p>
-              </div>
-            </div>
-            <Badge variant="default">Active</Badge>
-          </div>
-        </div>
-      )}
 
       {isLoading ? (
         <div>Loading bank accounts...</div>
@@ -196,18 +144,12 @@ export function BankAccountsTab({ entity }: BankAccountsTabProps) {
           <div className="text-center space-y-4">
             <p className="text-lg font-medium">No bank accounts yet</p>
             <p className="text-sm text-muted-foreground">
-              Connect your bank via Open Banking or add a manual account
+              Clients can connect their bank via the Client Portal, or you can add a manual account here
             </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={() => setConnectDialogOpen(true)}>
-                <Link2 className="h-4 w-4 mr-2" />
-                Connect Bank
-              </Button>
-              <Button variant="secondary" onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Manual
-              </Button>
-            </div>
+            <Button variant="secondary" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Manual Account
+            </Button>
           </div>
         </div>
       ) : (
@@ -318,12 +260,6 @@ export function BankAccountsTab({ entity }: BankAccountsTabProps) {
         }}
         entity={entity}
         editAccount={editAccount}
-      />
-
-      <ConnectBankDialog
-        open={connectDialogOpen}
-        onOpenChange={setConnectDialogOpen}
-        entity={entity}
       />
     </div>
   );
