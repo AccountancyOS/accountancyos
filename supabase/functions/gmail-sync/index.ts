@@ -391,7 +391,7 @@ async function syncMessage(
       }
     }
 
-    // Insert email
+    // Insert email (job_id will be null initially - tagged manually by user)
     const { error: insertError } = await supabase
       .from('email_messages')
       .insert({
@@ -413,6 +413,7 @@ async function syncMessage(
         labels: message.labelIds || [],
         client_id: clientId,
         company_id: companyId,
+        job_id: null, // Tagged manually via UI
         matched_at: clientId || companyId ? new Date().toISOString() : null,
         matched_by: clientId || companyId ? 'auto' : null,
       });
