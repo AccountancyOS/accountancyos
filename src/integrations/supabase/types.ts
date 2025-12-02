@@ -971,6 +971,71 @@ export type Database = {
           },
         ]
       }
+      connected_mailboxes: {
+        Row: {
+          access_token: string | null
+          created_at: string
+          email_address: string
+          error_message: string | null
+          id: string
+          last_sync_at: string | null
+          organization_id: string
+          provider: Database["public"]["Enums"]["mailbox_provider"]
+          refresh_token: string | null
+          scopes: string[] | null
+          status: Database["public"]["Enums"]["mailbox_status"]
+          sync_cursor: string | null
+          sync_enabled: boolean | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          created_at?: string
+          email_address: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          organization_id: string
+          provider?: Database["public"]["Enums"]["mailbox_provider"]
+          refresh_token?: string | null
+          scopes?: string[] | null
+          status?: Database["public"]["Enums"]["mailbox_status"]
+          sync_cursor?: string | null
+          sync_enabled?: boolean | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          created_at?: string
+          email_address?: string
+          error_message?: string | null
+          id?: string
+          last_sync_at?: string | null
+          organization_id?: string
+          provider?: Database["public"]["Enums"]["mailbox_provider"]
+          refresh_token?: string | null
+          scopes?: string[] | null
+          status?: Database["public"]["Enums"]["mailbox_status"]
+          sync_cursor?: string | null
+          sync_enabled?: boolean | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connected_mailboxes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deadlines: {
         Row: {
           active_window_start: string | null
@@ -1109,6 +1174,116 @@ export type Database = {
             columns: ["parent_deadline_id"]
             isOneToOne: false
             referencedRelation: "deadlines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_messages: {
+        Row: {
+          attachments: Json | null
+          body_html: string | null
+          body_text: string | null
+          cc_emails: string[] | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          direction: Database["public"]["Enums"]["email_direction"]
+          from_email: string
+          from_name: string | null
+          id: string
+          is_read: boolean | null
+          labels: string[] | null
+          mailbox_id: string
+          matched_at: string | null
+          matched_by: Database["public"]["Enums"]["email_match_type"] | null
+          message_id: string
+          organization_id: string
+          raw_headers: Json | null
+          received_at: string | null
+          sent_at: string | null
+          subject: string | null
+          thread_id: string | null
+          to_emails: string[] | null
+        }
+        Insert: {
+          attachments?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          cc_emails?: string[] | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          direction?: Database["public"]["Enums"]["email_direction"]
+          from_email: string
+          from_name?: string | null
+          id?: string
+          is_read?: boolean | null
+          labels?: string[] | null
+          mailbox_id: string
+          matched_at?: string | null
+          matched_by?: Database["public"]["Enums"]["email_match_type"] | null
+          message_id: string
+          organization_id: string
+          raw_headers?: Json | null
+          received_at?: string | null
+          sent_at?: string | null
+          subject?: string | null
+          thread_id?: string | null
+          to_emails?: string[] | null
+        }
+        Update: {
+          attachments?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          cc_emails?: string[] | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          direction?: Database["public"]["Enums"]["email_direction"]
+          from_email?: string
+          from_name?: string | null
+          id?: string
+          is_read?: boolean | null
+          labels?: string[] | null
+          mailbox_id?: string
+          matched_at?: string | null
+          matched_by?: Database["public"]["Enums"]["email_match_type"] | null
+          message_id?: string
+          organization_id?: string
+          raw_headers?: Json | null
+          received_at?: string | null
+          sent_at?: string | null
+          subject?: string | null
+          thread_id?: string | null
+          to_emails?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "connected_mailboxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1532,6 +1707,44 @@ export type Database = {
             columns: ["workpaper_instance_id"]
             isOneToOne: false
             referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gmail_auth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          organization_id: string
+          redirect_url: string | null
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id: string
+          redirect_url?: string | null
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          redirect_url?: string | null
+          state?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmail_auth_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -4732,6 +4945,7 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      cleanup_expired_gmail_auth_states: { Args: never; Returns: undefined }
       client_has_portal_access: {
         Args: {
           check_client_id?: string
@@ -4888,7 +5102,11 @@ export type Database = {
         | "revoked_by_client"
         | "revoked_by_practice"
         | "switched_out"
+      email_direction: "inbound" | "outbound"
+      email_match_type: "auto" | "manual"
       link_initiator: "client" | "practice"
+      mailbox_provider: "gmail" | "outlook"
+      mailbox_status: "active" | "expired" | "revoked" | "error"
       portal_role: "accountant" | "client"
     }
     CompositeTypes: {
@@ -5026,7 +5244,11 @@ export const Constants = {
         "revoked_by_practice",
         "switched_out",
       ],
+      email_direction: ["inbound", "outbound"],
+      email_match_type: ["auto", "manual"],
       link_initiator: ["client", "practice"],
+      mailbox_provider: ["gmail", "outlook"],
+      mailbox_status: ["active", "expired", "revoked", "error"],
       portal_role: ["accountant", "client"],
     },
   },
