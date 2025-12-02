@@ -1192,6 +1192,7 @@ export type Database = {
           from_name: string | null
           id: string
           is_read: boolean | null
+          job_id: string | null
           labels: string[] | null
           mailbox_id: string
           matched_at: string | null
@@ -1200,6 +1201,7 @@ export type Database = {
           organization_id: string
           raw_headers: Json | null
           received_at: string | null
+          search_vector: unknown
           sent_at: string | null
           subject: string | null
           thread_id: string | null
@@ -1218,6 +1220,7 @@ export type Database = {
           from_name?: string | null
           id?: string
           is_read?: boolean | null
+          job_id?: string | null
           labels?: string[] | null
           mailbox_id: string
           matched_at?: string | null
@@ -1226,6 +1229,7 @@ export type Database = {
           organization_id: string
           raw_headers?: Json | null
           received_at?: string | null
+          search_vector?: unknown
           sent_at?: string | null
           subject?: string | null
           thread_id?: string | null
@@ -1244,6 +1248,7 @@ export type Database = {
           from_name?: string | null
           id?: string
           is_read?: boolean | null
+          job_id?: string | null
           labels?: string[] | null
           mailbox_id?: string
           matched_at?: string | null
@@ -1252,6 +1257,7 @@ export type Database = {
           organization_id?: string
           raw_headers?: Json | null
           received_at?: string | null
+          search_vector?: unknown
           sent_at?: string | null
           subject?: string | null
           thread_id?: string | null
@@ -1270,6 +1276,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
