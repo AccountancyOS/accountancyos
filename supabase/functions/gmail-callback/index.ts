@@ -13,12 +13,15 @@ serve(async (req: Request) => {
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
 
+    // Get APP_URL for redirects - fallback to a safe default
+    const APP_URL = Deno.env.get('APP_URL') || '';
+
     // Handle OAuth errors
     if (error) {
       console.error('OAuth error from Google:', error);
       return new Response(null, {
         status: 302,
-        headers: { 'Location': `/settings?error=${encodeURIComponent(error)}` }
+        headers: { 'Location': `${APP_URL}/settings?error=${encodeURIComponent(error)}` }
       });
     }
 
@@ -26,7 +29,7 @@ serve(async (req: Request) => {
       console.error('Missing code or state');
       return new Response(null, {
         status: 302,
-        headers: { 'Location': '/settings?error=invalid_request' }
+        headers: { 'Location': `${APP_URL}/settings?error=invalid_request` }
       });
     }
 
@@ -45,9 +48,12 @@ serve(async (req: Request) => {
       console.error('Invalid or expired state:', stateError);
       return new Response(null, {
         status: 302,
-        headers: { 'Location': '/settings?error=invalid_state' }
+        headers: { 'Location': `${APP_URL}/settings?error=invalid_state` }
       });
     }
+
+    // Use redirect_url from authState, fallback to APP_URL
+    const redirectBase = authState.redirect_url || APP_URL;
 
     // Delete used state
     await supabase.from('gmail_auth_states').delete().eq('id', authState.id);
@@ -71,7 +77,7 @@ serve(async (req: Request) => {
       console.error('Token exchange failed:', errorText);
       return new Response(null, {
         status: 302,
-        headers: { 'Location': '/settings?error=token_exchange_failed' }
+        headers: { 'Location': `${redirectBase}/settings?error=token_exchange_failed` }
       });
     }
 
@@ -87,7 +93,7 @@ serve(async (req: Request) => {
       console.error('Failed to get user profile');
       return new Response(null, {
         status: 302,
-        headers: { 'Location': '/settings?error=profile_fetch_failed' }
+        headers: { 'Location': `${redirectBase}/settings?error=profile_fetch_failed` }
       });
     }
 
@@ -98,7 +104,7 @@ serve(async (req: Request) => {
       console.error('No email in profile');
       return new Response(null, {
         status: 302,
-        headers: { 'Location': '/settings?error=no_email' }
+        headers: { 'Location': `${redirectBase}/settings?error=no_email` }
       });
     }
 
@@ -132,7 +138,7 @@ serve(async (req: Request) => {
         console.error('Failed to update mailbox:', updateError);
         return new Response(null, {
           status: 302,
-          headers: { 'Location': '/settings?error=update_failed' }
+          headers: { 'Location': `${redirectBase}/settings?error=update_failed` }
         });
       }
 
@@ -157,7 +163,7 @@ serve(async (req: Request) => {
         console.error('Failed to create mailbox:', insertError);
         return new Response(null, {
           status: 302,
-          headers: { 'Location': '/settings?error=create_failed' }
+          headers: { 'Location': `${redirectBase}/settings?error=create_failed` }
         });
       }
 
@@ -167,14 +173,15 @@ serve(async (req: Request) => {
     // Redirect to settings with success
     return new Response(null, {
       status: 302,
-      headers: { 'Location': '/settings?gmail_connected=true' }
+      headers: { 'Location': `${redirectBase}/settings?gmail_connected=true` }
     });
 
   } catch (error) {
     console.error('Gmail callback error:', error);
+    const fallbackUrl = Deno.env.get('APP_URL') || '';
     return new Response(null, {
       status: 302,
-      headers: { 'Location': '/settings?error=internal_error' }
+      headers: { 'Location': `${fallbackUrl}/settings?error=internal_error` }
     });
   }
 });
