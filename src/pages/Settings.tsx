@@ -116,7 +116,7 @@ export default function Settings() {
     mutationFn: async () => {
       setIsConnecting(true);
       const { data, error } = await supabase.functions.invoke("gmail-auth", {
-        body: {},
+        body: { redirect_url: window.location.origin },
       });
 
       if (error) throw error;
