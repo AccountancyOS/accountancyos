@@ -226,7 +226,6 @@ export default function Emails() {
   };
 
   const counts = {
-    all: emails?.length || 0,
     draft: filterByStatus("draft").length,
     queued: filterByStatus("queued").length + (emails || []).filter(e => e.status === "pending").length,
     failed: filterByStatus("failed").length,
@@ -250,21 +249,11 @@ export default function Emails() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Mail className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-semibold">{counts.all}</p>
-                  <p className="text-sm text-muted-foreground">In Queue</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
+        <div className="grid grid-cols-3 gap-4">
+          <Card 
+            className={`cursor-pointer transition-all hover:border-primary/50 ${statusFilter === "draft" ? "border-primary ring-1 ring-primary" : ""}`}
+            onClick={() => setStatusFilter("draft")}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-secondary/50 rounded-lg">
@@ -277,7 +266,10 @@ export default function Emails() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:border-primary/50 ${statusFilter === "queued" ? "border-primary ring-1 ring-primary" : ""}`}
+            onClick={() => setStatusFilter("queued")}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
@@ -290,7 +282,10 @@ export default function Emails() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:border-primary/50 ${statusFilter === "failed" ? "border-primary ring-1 ring-primary" : ""}`}
+            onClick={() => setStatusFilter("failed")}
+          >
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-destructive/10 rounded-lg">
@@ -344,7 +339,7 @@ export default function Emails() {
               <div className="border-b px-4">
                 <TabsList className="h-12 bg-transparent">
                   <TabsTrigger value="all" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-                    All ({counts.all})
+                    All ({emails?.length || 0})
                   </TabsTrigger>
                   <TabsTrigger value="draft" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                     Drafts ({counts.draft})
