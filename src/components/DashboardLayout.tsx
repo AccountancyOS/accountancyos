@@ -24,12 +24,14 @@ import {
   Receipt,
   UserCheck,
   CreditCard,
+  Mail,
 } from "lucide-react";
 
 const navigation = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
   { name: "CRM", href: "/crm", icon: Users },
   { name: "Clients", href: "/clients", icon: Briefcase },
+  { name: "Emails", href: "/emails", icon: Mail },
   { name: "Services", href: "/services", icon: Wrench },
   { name: "Quotes", href: "/quotes", icon: Receipt },
   { name: "Onboarding", href: "/onboarding", icon: UserCheck },
