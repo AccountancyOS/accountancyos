@@ -3,7 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,7 +11,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical } from "lucide-react";
+import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical, Trash2, Calendar } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   DndContext,
   DragOverlay,
@@ -25,6 +36,7 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { format } from "date-fns";
 
 interface Lead {
   id: string;
@@ -56,6 +68,21 @@ const CRM = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+    phone: "",
+    source: "website",
+    estimated_monthly_value: "",
+    notes: "",
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -179,6 +206,91 @@ const CRM = () => {
     }
   };
 
+  const handleLeadClick = (lead: Lead) => {
+    setSelectedLead(lead);
+    setEditFormData({
+      first_name: lead.first_name,
+      last_name: lead.last_name,
+      email: lead.email,
+      phone: lead.phone || "",
+      source: lead.source || "website",
+      estimated_monthly_value: lead.estimated_monthly_value?.toString() || "",
+      notes: lead.notes || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead) return;
+    setIsUpdating(true);
+
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .update({
+          first_name: editFormData.first_name,
+          last_name: editFormData.last_name,
+          email: editFormData.email,
+          phone: editFormData.phone || null,
+          source: editFormData.source,
+          estimated_monthly_value: editFormData.estimated_monthly_value
+            ? parseFloat(editFormData.estimated_monthly_value)
+            : null,
+          notes: editFormData.notes || null,
+        })
+        .eq("id", selectedLead.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Lead updated",
+        description: "Lead has been updated successfully.",
+      });
+
+      setEditDialogOpen(false);
+      loadLeads();
+    } catch (error: any) {
+      toast({
+        title: "Error updating lead",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteLead = async () => {
+    if (!selectedLead) return;
+    setIsDeleting(true);
+
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .delete()
+        .eq("id", selectedLead.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Lead deleted",
+        description: "Lead has been removed successfully.",
+      });
+
+      setEditDialogOpen(false);
+      loadLeads();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting lead",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const getLeadsByStage = (stage: string) => {
     return leads.filter((lead) => lead.pipeline_stage === stage);
   };
@@ -204,6 +316,10 @@ const CRM = () => {
     if (!lead || lead.pipeline_stage === newStage) return;
 
     updateStage(leadId, newStage);
+  };
+
+  const getStageInfo = (stage: string) => {
+    return pipelineStages.find((s) => s.value === stage);
   };
 
   if (loading) {
@@ -391,6 +507,7 @@ const CRM = () => {
                   stage={stage}
                   leads={getLeadsByStage(stage.value)}
                   onUpdateStage={updateStage}
+                  onLeadClick={handleLeadClick}
                 />
               ))}
             </div>
@@ -399,6 +516,201 @@ const CRM = () => {
               {activeLead ? <LeadCard lead={activeLead} isDragging /> : null}
             </DragOverlay>
           </DndContext>
+
+          {/* Edit Lead Dialog */}
+          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Lead Details</DialogTitle>
+                <DialogDescription>
+                  View and edit lead information
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedLead && (
+                <>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Badge className={getStageInfo(selectedLead.pipeline_stage)?.color}>
+                      {getStageInfo(selectedLead.pipeline_stage)?.label}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      Created {format(new Date(selectedLead.created_at), "dd MMM yyyy")}
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleUpdateLead} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_first_name">First Name *</Label>
+                        <Input
+                          id="edit_first_name"
+                          value={editFormData.first_name}
+                          onChange={(e) =>
+                            setEditFormData({ ...editFormData, first_name: e.target.value })
+                          }
+                          required
+                          disabled={isUpdating}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_last_name">Last Name *</Label>
+                        <Input
+                          id="edit_last_name"
+                          value={editFormData.last_name}
+                          onChange={(e) =>
+                            setEditFormData({ ...editFormData, last_name: e.target.value })
+                          }
+                          required
+                          disabled={isUpdating}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_email">Email *</Label>
+                      <Input
+                        id="edit_email"
+                        type="email"
+                        value={editFormData.email}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, email: e.target.value })
+                        }
+                        required
+                        disabled={isUpdating}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_phone">Phone</Label>
+                      <Input
+                        id="edit_phone"
+                        type="tel"
+                        value={editFormData.phone}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, phone: e.target.value })
+                        }
+                        disabled={isUpdating}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_source">Source</Label>
+                        <Select
+                          value={editFormData.source}
+                          onValueChange={(value) =>
+                            setEditFormData({ ...editFormData, source: value })
+                          }
+                          disabled={isUpdating}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="website">Website</SelectItem>
+                            <SelectItem value="referral">Referral</SelectItem>
+                            <SelectItem value="ad">Advertisement</SelectItem>
+                            <SelectItem value="direct">Direct</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_estimated_monthly_value">
+                          Est. Monthly Value (£)
+                        </Label>
+                        <Input
+                          id="edit_estimated_monthly_value"
+                          type="number"
+                          step="0.01"
+                          value={editFormData.estimated_monthly_value}
+                          onChange={(e) =>
+                            setEditFormData({
+                              ...editFormData,
+                              estimated_monthly_value: e.target.value,
+                            })
+                          }
+                          disabled={isUpdating}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_notes">Notes</Label>
+                      <Textarea
+                        id="edit_notes"
+                        value={editFormData.notes}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, notes: e.target.value })
+                        }
+                        rows={3}
+                        disabled={isUpdating}
+                      />
+                    </div>
+
+                    <DialogFooter className="flex justify-between sm:justify-between">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button type="button" variant="destructive" disabled={isDeleting}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Lead
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Lead?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete {selectedLead.first_name} {selectedLead.last_name} from your CRM.
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDeleteLead}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {isDeleting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Deleting...
+                                </>
+                              ) : (
+                                "Delete"
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setEditDialogOpen(false)}
+                          disabled={isUpdating}
+                        >
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={isUpdating}>
+                          {isUpdating ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            "Save Changes"
+                          )}
+                        </Button>
+                      </div>
+                    </DialogFooter>
+                  </form>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </DashboardLayout>
@@ -410,9 +722,10 @@ interface DroppableColumnProps {
   stage: { value: string; label: string; color: string };
   leads: Lead[];
   onUpdateStage: (leadId: string, stage: string) => void;
+  onLeadClick: (lead: Lead) => void;
 }
 
-const DroppableColumn = ({ id, stage, leads, onUpdateStage }: DroppableColumnProps) => {
+const DroppableColumn = ({ id, stage, leads, onUpdateStage, onLeadClick }: DroppableColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
@@ -431,7 +744,7 @@ const DroppableColumn = ({ id, stage, leads, onUpdateStage }: DroppableColumnPro
       </CardHeader>
       <CardContent className="flex-1 space-y-3">
         {leads.map((lead) => (
-          <DraggableLead key={lead.id} lead={lead} onUpdateStage={onUpdateStage} />
+          <DraggableLead key={lead.id} lead={lead} onUpdateStage={onUpdateStage} onLeadClick={onLeadClick} />
         ))}
       </CardContent>
     </Card>
@@ -441,9 +754,10 @@ const DroppableColumn = ({ id, stage, leads, onUpdateStage }: DroppableColumnPro
 interface DraggableLeadProps {
   lead: Lead;
   onUpdateStage: (leadId: string, stage: string) => void;
+  onLeadClick: (lead: Lead) => void;
 }
 
-const DraggableLead = ({ lead, onUpdateStage }: DraggableLeadProps) => {
+const DraggableLead = ({ lead, onUpdateStage, onLeadClick }: DraggableLeadProps) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
   });
@@ -457,7 +771,7 @@ const DraggableLead = ({ lead, onUpdateStage }: DraggableLeadProps) => {
 
   return (
     <div ref={setNodeRef} style={style}>
-      <LeadCard lead={lead} onUpdateStage={onUpdateStage} dragListeners={listeners} dragAttributes={attributes} />
+      <LeadCard lead={lead} onUpdateStage={onUpdateStage} onLeadClick={onLeadClick} dragListeners={listeners} dragAttributes={attributes} />
     </div>
   );
 };
@@ -465,18 +779,31 @@ const DraggableLead = ({ lead, onUpdateStage }: DraggableLeadProps) => {
 interface LeadCardProps {
   lead: Lead;
   onUpdateStage?: (leadId: string, stage: string) => void;
+  onLeadClick?: (lead: Lead) => void;
   isDragging?: boolean;
   dragListeners?: any;
   dragAttributes?: any;
 }
 
-const LeadCard = ({ lead, onUpdateStage, isDragging, dragListeners, dragAttributes }: LeadCardProps) => {
+const LeadCard = ({ lead, onUpdateStage, onLeadClick, isDragging, dragListeners, dragAttributes }: LeadCardProps) => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't open dialog if clicking on drag handle or select
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-drag-handle]') || target.closest('[role="combobox"]')) {
+      return;
+    }
+    onLeadClick?.(lead);
+  };
+
   return (
-    <Card className={`p-4 hover:shadow-md transition-shadow ${isDragging ? "shadow-lg" : ""}`}>
+    <Card 
+      className={`p-4 hover:shadow-md transition-shadow cursor-pointer ${isDragging ? "shadow-lg" : ""}`}
+      onClick={handleCardClick}
+    >
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-1">
-            <div {...dragListeners} {...dragAttributes} className="cursor-grab active:cursor-grabbing">
+            <div {...dragListeners} {...dragAttributes} data-drag-handle className="cursor-grab active:cursor-grabbing">
               <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </div>
             <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />

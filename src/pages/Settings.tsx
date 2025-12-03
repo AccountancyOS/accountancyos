@@ -67,6 +67,9 @@ export default function Settings() {
     },
   });
 
+  // Check if Gmail is already connected
+  const hasGmailConnected = mailboxes?.some(m => m.provider === 'gmail');
+
   // Fetch email queue stats
   const { data: queueStats } = useQuery({
     queryKey: ["email-queue-stats"],
@@ -200,6 +203,46 @@ export default function Settings() {
     },
   });
 
+  // Delete single failed email mutation
+  const deleteFailedEmailMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      const { error } = await supabase
+        .from("email_queue")
+        .delete()
+        .eq("id", emailId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Failed email removed");
+      queryClient.invalidateQueries({ queryKey: ["email-queue-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-failures"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete: ${error.message}`);
+    },
+  });
+
+  // Clear all failed emails mutation
+  const clearAllFailedMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("email_queue")
+        .delete()
+        .eq("status", "failed");
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("All failed emails cleared");
+      queryClient.invalidateQueries({ queryKey: ["email-queue-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-failures"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to clear emails: ${error.message}`);
+    },
+  });
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
@@ -231,26 +274,36 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <MailCheck className="h-5 w-5" />
-                  Connected Email Accounts
-                </CardTitle>
-                <CardDescription>
-                  Connect your Gmail or Outlook to send and receive emails directly from AccountancyOS
-                </CardDescription>
+              <div className="flex items-center gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <MailCheck className="h-5 w-5" />
+                    Connected Email Accounts
+                    {hasGmailConnected && (
+                      <Badge variant="default" className="bg-green-600 ml-2">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    Connect your Gmail or Outlook to send and receive emails directly from AccountancyOS
+                  </CardDescription>
+                </div>
               </div>
-              <Button
-                onClick={() => connectGmailMutation.mutate()}
-                disabled={isConnecting}
-              >
-                {isConnecting ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="mr-2 h-4 w-4" />
-                )}
-                Connect Gmail
-              </Button>
+              {!hasGmailConnected && (
+                <Button
+                  onClick={() => connectGmailMutation.mutate()}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-2 h-4 w-4" />
+                  )}
+                  Connect Gmail
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -405,7 +458,35 @@ export default function Settings() {
             {/* Recent Failures */}
             {recentFailures && recentFailures.length > 0 && (
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Recent Failures</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">Recent Failures</h4>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Clear All
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Clear All Failed Emails?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently remove all {queueStats?.failed || 0} failed emails from the queue.
+                          This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => clearAllFailedMutation.mutate()}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Clear All
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
                 <div className="space-y-2">
                   {recentFailures.map((email) => (
                     <div
@@ -429,6 +510,30 @@ export default function Settings() {
                           </p>
                         )}
                       </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove Failed Email?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove the failed email to {email.to_email} from the queue.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteFailedEmailMutation.mutate(email.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   ))}
                 </div>
