@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,9 +36,11 @@ import {
   Tag,
   User,
   Building2,
-  Plus,
-  Filter
+  Filter,
+  AlertCircle,
+  Settings
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface ConversationsTabProps {
   clientId?: string;
@@ -71,8 +75,71 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
   const queryClient = useQueryClient();
   
   const [newMessage, setNewMessage] = useState("");
-  const [messageType, setMessageType] = useState<"message" | "note">("message");
+  const [messageType, setMessageType] = useState<"message" | "note" | "email">("message");
   const [filterType, setFilterType] = useState<"all" | "email" | "message" | "note">("all");
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // Fetch connected mailboxes for the user
+  const { data: mailboxes } = useQuery({
+    queryKey: ["user-mailboxes", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("connected_mailboxes")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "active");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch client email for pre-population
+  const { data: clientData } = useQuery({
+    queryKey: ["client-email", clientId],
+    queryFn: async () => {
+      if (!clientId) return null;
+      const { data, error } = await supabase
+        .from("clients")
+        .select("email, first_name, last_name")
+        .eq("id", clientId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!clientId,
+  });
+
+  // Fetch company email for pre-population
+  const { data: companyData } = useQuery({
+    queryKey: ["company-email", companyId],
+    queryFn: async () => {
+      if (!companyId) return null;
+      const { data, error } = await supabase
+        .from("companies")
+        .select("email, company_name")
+        .eq("id", companyId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId,
+  });
+
+  // Pre-populate email "To" field when switching to email mode
+  useEffect(() => {
+    if (messageType === "email" && !emailTo) {
+      const recipientEmail = clientData?.email || companyData?.email;
+      if (recipientEmail) {
+        setEmailTo(recipientEmail);
+      }
+    }
+  }, [messageType, clientData, companyData, emailTo]);
+
+  const activeMailbox = mailboxes?.[0]; // Use first active mailbox
 
   // Fetch emails for this entity
   const { data: emails, isLoading: emailsLoading } = useQuery({
@@ -172,7 +239,7 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
     enabled: !!organization?.id,
   });
 
-  // Send message mutation
+  // Send portal message/note mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({ content, type }: { content: string; type: "message" | "note" }) => {
       if (!organization?.id) throw new Error("No organization");
@@ -201,6 +268,67 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  // Send email via Gmail/Outlook
+  const handleSendEmail = async () => {
+    if (!activeMailbox) {
+      toast({ 
+        title: "No mailbox connected", 
+        description: "Connect a Gmail or Outlook mailbox in Settings to send emails.",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (!emailTo || !emailSubject || !newMessage.trim()) {
+      toast({ 
+        title: "Missing fields", 
+        description: "Please fill in To, Subject, and Message.",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsSendingEmail(true);
+
+    try {
+      // Determine which edge function to call based on provider
+      const edgeFunctionName = activeMailbox.provider === "outlook" ? "outlook-send" : "gmail-send";
+      
+      const { data, error } = await supabase.functions.invoke(edgeFunctionName, {
+        body: {
+          mailbox_id: activeMailbox.id,
+          to: emailTo,
+          subject: emailSubject,
+          body_html: `<p>${newMessage.replace(/\n/g, '<br>')}</p>`,
+          body_text: newMessage,
+          client_id: clientId || null,
+          company_id: companyId || null,
+        },
+      });
+
+      if (error) throw error;
+
+      // Refresh email list
+      queryClient.invalidateQueries({ queryKey: ["entity-emails"] });
+      
+      // Clear form
+      setNewMessage("");
+      setEmailSubject("");
+      // Keep emailTo for convenience
+      
+      toast({ title: "Email sent successfully" });
+    } catch (error: any) {
+      console.error("Email send error:", error);
+      toast({ 
+        title: "Failed to send email", 
+        description: error.message || "Please try again.",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
 
   // Tag message to job mutation
   const tagToJobMutation = useMutation({
@@ -320,6 +448,18 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
     }
   };
 
+  const handleSend = () => {
+    if (messageType === "email") {
+      handleSendEmail();
+    } else {
+      sendMessageMutation.mutate({ content: newMessage, type: messageType });
+    }
+  };
+
+  const recipientName = clientData 
+    ? `${clientData.first_name} ${clientData.last_name}` 
+    : companyData?.company_name || "Client";
+
   return (
     <div className="space-y-4">
       {/* Compose Section */}
@@ -332,11 +472,17 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
-            <Select value={messageType} onValueChange={(v) => setMessageType(v as "message" | "note")}>
+            <Select value={messageType} onValueChange={(v) => setMessageType(v as "message" | "note" | "email")}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="email">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Email
+                  </div>
+                </SelectItem>
                 <SelectItem value="message">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4" />
@@ -352,22 +498,86 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
               </SelectContent>
             </Select>
             <Badge variant="outline" className="self-center">
-              {messageType === "note" ? "Internal Only" : "Client Visible"}
+              {messageType === "note" ? "Internal Only" : messageType === "email" ? "Email to Client" : "Client Visible"}
             </Badge>
           </div>
+
+          {/* Email-specific fields */}
+          {messageType === "email" && (
+            <div className="space-y-3 p-3 rounded-lg border bg-muted/30">
+              {/* No mailbox warning */}
+              {!activeMailbox && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                    No mailbox connected.{" "}
+                    <Link to="/settings" className="underline font-medium inline-flex items-center gap-1">
+                      <Settings className="h-3 w-3" />
+                      Connect in Settings
+                    </Link>
+                  </span>
+                </div>
+              )}
+
+              {/* From field */}
+              {activeMailbox && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <div className="text-sm font-medium px-3 py-2 rounded-md bg-background border">
+                    {activeMailbox.email_address}
+                  </div>
+                </div>
+              )}
+
+              {/* To field */}
+              <div className="space-y-1">
+                <Label htmlFor="email-to" className="text-xs text-muted-foreground">To</Label>
+                <Input
+                  id="email-to"
+                  type="email"
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder={`${recipientName}'s email address`}
+                />
+              </div>
+
+              {/* Subject field */}
+              <div className="space-y-1">
+                <Label htmlFor="email-subject" className="text-xs text-muted-foreground">Subject</Label>
+                <Input
+                  id="email-subject"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Email subject..."
+                />
+              </div>
+            </div>
+          )}
+
           <Textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={messageType === "note" ? "Add an internal note..." : "Write a message to the client..."}
-            rows={3}
+            placeholder={
+              messageType === "note" 
+                ? "Add an internal note..." 
+                : messageType === "email"
+                  ? "Write your email message..."
+                  : "Write a message to the client..."
+            }
+            rows={messageType === "email" ? 6 : 3}
           />
           <div className="flex justify-end">
             <Button
-              onClick={() => sendMessageMutation.mutate({ content: newMessage, type: messageType })}
-              disabled={!newMessage.trim() || sendMessageMutation.isPending}
+              onClick={handleSend}
+              disabled={
+                !newMessage.trim() || 
+                sendMessageMutation.isPending || 
+                isSendingEmail ||
+                (messageType === "email" && (!activeMailbox || !emailTo || !emailSubject))
+              }
             >
               <Send className="h-4 w-4 mr-2" />
-              {messageType === "note" ? "Add Note" : "Send Message"}
+              {isSendingEmail ? "Sending..." : messageType === "note" ? "Add Note" : messageType === "email" ? "Send Email" : "Send Message"}
             </Button>
           </div>
         </CardContent>
