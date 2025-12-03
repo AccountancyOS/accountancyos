@@ -3551,8 +3551,10 @@ export type Database = {
           logo_url: string | null
           name: string
           onboarding_completed: boolean | null
+          payment_required_before_onboarding: boolean
           postcode: string | null
           practice_description: string | null
+          stripe_connect_account_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           timezone: string | null
@@ -3571,8 +3573,10 @@ export type Database = {
           logo_url?: string | null
           name: string
           onboarding_completed?: boolean | null
+          payment_required_before_onboarding?: boolean
           postcode?: string | null
           practice_description?: string | null
+          stripe_connect_account_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           timezone?: string | null
@@ -3591,8 +3595,10 @@ export type Database = {
           logo_url?: string | null
           name?: string
           onboarding_completed?: boolean | null
+          payment_required_before_onboarding?: boolean
           postcode?: string | null
           practice_description?: string | null
+          stripe_connect_account_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           timezone?: string | null

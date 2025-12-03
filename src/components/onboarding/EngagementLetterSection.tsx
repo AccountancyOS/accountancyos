@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Eye, FileSignature, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { Send, Eye, FileSignature, Clock, CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 
 interface EngagementLetterSectionProps {
@@ -35,9 +35,11 @@ const EngagementLetterSection = ({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [letter, setLetter] = useState<EngagementLetter | null>(null);
+  const [hasMailbox, setHasMailbox] = useState<boolean | null>(null);
 
   useEffect(() => {
     loadEngagementLetter();
+    checkMailboxStatus();
   }, [applicationId]);
 
   const loadEngagementLetter = async () => {
@@ -57,6 +59,26 @@ const EngagementLetterSection = ({
     }
   };
 
+  const checkMailboxStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("connected_mailboxes")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1);
+
+      if (error) throw error;
+      setHasMailbox(data && data.length > 0);
+    } catch (error: any) {
+      console.error("Error checking mailbox:", error);
+      setHasMailbox(false);
+    }
+  };
+
   const sendEngagementLetter = async () => {
     setSending(true);
     try {
@@ -65,12 +87,13 @@ const EngagementLetterSection = ({
       const tokenExpiresAt = new Date();
       tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 14); // 14 days validity
 
+      let letterId = letter?.id;
+
       // Create or update engagement letter record
       if (letter) {
         const { error } = await supabase
           .from("engagement_letters")
           .update({
-            sent_at: new Date().toISOString(),
             signature_token: signatureToken,
             token_expires_at: tokenExpiresAt.toISOString(),
             updated_at: new Date().toISOString(),
@@ -79,44 +102,35 @@ const EngagementLetterSection = ({
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("engagement_letters")
           .insert({
             organization_id: organizationId,
             onboarding_application_id: applicationId,
-            sent_at: new Date().toISOString(),
             signature_token: signatureToken,
             token_expires_at: tokenExpiresAt.toISOString(),
-          });
+          })
+          .select("id")
+          .single();
 
         if (error) throw error;
+        letterId = data.id;
       }
 
-      // Queue email to client
-      const { error: emailError } = await supabase
-        .from("email_queue")
-        .insert({
-          organization_id: organizationId,
-          to_email: recipientEmail,
-          to_name: recipientName,
-          subject: "Please sign your engagement letter",
-          body_html: `
-            <p>Dear ${recipientName},</p>
-            <p>Thank you for choosing our services. Please review and sign your engagement letter by clicking the link below:</p>
-            <p><a href="https://client.accountancyos.com/sign-engagement?token=${signatureToken}">View and Sign Engagement Letter</a></p>
-            <p>This link will expire in 14 days.</p>
-            <p>If you have any questions, please don't hesitate to contact us.</p>
-          `,
-          entity_type: "engagement_letter",
-          entity_id: applicationId,
-          status: "pending",
-        });
+      // Send via connected mailbox using edge function
+      const { data, error: sendError } = await supabase.functions.invoke("send-engagement-letter", {
+        body: { engagement_letter_id: letterId },
+      });
 
-      if (emailError) throw emailError;
+      if (sendError) throw sendError;
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to send engagement letter");
+      }
 
       toast({
         title: "Engagement letter sent",
-        description: `Email queued for ${recipientEmail}`,
+        description: `Sent from ${data.sent_via} to ${recipientEmail}`,
       });
 
       loadEngagementLetter();
@@ -180,6 +194,17 @@ const EngagementLetterSection = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* No mailbox warning */}
+        {hasMailbox === false && (
+          <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              <p className="font-medium">No mailbox connected</p>
+              <p className="text-xs mt-1">Connect Gmail or Outlook in Settings to send engagement letters from your email.</p>
+            </div>
+          </div>
+        )}
+
         {/* Timeline */}
         <div className="space-y-2 text-sm">
           {letter?.sent_at && (
@@ -207,7 +232,7 @@ const EngagementLetterSection = ({
           <div className="pt-2">
             <Button
               onClick={sendEngagementLetter}
-              disabled={sending}
+              disabled={sending || hasMailbox === false}
               variant={letter?.sent_at ? "outline" : "default"}
               size="sm"
             >
@@ -218,7 +243,7 @@ const EngagementLetterSection = ({
               )}
               {letter?.sent_at ? "Resend Letter" : "Send Engagement Letter"}
             </Button>
-            {!letter?.sent_at && (
+            {!letter?.sent_at && hasMailbox !== false && (
               <p className="text-xs text-muted-foreground mt-2">
                 Will be sent to: {recipientEmail}
               </p>
