@@ -43,6 +43,13 @@ interface OutlookMessage {
   hasAttachments: boolean;
 }
 
+interface MatchedEntity {
+  entity_type: string;
+  entity_id: string;
+  entity_name: string;
+  match_source: string;
+}
+
 async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number; refresh_token?: string } | null> {
   try {
     const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
@@ -68,6 +75,51 @@ async function refreshAccessToken(refreshToken: string): Promise<{ access_token:
     console.error('Token refresh error:', error);
     return null;
   }
+}
+
+// Find all matching entities for email addresses using the database function
+async function findMatchingEntities(
+  supabase: any,
+  orgId: string,
+  emails: string[]
+): Promise<MatchedEntity[]> {
+  const matches: MatchedEntity[] = [];
+  const seen = new Set<string>();
+  
+  for (const email of emails) {
+    if (!email) continue;
+    
+    try {
+      const { data, error } = await supabase.rpc('find_entities_by_email', {
+        _org_id: orgId,
+        _email: email
+      });
+      
+      if (error) {
+        console.error('Error finding entities for email:', email, error);
+        continue;
+      }
+      
+      if (data) {
+        for (const match of data) {
+          const key = `${match.entity_type}-${match.entity_id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            matches.push({
+              entity_type: match.entity_type,
+              entity_id: match.entity_id,
+              entity_name: match.entity_name,
+              match_source: match.match_source,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Exception finding entities for email:', email, err);
+    }
+  }
+  
+  return matches;
 }
 
 serve(async (req: Request) => {
@@ -194,39 +246,23 @@ serve(async (req: Request) => {
           const direction = fromEmail === mailbox.email_address.toLowerCase() ? 'outbound' : 'inbound';
 
           // Extract recipients
-          const toEmails = msg.toRecipients?.map(r => r.emailAddress.address) || [];
-          const ccEmails = msg.ccRecipients?.map(r => r.emailAddress.address) || [];
+          const toEmails = msg.toRecipients?.map(r => r.emailAddress.address.toLowerCase()) || [];
+          const ccEmails = msg.ccRecipients?.map(r => r.emailAddress.address.toLowerCase()) || [];
 
-          // Try to match to client/company
-          let clientId: string | null = null;
-          let companyId: string | null = null;
+          // Collect ALL email addresses for matching
+          const allEmails: string[] = [];
+          if (fromEmail) allEmails.push(fromEmail);
+          allEmails.push(...toEmails);
+          allEmails.push(...ccEmails);
 
-          const matchEmail = direction === 'inbound' ? fromEmail : toEmails[0];
-          if (matchEmail) {
-            // Check clients
-            const { data: client } = await supabase
-              .from('clients')
-              .select('id')
-              .eq('organization_id', mailbox.organization_id)
-              .ilike('email', matchEmail)
-              .single();
+          // Find all matching entities using the database function
+          const matchedEntities = await findMatchingEntities(supabase, mailbox.organization_id, allEmails);
 
-            if (client) {
-              clientId = client.id;
-            } else {
-              // Check companies
-              const { data: company } = await supabase
-                .from('companies')
-                .select('id')
-                .eq('organization_id', mailbox.organization_id)
-                .ilike('email', matchEmail)
-                .single();
+          // Determine primary client_id and company_id (first match of each type)
+          const primaryClient = matchedEntities.find(m => m.entity_type === 'client');
+          const primaryCompany = matchedEntities.find(m => m.entity_type === 'company');
 
-              if (company) {
-                companyId = company.id;
-              }
-            }
-          }
+          console.log(`Message ${msg.id}: Found ${matchedEntities.length} matching entities`);
 
           // Extract body text
           let bodyHtml = '';
@@ -238,7 +274,7 @@ serve(async (req: Request) => {
             bodyText = msg.body.content;
           }
 
-          // Insert message
+          // Insert message with multi-entity support
           const { error: insertError } = await supabase
             .from('email_messages')
             .insert({
@@ -257,10 +293,11 @@ serve(async (req: Request) => {
               is_read: msg.isRead,
               received_at: msg.receivedDateTime,
               sent_at: msg.sentDateTime,
-              client_id: clientId,
-              company_id: companyId,
-              matched_by: clientId || companyId ? 'auto_email' : null,
-              matched_at: clientId || companyId ? new Date().toISOString() : null,
+              client_id: primaryClient?.entity_id || null,
+              company_id: primaryCompany?.entity_id || null,
+              matched_by: matchedEntities.length > 0 ? 'auto' : null,
+              matched_at: matchedEntities.length > 0 ? new Date().toISOString() : null,
+              matched_entities: matchedEntities, // Store all matched entities
             });
 
           if (insertError) {
