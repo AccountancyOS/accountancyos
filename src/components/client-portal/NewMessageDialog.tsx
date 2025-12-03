@@ -39,7 +39,7 @@ export function NewMessageDialog({ clientId }: NewMessageDialogProps) {
   const [form, setForm] = useState({
     subject: "",
     content: "",
-    message_type: "note" as "note" | "email" | "portal",
+    message_type: "note" as "note" | "email" | "message",
     visibility: "client_visible" as "client_visible" | "internal_only",
   });
 
@@ -118,12 +118,12 @@ export function NewMessageDialog({ clientId }: NewMessageDialogProps) {
               <SelectContent>
                 <SelectItem value="note">Note</SelectItem>
                 <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="portal">Portal Message</SelectItem>
+                <SelectItem value="message">Portal Message</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {(form.message_type === "email" || form.message_type === "portal") && (
+          {(form.message_type === "email" || form.message_type === "message") && (
             <div className="space-y-2">
               <Label htmlFor="subject">Subject</Label>
               <Input
