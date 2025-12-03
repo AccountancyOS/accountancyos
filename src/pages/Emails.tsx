@@ -38,10 +38,8 @@ import {
   MoreHorizontal,
   RefreshCw,
   Mail,
-  Send,
   AlertCircle,
   Clock,
-  CheckCircle2,
   XCircle,
   Eye,
   Pencil,
@@ -50,7 +48,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-type EmailStatus = "draft" | "queued" | "pending" | "sent" | "failed" | "ignored";
+type EmailStatus = "draft" | "queued" | "pending" | "failed" | "ignored";
 
 interface QueuedEmail {
   id: string;
@@ -61,10 +59,8 @@ interface QueuedEmail {
   body_text: string | null;
   status: EmailStatus;
   context: string | null;
-  provider: string | null;
   error_message: string | null;
   scheduled_at: string | null;
-  sent_at: string | null;
   created_at: string | null;
   client_id: string | null;
   company_id: string | null;
@@ -77,7 +73,6 @@ const statusConfig: Record<EmailStatus, { label: string; variant: "default" | "s
   draft: { label: "Draft", variant: "outline", icon: Pencil },
   queued: { label: "Queued", variant: "secondary", icon: Clock },
   pending: { label: "Pending", variant: "secondary", icon: Clock },
-  sent: { label: "Sent", variant: "default", icon: CheckCircle2 },
   failed: { label: "Failed", variant: "destructive", icon: XCircle },
   ignored: { label: "Ignored", variant: "outline", icon: Eye },
 };
@@ -120,10 +115,8 @@ export default function Emails() {
           body_text,
           status,
           context,
-          provider,
           error_message,
           scheduled_at,
-          sent_at,
           created_at,
           client_id,
           company_id,
@@ -132,6 +125,7 @@ export default function Emails() {
           companies(company_name)
         `)
         .eq("organization_id", organization.id)
+        .neq("status", "sent")
         .order("created_at", { ascending: false });
 
       if (statusFilter !== "all") {
@@ -234,8 +228,7 @@ export default function Emails() {
   const counts = {
     all: emails?.length || 0,
     draft: filterByStatus("draft").length,
-    queued: filterByStatus("queued").length,
-    sent: filterByStatus("sent").length,
+    queued: filterByStatus("queued").length + (emails || []).filter(e => e.status === "pending").length,
     failed: filterByStatus("failed").length,
   };
 
@@ -257,7 +250,7 @@ export default function Emails() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-3">
@@ -266,7 +259,7 @@ export default function Emails() {
                 </div>
                 <div>
                   <p className="text-2xl font-semibold">{counts.all}</p>
-                  <p className="text-sm text-muted-foreground">Total</p>
+                  <p className="text-sm text-muted-foreground">In Queue</p>
                 </div>
               </div>
             </CardContent>
@@ -293,19 +286,6 @@ export default function Emails() {
                 <div>
                   <p className="text-2xl font-semibold">{counts.queued}</p>
                   <p className="text-sm text-muted-foreground">Queued</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-semibold">{counts.sent}</p>
-                  <p className="text-sm text-muted-foreground">Sent</p>
                 </div>
               </div>
             </CardContent>
@@ -372,9 +352,6 @@ export default function Emails() {
                   <TabsTrigger value="queued" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                     Queued ({counts.queued})
                   </TabsTrigger>
-                  <TabsTrigger value="sent" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-                    Sent ({counts.sent})
-                  </TabsTrigger>
                   <TabsTrigger value="failed" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                     Failed ({counts.failed})
                   </TabsTrigger>
@@ -405,7 +382,6 @@ export default function Emails() {
                         <TableHead>Client</TableHead>
                         <TableHead>Context</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Provider</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
@@ -451,17 +427,10 @@ export default function Emails() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline" className="capitalize">
-                                {email.provider || "postmark"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
                               <p className="text-sm text-muted-foreground">
-                                {email.sent_at 
-                                  ? format(new Date(email.sent_at), "dd MMM yyyy HH:mm")
-                                  : email.created_at 
-                                    ? format(new Date(email.created_at), "dd MMM yyyy HH:mm")
-                                    : "-"
+                                {email.created_at 
+                                  ? format(new Date(email.created_at), "dd MMM yyyy HH:mm")
+                                  : "-"
                                 }
                               </p>
                             </TableCell>
@@ -495,21 +464,17 @@ export default function Emails() {
                                     <Eye className="h-4 w-4 mr-2" />
                                     View
                                   </DropdownMenuItem>
-                                  {status !== "sent" && (
-                                    <>
-                                      <DropdownMenuItem onClick={() => ignoreMutation.mutate(email.id)}>
-                                        <XCircle className="h-4 w-4 mr-2" />
-                                        Ignore
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem 
-                                        onClick={() => deleteMutation.mutate(email.id)}
-                                        className="text-destructive"
-                                      >
-                                        <Trash2 className="h-4 w-4 mr-2" />
-                                        Delete
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
+                                  <DropdownMenuItem onClick={() => ignoreMutation.mutate(email.id)}>
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                    Ignore
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => deleteMutation.mutate(email.id)}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
