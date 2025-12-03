@@ -6,18 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Check, X, FileText, ExternalLink, Users, Building2 } from "lucide-react";
+import { Loader2, ArrowLeft, Check, X, FileText, Users, Building2, AlertTriangle } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
 import EngagementLetterSection from "@/components/onboarding/EngagementLetterSection";
 
@@ -45,9 +48,15 @@ const OnboardingDetail = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [application, setApplication] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [engagementLetter, setEngagementLetter] = useState<any>(null);
+  
+  // Modal states
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showAmlWarningDialog, setShowAmlWarningDialog] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
 
   useEffect(() => {
     if (organization && id) {
@@ -165,29 +174,50 @@ const OnboardingDetail = () => {
     }
   };
 
-  const updateStatus = async (newStatus: string) => {
+  // Reject application with reason
+  const rejectApplication = async () => {
+    setRejecting(true);
     try {
       const { error } = await supabase
         .from("onboarding_applications")
-        .update({ status: newStatus })
+        .update({ 
+          status: "rejected",
+          notes: rejectionReason ? `Rejection reason: ${rejectionReason}` : null
+        })
         .eq("id", id);
 
       if (error) throw error;
 
-      toast({ title: "Status updated successfully" });
+      toast({ title: "Application rejected" });
+      setShowRejectDialog(false);
+      setRejectionReason("");
       loadApplication();
     } catch (error: any) {
       toast({
-        title: "Error updating status",
+        title: "Error rejecting application",
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setRejecting(false);
     }
   };
 
-  // Use lifecycle_approve_onboarding RPC instead of manual logic
+  // Handle approval click - check for AML warning first
+  const handleApproveClick = () => {
+    const amlComplete = application.id_document_uploaded && application.proof_of_address_uploaded;
+    
+    if (!amlComplete) {
+      setShowAmlWarningDialog(true);
+    } else {
+      approveApplication();
+    }
+  };
+
+  // Use lifecycle_approve_onboarding RPC
   const approveApplication = async () => {
     setApproving(true);
+    setShowAmlWarningDialog(false);
     try {
       const { data, error } = await supabase.rpc('lifecycle_approve_onboarding', {
         p_onboarding_id: id
@@ -242,9 +272,10 @@ const OnboardingDetail = () => {
     ? `${application.first_name} ${application.last_name}`
     : application.company_name;
 
-  const canApprove = application.id_document_uploaded && 
-                     application.proof_of_address_uploaded &&
-                     engagementLetter?.signed_at;
+  // Approval logic: engagement letter REQUIRED, AML warns but doesn't block
+  const engagementSigned = !!engagementLetter?.signed_at;
+  const amlComplete = application.id_document_uploaded && application.proof_of_address_uploaded;
+  const canApprove = engagementSigned;
 
   return (
     <DashboardLayout>
@@ -280,7 +311,7 @@ const OnboardingDetail = () => {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 items-end">
-                    <Badge variant={application.status === "approved" ? "default" : "secondary"}>
+                    <Badge variant={application.status === "approved" ? "default" : application.status === "rejected" ? "destructive" : "secondary"}>
                       {application.status.replace(/_/g, " ").toUpperCase()}
                     </Badge>
                     <div className="flex items-center gap-2">
@@ -322,40 +353,57 @@ const OnboardingDetail = () => {
                 onLetterStatusChange={loadEngagementLetter}
               />
 
-              {/* Status Management */}
+              {/* Application Status Info */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Application Status</CardTitle>
+                  <CardTitle className="text-lg">Approval Requirements</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={application.status}
-                      onValueChange={updateStatus}
-                      disabled={application.status === "approved"}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="contracts_signed">Contracts Signed</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3">
+                    {/* Engagement Letter - Required */}
+                    <div className="flex items-center justify-between p-3 rounded-md border">
+                      <span className="text-sm font-medium">Engagement Letter Signed</span>
+                      {engagementSigned ? (
+                        <Badge variant="default" className="bg-green-600">
+                          <Check className="h-3 w-3 mr-1" />
+                          Complete
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive">
+                          <X className="h-3 w-3 mr-1" />
+                          Required
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* AML Documents - Recommended */}
+                    <div className="flex items-center justify-between p-3 rounded-md border">
+                      <span className="text-sm font-medium">AML Documents</span>
+                      {amlComplete ? (
+                        <Badge variant="default" className="bg-green-600">
+                          <Check className="h-3 w-3 mr-1" />
+                          Complete
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Recommended
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>AML Status</Label>
-                    <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center">
-                      <span className="text-sm capitalize">{application.aml_status}</span>
-                    </div>
+                  {!engagementSigned && (
                     <p className="text-xs text-muted-foreground">
-                      AML status is automatically verified when application is approved
+                      The engagement letter must be signed before you can approve this application.
                     </p>
-                  </div>
+                  )}
+
+                  {engagementSigned && !amlComplete && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      AML documents are incomplete. You can still approve, but it's recommended to collect them first.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -436,29 +484,27 @@ const OnboardingDetail = () => {
             </Card>
 
             {/* Actions */}
-            {application.status !== "approved" && (
+            {application.status !== "approved" && application.status !== "rejected" && (
               <Card>
                 <CardContent className="py-4">
                   <div className="flex items-center justify-between">
                     <div>
                       {!canApprove && (
                         <p className="text-sm text-muted-foreground">
-                          To approve: {!engagementLetter?.signed_at && "Engagement letter must be signed. "}
-                          {!application.id_document_uploaded && "ID document required. "}
-                          {!application.proof_of_address_uploaded && "Proof of address required."}
+                          Engagement letter must be signed before approval
                         </p>
                       )}
                     </div>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => updateStatus("rejected")}
+                        onClick={() => setShowRejectDialog(true)}
                       >
                         <X className="mr-2 h-4 w-4" />
                         Reject
                       </Button>
                       <Button
-                        onClick={approveApplication}
+                        onClick={handleApproveClick}
                         disabled={!canApprove || approving}
                       >
                         {approving ? (
@@ -489,26 +535,111 @@ const OnboardingDetail = () => {
                         </p>
                       )}
                     </div>
-                    {(application.client_id || application.company_id) && (
-                      <Button
-                        variant="outline"
-                        onClick={() => navigate(
-                          application.client_id 
-                            ? `/clients/${application.client_id}` 
-                            : `/clients/${application.company_id}`
-                        )}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        View {application.application_type === "individual" ? "Client" : "Company"}
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (application.client_id) {
+                          navigate(`/clients/${application.client_id}`);
+                        } else if (application.company_id) {
+                          navigate(`/clients/company/${application.company_id}`);
+                        }
+                      }}
+                    >
+                      View {application.application_type === "individual" ? "Client" : "Company"}
+                    </Button>
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Rejected State */}
+            {application.status === "rejected" && (
+              <Card className="border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
+                <CardContent className="py-4">
+                  <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                    ✗ Application rejected
+                  </p>
+                  {application.notes && (
+                    <p className="text-xs text-red-800 dark:text-red-200 mt-1">
+                      {application.notes}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
           </div>
         </div>
       </div>
+
+      {/* Rejection Dialog */}
+      <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reject this application for {recipientName}? This action can be undone by creating a new application.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Label htmlFor="rejection-reason">Reason (optional)</Label>
+            <Textarea
+              id="rejection-reason"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Enter reason for rejection..."
+              className="mt-2"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={rejectApplication}
+              disabled={rejecting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {rejecting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Reject Application
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AML Warning Dialog */}
+      <AlertDialog open={showAmlWarningDialog} onOpenChange={setShowAmlWarningDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              AML Documents Incomplete
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The following AML documents have not been uploaded:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                {!application.id_document_uploaded && <li>ID Document</li>}
+                {!application.proof_of_address_uploaded && <li>Proof of Address</li>}
+              </ul>
+              <p className="mt-3">
+                You can still approve this application, but it's recommended to collect AML documents before proceeding.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go Back</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={approveApplication}
+              disabled={approving}
+            >
+              {approving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Continue Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };

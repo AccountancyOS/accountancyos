@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -596,10 +598,191 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        {/* Stripe Connect Section */}
+        <StripeConnectSection />
+
         {/* Password Change Section */}
         <PasswordChangeSection />
       </div>
     </DashboardLayout>
+  );
+}
+
+function StripeConnectSection() {
+  const { organization } = useOrganization();
+  const queryClient = useQueryClient();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Fetch organization details for Stripe Connect status
+  const { data: orgDetails, isLoading: orgLoading } = useQuery({
+    queryKey: ["organization-stripe", organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return null;
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("stripe_connect_account_id, payment_required_before_onboarding")
+        .eq("id", organization.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organization?.id,
+  });
+
+  const connectStripeMutation = useMutation({
+    mutationFn: async () => {
+      setIsConnecting(true);
+      const { data, error } = await supabase.functions.invoke("stripe-connect-onboard", {
+        body: {
+          return_url: `${window.location.origin}/settings?stripe_connected=true`,
+          refresh_url: `${window.location.origin}/settings?stripe_refresh=true`,
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.onboarding_url) {
+        window.location.href = data.onboarding_url;
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to connect Stripe: ${error.message}`);
+      setIsConnecting(false);
+    },
+  });
+
+  const togglePaymentRequiredMutation = useMutation({
+    mutationFn: async (required: boolean) => {
+      setIsUpdating(true);
+      const { error } = await supabase
+        .from("organizations")
+        .update({ payment_required_before_onboarding: required })
+        .eq("id", organization!.id);
+      if (error) throw error;
+      return required;
+    },
+    onSuccess: (required) => {
+      toast.success(`Payment ${required ? "now required" : "no longer required"} before onboarding`);
+      queryClient.invalidateQueries({ queryKey: ["organization-stripe"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update setting: ${error.message}`);
+    },
+    onSettled: () => {
+      setIsUpdating(false);
+    },
+  });
+
+  const isConnected = !!orgDetails?.stripe_connect_account_id;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Client Billing (Stripe Connect)
+                {isConnected && (
+                  <Badge variant="default" className="bg-green-600 ml-2">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Connect your Stripe account to collect payments from clients
+              </CardDescription>
+            </div>
+          </div>
+          {!isConnected && (
+            <Button
+              onClick={() => connectStripeMutation.mutate()}
+              disabled={isConnecting || orgLoading}
+            >
+              {isConnecting ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              Connect Stripe
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {orgLoading ? (
+          <div className="text-sm text-muted-foreground py-4">Loading...</div>
+        ) : !isConnected ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-50" />
+            <p className="font-medium">No Stripe account connected</p>
+            <p className="text-sm mt-1">
+              Connect your Stripe account to collect payments from clients for quotes and invoices
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Connected Account Info */}
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CreditCard className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Stripe Account</span>
+                    <Badge variant="default" className="bg-green-600">Connected</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Account ID: {orgDetails.stripe_connect_account_id}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open("https://dashboard.stripe.com", "_blank")}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Stripe Dashboard
+              </Button>
+            </div>
+
+            {/* Payment Settings */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold">Payment Settings</h4>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="payment-required">Require payment before onboarding</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, clients must pay their first invoice before their application can be approved
+                  </p>
+                </div>
+                <Switch
+                  id="payment-required"
+                  checked={orgDetails.payment_required_before_onboarding || false}
+                  onCheckedChange={(checked) => togglePaymentRequiredMutation.mutate(checked)}
+                  disabled={isUpdating}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg bg-muted p-4 text-sm">
+          <p className="font-medium mb-2">How Stripe Connect works:</p>
+          <ul className="space-y-1 text-muted-foreground list-disc list-inside">
+            <li>Payments go directly to your Stripe account</li>
+            <li>Clients can pay by card or Direct Debit</li>
+            <li>Manage billing in your own Stripe Dashboard</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
