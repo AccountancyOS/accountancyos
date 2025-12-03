@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Send, CheckCircle } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle, XCircle, ExternalLink, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
 
 const QuoteDetail = () => {
   const { id } = useParams();
@@ -55,6 +56,22 @@ const QuoteDetail = () => {
     enabled: !!id,
   });
 
+  // Fetch linked onboarding application if quote is accepted
+  const { data: onboardingApp } = useQuery({
+    queryKey: ["quote-onboarding", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await supabase
+        .from("onboarding_applications")
+        .select("id, status, aml_status")
+        .eq("quote_id", id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id && quote?.status === "accepted",
+  });
+
   const sendQuoteMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.rpc('lifecycle_send_quote', {
@@ -80,19 +97,66 @@ const QuoteDetail = () => {
     }
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: async (status: string) => {
+  // Use lifecycle_accept_quote RPC instead of manual update
+  const acceptQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('lifecycle_accept_quote', {
+        p_quote_id: id
+      });
+      if (error) throw error;
+      return data as {
+        quote_id: string;
+        quote_status: string;
+        lead_id: string | null;
+        lead_stage: string | null;
+        onboarding_application_id: string;
+        onboarding_status: string;
+        created_new_onboarding: boolean;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["quote", id] });
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["quote-onboarding", id] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["onboarding-applications"] });
+      
+      toast({ 
+        title: "Quote accepted",
+        description: data.created_new_onboarding 
+          ? "Onboarding application created automatically"
+          : "Onboarding application linked"
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to accept quote",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const rejectQuoteMutation = useMutation({
+    mutationFn: async () => {
       const { error } = await supabase
         .from("quotes")
-        .update({ status })
+        .update({ status: "rejected" })
         .eq("id", id!);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quote", id] });
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
-      toast({ title: "Quote status updated" });
+      toast({ title: "Quote marked as rejected" });
     },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to reject quote",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   });
 
   if (isLoading) {
@@ -136,6 +200,21 @@ const QuoteDetail = () => {
         </Badge>
       </div>
 
+      {/* Status Stepper - show for sent or accepted quotes */}
+      {(quote.status === "sent" || quote.status === "accepted") && (
+        <Card>
+          <CardContent className="py-6">
+            <OnboardingStatusStepper
+              quoteStatus={quote.status}
+              quoteSentAt={quote.sent_at}
+              quoteAcceptedAt={quote.accepted_at}
+              applicationStatus={onboardingApp?.status}
+              amlStatus={onboardingApp?.aml_status}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6">
         <Card>
           <CardHeader>
@@ -159,6 +238,22 @@ const QuoteDetail = () => {
                   <div className="text-sm text-muted-foreground">Valid Until</div>
                   <div className="font-medium">
                     {format(new Date(quote.valid_until), "dd MMMM yyyy")}
+                  </div>
+                </div>
+              )}
+              {quote.sent_at && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Sent</div>
+                  <div className="font-medium">
+                    {format(new Date(quote.sent_at), "dd MMMM yyyy 'at' HH:mm")}
+                  </div>
+                </div>
+              )}
+              {quote.accepted_at && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Accepted</div>
+                  <div className="font-medium">
+                    {format(new Date(quote.accepted_at), "dd MMMM yyyy 'at' HH:mm")}
                   </div>
                 </div>
               )}
@@ -235,13 +330,46 @@ const QuoteDetail = () => {
           </CardContent>
         </Card>
 
+        {/* Linked Onboarding Application */}
+        {quote.status === "accepted" && onboardingApp && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Onboarding Application</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Badge variant="secondary" className="mb-2">
+                    {onboardingApp.status.replace(/_/g, " ").toUpperCase()}
+                  </Badge>
+                  <p className="text-sm text-muted-foreground">
+                    Continue the onboarding process to convert this prospect into an active client.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/onboarding/${onboardingApp.id}`)}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View Application
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Actions */}
         {quote.status === "draft" && (
           <div className="flex gap-2">
             <Button
               onClick={() => sendQuoteMutation.mutate()}
               disabled={sendQuoteMutation.isPending}
             >
-              <Send className="h-4 w-4 mr-2" />
+              {sendQuoteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
               Send Quote
             </Button>
             {recipientEmail && (
@@ -255,17 +383,26 @@ const QuoteDetail = () => {
         {quote.status === "sent" && (
           <div className="flex gap-2">
             <Button
-              onClick={() => updateStatusMutation.mutate("accepted")}
-              disabled={updateStatusMutation.isPending}
+              onClick={() => acceptQuoteMutation.mutate()}
+              disabled={acceptQuoteMutation.isPending}
             >
-              <CheckCircle className="h-4 w-4 mr-2" />
+              {acceptQuoteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
               Mark as Accepted
             </Button>
             <Button
               variant="outline"
-              onClick={() => updateStatusMutation.mutate("rejected")}
-              disabled={updateStatusMutation.isPending}
+              onClick={() => rejectQuoteMutation.mutate()}
+              disabled={rejectQuoteMutation.isPending}
             >
+              {rejectQuoteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4 mr-2" />
+              )}
               Mark as Rejected
             </Button>
           </div>
