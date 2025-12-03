@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useOrganization } from "@/lib/organization-context";
@@ -21,6 +22,7 @@ export default function ClientPortal() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { organization } = useOrganization();
+  const [activeTab, setActiveTab] = useState("portal");
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", clientId],
@@ -98,7 +100,7 @@ export default function ClientPortal() {
           </div>
 
           {/* Tabs */}
-          <Tabs defaultValue="portal" className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="flex-wrap">
               <TabsTrigger value="portal">Portal</TabsTrigger>
               <TabsTrigger value="conversations">Conversations</TabsTrigger>
@@ -114,7 +116,7 @@ export default function ClientPortal() {
             </TabsList>
 
             <TabsContent value="portal">
-              <ClientPortalTab clientId={client.id} />
+              <ClientPortalTab clientId={client.id} onViewConversations={() => setActiveTab("conversations")} />
             </TabsContent>
 
             <TabsContent value="conversations">

@@ -63,6 +63,8 @@ export function NewMessageDialog({ clientId }: NewMessageDialogProps) {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Invalidate both query keys for full sync
+      queryClient.invalidateQueries({ queryKey: ["entity-messages", clientId] });
       queryClient.invalidateQueries({ queryKey: ["client-messages", clientId] });
       toast({
         title: "Message created",

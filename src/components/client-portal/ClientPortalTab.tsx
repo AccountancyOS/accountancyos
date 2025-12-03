@@ -4,20 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { CheckCircle2, Circle, Clock } from "lucide-react";
+import { CheckCircle2, Circle, Clock, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { AddTaskDialog } from "./AddTaskDialog";
-import { NewMessageDialog } from "./NewMessageDialog";
 
 interface ClientPortalTabProps {
   clientId: string;
+  onViewConversations?: () => void;
 }
 
-export default function ClientPortalTab({ clientId }: ClientPortalTabProps) {
+export default function ClientPortalTab({ clientId, onViewConversations }: ClientPortalTabProps) {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -38,8 +37,9 @@ export default function ClientPortalTab({ clientId }: ClientPortalTabProps) {
     enabled: !!clientId,
   });
 
+  // Use the same query key pattern as ConversationsTab for cache sync
   const { data: messages } = useQuery({
-    queryKey: ["client-messages", clientId],
+    queryKey: ["entity-messages", clientId, null, organization?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_messages")
@@ -51,7 +51,7 @@ export default function ClientPortalTab({ clientId }: ClientPortalTabProps) {
       if (error) throw error;
       return data;
     },
-    enabled: !!clientId,
+    enabled: !!clientId && !!organization?.id,
   });
 
   const updateTaskMutation = useMutation({
@@ -186,7 +186,12 @@ export default function ClientPortalTab({ clientId }: ClientPortalTabProps) {
                 {viewAsClient ? "Visible to client" : "All messages and notes"}
               </CardDescription>
             </div>
-            {!viewAsClient && <NewMessageDialog clientId={clientId} />}
+            {!viewAsClient && onViewConversations && (
+              <Button variant="outline" size="sm" onClick={onViewConversations}>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                View All
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleMessages && visibleMessages.length > 0 ? (
