@@ -1178,6 +1178,50 @@ export type Database = {
           },
         ]
       }
+      email_attachments: {
+        Row: {
+          content_id: string | null
+          content_type: string | null
+          created_at: string
+          email_message_id: string
+          filename: string
+          id: string
+          is_inline: boolean | null
+          size_bytes: number | null
+          storage_path: string | null
+        }
+        Insert: {
+          content_id?: string | null
+          content_type?: string | null
+          created_at?: string
+          email_message_id: string
+          filename: string
+          id?: string
+          is_inline?: boolean | null
+          size_bytes?: number | null
+          storage_path?: string | null
+        }
+        Update: {
+          content_id?: string | null
+          content_type?: string | null
+          created_at?: string
+          email_message_id?: string
+          filename?: string
+          id?: string
+          is_inline?: boolean | null
+          size_bytes?: number | null
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_attachments_email_message_id_fkey"
+            columns: ["email_message_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_messages: {
         Row: {
           attachments: Json | null
@@ -1194,10 +1238,13 @@ export type Database = {
           is_read: boolean | null
           job_id: string | null
           labels: string[] | null
+          link_reason: string | null
+          link_reference: string | null
           mailbox_id: string
           matched_at: string | null
           matched_by: Database["public"]["Enums"]["email_match_type"] | null
           message_id: string
+          needs_review: boolean | null
           organization_id: string
           raw_headers: Json | null
           received_at: string | null
@@ -1205,6 +1252,7 @@ export type Database = {
           sent_at: string | null
           subject: string | null
           thread_id: string | null
+          thread_ref: string | null
           to_emails: string[] | null
         }
         Insert: {
@@ -1222,10 +1270,13 @@ export type Database = {
           is_read?: boolean | null
           job_id?: string | null
           labels?: string[] | null
+          link_reason?: string | null
+          link_reference?: string | null
           mailbox_id: string
           matched_at?: string | null
           matched_by?: Database["public"]["Enums"]["email_match_type"] | null
           message_id: string
+          needs_review?: boolean | null
           organization_id: string
           raw_headers?: Json | null
           received_at?: string | null
@@ -1233,6 +1284,7 @@ export type Database = {
           sent_at?: string | null
           subject?: string | null
           thread_id?: string | null
+          thread_ref?: string | null
           to_emails?: string[] | null
         }
         Update: {
@@ -1250,10 +1302,13 @@ export type Database = {
           is_read?: boolean | null
           job_id?: string | null
           labels?: string[] | null
+          link_reason?: string | null
+          link_reference?: string | null
           mailbox_id?: string
           matched_at?: string | null
           matched_by?: Database["public"]["Enums"]["email_match_type"] | null
           message_id?: string
+          needs_review?: boolean | null
           organization_id?: string
           raw_headers?: Json | null
           received_at?: string | null
@@ -1261,6 +1316,7 @@ export type Database = {
           sent_at?: string | null
           subject?: string | null
           thread_id?: string | null
+          thread_ref?: string | null
           to_emails?: string[] | null
         }
         Relationships: [
@@ -1299,67 +1355,176 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "email_messages_thread_ref_fkey"
+            columns: ["thread_ref"]
+            isOneToOne: false
+            referencedRelation: "email_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_push_subscriptions: {
+        Row: {
+          created_at: string
+          delta_link: string | null
+          expiration_at: string | null
+          history_id: string | null
+          id: string
+          mailbox_id: string
+          provider: string
+          resource_uri: string | null
+          subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          delta_link?: string | null
+          expiration_at?: string | null
+          history_id?: string | null
+          id?: string
+          mailbox_id: string
+          provider: string
+          resource_uri?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          delta_link?: string | null
+          expiration_at?: string | null
+          history_id?: string | null
+          id?: string
+          mailbox_id?: string
+          provider?: string
+          resource_uri?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_push_subscriptions_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "connected_mailboxes"
+            referencedColumns: ["id"]
+          },
         ]
       }
       email_queue: {
         Row: {
           body_html: string | null
           body_text: string | null
+          client_id: string | null
+          company_id: string | null
+          context: string | null
           created_at: string | null
+          created_by: string | null
           entity_id: string | null
           entity_type: string | null
           error_message: string | null
           id: string
+          job_id: string | null
+          mailbox_id: string | null
           merge_data: Json | null
           organization_id: string
+          provider: string | null
           retry_count: number | null
           scheduled_at: string | null
           sent_at: string | null
           status: string | null
           subject: string
           template_id: string | null
+          thread_id: string | null
           to_email: string
           to_name: string | null
+          updated_at: string | null
         }
         Insert: {
           body_html?: string | null
           body_text?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          context?: string | null
           created_at?: string | null
+          created_by?: string | null
           entity_id?: string | null
           entity_type?: string | null
           error_message?: string | null
           id?: string
+          job_id?: string | null
+          mailbox_id?: string | null
           merge_data?: Json | null
           organization_id: string
+          provider?: string | null
           retry_count?: number | null
           scheduled_at?: string | null
           sent_at?: string | null
           status?: string | null
           subject: string
           template_id?: string | null
+          thread_id?: string | null
           to_email: string
           to_name?: string | null
+          updated_at?: string | null
         }
         Update: {
           body_html?: string | null
           body_text?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          context?: string | null
           created_at?: string | null
+          created_by?: string | null
           entity_id?: string | null
           entity_type?: string | null
           error_message?: string | null
           id?: string
+          job_id?: string | null
+          mailbox_id?: string | null
           merge_data?: Json | null
           organization_id?: string
+          provider?: string | null
           retry_count?: number | null
           scheduled_at?: string | null
           sent_at?: string | null
           status?: string | null
           subject?: string
           template_id?: string | null
+          thread_id?: string | null
           to_email?: string
           to_name?: string | null
+          updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "email_queue_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_queue_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_queue_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_queue_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "connected_mailboxes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_queue_organization_id_fkey"
             columns: ["organization_id"]
@@ -1372,6 +1537,93 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_queue_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "email_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_threads: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          external_thread_id: string
+          first_message_at: string | null
+          id: string
+          initiated_by: string
+          is_archived: boolean | null
+          job_id: string | null
+          last_message_at: string | null
+          message_count: number | null
+          organization_id: string
+          provider: string
+          subject: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          external_thread_id: string
+          first_message_at?: string | null
+          id?: string
+          initiated_by?: string
+          is_archived?: boolean | null
+          job_id?: string | null
+          last_message_at?: string | null
+          message_count?: number | null
+          organization_id: string
+          provider: string
+          subject?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          external_thread_id?: string
+          first_message_at?: string | null
+          id?: string
+          initiated_by?: string
+          is_archived?: boolean | null
+          job_id?: string | null
+          last_message_at?: string | null
+          message_count?: number | null
+          organization_id?: string
+          provider?: string
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_threads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_threads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_threads_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_threads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]

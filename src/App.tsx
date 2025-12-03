@@ -33,6 +33,7 @@ import FilingDetail from "./pages/FilingDetail";
 import Workpapers from "./pages/Workpapers";
 import Bookkeeping from "./pages/Bookkeeping";
 import Settings from "./pages/Settings";
+import Emails from "./pages/Emails";
 import GmailCallback from "./pages/GmailCallback";
 import OutlookCallback from "./pages/OutlookCallback";
 import { Loader2 } from "lucide-react";
@@ -285,6 +286,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/emails"
+              element={
+                <ProtectedRoute>
+                  <Emails />
                 </ProtectedRoute>
               }
             />
