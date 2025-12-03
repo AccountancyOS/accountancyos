@@ -29,24 +29,30 @@ export default function Settings() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
 
-  // Handle URL params for Gmail callback success/error
+  // Handle URL params for Gmail/Outlook callback success/error
   useEffect(() => {
     const gmailConnected = searchParams.get("gmail_connected");
+    const outlookConnected = searchParams.get("outlook_connected");
     const error = searchParams.get("error");
 
     if (gmailConnected === "true") {
       toast.success("Gmail account connected successfully!");
       queryClient.invalidateQueries({ queryKey: ["connected-mailboxes"] });
       setSearchParams({});
+    } else if (outlookConnected === "true") {
+      toast.success("Outlook account connected successfully!");
+      queryClient.invalidateQueries({ queryKey: ["connected-mailboxes"] });
+      setSearchParams({});
     } else if (error) {
       const errorMessages: Record<string, string> = {
         invalid_state: "Invalid or expired session. Please try again.",
-        token_exchange_failed: "Failed to connect to Gmail. Please try again.",
-        profile_fetch_failed: "Failed to fetch Gmail profile.",
-        no_email: "Could not retrieve email address from Gmail.",
+        token_exchange_failed: "Failed to connect. Please try again.",
+        profile_fetch_failed: "Failed to fetch profile.",
+        no_email: "Could not retrieve email address.",
         update_failed: "Failed to update existing connection.",
         create_failed: "Failed to create mailbox connection.",
         internal_error: "An unexpected error occurred.",
+        access_denied: "Access was denied. Please try again.",
       };
       toast.error(errorMessages[error] || `Connection error: ${error}`);
       setSearchParams({});
@@ -67,8 +73,8 @@ export default function Settings() {
     },
   });
 
-  // Check if Gmail is already connected
-  const hasGmailConnected = mailboxes?.some(m => m.provider === 'gmail');
+  // Check if any mailbox is already connected
+  const hasMailboxConnected = mailboxes && mailboxes.length > 0;
 
   // Fetch email queue stats
   const { data: queueStats } = useQuery({
@@ -136,6 +142,28 @@ export default function Settings() {
     },
   });
 
+  // Connect Outlook mutation
+  const connectOutlookMutation = useMutation({
+    mutationFn: async () => {
+      setIsConnecting(true);
+      const { data, error } = await supabase.functions.invoke("outlook-auth", {
+        body: { redirect_url: window.location.origin },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url;
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to initiate Outlook connection: ${error.message}`);
+      setIsConnecting(false);
+    },
+  });
+
   // Disconnect mailbox mutation
   const disconnectMailboxMutation = useMutation({
     mutationFn: async (mailboxId: string) => {
@@ -155,11 +183,12 @@ export default function Settings() {
     },
   });
 
-  // Sync mailbox mutation
+  // Sync mailbox mutation - uses correct sync function based on provider
   const syncMailboxMutation = useMutation({
-    mutationFn: async (mailboxId: string) => {
+    mutationFn: async ({ mailboxId, provider }: { mailboxId: string; provider: string }) => {
       setIsSyncing(mailboxId);
-      const { data, error } = await supabase.functions.invoke("gmail-sync", {
+      const syncFunction = provider === 'outlook' ? 'outlook-sync' : 'gmail-sync';
+      const { data, error } = await supabase.functions.invoke(syncFunction, {
         body: { mailbox_id: mailboxId },
       });
 
@@ -273,13 +302,13 @@ export default function Settings() {
         {/* Connected Email Accounts */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <MailCheck className="h-5 w-5" />
                     Connected Email Accounts
-                    {hasGmailConnected && (
+                    {hasMailboxConnected && (
                       <Badge variant="default" className="bg-green-600 ml-2">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                         Connected
@@ -291,18 +320,32 @@ export default function Settings() {
                   </CardDescription>
                 </div>
               </div>
-              {!hasGmailConnected && (
-                <Button
-                  onClick={() => connectGmailMutation.mutate()}
-                  disabled={isConnecting}
-                >
-                  {isConnecting ? (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="mr-2 h-4 w-4" />
-                  )}
-                  Connect Gmail
-                </Button>
+              {!hasMailboxConnected && (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => connectGmailMutation.mutate()}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    Connect Gmail
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => connectOutlookMutation.mutate()}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    Connect Outlook
+                  </Button>
+                </div>
               )}
             </div>
           </CardHeader>
@@ -352,11 +395,11 @@ export default function Settings() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => syncMailboxMutation.mutate(mailbox.id)}
+                        onClick={() => syncMailboxMutation.mutate({ mailboxId: mailbox.id, provider: mailbox.provider })}
                         disabled={isSyncing === mailbox.id || mailbox.status !== "active"}
                       >
                         <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing === mailbox.id ? "animate-spin" : ""}`} />

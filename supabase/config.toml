@@ -29,3 +29,18 @@ verify_jwt = true
 
 [functions.gmail-exchange]
 verify_jwt = false
+
+[functions.outlook-auth]
+verify_jwt = true
+
+[functions.outlook-callback]
+verify_jwt = false
+
+[functions.outlook-exchange]
+verify_jwt = false
+
+[functions.outlook-sync]
+verify_jwt = false
+
+[functions.outlook-send]
+verify_jwt = true

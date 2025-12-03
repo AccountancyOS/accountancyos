@@ -3226,6 +3226,44 @@ export type Database = {
         }
         Relationships: []
       }
+      outlook_auth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          organization_id: string
+          redirect_url: string | null
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id: string
+          redirect_url?: string | null
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          redirect_url?: string | null
+          state?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outlook_auth_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pending_practice_signups: {
         Row: {
           accountant_email: string
@@ -4959,6 +4997,7 @@ export type Database = {
         Returns: boolean
       }
       cleanup_expired_gmail_auth_states: { Args: never; Returns: undefined }
+      cleanup_expired_outlook_auth_states: { Args: never; Returns: undefined }
       client_has_portal_access: {
         Args: {
           check_client_id?: string
