@@ -33,7 +33,6 @@ interface QueuedEmail {
   body_text: string | null;
   status: string;
   context: string | null;
-  provider: string | null;
   error_message: string | null;
 }
 
@@ -61,7 +60,7 @@ export function EditQueuedEmailDialog({
   });
   const [viewMode, setViewMode] = useState<"preview" | "html">("preview");
 
-  const isReadOnly = email?.status === "sent";
+  const isReadOnly = false; // All items in queue are editable
   const canEdit = email?.status === "draft" || email?.status === "queued" || email?.status === "failed";
 
   useEffect(() => {
@@ -130,11 +129,6 @@ export function EditQueuedEmailDialog({
             <Badge variant={email.status === "failed" ? "destructive" : "secondary"}>
               {email.status}
             </Badge>
-            {email.provider && (
-              <Badge variant="outline" className="capitalize">
-                {email.provider}
-              </Badge>
-            )}
           </div>
           {email.error_message && (
             <p className="text-sm text-destructive mt-2">{email.error_message}</p>
