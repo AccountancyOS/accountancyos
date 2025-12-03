@@ -112,8 +112,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Build Google OAuth URL
-    const callbackUrl = `${SUPABASE_URL}/functions/v1/gmail-callback`;
+    // Build Google OAuth URL - redirect through app domain for branded consent screen
+    const callbackUrl = `${redirectUrl}/auth/gmail/callback`;
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
     authUrl.searchParams.set('redirect_uri', callbackUrl);
