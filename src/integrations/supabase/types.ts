@@ -798,6 +798,9 @@ export type Database = {
           activated_at: string | null
           address_line_1: string | null
           address_line_2: string | null
+          aml_expiry_date: string | null
+          aml_verified_at: string | null
+          aml_verified_by: string | null
           archived_at: string | null
           city: string | null
           country: string | null
@@ -822,6 +825,9 @@ export type Database = {
           activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          aml_expiry_date?: string | null
+          aml_verified_at?: string | null
+          aml_verified_by?: string | null
           archived_at?: string | null
           city?: string | null
           country?: string | null
@@ -846,6 +852,9 @@ export type Database = {
           activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          aml_expiry_date?: string | null
+          aml_verified_at?: string | null
+          aml_verified_by?: string | null
           archived_at?: string | null
           city?: string | null
           country?: string | null
@@ -881,6 +890,9 @@ export type Database = {
           activated_at: string | null
           address_line_1: string | null
           address_line_2: string | null
+          aml_expiry_date: string | null
+          aml_verified_at: string | null
+          aml_verified_by: string | null
           archived_at: string | null
           city: string | null
           company_name: string
@@ -909,6 +921,9 @@ export type Database = {
           activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          aml_expiry_date?: string | null
+          aml_verified_at?: string | null
+          aml_verified_by?: string | null
           archived_at?: string | null
           city?: string | null
           company_name: string
@@ -937,6 +952,9 @@ export type Database = {
           activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
+          aml_expiry_date?: string | null
+          aml_verified_at?: string | null
+          aml_verified_by?: string | null
           archived_at?: string | null
           city?: string | null
           company_name?: string
@@ -3259,6 +3277,8 @@ export type Database = {
           additional_documents_uploaded: boolean | null
           address_line_1: string | null
           address_line_2: string | null
+          aml_documents_migrated: boolean | null
+          aml_expiry_date: string | null
           aml_notes: string | null
           aml_status: string | null
           aml_submitted_at: string | null
@@ -3267,6 +3287,9 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           city: string | null
+          clearance_notes: string | null
+          clearance_received: boolean | null
+          clearance_received_at: string | null
           client_id: string | null
           company_id: string | null
           company_name: string | null
@@ -3285,10 +3308,15 @@ export type Database = {
           last_name: string | null
           lead_id: string | null
           national_insurance_number: string | null
+          onboarding_questionnaire_instance_id: string | null
           organization_id: string
           phone: string | null
           postcode: string | null
+          previous_accountant_email: string | null
+          previous_accountant_firm_name: string | null
+          previous_accountant_required: boolean | null
           proof_of_address_uploaded: boolean | null
+          questionnaire_submitted_at: string | null
           quote_id: string | null
           rejection_reason: string | null
           signature_data: Json | null
@@ -3300,6 +3328,8 @@ export type Database = {
           additional_documents_uploaded?: boolean | null
           address_line_1?: string | null
           address_line_2?: string | null
+          aml_documents_migrated?: boolean | null
+          aml_expiry_date?: string | null
           aml_notes?: string | null
           aml_status?: string | null
           aml_submitted_at?: string | null
@@ -3308,6 +3338,9 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           city?: string | null
+          clearance_notes?: string | null
+          clearance_received?: boolean | null
+          clearance_received_at?: string | null
           client_id?: string | null
           company_id?: string | null
           company_name?: string | null
@@ -3326,10 +3359,15 @@ export type Database = {
           last_name?: string | null
           lead_id?: string | null
           national_insurance_number?: string | null
+          onboarding_questionnaire_instance_id?: string | null
           organization_id: string
           phone?: string | null
           postcode?: string | null
+          previous_accountant_email?: string | null
+          previous_accountant_firm_name?: string | null
+          previous_accountant_required?: boolean | null
           proof_of_address_uploaded?: boolean | null
+          questionnaire_submitted_at?: string | null
           quote_id?: string | null
           rejection_reason?: string | null
           signature_data?: Json | null
@@ -3341,6 +3379,8 @@ export type Database = {
           additional_documents_uploaded?: boolean | null
           address_line_1?: string | null
           address_line_2?: string | null
+          aml_documents_migrated?: boolean | null
+          aml_expiry_date?: string | null
           aml_notes?: string | null
           aml_status?: string | null
           aml_submitted_at?: string | null
@@ -3349,6 +3389,9 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           city?: string | null
+          clearance_notes?: string | null
+          clearance_received?: boolean | null
+          clearance_received_at?: string | null
           client_id?: string | null
           company_id?: string | null
           company_name?: string | null
@@ -3367,10 +3410,15 @@ export type Database = {
           last_name?: string | null
           lead_id?: string | null
           national_insurance_number?: string | null
+          onboarding_questionnaire_instance_id?: string | null
           organization_id?: string
           phone?: string | null
           postcode?: string | null
+          previous_accountant_email?: string | null
+          previous_accountant_firm_name?: string | null
+          previous_accountant_required?: boolean | null
           proof_of_address_uploaded?: boolean | null
+          questionnaire_submitted_at?: string | null
           quote_id?: string | null
           rejection_reason?: string | null
           signature_data?: Json | null
@@ -3405,6 +3453,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_applications_questionnaire_instance_fkey"
+            columns: ["onboarding_questionnaire_instance_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
             referencedColumns: ["id"]
           },
           {
@@ -4547,9 +4602,12 @@ export type Database = {
           default_price: number
           description: string | null
           id: string
+          information_request_template_id: string | null
           is_bookkeeping_related: boolean | null
           name: string
           organization_id: string
+          trigger_date_offset_days: number | null
+          trigger_date_type: string | null
           updated_at: string
         }
         Insert: {
@@ -4560,9 +4618,12 @@ export type Database = {
           default_price: number
           description?: string | null
           id?: string
+          information_request_template_id?: string | null
           is_bookkeeping_related?: boolean | null
           name: string
           organization_id: string
+          trigger_date_offset_days?: number | null
+          trigger_date_type?: string | null
           updated_at?: string
         }
         Update: {
@@ -4573,12 +4634,22 @@ export type Database = {
           default_price?: number
           description?: string | null
           id?: string
+          information_request_template_id?: string | null
           is_bookkeeping_related?: boolean | null
           name?: string
           organization_id?: string
+          trigger_date_offset_days?: number | null
+          trigger_date_type?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "services_catalog_information_request_template_id_fkey"
+            columns: ["information_request_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "services_catalog_organization_id_fkey"
             columns: ["organization_id"]
@@ -5517,6 +5588,10 @@ export type Database = {
         Args: { p_organization_id: string }
         Returns: undefined
       }
+      send_onboarding_questionnaire: {
+        Args: { p_onboarding_id: string; p_template_id: string }
+        Returns: Json
+      }
       user_has_org_role: {
         Args: {
           check_org_id: string
@@ -5533,6 +5608,7 @@ export type Database = {
         Args: { check_org_id: string; check_user_id: string }
         Returns: boolean
       }
+      verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
     }
     Enums: {
       accountant_client_link_status:

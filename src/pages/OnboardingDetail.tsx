@@ -23,6 +23,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
 import EngagementLetterSection from "@/components/onboarding/EngagementLetterSection";
+import { OnboardingQuestionnaireSection } from "@/components/onboarding/OnboardingQuestionnaireSection";
+import { AMLVerificationPanel } from "@/components/onboarding/AMLVerificationPanel";
+import { ProfessionalClearanceSection } from "@/components/onboarding/ProfessionalClearanceSection";
 
 interface ApprovalResult {
   onboarding_id: string;
@@ -343,6 +346,17 @@ const OnboardingDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Onboarding Questionnaire */}
+            <OnboardingQuestionnaireSection
+              onboardingId={id!}
+              organizationId={organization!.id}
+              questionnaireInstanceId={application.onboarding_questionnaire_instance_id}
+              questionnaireSubmittedAt={application.questionnaire_submitted_at}
+              recipientEmail={application.email}
+              recipientName={recipientName}
+              onQuestionnaireSent={loadApplication}
+            />
+
             <div className="grid gap-6 md:grid-cols-2">
               {/* Engagement Letter */}
               <EngagementLetterSection
@@ -353,6 +367,48 @@ const OnboardingDetail = () => {
                 onLetterStatusChange={loadEngagementLetter}
               />
 
+              {/* AML Verification */}
+              <AMLVerificationPanel
+                onboardingId={id!}
+                amlStatus={application.aml_status}
+                amlVerifiedAt={application.aml_verified_at}
+                amlExpiryDate={application.aml_expiry_date}
+                idDocumentUploaded={application.id_document_uploaded}
+                proofOfAddressUploaded={application.proof_of_address_uploaded}
+                clientInfo={{
+                  firstName: application.first_name,
+                  lastName: application.last_name,
+                  companyName: application.company_name,
+                  dateOfBirth: application.date_of_birth,
+                  addressLine1: application.address_line_1,
+                  addressLine2: application.address_line_2,
+                  city: application.city,
+                  postcode: application.postcode,
+                  country: application.country,
+                }}
+                documents={documents.map(d => ({
+                  id: d.id,
+                  name: d.file_name,
+                  type: d.document_type,
+                  storagePath: d.file_path,
+                }))}
+                onVerified={loadApplication}
+              />
+            </div>
+
+            {/* Professional Clearance */}
+            <ProfessionalClearanceSection
+              onboardingId={id!}
+              previousAccountantRequired={application.previous_accountant_required || false}
+              previousAccountantFirmName={application.previous_accountant_firm_name}
+              previousAccountantEmail={application.previous_accountant_email}
+              clearanceReceived={application.clearance_received || false}
+              clearanceReceivedAt={application.clearance_received_at}
+              clearanceNotes={application.clearance_notes}
+              onUpdate={loadApplication}
+            />
+
+            <div className="grid gap-6 md:grid-cols-2">
               {/* Application Status Info */}
               <Card>
                 <CardHeader className="pb-3">
