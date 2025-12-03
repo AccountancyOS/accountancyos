@@ -34,6 +34,7 @@ import Workpapers from "./pages/Workpapers";
 import Bookkeeping from "./pages/Bookkeeping";
 import Settings from "./pages/Settings";
 import GmailCallback from "./pages/GmailCallback";
+import OutlookCallback from "./pages/OutlookCallback";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -292,6 +293,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <GmailCallback />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/auth/outlook/callback"
+              element={
+                <ProtectedRoute>
+                  <OutlookCallback />
                 </ProtectedRoute>
               }
             />
