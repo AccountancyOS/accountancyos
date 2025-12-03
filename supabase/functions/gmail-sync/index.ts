@@ -23,6 +23,13 @@ interface GmailMessage {
   internalDate: string;
 }
 
+interface MatchedEntity {
+  entity_type: string;
+  entity_id: string;
+  entity_name: string;
+  match_source: string;
+}
+
 // Refresh access token if expired
 async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {
   try {
@@ -110,6 +117,51 @@ function extractBody(payload: GmailMessage['payload']): { html?: string; text?: 
 
   processPayload(payload);
   return result;
+}
+
+// Find all matching entities for email addresses using the database function
+async function findMatchingEntities(
+  supabase: any,
+  orgId: string,
+  emails: string[]
+): Promise<MatchedEntity[]> {
+  const matches: MatchedEntity[] = [];
+  const seen = new Set<string>();
+  
+  for (const email of emails) {
+    if (!email) continue;
+    
+    try {
+      const { data, error } = await supabase.rpc('find_entities_by_email', {
+        _org_id: orgId,
+        _email: email
+      });
+      
+      if (error) {
+        console.error('Error finding entities for email:', email, error);
+        continue;
+      }
+      
+      if (data) {
+        for (const match of data) {
+          const key = `${match.entity_type}-${match.entity_id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            matches.push({
+              entity_type: match.entity_type,
+              entity_id: match.entity_id,
+              entity_name: match.entity_name,
+              match_source: match.match_source,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Exception finding entities for email:', email, err);
+    }
+  }
+  
+  return matches;
 }
 
 serve(async (req: Request) => {
@@ -317,7 +369,7 @@ serve(async (req: Request) => {
   }
 });
 
-// Sync a single message
+// Sync a single message with multi-entity matching
 async function syncMessage(
   supabase: any,
   mailbox: any,
@@ -360,38 +412,22 @@ async function syncMessage(
     // Determine direction
     const direction = from?.email === mailbox.email_address ? 'outbound' : 'inbound';
 
-    // Try to auto-match to client/company
-    const matchEmail = direction === 'inbound' ? from?.email : toAddresses[0];
-    let clientId: string | undefined;
-    let companyId: string | undefined;
+    // Collect ALL email addresses from the message for matching
+    const allEmails: string[] = [];
+    if (from?.email) allEmails.push(from.email);
+    allEmails.push(...toAddresses);
+    allEmails.push(...ccAddresses);
 
-    if (matchEmail) {
-      // Check clients
-      const { data: client } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('organization_id', mailbox.organization_id)
-        .ilike('email', matchEmail)
-        .single();
+    // Find all matching entities using the database function
+    const matchedEntities = await findMatchingEntities(supabase, mailbox.organization_id, allEmails);
 
-      if (client) {
-        clientId = client.id;
-      } else {
-        // Check companies
-        const { data: company } = await supabase
-          .from('companies')
-          .select('id')
-          .eq('organization_id', mailbox.organization_id)
-          .ilike('email', matchEmail)
-          .single();
+    // Determine primary client_id and company_id (first match of each type)
+    const primaryClient = matchedEntities.find(m => m.entity_type === 'client');
+    const primaryCompany = matchedEntities.find(m => m.entity_type === 'company');
 
-        if (company) {
-          companyId = company.id;
-        }
-      }
-    }
+    console.log(`Message ${messageId}: Found ${matchedEntities.length} matching entities`);
 
-    // Insert email (job_id will be null initially - tagged manually by user)
+    // Insert email with multi-entity support
     const { error: insertError } = await supabase
       .from('email_messages')
       .insert({
@@ -411,11 +447,12 @@ async function syncMessage(
         direction,
         is_read: !message.labelIds?.includes('UNREAD'),
         labels: message.labelIds || [],
-        client_id: clientId,
-        company_id: companyId,
+        client_id: primaryClient?.entity_id || null,
+        company_id: primaryCompany?.entity_id || null,
         job_id: null, // Tagged manually via UI
-        matched_at: clientId || companyId ? new Date().toISOString() : null,
-        matched_by: clientId || companyId ? 'auto' : null,
+        matched_at: matchedEntities.length > 0 ? new Date().toISOString() : null,
+        matched_by: matchedEntities.length > 0 ? 'auto' : null,
+        matched_entities: matchedEntities, // Store all matched entities
       });
 
     if (insertError) {

@@ -1036,6 +1036,70 @@ export type Database = {
           },
         ]
       }
+      contacts: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          email: string
+          id: string
+          is_primary: boolean | null
+          name: string
+          organization_id: string
+          phone: string | null
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          email: string
+          id?: string
+          is_primary?: boolean | null
+          name: string
+          organization_id: string
+          phone?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          is_primary?: boolean | null
+          name?: string
+          organization_id?: string
+          phone?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deadlines: {
         Row: {
           active_window_start: string | null
@@ -1243,6 +1307,7 @@ export type Database = {
           mailbox_id: string
           matched_at: string | null
           matched_by: Database["public"]["Enums"]["email_match_type"] | null
+          matched_entities: Json | null
           message_id: string
           needs_review: boolean | null
           organization_id: string
@@ -1275,6 +1340,7 @@ export type Database = {
           mailbox_id: string
           matched_at?: string | null
           matched_by?: Database["public"]["Enums"]["email_match_type"] | null
+          matched_entities?: Json | null
           message_id: string
           needs_review?: boolean | null
           organization_id: string
@@ -1307,6 +1373,7 @@ export type Database = {
           mailbox_id?: string
           matched_at?: string | null
           matched_by?: Database["public"]["Enums"]["email_match_type"] | null
+          matched_entities?: Json | null
           message_id?: string
           needs_review?: boolean | null
           organization_id?: string
@@ -3034,6 +3101,61 @@ export type Database = {
             columns: ["vat_code_id"]
             isOneToOne: false
             referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_entity_links: {
+        Row: {
+          client_message_id: string | null
+          email_message_id: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          organization_id: string
+          tagged_at: string | null
+          tagged_by: string | null
+        }
+        Insert: {
+          client_message_id?: string | null
+          email_message_id?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          organization_id: string
+          tagged_at?: string | null
+          tagged_by?: string | null
+        }
+        Update: {
+          client_message_id?: string | null
+          email_message_id?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          organization_id?: string
+          tagged_at?: string | null
+          tagged_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_entity_links_client_message_id_fkey"
+            columns: ["client_message_id"]
+            isOneToOne: false
+            referencedRelation: "client_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_entity_links_email_message_id_fkey"
+            columns: ["email_message_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_entity_links_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -5261,6 +5383,15 @@ export type Database = {
       create_organization_with_owner: {
         Args: { org_name: string }
         Returns: string
+      }
+      find_entities_by_email: {
+        Args: { _email: string; _org_id: string }
+        Returns: {
+          entity_id: string
+          entity_name: string
+          entity_type: string
+          match_source: string
+        }[]
       }
       generate_invite_token: { Args: never; Returns: string }
       generate_questionnaire_token: { Args: never; Returns: string }

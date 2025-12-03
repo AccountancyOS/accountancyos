@@ -7,15 +7,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, FileText, MessageSquare, Calendar, DollarSign, Settings, ArrowLeft, Building2 } from "lucide-react";
+import { Mail, Phone, FileText, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ClientPortalTab from "@/components/client-portal/ClientPortalTab";
 import ClientJobsTab from "@/components/client-portal/ClientJobsTab";
 import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
-import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
+import { ConversationsTab } from "@/components/client-portal/ConversationsTab";
 import ClientQuestionnairesTab from "@/components/client-portal/ClientQuestionnairesTab";
 import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab";
 import ClientBankingTab from "@/components/client-portal/ClientBankingTab";
+import { ContactsList } from "@/components/contacts/ContactsList";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -99,11 +100,12 @@ export default function ClientPortal() {
 
           {/* Tabs */}
           <Tabs defaultValue="portal" className="space-y-6">
-            <TabsList>
+            <TabsList className="flex-wrap">
               <TabsTrigger value="portal">Portal</TabsTrigger>
+              <TabsTrigger value="conversations">Conversations</TabsTrigger>
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
-              <TabsTrigger value="messages">Messages</TabsTrigger>
+              <TabsTrigger value="contacts">Contacts</TabsTrigger>
               <TabsTrigger value="questionnaires">Questionnaires</TabsTrigger>
               <TabsTrigger value="workpapers">Workpapers</TabsTrigger>
               <TabsTrigger value="banking">Banking</TabsTrigger>
@@ -117,6 +119,10 @@ export default function ClientPortal() {
               <ClientPortalTab clientId={client.id} />
             </TabsContent>
 
+            <TabsContent value="conversations">
+              <ConversationsTab clientId={client.id} />
+            </TabsContent>
+
             <TabsContent value="jobs">
               <ClientJobsTab clientId={client.id} />
             </TabsContent>
@@ -125,8 +131,8 @@ export default function ClientPortal() {
               <ClientDocumentsTab clientId={client.id} />
             </TabsContent>
 
-            <TabsContent value="messages">
-              <ClientMessagesTab clientId={client.id} />
+            <TabsContent value="contacts">
+              <ContactsList clientId={client.id} />
             </TabsContent>
 
             <TabsContent value="questionnaires">
