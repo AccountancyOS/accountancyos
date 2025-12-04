@@ -132,6 +132,23 @@ export const DeadlineFilters = ({ filters, onFiltersChange }: DeadlineFiltersPro
           </div>
 
           <div>
+            <Label className="text-xs text-muted-foreground mb-2 block">Service</Label>
+            <Select value={(filters as any).serviceCode || "all"} onValueChange={(value) => updateFilter("deadlineType" as any, value === "all" ? "" : value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="All services" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All services</SelectItem>
+                <SelectItem value="CS01">CS01 - Confirmation Statement</SelectItem>
+                <SelectItem value="SA100">SA100 - Self Assessment</SelectItem>
+                <SelectItem value="ct600">CT600 - Corporation Tax</SelectItem>
+                <SelectItem value="accounts">Company Accounts</SelectItem>
+                <SelectItem value="vat">VAT Return</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Status</Label>
             <Select value={filters.status || "all"} onValueChange={(value) => updateFilter("status", value === "all" ? "" : value)}>
               <SelectTrigger>

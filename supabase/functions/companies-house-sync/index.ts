@@ -201,6 +201,20 @@ async function syncCompanyFromCH(
     },
   });
   
+  // Generate CS01 deadline if confirmation_statement_next_due is available
+  let cs01DeadlineCreated = false;
+  if (chProfile.confirmation_statement?.next_due) {
+    const deadlineResult = await generateCS01Deadline(
+      supabase,
+      organizationId,
+      companyId,
+      chProfile.confirmation_statement.next_due,
+      chProfile.confirmation_statement.last_made_up_to
+    );
+    cs01DeadlineCreated = deadlineResult.created;
+    console.log(`[CH Sync] CS01 deadline generation: ${deadlineResult.message}`);
+  }
+  
   console.log(`[CH Sync] Completed sync for ${companyNumber}. Found ${discrepancies.length} discrepancies.`);
   
   return {
@@ -210,8 +224,70 @@ async function syncCompanyFromCH(
     officers: chOfficers,
     pscs: chPSCs,
     discrepancies,
+    cs01DeadlineCreated,
     syncedAt: new Date().toISOString(),
   };
+}
+
+async function generateCS01Deadline(
+  supabase: any,
+  organizationId: string,
+  companyId: string,
+  nextDueDate: string,
+  madeUpToDate?: string
+): Promise<{ created: boolean; message: string }> {
+  try {
+    // Check for existing CS01 deadline for this company with same due date
+    const { data: existingDeadline } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "CS01")
+      .eq("due_date", nextDueDate)
+      .maybeSingle();
+
+    if (existingDeadline) {
+      return { created: false, message: "CS01 deadline already exists" };
+    }
+
+    const dueDate = new Date(nextDueDate);
+    
+    // Calculate warning date (30 days before due)
+    const warningDate = new Date(dueDate);
+    warningDate.setDate(warningDate.getDate() - 30);
+
+    // Calculate active window start (90 days before due)
+    const activeWindowStart = new Date(dueDate);
+    activeWindowStart.setDate(activeWindowStart.getDate() - 90);
+
+    const { error } = await supabase
+      .from("deadlines")
+      .insert({
+        organization_id: organizationId,
+        company_id: companyId,
+        name: "Confirmation Statement (CS01)",
+        deadline_type: "statutory",
+        filing_body: "COMPANIES_HOUSE",
+        service_code: "CS01",
+        due_date: nextDueDate,
+        period_end: madeUpToDate,
+        warning_date: warningDate.toISOString().split("T")[0],
+        active_window_start: activeWindowStart.toISOString().split("T")[0],
+        status: "pending",
+        risk_score: 0,
+      });
+
+    if (error) {
+      console.error("[CH Sync] Failed to create CS01 deadline:", error);
+      return { created: false, message: `Failed to create deadline: ${error.message}` };
+    }
+
+    return { created: true, message: "CS01 deadline created successfully" };
+  } catch (err: any) {
+    console.error("[CH Sync] Error generating CS01 deadline:", err);
+    return { created: false, message: `Error: ${err.message}` };
+  }
 }
 
 async function compareWithInternalRegisters(

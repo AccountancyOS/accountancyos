@@ -333,6 +333,39 @@ async function createNextYearDeadlines(
         status: "pending",
         service_code: serviceType,
       });
+    } else if (serviceType === "CS01" || serviceType === "confirmation_statement") {
+      // CS01: 14 days after made-up-to date (period_end is the made-up-to date)
+      // Next year's made-up-to is 1 year from current
+      const nextMadeUpTo = new Date(periodEndDate);
+      nextMadeUpTo.setFullYear(nextMadeUpTo.getFullYear() + 1);
+      
+      // Due date is 14 days after made-up-to
+      const cs01Deadline = new Date(nextMadeUpTo);
+      cs01Deadline.setDate(cs01Deadline.getDate() + 14);
+      
+      // Warning date: 30 days before due
+      const warningDate = new Date(cs01Deadline);
+      warningDate.setDate(warningDate.getDate() - 30);
+      
+      // Active window: 90 days before due
+      const activeWindowStart = new Date(cs01Deadline);
+      activeWindowStart.setDate(activeWindowStart.getDate() - 90);
+      
+      deadlinesToCreate.push({
+        organization_id: organizationId,
+        client_id: clientId,
+        company_id: companyId,
+        job_id: jobId,
+        name: "Confirmation Statement (CS01)",
+        deadline_type: "statutory",
+        filing_body: "COMPANIES_HOUSE",
+        due_date: cs01Deadline.toISOString().split("T")[0],
+        period_end: nextMadeUpTo.toISOString().split("T")[0],
+        warning_date: warningDate.toISOString().split("T")[0],
+        active_window_start: activeWindowStart.toISOString().split("T")[0],
+        status: "pending",
+        service_code: "CS01",
+      });
     }
     
     if (deadlinesToCreate.length > 0) {
