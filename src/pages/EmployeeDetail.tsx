@@ -26,7 +26,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { PayslipViewDialog } from "@/components/payroll/PayslipViewDialog";
 import { STUDENT_LOAN_LABELS, type StudentLoanPlan } from "@/lib/payroll-constants";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { 
   ArrowLeft, 
   User,
@@ -53,8 +53,8 @@ const EmployeeDetail = () => {
           *,
           paye_schemes (
             id,
-            employer_name,
-            paye_reference,
+            name,
+            employer_paye_reference,
             company_id,
             client_id
           )
@@ -149,6 +149,7 @@ const EmployeeDetail = () => {
   }
 
   const studentLoanPlan = (employee.student_loan_plan || 'none') as StudentLoanPlan;
+  const isActive = employee.status === 'active';
 
   return (
     <DashboardLayout>
@@ -185,14 +186,14 @@ const EmployeeDetail = () => {
                 <h1 className="text-2xl font-semibold text-foreground">
                   {employee.first_name} {employee.last_name}
                 </h1>
-                <Badge variant={employee.is_active ? "default" : "secondary"}>
-                  {employee.is_active ? "Active" : "Inactive"}
+                <Badge variant={isActive ? "default" : "secondary"}>
+                  {isActive ? "Active" : employee.status}
                 </Badge>
               </div>
               <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                <span>Employer: {employee.paye_schemes?.employer_name}</span>
+                <span>Employer: {employee.paye_schemes?.name || employee.paye_schemes?.employer_paye_reference || '-'}</span>
                 <span>Tax Code: {employee.tax_code || '1257L'}</span>
-                <span>NI Category: {employee.ni_category || 'A'}</span>
+                <span>NI Category: {employee.nic_category || 'A'}</span>
               </div>
             </div>
           </div>
@@ -271,7 +272,7 @@ const EmployeeDetail = () => {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">NI Category</p>
-                      <p className="font-medium">{employee.ni_category || 'A'}</p>
+                      <p className="font-medium">{employee.nic_category || 'A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Student Loan</p>
@@ -279,7 +280,7 @@ const EmployeeDetail = () => {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Postgraduate Loan</p>
-                      <p className="font-medium">{employee.has_postgraduate_loan ? 'Yes' : 'No'}</p>
+                      <p className="font-medium">{(employee as any).postgraduate_loan ? 'Yes' : 'No'}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -305,8 +306,8 @@ const EmployeeDetail = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Payroll ID</p>
-                      <p className="font-medium font-mono">{employee.payroll_id || '-'}</p>
+                      <p className="text-sm text-muted-foreground">Employee Reference</p>
+                      <p className="font-medium font-mono">{employee.employee_reference || '-'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Is Director</p>
@@ -325,11 +326,11 @@ const EmployeeDetail = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Employee Rate</p>
-                      <p className="font-medium">{((employee.pension_employee_rate || 0.05) * 100).toFixed(1)}%</p>
+                      <p className="font-medium">{((employee.pension_employee_rate_override || 0.05) * 100).toFixed(1)}%</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Employer Rate</p>
-                      <p className="font-medium">{((employee.pension_employer_rate || 0.03) * 100).toFixed(1)}%</p>
+                      <p className="font-medium">{((employee.pension_employer_rate_override || 0.03) * 100).toFixed(1)}%</p>
                     </div>
                   </div>
                 </CardContent>
@@ -396,7 +397,7 @@ const EmployeeDetail = () => {
                             £{(payslip.gross_pay || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right">
-                            £{((payslip.paye_tax || 0) + (payslip.employee_nic || 0) + (payslip.pension_employee || 0)).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                            £{((payslip.paye_tax || 0) + (payslip.employee_nic || 0) + (payslip.employee_pension || 0)).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             £{(payslip.net_pay || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
@@ -440,25 +441,30 @@ const EmployeeDetail = () => {
                         <TableHead>Start Date</TableHead>
                         <TableHead>End Date</TableHead>
                         <TableHead>Days</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Statutory Pay</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {absences.map((absence) => (
-                        <TableRow key={absence.id}>
-                          <TableCell className="capitalize">{absence.absence_type?.replace('_', ' ')}</TableCell>
-                          <TableCell>{format(new Date(absence.start_date), "d MMM yyyy")}</TableCell>
-                          <TableCell>
-                            {absence.end_date ? format(new Date(absence.end_date), "d MMM yyyy") : 'Ongoing'}
-                          </TableCell>
-                          <TableCell>{absence.days_count || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {absence.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {absences.map((absence) => {
+                        const daysCount = absence.start_date && absence.end_date 
+                          ? differenceInDays(new Date(absence.end_date), new Date(absence.start_date)) + 1
+                          : '-';
+                        return (
+                          <TableRow key={absence.id}>
+                            <TableCell className="capitalize">{absence.absence_type?.replace('_', ' ')}</TableCell>
+                            <TableCell>{format(new Date(absence.start_date), "d MMM yyyy")}</TableCell>
+                            <TableCell>
+                              {absence.end_date ? format(new Date(absence.end_date), "d MMM yyyy") : 'Ongoing'}
+                            </TableCell>
+                            <TableCell>{daysCount}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize">
+                                {absence.statutory_pay_type || 'None'}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
@@ -485,8 +491,7 @@ const EmployeeDetail = () => {
                       <TableRow>
                         <TableHead>Benefit Type</TableHead>
                         <TableHead>Tax Year</TableHead>
-                        <TableHead className="text-right">Cash Value</TableHead>
-                        <TableHead className="text-right">P11D Value</TableHead>
+                        <TableHead className="text-right">Cash Equivalent</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -496,14 +501,11 @@ const EmployeeDetail = () => {
                           <TableCell className="capitalize">{benefit.benefit_type?.replace('_', ' ')}</TableCell>
                           <TableCell>{benefit.tax_year}</TableCell>
                           <TableCell className="text-right">
-                            £{(benefit.cash_value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            £{(benefit.p11d_value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                            £{(benefit.cash_equivalent || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={benefit.is_payrolled ? "default" : "secondary"}>
-                              {benefit.is_payrolled ? "Payrolled" : "P11D"}
+                            <Badge variant={benefit.payrolled ? "default" : "secondary"}>
+                              {benefit.payrolled ? "Payrolled" : "P11D"}
                             </Badge>
                           </TableCell>
                         </TableRow>

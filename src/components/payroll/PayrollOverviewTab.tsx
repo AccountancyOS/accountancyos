@@ -33,23 +33,17 @@ export function PayrollOverviewTab({
         .from("employees")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", organization.id)
-        .eq("employment_status", "active");
+        .eq("status", "active");
 
       if (selectedSchemeId) {
         query = query.eq("paye_scheme_id", selectedSchemeId);
       } else if (selectedEntity) {
-        const schemeQuery = supabase
+        const { data: schemes } = await supabase
           .from("paye_schemes")
           .select("id")
-          .eq("organization_id", organization.id);
+          .eq("organization_id", organization.id)
+          .eq(selectedEntity.type === "company" ? "company_id" : "client_id", selectedEntity.id);
         
-        if (selectedEntity.type === "company") {
-          schemeQuery.eq("company_id", selectedEntity.id);
-        } else {
-          schemeQuery.eq("client_id", selectedEntity.id);
-        }
-        
-        const { data: schemes } = await schemeQuery;
         if (schemes?.length) {
           query = query.in("paye_scheme_id", schemes.map(s => s.id));
         }
@@ -76,7 +70,10 @@ export function PayrollOverviewTab({
           payment_date,
           status,
           tax_year,
-          paye_schemes!inner (id, paye_reference, company_id, client_id)
+          total_gross_pay,
+          total_net_pay,
+          paye_scheme_id,
+          paye_schemes (id, employer_paye_reference, company_id, client_id)
         `)
         .eq("organization_id", organization.id)
         .eq("tax_year", taxYear)

@@ -48,10 +48,19 @@ export function PayRunsTab({ selectedEntity, selectedSchemeId, taxYear }: PayRun
       let query = supabase
         .from("pay_runs")
         .select(`
-          *,
+          id,
+          period_start,
+          period_end,
+          payment_date,
+          pay_frequency,
+          status,
+          tax_year,
+          total_gross_pay,
+          total_net_pay,
+          paye_scheme_id,
           paye_schemes (
             id,
-            paye_reference,
+            employer_paye_reference,
             company_id,
             client_id,
             companies (company_name),
@@ -172,10 +181,10 @@ export function PayRunsTab({ selectedEntity, selectedSchemeId, taxYear }: PayRun
                       <PayRunStatusBadge status={payRun.status as PayRunStatus} />
                     </TableCell>
                     <TableCell className="text-right">
-                      £{(payRun.total_gross || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                      £{(payRun.total_gross_pay || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      £{(payRun.total_net || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                      £{(payRun.total_net_pay || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                     </TableCell>
                   </TableRow>
                 );

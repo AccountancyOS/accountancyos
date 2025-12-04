@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/lib/organization-context";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,12 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PayRunStatusBadge } from "@/components/payroll/PayRunStatusBadge";
 import { PayslipViewDialog } from "@/components/payroll/PayslipViewDialog";
 import { SubmitRTIDialog } from "@/components/payroll/SubmitRTIDialog";
-import { 
-  PAY_RUN_STATUSES, 
-  PAY_FREQUENCY_LABELS,
-  type PayRunStatus,
-  type PayFrequency 
-} from "@/lib/payroll-constants";
+import { PAY_RUN_STATUSES, PAY_FREQUENCY_LABELS, type PayRunStatus, type PayFrequency } from "@/lib/payroll-constants";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
@@ -40,8 +34,6 @@ import {
   CheckCircle2,
   Send,
   FileText,
-  BookOpen,
-  AlertCircle,
   Eye
 } from "lucide-react";
 
@@ -49,8 +41,6 @@ const PayRunDetail = () => {
   const { payRunId } = useParams<{ payRunId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
-  
   const [selectedPayslipId, setSelectedPayslipId] = useState<string | null>(null);
   const [showRTIDialog, setShowRTIDialog] = useState(false);
 
@@ -105,20 +95,19 @@ const PayRunDetail = () => {
     enabled: !!payRunId,
   });
 
-  // Fetch RTI filings for this pay run
-  const { data: rtiFilings } = useQuery({
-    queryKey: ["pay-run-rti-filings", payRunId],
+  // Fetch related filings (RTI)
+  const { data: filings } = useQuery({
+    queryKey: ["pay-run-filings", payRunId],
     queryFn: async () => {
       if (!payRunId) return [];
       const { data, error } = await supabase
         .from("filings")
         .select("*")
         .eq("filing_body", "HMRC")
-        .in("filing_type", ["RTI_FPS", "RTI_EPS", "RTI_P45", "RTI_P46", "RTI_EYU"])
-        .eq("metadata->>pay_run_id", payRunId)
-        .order("created_at", { ascending: false });
+        .in("filing_type", ["RTI_FPS", "RTI_EPS"])
+        .contains("filing_data", { pay_run_id: payRunId });
       if (error) throw error;
-      return data || [];
+      return data;
     },
     enabled: !!payRunId,
   });
@@ -126,72 +115,74 @@ const PayRunDetail = () => {
   // Calculate payslips mutation
   const calculateMutation = useMutation({
     mutationFn: async () => {
+      if (!payRunId) throw new Error("No pay run ID");
       // In production, this would call the payroll calculation engine
-      // For now, update status to calculated
+      // For now, just update status
       const { error } = await supabase
         .from("pay_runs")
-        .update({ 
-          status: PAY_RUN_STATUSES.CALCULATED,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: PAY_RUN_STATUSES.CALCULATED })
         .eq("id", payRunId);
       if (error) throw error;
     },
     onSuccess: () => {
+      toast.success("Payslips calculated");
       queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
       queryClient.invalidateQueries({ queryKey: ["pay-run-payslips", payRunId] });
-      toast.success("Payslips calculated successfully");
     },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to calculate payslips");
-    },
+    onError: (error: any) => toast.error(error.message),
   });
 
   // Mark ready for review mutation
   const markReadyMutation = useMutation({
     mutationFn: async () => {
+      if (!payRunId) throw new Error("No pay run ID");
       const { error } = await supabase
         .from("pay_runs")
-        .update({ 
-          status: PAY_RUN_STATUSES.READY_FOR_REVIEW,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: PAY_RUN_STATUSES.READY_FOR_REVIEW })
         .eq("id", payRunId);
       if (error) throw error;
     },
     onSuccess: () => {
+      toast.success("Pay run marked as ready for review");
       queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
-      toast.success("Pay run marked ready for review");
     },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update status");
-    },
+    onError: (error: any) => toast.error(error.message),
   });
 
-  // Approve pay run mutation
+  // Approve mutation
   const approveMutation = useMutation({
     mutationFn: async () => {
+      if (!payRunId) throw new Error("No pay run ID");
       const { error } = await supabase
         .from("pay_runs")
         .update({ 
           status: PAY_RUN_STATUSES.APPROVED,
           approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
         })
         .eq("id", payRunId);
       if (error) throw error;
-      
-      // TODO: Create payroll journal automatically here
-      // This would call the bookkeeping journal creation service
+      // TODO: Create payroll journal automatically
     },
     onSuccess: () => {
+      toast.success("Pay run approved");
       queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
-      toast.success("Pay run approved and journal created");
     },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to approve pay run");
-    },
+    onError: (error: any) => toast.error(error.message),
   });
+
+  // Calculate totals from payslips
+  const totals = useMemo(() => {
+    if (!payslips?.length) return { gross: 0, paye: 0, employeeNic: 0, employerNic: 0, studentLoan: 0, pension: 0, net: 0 };
+    return payslips.reduce((acc, p) => ({
+      gross: acc.gross + (p.gross_pay || 0),
+      paye: acc.paye + (p.paye_tax || 0),
+      employeeNic: acc.employeeNic + (p.employee_nic || 0),
+      employerNic: acc.employerNic + (p.employer_nic || 0),
+      studentLoan: acc.studentLoan + (p.student_loan || 0),
+      pension: acc.pension + (p.employee_pension || 0),
+      net: acc.net + (p.net_pay || 0),
+    }), { gross: 0, paye: 0, employeeNic: 0, employerNic: 0, studentLoan: 0, pension: 0, net: 0 });
+  }, [payslips]);
 
   if (isLoading) {
     return (
@@ -220,20 +211,6 @@ const PayRunDetail = () => {
   const status = payRun.status as PayRunStatus;
   const frequency = payRun.pay_frequency as PayFrequency;
 
-  // Calculate totals from payslips
-  const totals = payslips?.reduce(
-    (acc, p) => ({
-      gross: acc.gross + (p.gross_pay || 0),
-      paye: acc.paye + (p.paye_tax || 0),
-      employeeNic: acc.employeeNic + (p.employee_nic || 0),
-      employerNic: acc.employerNic + (p.employer_nic || 0),
-      studentLoan: acc.studentLoan + (p.student_loan || 0),
-      pension: acc.pension + (p.employee_pension || 0),
-      net: acc.net + (p.net_pay || 0),
-    }),
-    { gross: 0, paye: 0, employeeNic: 0, employerNic: 0, studentLoan: 0, pension: 0, net: 0 }
-  ) || { gross: 0, paye: 0, employeeNic: 0, employerNic: 0, studentLoan: 0, pension: 0, net: 0 };
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -247,7 +224,9 @@ const PayRunDetail = () => {
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>Pay Run</BreadcrumbPage>
+              <BreadcrumbPage>
+                Pay Run - {format(new Date(payRun.payment_date), "d MMM yyyy")}
+              </BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
@@ -265,7 +244,7 @@ const PayRunDetail = () => {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-semibold text-foreground">
-                  {payRun.paye_schemes?.employer_name || "Pay Run"}
+                  {payRun.paye_schemes?.name || payRun.paye_schemes?.employer_paye_reference || "Pay Run"}
                 </h1>
                 <PayRunStatusBadge status={status} />
               </div>
@@ -405,7 +384,7 @@ const PayRunDetail = () => {
                         {payslip.employees?.first_name} {payslip.employees?.last_name}
                       </TableCell>
                       <TableCell>{payslip.employees?.tax_code || '-'}</TableCell>
-                      <TableCell>{payslip.employees?.ni_category || 'A'}</TableCell>
+                      <TableCell>{payslip.employees?.nic_category || 'A'}</TableCell>
                       <TableCell className="text-right">
                         £{(payslip.gross_pay || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                       </TableCell>
@@ -416,7 +395,7 @@ const PayRunDetail = () => {
                         £{(payslip.employee_nic || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right">
-                        £{(payslip.pension_employee || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                        £{(payslip.employee_pension || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         £{(payslip.net_pay || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
@@ -450,46 +429,29 @@ const PayRunDetail = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!rtiFilings?.length ? (
-              <div className="text-center py-6 text-muted-foreground">
-                No RTI submissions yet.
-                {status === PAY_RUN_STATUSES.APPROVED && (
-                  <p className="mt-2">Click "Submit FPS/EPS" to create and submit RTI filings.</p>
-                )}
+            {!filings?.length ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No RTI submissions yet
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
+                    <TableHead>Filing Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Submitted</TableHead>
                     <TableHead>Reference</TableHead>
-                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rtiFilings.map((filing) => (
+                  {filings.map((filing) => (
                     <TableRow key={filing.id}>
                       <TableCell className="font-medium">{filing.filing_type}</TableCell>
-                      <TableCell>
-                        <PayRunStatusBadge status={filing.status as PayRunStatus} />
-                      </TableCell>
+                      <TableCell>{filing.status}</TableCell>
                       <TableCell>
                         {filing.filed_at ? format(new Date(filing.filed_at), "d MMM yyyy HH:mm") : '-'}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {filing.filing_reference || '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/filings/${filing.id}`)}
-                        >
-                          View
-                        </Button>
-                      </TableCell>
+                      <TableCell className="font-mono">{filing.api_submission_id || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -501,49 +463,32 @@ const PayRunDetail = () => {
         {/* Journal Status Panel */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Payroll Journal
-            </CardTitle>
+            <CardTitle>Payroll Journal</CardTitle>
             <CardDescription>
-              Bookkeeping journal entry for this pay run
+              Accounting entries for this pay run
             </CardDescription>
           </CardHeader>
           <CardContent>
             {payRun.journal_id ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-green-600">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <span>Journal created</span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/bookkeeping?journalId=${payRun.journal_id}`)}
-                >
+              <div className="flex items-center gap-2 text-green-600">
+                <span className="h-2 w-2 rounded-full bg-green-600"></span>
+                <span>Payroll journal created</span>
+                <Button variant="link" size="sm" className="ml-2">
                   View Journal
                 </Button>
               </div>
-            ) : status === PAY_RUN_STATUSES.APPROVED || status === PAY_RUN_STATUSES.SUBMITTED ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-amber-600">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>Journal not created</span>
-                </div>
-                <Button variant="outline" size="sm">
-                  Create Journal
-                </Button>
-              </div>
             ) : (
-              <div className="text-center py-4 text-muted-foreground">
-                Journal will be created when pay run is approved.
+              <div className="text-muted-foreground">
+                {status === PAY_RUN_STATUSES.APPROVED || status === PAY_RUN_STATUSES.SUBMITTED 
+                  ? "Journal will be created when pay run is approved"
+                  : "Journal not yet created"}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Dialogs */}
+      {/* Payslip Dialog */}
       {selectedPayslipId && (
         <PayslipViewDialog
           payslipId={selectedPayslipId}
@@ -552,19 +497,19 @@ const PayRunDetail = () => {
         />
       )}
 
-      {showRTIDialog && payRun && organization && (
-        <SubmitRTIDialog
-          payRunId={payRun.id}
-          payeSchemeId={payRun.paye_scheme_id}
-          organizationId={organization.id}
-          open={showRTIDialog}
-          onOpenChange={setShowRTIDialog}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
-            queryClient.invalidateQueries({ queryKey: ["pay-run-rti-filings", payRunId] });
-          }}
-        />
-      )}
+      {/* RTI Submit Dialog */}
+      <SubmitRTIDialog
+        open={showRTIDialog}
+        onOpenChange={setShowRTIDialog}
+        payRunId={payRunId!}
+        payeSchemeId={payRun?.paye_scheme_id || ''}
+        organizationId={payRun?.organization_id || ''}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
+          queryClient.invalidateQueries({ queryKey: ["pay-run-filings", payRunId] });
+          setShowRTIDialog(false);
+        }}
+      />
     </DashboardLayout>
   );
 };
