@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type AuditEntityType = "trial_balance_snapshot" | "workpaper_instance" | "filing";
-export type AuditAction = "create" | "update" | "finalise" | "reopen" | "approve" | "reject" | "file" | "override";
+export type AuditAction = "create" | "update" | "finalise" | "reopen" | "approve" | "reject" | "file" | "override" | "send_for_approval" | "client_approve" | "client_reject" | "api_submit";
 
 export interface AuditLogEntry {
   id: string;

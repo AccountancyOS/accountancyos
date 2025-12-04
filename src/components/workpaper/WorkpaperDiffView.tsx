@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { 
   History, 
   ArrowRight, 
@@ -15,7 +16,12 @@ import {
 import { format } from "date-fns";
 
 interface WorkpaperDiffViewProps {
+  isOpen: boolean;
+  onClose: () => void;
   workpaperId: string;
+  fieldOverrides?: Record<string, any>;
+  fieldNotes?: Record<string, string>;
+  fieldValues?: Record<string, any>;
   entityType?: "workpaper_instance" | "filing" | "trial_balance_snapshot";
 }
 
@@ -31,7 +37,12 @@ interface AuditEntry {
 }
 
 export function WorkpaperDiffView({ 
-  workpaperId, 
+  isOpen,
+  onClose,
+  workpaperId,
+  fieldOverrides = {},
+  fieldNotes = {},
+  fieldValues = {},
   entityType = "workpaper_instance" 
 }: WorkpaperDiffViewProps) {
   const { data: auditLog, isLoading } = useQuery({
@@ -47,7 +58,7 @@ export function WorkpaperDiffView({
       if (error) throw error;
       return data as AuditEntry[];
     },
-    enabled: !!workpaperId,
+    enabled: isOpen && !!workpaperId,
   });
 
   const { data: users } = useQuery({
@@ -56,7 +67,6 @@ export function WorkpaperDiffView({
       const userIds = auditLog?.map(e => e.user_id).filter(Boolean) as string[];
       if (!userIds.length) return {};
       
-      // Use organization_users to get user info
       const { data } = await supabase
         .from("organization_users")
         .select("user_id, role")
@@ -101,7 +111,6 @@ export function WorkpaperDiffView({
   const formatValue = (value: string | null): string => {
     if (value === null || value === undefined) return "—";
     
-    // Try to parse as number and format
     const num = parseFloat(value);
     if (!isNaN(num) && value.match(/^-?\d+\.?\d*$/)) {
       return new Intl.NumberFormat("en-GB", {
@@ -111,7 +120,6 @@ export function WorkpaperDiffView({
       }).format(num);
     }
     
-    // Truncate long values
     if (value.length > 50) {
       return value.substring(0, 50) + "...";
     }
@@ -123,139 +131,184 @@ export function WorkpaperDiffView({
     return metadata?.level || null;
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <History className="h-4 w-4" />
-            Change History
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-sm text-muted-foreground">Loading audit trail...</div>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Build current overrides from props for display
+  const currentOverrides = Object.entries(fieldOverrides).map(([fieldName, originalValue]) => ({
+    fieldName,
+    originalValue,
+    currentValue: fieldValues[fieldName],
+    note: fieldNotes[fieldName],
+  }));
 
-  const overrides = auditLog?.filter(e => e.action === "override") || [];
+  const auditOverrides = auditLog?.filter(e => e.action === "override") || [];
   const otherChanges = auditLog?.filter(e => e.action !== "override") || [];
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <History className="h-4 w-4" />
-          Change History
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Overrides Section */}
-        {overrides.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
-              <FileEdit className="h-4 w-4 text-amber-600" />
-              Field Overrides ({overrides.length})
-            </h4>
-            <ScrollArea className="h-[200px]">
-              <div className="space-y-3">
-                {overrides.map((entry) => (
-                  <div 
-                    key={entry.id} 
-                    className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-100 dark:border-amber-900/30"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-[500px] sm:max-w-[500px]">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Change History
+          </SheetTitle>
+        </SheetHeader>
+
+        <div className="mt-6 space-y-6">
+          {/* Current Overrides Section */}
+          {currentOverrides.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
+                <FileEdit className="h-4 w-4 text-amber-600" />
+                Current Overrides ({currentOverrides.length})
+              </h4>
+              <ScrollArea className="h-[200px]">
+                <div className="space-y-3">
+                  {currentOverrides.map((override) => (
+                    <div 
+                      key={override.fieldName} 
+                      className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-100 dark:border-amber-900/30"
+                    >
+                      <div className="flex items-start justify-between mb-2">
                         <span className="font-medium text-sm">
-                          {formatFieldName(entry.field_name)}
+                          {formatFieldName(override.fieldName)}
                         </span>
-                        {getSourceLevel(entry.metadata) && (
-                          <Badge variant="secondary" className="text-xs">
-                            {getSourceLevel(entry.metadata)}
-                          </Badge>
-                        )}
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-200">
+                          Overridden
+                        </Badge>
                       </div>
-                      {getActionBadge(entry.action)}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 text-sm mb-2">
-                      <span className="text-muted-foreground line-through">
-                        {formatValue(entry.old_value)}
-                      </span>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium text-amber-700 dark:text-amber-400">
-                        {formatValue(entry.new_value)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <User className="h-3 w-3" />
-                        {users?.[entry.user_id || ""] || "System"}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {format(new Date(entry.created_at), "d MMM yyyy HH:mm")}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        )}
-
-        {overrides.length > 0 && otherChanges.length > 0 && (
-          <Separator />
-        )}
-
-        {/* Other Changes Section */}
-        {otherChanges.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium mb-3">Status Changes</h4>
-            <ScrollArea className="h-[200px]">
-              <div className="space-y-2">
-                {otherChanges.map((entry) => (
-                  <div 
-                    key={entry.id} 
-                    className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      {getActionBadge(entry.action)}
-                      {entry.field_name && (
-                        <span className="text-sm text-muted-foreground">
-                          {formatFieldName(entry.field_name)}
+                      
+                      <div className="flex items-center gap-2 text-sm mb-2">
+                        <span className="text-muted-foreground line-through">
+                          {formatValue(
+                            typeof override.originalValue === 'object' 
+                              ? override.originalValue?.amount?.toString() 
+                              : override.originalValue?.toString()
+                          )}
                         </span>
-                      )}
-                      {entry.old_value && entry.new_value && (
-                        <span className="text-sm">
-                          <span className="text-muted-foreground">{formatValue(entry.old_value)}</span>
-                          <ArrowRight className="h-3 w-3 inline mx-1 text-muted-foreground" />
-                          <span className="font-medium">{formatValue(entry.new_value)}</span>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-medium text-amber-700 dark:text-amber-400">
+                          {formatValue(
+                            typeof override.currentValue === 'object'
+                              ? override.currentValue?.amount?.toString()
+                              : override.currentValue?.toString()
+                          )}
                         </span>
+                      </div>
+                      
+                      {override.note && (
+                        <p className="text-xs text-muted-foreground italic">
+                          Note: {override.note}
+                        </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{users?.[entry.user_id || ""] || "System"}</span>
-                      <span>•</span>
-                      <span>{format(new Date(entry.created_at), "d MMM HH:mm")}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        )}
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
 
-        {/* Empty State */}
-        {(!auditLog || auditLog.length === 0) && (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <AlertCircle className="h-8 w-8 mb-2" />
-            <p className="text-sm">No changes recorded yet</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          {currentOverrides.length > 0 && (auditOverrides.length > 0 || otherChanges.length > 0) && (
+            <Separator />
+          )}
+
+          {/* Audit Log Section */}
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading audit trail...</div>
+          ) : (
+            <>
+              {/* Override History */}
+              {auditOverrides.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
+                    <FileEdit className="h-4 w-4 text-muted-foreground" />
+                    Override History
+                  </h4>
+                  <ScrollArea className="h-[150px]">
+                    <div className="space-y-2">
+                      {auditOverrides.map((entry) => (
+                        <div 
+                          key={entry.id} 
+                          className="p-2 rounded border bg-muted/30"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">
+                              {formatFieldName(entry.field_name)}
+                            </span>
+                            {getSourceLevel(entry.metadata) && (
+                              <Badge variant="secondary" className="text-xs">
+                                {getSourceLevel(entry.metadata)}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-xs mb-1">
+                            <span className="text-muted-foreground">
+                              {formatValue(entry.old_value)}
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-medium">
+                              {formatValue(entry.new_value)}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            <span>{users?.[entry.user_id || ""] || "System"}</span>
+                            <span>•</span>
+                            <span>{format(new Date(entry.created_at), "d MMM HH:mm")}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {auditOverrides.length > 0 && otherChanges.length > 0 && (
+                <Separator />
+              )}
+
+              {/* Status Changes */}
+              {otherChanges.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Status Changes</h4>
+                  <ScrollArea className="h-[150px]">
+                    <div className="space-y-2">
+                      {otherChanges.map((entry) => (
+                        <div 
+                          key={entry.id} 
+                          className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
+                        >
+                          <div className="flex items-center gap-2">
+                            {getActionBadge(entry.action)}
+                            {entry.field_name && (
+                              <span className="text-xs text-muted-foreground">
+                                {formatFieldName(entry.field_name)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{users?.[entry.user_id || ""] || "System"}</span>
+                            <span>•</span>
+                            <span>{format(new Date(entry.created_at), "d MMM HH:mm")}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {(!auditLog || auditLog.length === 0) && currentOverrides.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                  <AlertCircle className="h-8 w-8 mb-2" />
+                  <p className="text-sm">No changes recorded yet</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

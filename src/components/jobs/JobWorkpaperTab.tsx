@@ -4,13 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { FileSpreadsheet, RefreshCw, FolderOpen, Plus } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, FolderOpen, Plus, History } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useMemo } from "react";
 import { WorkpaperLineItem, WorkpaperLineValue } from "@/components/workpaper/WorkpaperLineItem";
 import { WorkpaperDocumentPanel } from "@/components/workpaper/WorkpaperDocumentPanel";
 import { WorkpaperStatusActions } from "@/components/workpaper/WorkpaperStatusActions";
 import { AddAdjustmentDialog } from "@/components/workpaper/AddAdjustmentDialog";
+import { WorkpaperDiffView } from "@/components/workpaper/WorkpaperDiffView";
 
 interface JobWorkpaperTabProps {
   jobId: string;
@@ -24,6 +25,7 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState<string | undefined>();
   const [showAddAdjustment, setShowAddAdjustment] = useState(false);
+  const [showDiffView, setShowDiffView] = useState(false);
 
   const { data: workpaper, isLoading } = useQuery({
     queryKey: ["job-workpaper", jobId],
@@ -294,6 +296,14 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
         <Button
           variant="outline"
           size="sm"
+          onClick={() => setShowDiffView(true)}
+        >
+          <History className="mr-2 h-4 w-4" />
+          Change History
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => {
             setSelectedCategory(undefined);
             setSelectedCategoryLabel(undefined);
@@ -379,6 +389,16 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
         workpaperId={workpaper.id}
         jobId={jobId}
         serviceType={workpaper.service_type}
+      />
+
+      {/* Change History / Diff View */}
+      <WorkpaperDiffView
+        isOpen={showDiffView}
+        onClose={() => setShowDiffView(false)}
+        workpaperId={workpaper.id}
+        fieldOverrides={fieldOverrides}
+        fieldNotes={fieldNotes}
+        fieldValues={fieldValues}
       />
     </div>
   );
