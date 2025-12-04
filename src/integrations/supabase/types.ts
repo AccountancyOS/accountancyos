@@ -633,6 +633,376 @@ export type Database = {
           },
         ]
       }
+      cis_contractors: {
+        Row: {
+          accounts_office_reference: string | null
+          client_id: string | null
+          company_id: string | null
+          contractor_utr: string
+          created_at: string
+          hmrc_verification_number: string | null
+          hmrc_verified: boolean | null
+          id: string
+          is_active: boolean | null
+          name: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          accounts_office_reference?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          contractor_utr: string
+          created_at?: string
+          hmrc_verification_number?: string | null
+          hmrc_verified?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          accounts_office_reference?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          contractor_utr?: string
+          created_at?: string
+          hmrc_verification_number?: string | null
+          hmrc_verified?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cis_contractors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_contractors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_contractors_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cis_payments: {
+        Row: {
+          cis_contractor_id: string
+          cis_return_id: string | null
+          cis_subcontractor_id: string
+          created_at: string
+          deduction_amount: number
+          deduction_rate: number
+          description: string | null
+          gross_amount: number
+          id: string
+          invoice_number: string | null
+          labour_amount: number
+          materials_amount: number | null
+          net_amount: number
+          organization_id: string
+          payment_date: string
+          payment_reference: string | null
+          status: string
+          tax_month: number
+          tax_year: string
+          updated_at: string
+        }
+        Insert: {
+          cis_contractor_id: string
+          cis_return_id?: string | null
+          cis_subcontractor_id: string
+          created_at?: string
+          deduction_amount: number
+          deduction_rate: number
+          description?: string | null
+          gross_amount: number
+          id?: string
+          invoice_number?: string | null
+          labour_amount: number
+          materials_amount?: number | null
+          net_amount: number
+          organization_id: string
+          payment_date: string
+          payment_reference?: string | null
+          status?: string
+          tax_month: number
+          tax_year: string
+          updated_at?: string
+        }
+        Update: {
+          cis_contractor_id?: string
+          cis_return_id?: string | null
+          cis_subcontractor_id?: string
+          created_at?: string
+          deduction_amount?: number
+          deduction_rate?: number
+          description?: string | null
+          gross_amount?: number
+          id?: string
+          invoice_number?: string | null
+          labour_amount?: number
+          materials_amount?: number | null
+          net_amount?: number
+          organization_id?: string
+          payment_date?: string
+          payment_reference?: string | null
+          status?: string
+          tax_month?: number
+          tax_year?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cis_payments_cis_contractor_id_fkey"
+            columns: ["cis_contractor_id"]
+            isOneToOne: false
+            referencedRelation: "cis_contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_payments_cis_return_id_fkey"
+            columns: ["cis_return_id"]
+            isOneToOne: false
+            referencedRelation: "cis_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_payments_cis_subcontractor_id_fkey"
+            columns: ["cis_subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "cis_subcontractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_payments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cis_returns: {
+        Row: {
+          cis_contractor_id: string
+          created_at: string
+          due_date: string
+          employment_status_declaration: boolean | null
+          filing_id: string | null
+          hmrc_receipt_number: string | null
+          hmrc_response: Json | null
+          id: string
+          notes: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          status: string
+          subcontractor_verification_declaration: boolean | null
+          submitted_at: string | null
+          submitted_by: string | null
+          tax_month: number
+          tax_year: string
+          total_deductions: number | null
+          total_gross_amount: number | null
+          total_materials_amount: number | null
+          total_payments_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          cis_contractor_id: string
+          created_at?: string
+          due_date: string
+          employment_status_declaration?: boolean | null
+          filing_id?: string | null
+          hmrc_receipt_number?: string | null
+          hmrc_response?: Json | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          status?: string
+          subcontractor_verification_declaration?: boolean | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax_month: number
+          tax_year: string
+          total_deductions?: number | null
+          total_gross_amount?: number | null
+          total_materials_amount?: number | null
+          total_payments_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cis_contractor_id?: string
+          created_at?: string
+          due_date?: string
+          employment_status_declaration?: boolean | null
+          filing_id?: string | null
+          hmrc_receipt_number?: string | null
+          hmrc_response?: Json | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          status?: string
+          subcontractor_verification_declaration?: boolean | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax_month?: number
+          tax_year?: string
+          total_deductions?: number | null
+          total_gross_amount?: number | null
+          total_materials_amount?: number | null
+          total_payments_count?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cis_returns_cis_contractor_id_fkey"
+            columns: ["cis_contractor_id"]
+            isOneToOne: false
+            referencedRelation: "cis_contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_returns_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_returns_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cis_subcontractors: {
+        Row: {
+          address_line_1: string | null
+          address_line_2: string | null
+          business_name: string | null
+          cis_contractor_id: string
+          city: string | null
+          company_registration_number: string | null
+          country: string | null
+          created_at: string
+          deduction_rate: string
+          email: string | null
+          first_name: string | null
+          id: string
+          is_active: boolean | null
+          is_partnership: boolean | null
+          last_name: string | null
+          national_insurance_number: string | null
+          organization_id: string
+          partner_details: Json | null
+          phone: string | null
+          postcode: string | null
+          trading_name: string | null
+          updated_at: string
+          utr: string | null
+          vat_number: string | null
+          verification_number: string | null
+          verification_status: string
+          verified_at: string | null
+        }
+        Insert: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          business_name?: string | null
+          cis_contractor_id: string
+          city?: string | null
+          company_registration_number?: string | null
+          country?: string | null
+          created_at?: string
+          deduction_rate?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_partnership?: boolean | null
+          last_name?: string | null
+          national_insurance_number?: string | null
+          organization_id: string
+          partner_details?: Json | null
+          phone?: string | null
+          postcode?: string | null
+          trading_name?: string | null
+          updated_at?: string
+          utr?: string | null
+          vat_number?: string | null
+          verification_number?: string | null
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          business_name?: string | null
+          cis_contractor_id?: string
+          city?: string | null
+          company_registration_number?: string | null
+          country?: string | null
+          created_at?: string
+          deduction_rate?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_partnership?: boolean | null
+          last_name?: string | null
+          national_insurance_number?: string | null
+          organization_id?: string
+          partner_details?: Json | null
+          phone?: string | null
+          postcode?: string | null
+          trading_name?: string | null
+          updated_at?: string
+          utr?: string | null
+          vat_number?: string | null
+          verification_number?: string | null
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cis_subcontractors_cis_contractor_id_fkey"
+            columns: ["cis_contractor_id"]
+            isOneToOne: false
+            referencedRelation: "cis_contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cis_subcontractors_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_messages: {
         Row: {
           attachments: Json | null
@@ -2344,6 +2714,392 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_absences: {
+        Row: {
+          absence_type: string
+          average_weekly_earnings: number | null
+          created_at: string
+          employee_id: string
+          end_date: string | null
+          expected_return_date: string | null
+          fit_note_received: boolean | null
+          id: string
+          matb1_received: boolean | null
+          notes: string | null
+          organization_id: string
+          qualifying_days_pattern: Json | null
+          start_date: string
+          statutory_pay_type: string | null
+          statutory_weeks_paid: number | null
+          statutory_weeks_remaining: number | null
+          updated_at: string
+          waiting_days_served: number | null
+        }
+        Insert: {
+          absence_type: string
+          average_weekly_earnings?: number | null
+          created_at?: string
+          employee_id: string
+          end_date?: string | null
+          expected_return_date?: string | null
+          fit_note_received?: boolean | null
+          id?: string
+          matb1_received?: boolean | null
+          notes?: string | null
+          organization_id: string
+          qualifying_days_pattern?: Json | null
+          start_date: string
+          statutory_pay_type?: string | null
+          statutory_weeks_paid?: number | null
+          statutory_weeks_remaining?: number | null
+          updated_at?: string
+          waiting_days_served?: number | null
+        }
+        Update: {
+          absence_type?: string
+          average_weekly_earnings?: number | null
+          created_at?: string
+          employee_id?: string
+          end_date?: string | null
+          expected_return_date?: string | null
+          fit_note_received?: boolean | null
+          id?: string
+          matb1_received?: boolean | null
+          notes?: string | null
+          organization_id?: string
+          qualifying_days_pattern?: Json | null
+          start_date?: string
+          statutory_pay_type?: string | null
+          statutory_weeks_paid?: number | null
+          statutory_weeks_remaining?: number | null
+          updated_at?: string
+          waiting_days_served?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_absences_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_absences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_benefits: {
+        Row: {
+          benefit_type: string
+          car_available_from: string | null
+          car_available_to: string | null
+          car_capital_contributions: number | null
+          car_co2_emissions: number | null
+          car_days_unavailable: number | null
+          car_fuel_type: string | null
+          car_list_price: number | null
+          car_make_model: string | null
+          car_private_use_contribution: number | null
+          car_registration: string | null
+          cash_equivalent: number
+          created_at: string
+          description: string
+          employee_id: string
+          from_date: string
+          id: string
+          loan_amount: number | null
+          loan_interest_paid: number | null
+          notes: string | null
+          organization_id: string
+          payrolled: boolean | null
+          tax_year: string
+          to_date: string
+          updated_at: string
+        }
+        Insert: {
+          benefit_type: string
+          car_available_from?: string | null
+          car_available_to?: string | null
+          car_capital_contributions?: number | null
+          car_co2_emissions?: number | null
+          car_days_unavailable?: number | null
+          car_fuel_type?: string | null
+          car_list_price?: number | null
+          car_make_model?: string | null
+          car_private_use_contribution?: number | null
+          car_registration?: string | null
+          cash_equivalent: number
+          created_at?: string
+          description: string
+          employee_id: string
+          from_date: string
+          id?: string
+          loan_amount?: number | null
+          loan_interest_paid?: number | null
+          notes?: string | null
+          organization_id: string
+          payrolled?: boolean | null
+          tax_year: string
+          to_date: string
+          updated_at?: string
+        }
+        Update: {
+          benefit_type?: string
+          car_available_from?: string | null
+          car_available_to?: string | null
+          car_capital_contributions?: number | null
+          car_co2_emissions?: number | null
+          car_days_unavailable?: number | null
+          car_fuel_type?: string | null
+          car_list_price?: number | null
+          car_make_model?: string | null
+          car_private_use_contribution?: number | null
+          car_registration?: string | null
+          cash_equivalent?: number
+          created_at?: string
+          description?: string
+          employee_id?: string
+          from_date?: string
+          id?: string
+          loan_amount?: number | null
+          loan_interest_paid?: number | null
+          notes?: string | null
+          organization_id?: string
+          payrolled?: boolean | null
+          tax_year?: string
+          to_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_benefits_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_benefits_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          address_line_1: string | null
+          address_line_2: string | null
+          address_line_3: string | null
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_name: string | null
+          bank_sort_code: string | null
+          city: string | null
+          country: string | null
+          county: string | null
+          created_at: string
+          date_of_birth: string
+          department: string | null
+          director_nic_method: string | null
+          directorship_end_date: string | null
+          directorship_start_date: string | null
+          email: string | null
+          employee_reference: string | null
+          first_name: string
+          gender: string | null
+          id: string
+          is_director: boolean | null
+          is_scottish_taxpayer: boolean | null
+          is_welsh_taxpayer: boolean | null
+          job_title: string | null
+          last_name: string
+          leaving_date: string | null
+          leaving_reason: string | null
+          linked_person_id: string | null
+          middle_names: string | null
+          national_insurance_number: string | null
+          nic_category: string
+          organization_id: string
+          p45_leaving_date: string | null
+          p45_received: boolean | null
+          p45_tax_code: string | null
+          p45_total_pay: number | null
+          p45_total_tax: number | null
+          pay_frequency: string
+          paye_scheme_id: string
+          payment_method: string | null
+          pension_auto_enrol_date: string | null
+          pension_employee_rate_override: number | null
+          pension_employer_rate_override: number | null
+          pension_opt_out_date: string | null
+          pension_scheme_id: string | null
+          phone: string | null
+          portal_user_id: string | null
+          postcode: string | null
+          start_date: string
+          starter_declaration: string | null
+          status: string
+          student_loan_plan: string | null
+          tax_basis: string
+          tax_code: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          address_line_3?: string | null
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          bank_sort_code?: string | null
+          city?: string | null
+          country?: string | null
+          county?: string | null
+          created_at?: string
+          date_of_birth: string
+          department?: string | null
+          director_nic_method?: string | null
+          directorship_end_date?: string | null
+          directorship_start_date?: string | null
+          email?: string | null
+          employee_reference?: string | null
+          first_name: string
+          gender?: string | null
+          id?: string
+          is_director?: boolean | null
+          is_scottish_taxpayer?: boolean | null
+          is_welsh_taxpayer?: boolean | null
+          job_title?: string | null
+          last_name: string
+          leaving_date?: string | null
+          leaving_reason?: string | null
+          linked_person_id?: string | null
+          middle_names?: string | null
+          national_insurance_number?: string | null
+          nic_category?: string
+          organization_id: string
+          p45_leaving_date?: string | null
+          p45_received?: boolean | null
+          p45_tax_code?: string | null
+          p45_total_pay?: number | null
+          p45_total_tax?: number | null
+          pay_frequency?: string
+          paye_scheme_id: string
+          payment_method?: string | null
+          pension_auto_enrol_date?: string | null
+          pension_employee_rate_override?: number | null
+          pension_employer_rate_override?: number | null
+          pension_opt_out_date?: string | null
+          pension_scheme_id?: string | null
+          phone?: string | null
+          portal_user_id?: string | null
+          postcode?: string | null
+          start_date: string
+          starter_declaration?: string | null
+          status?: string
+          student_loan_plan?: string | null
+          tax_basis?: string
+          tax_code?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          address_line_3?: string | null
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          bank_sort_code?: string | null
+          city?: string | null
+          country?: string | null
+          county?: string | null
+          created_at?: string
+          date_of_birth?: string
+          department?: string | null
+          director_nic_method?: string | null
+          directorship_end_date?: string | null
+          directorship_start_date?: string | null
+          email?: string | null
+          employee_reference?: string | null
+          first_name?: string
+          gender?: string | null
+          id?: string
+          is_director?: boolean | null
+          is_scottish_taxpayer?: boolean | null
+          is_welsh_taxpayer?: boolean | null
+          job_title?: string | null
+          last_name?: string
+          leaving_date?: string | null
+          leaving_reason?: string | null
+          linked_person_id?: string | null
+          middle_names?: string | null
+          national_insurance_number?: string | null
+          nic_category?: string
+          organization_id?: string
+          p45_leaving_date?: string | null
+          p45_received?: boolean | null
+          p45_tax_code?: string | null
+          p45_total_pay?: number | null
+          p45_total_tax?: number | null
+          pay_frequency?: string
+          paye_scheme_id?: string
+          payment_method?: string | null
+          pension_auto_enrol_date?: string | null
+          pension_employee_rate_override?: number | null
+          pension_employer_rate_override?: number | null
+          pension_opt_out_date?: string | null
+          pension_scheme_id?: string | null
+          phone?: string | null
+          portal_user_id?: string | null
+          postcode?: string | null
+          start_date?: string
+          starter_declaration?: string | null
+          status?: string
+          student_loan_plan?: string | null
+          tax_basis?: string
+          tax_code?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_linked_person_id_fkey"
+            columns: ["linked_person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_paye_scheme_id_fkey"
+            columns: ["paye_scheme_id"]
+            isOneToOne: false
+            referencedRelation: "paye_schemes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_pension_scheme_id_fkey"
+            columns: ["pension_scheme_id"]
+            isOneToOne: false
+            referencedRelation: "pension_schemes"
             referencedColumns: ["id"]
           },
         ]
@@ -4562,6 +5318,412 @@ export type Database = {
           },
         ]
       }
+      pay_runs: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          employee_count: number | null
+          fps_filing_id: string | null
+          id: string
+          journal_id: string | null
+          notes: string | null
+          organization_id: string
+          pay_frequency: string
+          paye_scheme_id: string
+          payment_date: string
+          period_end: string
+          period_start: string
+          prepared_at: string | null
+          prepared_by: string | null
+          status: string
+          tax_period: number
+          tax_year: string
+          total_employee_nic: number | null
+          total_employee_pension: number | null
+          total_employer_nic: number | null
+          total_employer_pension: number | null
+          total_gross_pay: number | null
+          total_net_pay: number | null
+          total_paye: number | null
+          total_statutory_pay: number | null
+          total_student_loan: number | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_count?: number | null
+          fps_filing_id?: string | null
+          id?: string
+          journal_id?: string | null
+          notes?: string | null
+          organization_id: string
+          pay_frequency: string
+          paye_scheme_id: string
+          payment_date: string
+          period_end: string
+          period_start: string
+          prepared_at?: string | null
+          prepared_by?: string | null
+          status?: string
+          tax_period: number
+          tax_year: string
+          total_employee_nic?: number | null
+          total_employee_pension?: number | null
+          total_employer_nic?: number | null
+          total_employer_pension?: number | null
+          total_gross_pay?: number | null
+          total_net_pay?: number | null
+          total_paye?: number | null
+          total_statutory_pay?: number | null
+          total_student_loan?: number | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_count?: number | null
+          fps_filing_id?: string | null
+          id?: string
+          journal_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          pay_frequency?: string
+          paye_scheme_id?: string
+          payment_date?: string
+          period_end?: string
+          period_start?: string
+          prepared_at?: string | null
+          prepared_by?: string | null
+          status?: string
+          tax_period?: number
+          tax_year?: string
+          total_employee_nic?: number | null
+          total_employee_pension?: number | null
+          total_employer_nic?: number | null
+          total_employer_pension?: number | null
+          total_gross_pay?: number | null
+          total_net_pay?: number | null
+          total_paye?: number | null
+          total_statutory_pay?: number | null
+          total_student_loan?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pay_runs_fps_filing_id_fkey"
+            columns: ["fps_filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pay_runs_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pay_runs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pay_runs_paye_scheme_id_fkey"
+            columns: ["paye_scheme_id"]
+            isOneToOne: false
+            referencedRelation: "paye_schemes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paye_schemes: {
+        Row: {
+          accounts_office_reference: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          default_pay_day: number | null
+          default_pay_day_of_week: string | null
+          default_pay_frequency: string
+          employer_paye_reference: string
+          id: string
+          is_active: boolean | null
+          name: string
+          organization_id: string
+          rti_password_hash: string | null
+          rti_sender_id: string | null
+          rti_test_mode: boolean | null
+          tax_year_start: string
+          updated_at: string
+        }
+        Insert: {
+          accounts_office_reference?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          default_pay_day?: number | null
+          default_pay_day_of_week?: string | null
+          default_pay_frequency?: string
+          employer_paye_reference: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          organization_id: string
+          rti_password_hash?: string | null
+          rti_sender_id?: string | null
+          rti_test_mode?: boolean | null
+          tax_year_start?: string
+          updated_at?: string
+        }
+        Update: {
+          accounts_office_reference?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          default_pay_day?: number | null
+          default_pay_day_of_week?: string | null
+          default_pay_frequency?: string
+          employer_paye_reference?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          organization_id?: string
+          rti_password_hash?: string | null
+          rti_sender_id?: string | null
+          rti_test_mode?: boolean | null
+          tax_year_start?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paye_schemes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paye_schemes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paye_schemes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payslips: {
+        Row: {
+          attachment_of_earnings: number | null
+          basic_pay: number | null
+          bonus_pay: number | null
+          calculation_breakdown: Json | null
+          commission_pay: number | null
+          created_at: string
+          director_nic_method: string | null
+          employee_id: string
+          employee_nic: number | null
+          employee_pension: number | null
+          employer_nic: number | null
+          employer_pension: number | null
+          gross_pay: number
+          holiday_pay: number | null
+          id: string
+          is_director: boolean | null
+          net_pay: number
+          nic_category: string
+          nicable_pay: number
+          organization_id: string
+          other_deductions: number | null
+          other_pay: number | null
+          overtime_pay: number | null
+          pay_run_id: string
+          paye_tax: number | null
+          payment_date: string
+          pdf_storage_path: string | null
+          pensionable_pay: number
+          period_end: string
+          period_start: string
+          postgrad_loan: number | null
+          salary_sacrifice_other: number | null
+          salary_sacrifice_pension: number | null
+          sick_pay: number | null
+          status: string
+          statutory_adoption_pay: number | null
+          statutory_maternity_pay: number | null
+          statutory_parental_bereavement_pay: number | null
+          statutory_paternity_pay: number | null
+          statutory_shared_parental_pay: number | null
+          student_loan: number | null
+          tax_basis: string
+          tax_code: string
+          tax_period: number
+          tax_year: string
+          taxable_pay: number
+          total_deductions: number
+          updated_at: string
+          ytd_employee_nic: number | null
+          ytd_employee_pension: number | null
+          ytd_employer_nic: number | null
+          ytd_employer_pension: number | null
+          ytd_gross_pay: number | null
+          ytd_paye_tax: number | null
+          ytd_student_loan: number | null
+          ytd_taxable_pay: number | null
+        }
+        Insert: {
+          attachment_of_earnings?: number | null
+          basic_pay?: number | null
+          bonus_pay?: number | null
+          calculation_breakdown?: Json | null
+          commission_pay?: number | null
+          created_at?: string
+          director_nic_method?: string | null
+          employee_id: string
+          employee_nic?: number | null
+          employee_pension?: number | null
+          employer_nic?: number | null
+          employer_pension?: number | null
+          gross_pay: number
+          holiday_pay?: number | null
+          id?: string
+          is_director?: boolean | null
+          net_pay: number
+          nic_category: string
+          nicable_pay: number
+          organization_id: string
+          other_deductions?: number | null
+          other_pay?: number | null
+          overtime_pay?: number | null
+          pay_run_id: string
+          paye_tax?: number | null
+          payment_date: string
+          pdf_storage_path?: string | null
+          pensionable_pay: number
+          period_end: string
+          period_start: string
+          postgrad_loan?: number | null
+          salary_sacrifice_other?: number | null
+          salary_sacrifice_pension?: number | null
+          sick_pay?: number | null
+          status?: string
+          statutory_adoption_pay?: number | null
+          statutory_maternity_pay?: number | null
+          statutory_parental_bereavement_pay?: number | null
+          statutory_paternity_pay?: number | null
+          statutory_shared_parental_pay?: number | null
+          student_loan?: number | null
+          tax_basis: string
+          tax_code: string
+          tax_period: number
+          tax_year: string
+          taxable_pay: number
+          total_deductions: number
+          updated_at?: string
+          ytd_employee_nic?: number | null
+          ytd_employee_pension?: number | null
+          ytd_employer_nic?: number | null
+          ytd_employer_pension?: number | null
+          ytd_gross_pay?: number | null
+          ytd_paye_tax?: number | null
+          ytd_student_loan?: number | null
+          ytd_taxable_pay?: number | null
+        }
+        Update: {
+          attachment_of_earnings?: number | null
+          basic_pay?: number | null
+          bonus_pay?: number | null
+          calculation_breakdown?: Json | null
+          commission_pay?: number | null
+          created_at?: string
+          director_nic_method?: string | null
+          employee_id?: string
+          employee_nic?: number | null
+          employee_pension?: number | null
+          employer_nic?: number | null
+          employer_pension?: number | null
+          gross_pay?: number
+          holiday_pay?: number | null
+          id?: string
+          is_director?: boolean | null
+          net_pay?: number
+          nic_category?: string
+          nicable_pay?: number
+          organization_id?: string
+          other_deductions?: number | null
+          other_pay?: number | null
+          overtime_pay?: number | null
+          pay_run_id?: string
+          paye_tax?: number | null
+          payment_date?: string
+          pdf_storage_path?: string | null
+          pensionable_pay?: number
+          period_end?: string
+          period_start?: string
+          postgrad_loan?: number | null
+          salary_sacrifice_other?: number | null
+          salary_sacrifice_pension?: number | null
+          sick_pay?: number | null
+          status?: string
+          statutory_adoption_pay?: number | null
+          statutory_maternity_pay?: number | null
+          statutory_parental_bereavement_pay?: number | null
+          statutory_paternity_pay?: number | null
+          statutory_shared_parental_pay?: number | null
+          student_loan?: number | null
+          tax_basis?: string
+          tax_code?: string
+          tax_period?: number
+          tax_year?: string
+          taxable_pay?: number
+          total_deductions?: number
+          updated_at?: string
+          ytd_employee_nic?: number | null
+          ytd_employee_pension?: number | null
+          ytd_employer_nic?: number | null
+          ytd_employer_pension?: number | null
+          ytd_gross_pay?: number | null
+          ytd_paye_tax?: number | null
+          ytd_student_loan?: number | null
+          ytd_taxable_pay?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payslips_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_pay_run_id_fkey"
+            columns: ["pay_run_id"]
+            isOneToOne: false
+            referencedRelation: "pay_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pending_practice_signups: {
         Row: {
           accountant_email: string
@@ -4606,6 +5768,81 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pension_schemes: {
+        Row: {
+          auto_enrolment_enabled: boolean | null
+          auto_enrolment_trigger: number | null
+          created_at: string
+          employee_contribution_rate: number
+          employer_contribution_rate: number
+          employer_id: string | null
+          id: string
+          is_active: boolean | null
+          lower_qualifying_earnings: number | null
+          name: string
+          organization_id: string
+          paye_scheme_id: string
+          postponement_period_months: number | null
+          provider: string
+          staging_date: string | null
+          updated_at: string
+          upper_qualifying_earnings: number | null
+        }
+        Insert: {
+          auto_enrolment_enabled?: boolean | null
+          auto_enrolment_trigger?: number | null
+          created_at?: string
+          employee_contribution_rate?: number
+          employer_contribution_rate?: number
+          employer_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          lower_qualifying_earnings?: number | null
+          name: string
+          organization_id: string
+          paye_scheme_id: string
+          postponement_period_months?: number | null
+          provider: string
+          staging_date?: string | null
+          updated_at?: string
+          upper_qualifying_earnings?: number | null
+        }
+        Update: {
+          auto_enrolment_enabled?: boolean | null
+          auto_enrolment_trigger?: number | null
+          created_at?: string
+          employee_contribution_rate?: number
+          employer_contribution_rate?: number
+          employer_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          lower_qualifying_earnings?: number | null
+          name?: string
+          organization_id?: string
+          paye_scheme_id?: string
+          postponement_period_months?: number | null
+          provider?: string
+          staging_date?: string | null
+          updated_at?: string
+          upper_qualifying_earnings?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pension_schemes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pension_schemes_paye_scheme_id_fkey"
+            columns: ["paye_scheme_id"]
+            isOneToOne: false
+            referencedRelation: "paye_schemes"
             referencedColumns: ["id"]
           },
         ]
@@ -5455,6 +6692,101 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rti_submissions: {
+        Row: {
+          created_at: string
+          error_messages: Json | null
+          filing_id: string
+          hmrc_correlation_id: string | null
+          hmrc_response: Json | null
+          hmrc_submission_id: string | null
+          id: string
+          organization_id: string
+          pay_run_id: string | null
+          paye_scheme_id: string
+          response_received_at: string | null
+          submission_status: string
+          submission_type: string
+          submitted_at: string | null
+          submitted_by: string | null
+          tax_period: number | null
+          tax_year: string
+          updated_at: string
+          xml_payload: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_messages?: Json | null
+          filing_id: string
+          hmrc_correlation_id?: string | null
+          hmrc_response?: Json | null
+          hmrc_submission_id?: string | null
+          id?: string
+          organization_id: string
+          pay_run_id?: string | null
+          paye_scheme_id: string
+          response_received_at?: string | null
+          submission_status?: string
+          submission_type: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax_period?: number | null
+          tax_year: string
+          updated_at?: string
+          xml_payload?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_messages?: Json | null
+          filing_id?: string
+          hmrc_correlation_id?: string | null
+          hmrc_response?: Json | null
+          hmrc_submission_id?: string | null
+          id?: string
+          organization_id?: string
+          pay_run_id?: string | null
+          paye_scheme_id?: string
+          response_received_at?: string | null
+          submission_status?: string
+          submission_type?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tax_period?: number | null
+          tax_year?: string
+          updated_at?: string
+          xml_payload?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rti_submissions_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rti_submissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rti_submissions_pay_run_id_fkey"
+            columns: ["pay_run_id"]
+            isOneToOne: false
+            referencedRelation: "pay_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rti_submissions_paye_scheme_id_fkey"
+            columns: ["paye_scheme_id"]
+            isOneToOne: false
+            referencedRelation: "paye_schemes"
             referencedColumns: ["id"]
           },
         ]
