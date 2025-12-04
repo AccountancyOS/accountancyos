@@ -368,7 +368,7 @@ async function createNextYearDeadlines(
       });
     }
     
-    // Handle RTI-specific deadlines
+    // Handle RTI-specific deadlines (filing_body = "HMRC" per CTO directive)
     if (serviceType === "RTI_FPS" || serviceType === "RTI_EPS" || serviceType === "payroll") {
       // RTI jobs roll over per pay period, not annually
       // Next FPS deadline is the next payday
@@ -387,7 +387,7 @@ async function createNextYearDeadlines(
         job_id: jobId,
         name: "RTI FPS Submission",
         deadline_type: "statutory",
-        filing_body: "HMRC_RTI",
+        filing_body: "HMRC",
         due_date: nextPayday.toISOString().split("T")[0],
         period_end: periodEnd,
         status: "pending",
@@ -401,7 +401,7 @@ async function createNextYearDeadlines(
         job_id: jobId,
         name: "RTI EPS Submission",
         deadline_type: "statutory",
-        filing_body: "HMRC_RTI",
+        filing_body: "HMRC",
         due_date: epsDeadline.toISOString().split("T")[0],
         period_end: periodEnd,
         status: "pending",
@@ -409,7 +409,7 @@ async function createNextYearDeadlines(
       });
     }
     
-    // Handle CIS-specific deadlines
+    // Handle CIS-specific deadlines (filing_body = "HMRC" per CTO directive)
     if (serviceType === "CIS_RETURN" || serviceType === "cis") {
       // CIS returns are monthly, due 19th of following month
       const nextPeriodEnd = new Date(periodEndDate);
@@ -426,7 +426,7 @@ async function createNextYearDeadlines(
         job_id: jobId,
         name: "CIS Monthly Return",
         deadline_type: "statutory",
-        filing_body: "HMRC_CIS",
+        filing_body: "HMRC",
         due_date: cisDeadline.toISOString().split("T")[0],
         period_end: nextPeriodEnd.toISOString().split("T")[0],
         status: "pending",
