@@ -19,6 +19,7 @@ interface AddPayeSchemeDialogProps {
 export function AddPayeSchemeDialog({ open, onOpenChange, onSuccess, preSelectedEntity }: AddPayeSchemeDialogProps) {
   const { organization } = useOrganization();
   const [entity, setEntity] = useState<BookkeepingEntity | null>(preSelectedEntity || null);
+  const [name, setName] = useState("");
   const [payeRef, setPayeRef] = useState("");
   const [aoRef, setAoRef] = useState("");
 
@@ -29,6 +30,7 @@ export function AddPayeSchemeDialog({ open, onOpenChange, onSuccess, preSelected
         organization_id: organization.id,
         company_id: entity.type === "company" ? entity.id : null,
         client_id: entity.type === "client" ? entity.id : null,
+        name: name || null,
         employer_paye_reference: payeRef,
         accounts_office_reference: aoRef || null,
       });
@@ -36,6 +38,7 @@ export function AddPayeSchemeDialog({ open, onOpenChange, onSuccess, preSelected
     },
     onSuccess: () => {
       toast.success("PAYE scheme created");
+      setName("");
       setPayeRef("");
       setAoRef("");
       onSuccess();
@@ -48,9 +51,22 @@ export function AddPayeSchemeDialog({ open, onOpenChange, onSuccess, preSelected
       <DialogContent>
         <DialogHeader><DialogTitle>Add PAYE Scheme</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <div><Label>Employer</Label><EntitySelector value={entity} onValueChange={setEntity} /></div>
-          <div><Label>PAYE Reference</Label><Input value={payeRef} onChange={(e) => setPayeRef(e.target.value)} placeholder="123/AB12345" /></div>
-          <div><Label>Accounts Office Reference</Label><Input value={aoRef} onChange={(e) => setAoRef(e.target.value)} placeholder="123PA00012345" /></div>
+          <div>
+            <Label>Employer</Label>
+            <EntitySelector value={entity} onValueChange={setEntity} />
+          </div>
+          <div>
+            <Label>Scheme Name (optional)</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main Payroll" />
+          </div>
+          <div>
+            <Label>PAYE Reference</Label>
+            <Input value={payeRef} onChange={(e) => setPayeRef(e.target.value)} placeholder="123/AB12345" />
+          </div>
+          <div>
+            <Label>Accounts Office Reference</Label>
+            <Input value={aoRef} onChange={(e) => setAoRef(e.target.value)} placeholder="123PA00012345" />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

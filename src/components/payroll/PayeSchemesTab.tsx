@@ -36,7 +36,13 @@ export function PayeSchemesTab({ selectedEntity }: PayeSchemesTabProps) {
       let query = supabase
         .from("paye_schemes")
         .select(`
-          *,
+          id,
+          name,
+          employer_paye_reference,
+          accounts_office_reference,
+          is_active,
+          company_id,
+          client_id,
           companies (id, company_name),
           clients (id, first_name, last_name)
         `)
@@ -50,7 +56,7 @@ export function PayeSchemesTab({ selectedEntity }: PayeSchemesTabProps) {
         }
       }
 
-      const { data, error } = await query.order("paye_reference");
+      const { data, error } = await query.order("employer_paye_reference");
       if (error) throw error;
       return data;
     },
@@ -125,7 +131,7 @@ export function PayeSchemesTab({ selectedEntity }: PayeSchemesTabProps) {
                         ({entityType})
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono">{scheme.paye_reference}</TableCell>
+                    <TableCell className="font-mono">{scheme.employer_paye_reference}</TableCell>
                     <TableCell className="font-mono">
                       {scheme.accounts_office_reference || '-'}
                     </TableCell>

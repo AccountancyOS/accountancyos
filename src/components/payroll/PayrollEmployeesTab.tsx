@@ -47,10 +47,18 @@ export function PayrollEmployeesTab({ selectedEntity, selectedSchemeId }: Payrol
       let query = supabase
         .from("employees")
         .select(`
-          *,
+          id,
+          first_name,
+          last_name,
+          tax_code,
+          nic_category,
+          status,
+          leaving_date,
+          employee_reference,
+          paye_scheme_id,
           paye_schemes (
             id,
-            paye_reference,
+            employer_paye_reference,
             company_id,
             client_id,
             companies (company_name),
@@ -60,7 +68,7 @@ export function PayrollEmployeesTab({ selectedEntity, selectedSchemeId }: Payrol
         .eq("organization_id", organization.id);
 
       if (statusFilter === "active") {
-        query = query.eq("employment_status", "active");
+        query = query.eq("status", "active");
       } else if (statusFilter === "leaver") {
         query = query.not("leaving_date", "is", null);
       }
@@ -92,7 +100,7 @@ export function PayrollEmployeesTab({ selectedEntity, selectedSchemeId }: Payrol
     if (!searchTerm) return true;
     const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
     return fullName.includes(searchTerm.toLowerCase()) || 
-           emp.payroll_number?.toLowerCase().includes(searchTerm.toLowerCase());
+           emp.employee_reference?.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   if (isLoading) {
@@ -183,8 +191,8 @@ export function PayrollEmployeesTab({ selectedEntity, selectedSchemeId }: Payrol
                     <TableCell className="font-mono">{employee.tax_code || '1257L'}</TableCell>
                     <TableCell>{employee.nic_category || 'A'}</TableCell>
                     <TableCell>
-                      <Badge variant={employee.employment_status === 'active' ? "default" : "secondary"}>
-                        {employee.employment_status === 'active' ? "Active" : employee.employment_status}
+                      <Badge variant={employee.status === 'active' ? "default" : "secondary"}>
+                        {employee.status === 'active' ? "Active" : employee.status}
                       </Badge>
                     </TableCell>
                   </TableRow>
