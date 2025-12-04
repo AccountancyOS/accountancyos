@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -28,12 +28,15 @@ import {
   MapPin,
   Calendar,
   Hash,
-  Loader2
+  AlertTriangle,
+  AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
 import { CS01WorkpaperTab } from "@/components/cosec/CS01WorkpaperTab";
 import { CompanyCoSecJobsTab } from "@/components/cosec/CompanyCoSecJobsTab";
+import { CompanyDetailSkeleton } from "@/components/cosec/CompanyDetailSkeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -41,26 +44,66 @@ const CompanyDetail = () => {
   const { organization } = useOrganization();
   const [activeTab, setActiveTab] = useState("overview");
 
-  const { data: company, isLoading } = useQuery({
+  const { data: company, isLoading, error, refetch } = useQuery({
     queryKey: ["company-detail", companyId],
     queryFn: async () => {
       if (!companyId) return null;
       const { data, error } = await supabase
         .from("companies")
-        .select("*")
+        .select("*, ch_company_profile")
         .eq("id", companyId)
         .single();
       if (error) throw error;
       return data;
     },
     enabled: !!companyId,
+    retry: 2,
   });
+
+  // Count discrepancies from CH profile
+  const discrepancyCount = (company?.ch_company_profile as any)?.discrepancies?.length || 0;
 
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <CompanyDetailSkeleton />
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link to="/clients">Clients</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Error</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Failed to load company</AlertTitle>
+            <AlertDescription className="mt-2">
+              {(error as Error).message || "An unexpected error occurred"}
+              <div className="mt-4 flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  Try Again
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/clients")}>
+                  Return to Clients
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
         </div>
       </DashboardLayout>
     );
@@ -79,19 +122,49 @@ const CompanyDetail = () => {
     );
   }
 
+  const getTabLabel = (tab: string) => {
+    const labels: Record<string, string> = {
+      overview: "Overview",
+      registers: "Registers",
+      "cosec-jobs": "CoSec Jobs",
+      documents: "Documents",
+      settings: "Settings",
+    };
+    return labels[tab] || tab;
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Breadcrumb Navigation */}
+        {/* Breadcrumb Navigation with active tab */}
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href="/clients">Clients</BreadcrumbLink>
+              <BreadcrumbLink asChild>
+                <Link to="/clients">Clients</Link>
+              </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>{company.company_name}</BreadcrumbPage>
+              {activeTab === "overview" ? (
+                <BreadcrumbPage>{company.company_name}</BreadcrumbPage>
+              ) : (
+                <BreadcrumbLink 
+                  className="cursor-pointer"
+                  onClick={() => setActiveTab("overview")}
+                >
+                  {company.company_name}
+                </BreadcrumbLink>
+              )}
             </BreadcrumbItem>
+            {activeTab !== "overview" && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{getTabLabel(activeTab)}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
           </BreadcrumbList>
         </Breadcrumb>
 
@@ -135,24 +208,29 @@ const CompanyDetail = () => {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
+          <TabsList className="h-auto flex-wrap sm:flex-nowrap w-full sm:w-auto sm:inline-flex gap-1">
+            <TabsTrigger value="overview" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="registers" className="flex items-center gap-2">
+            <TabsTrigger value="registers" className="flex items-center gap-2 flex-1 sm:flex-initial relative">
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">Registers</span>
+              {discrepancyCount > 0 && (
+                <span className="absolute -top-1 -right-1 sm:static sm:ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-medium text-white">
+                  {discrepancyCount}
+                </span>
+              )}
             </TabsTrigger>
-            <TabsTrigger value="cosec-jobs" className="flex items-center gap-2">
+            <TabsTrigger value="cosec-jobs" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">CoSec Jobs</span>
             </TabsTrigger>
-            <TabsTrigger value="documents" className="flex items-center gap-2">
+            <TabsTrigger value="documents" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-2">
+            <TabsTrigger value="settings" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>

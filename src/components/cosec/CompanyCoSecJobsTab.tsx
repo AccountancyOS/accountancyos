@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -29,7 +30,7 @@ import {
   Eye,
   Loader2,
   FileText,
-  Download
+  AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CompanyCoSecJobsTabProps {
   companyId: string;
@@ -62,7 +64,7 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   // Fetch CoSec jobs for this company
-  const { data: jobs, isLoading } = useQuery({
+  const { data: jobs, isLoading, error, refetch } = useQuery({
     queryKey: ["cosec-jobs", companyId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -78,6 +80,7 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
       if (error) throw error;
       return data || [];
     },
+    retry: 2,
   });
 
   // Fetch company details for CS01 creation
@@ -227,9 +230,48 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-64" />
+              </div>
+              <Skeleton className="h-10 w-28" />
+            </div>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-48 flex-1" />
+                  <Skeleton className="h-6 w-16" />
+                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription className="flex items-center justify-between">
+          <span>Failed to load CoSec jobs. Please try again.</span>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Retry
+          </Button>
+        </AlertDescription>
+      </Alert>
     );
   }
 
@@ -247,7 +289,12 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button>
+                <Button size="sm" className="sm:hidden">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuTrigger asChild>
+                <Button className="hidden sm:flex">
                   <Plus className="h-4 w-4 mr-2" />
                   New Filing
                 </Button>
@@ -275,56 +322,126 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
         </CardHeader>
       </Card>
 
-      {/* Jobs Table */}
+      {/* Jobs List - Desktop Table / Mobile Cards */}
       {jobs && jobs.length > 0 ? (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Filing Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobs.map((job) => {
-                const filing = job.filings?.[0];
-                return (
-                  <TableRow 
-                    key={job.id} 
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleOpenJob(job)}
-                  >
-                    <TableCell className="font-medium">{job.job_name}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getFilingTypeBadge(job.service_type)}`}>
-                        {job.service_type}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusBadge(job.status)}>
-                        {job.status.replace(/_/g, " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {filing ? (
-                        <Badge variant={filing.status === "filed" ? "default" : "secondary"}>
-                          {filing.status.replace(/_/g, " ")}
+        <>
+          {/* Desktop Table */}
+          <Card className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Filing Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((job) => {
+                  const filing = job.filings?.[0];
+                  return (
+                    <TableRow 
+                      key={job.id} 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleOpenJob(job)}
+                    >
+                      <TableCell className="font-medium">{job.job_name}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getFilingTypeBadge(job.service_type)}`}>
+                          {job.service_type}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadge(job.status)}>
+                          {job.status.replace(/_/g, " ")}
                         </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">Not created</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(job.created_at), "d MMM yyyy")}
-                    </TableCell>
-                    <TableCell>
+                      </TableCell>
+                      <TableCell>
+                        {filing ? (
+                          <Badge variant={filing.status === "filed" ? "default" : "secondary"}>
+                            {filing.status.replace(/_/g, " ")}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Not created</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {format(new Date(job.created_at), "d MMM yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon">
+                              {generatingPdf === job.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <MoreHorizontal className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleOpenJob(job)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Open Workpaper
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={(e) => handleGeneratePdf(job, e)}
+                              disabled={!filing || generatingPdf === job.id}
+                            >
+                              {generatingPdf === job.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <FileText className="h-4 w-4 mr-2" />
+                              )}
+                              Generate PDF
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3">
+            {jobs.map((job) => {
+              const filing = job.filings?.[0];
+              return (
+                <Card 
+                  key={job.id} 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleOpenJob(job)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getFilingTypeBadge(job.service_type)}`}>
+                            {job.service_type}
+                          </span>
+                          <Badge variant={getStatusBadge(job.status)} className="text-xs">
+                            {job.status.replace(/_/g, " ")}
+                          </Badge>
+                        </div>
+                        <p className="font-medium text-sm truncate">{job.job_name}</p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span>{format(new Date(job.created_at), "d MMM yyyy")}</span>
+                          {filing && (
+                            <Badge variant={filing.status === "filed" ? "default" : "outline"} className="text-xs">
+                              {filing.status.replace(/_/g, " ")}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
                             {generatingPdf === job.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
@@ -351,13 +468,13 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       ) : (
         <Card>
           <CardContent className="py-12 text-center">

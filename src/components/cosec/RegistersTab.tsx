@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { RefreshCw, AlertTriangle, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { syncCompanyWithCH, getLastCHSyncData, CHDiscrepancy } from "@/lib/ch-sync-service";
 import { OfficersSection } from "./OfficersSection";
@@ -13,6 +14,8 @@ import { PSCsSection } from "./PSCsSection";
 import { ShareClassesSection } from "./ShareClassesSection";
 import { ShareholdersSection } from "./ShareholdersSection";
 import { RegisterEventsTimeline } from "./RegisterEventsTimeline";
+import { RegistersTabSkeleton } from "./RegistersTabSkeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatDistanceToNow } from "date-fns";
 
 interface RegistersTabProps {
@@ -23,15 +26,17 @@ interface RegistersTabProps {
 export function RegistersTab({ companyId, organizationId }: RegistersTabProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("officers");
+  const [syncProgress, setSyncProgress] = useState(0);
 
   // Fetch company CH sync data
-  const { data: syncData, isLoading: syncLoading } = useQuery({
+  const { data: syncData, isLoading: syncLoading, error: syncError } = useQuery({
     queryKey: ["ch-sync-data", companyId],
     queryFn: () => getLastCHSyncData(companyId),
+    retry: 2,
   });
 
   // Fetch company details for discrepancies
-  const { data: company } = useQuery({
+  const { data: company, isLoading: companyLoading, error: companyError } = useQuery({
     queryKey: ["company-registers", companyId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -51,34 +56,77 @@ export function RegistersTab({ companyId, organizationId }: RegistersTabProps) {
       if (error) throw error;
       return data;
     },
+    retry: 2,
   });
 
-  // CH Sync mutation
+  // CH Sync mutation with progress
   const syncMutation = useMutation({
-    mutationFn: () => syncCompanyWithCH(companyId, organizationId),
+    mutationFn: async () => {
+      setSyncProgress(10);
+      const result = await syncCompanyWithCH(companyId, organizationId);
+      setSyncProgress(100);
+      return result;
+    },
+    onMutate: () => {
+      setSyncProgress(0);
+      toast.loading("Syncing with Companies House...", { id: "ch-sync" });
+    },
     onSuccess: (result) => {
+      toast.dismiss("ch-sync");
       if (result.success) {
         toast.success("Synced with Companies House", {
           description: result.data?.discrepancies?.length 
             ? `Found ${result.data.discrepancies.length} discrepancies` 
-            : "No discrepancies found",
+            : "All registers match Companies House records",
+          icon: result.data?.discrepancies?.length ? <AlertTriangle className="h-4 w-4 text-amber-500" /> : <CheckCircle className="h-4 w-4 text-green-500" />,
         });
         queryClient.invalidateQueries({ queryKey: ["ch-sync-data", companyId] });
         queryClient.invalidateQueries({ queryKey: ["company-registers", companyId] });
+        queryClient.invalidateQueries({ queryKey: ["company-detail", companyId] });
         queryClient.invalidateQueries({ queryKey: ["company-officers", companyId] });
         queryClient.invalidateQueries({ queryKey: ["company-pscs", companyId] });
         queryClient.invalidateQueries({ queryKey: ["register-events", companyId] });
       } else {
         toast.error("Sync failed", { description: result.error });
       }
+      setTimeout(() => setSyncProgress(0), 500);
     },
     onError: (error: any) => {
+      toast.dismiss("ch-sync");
       toast.error("Sync failed", { description: error.message });
+      setSyncProgress(0);
     },
   });
 
+  // Simulate progress during sync
+  useEffect(() => {
+    if (syncMutation.isPending && syncProgress < 90) {
+      const timer = setTimeout(() => {
+        setSyncProgress((prev) => Math.min(prev + 15, 90));
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [syncMutation.isPending, syncProgress]);
+
   const discrepancies: CHDiscrepancy[] = (company?.ch_company_profile as any)?.discrepancies || [];
   const lastSyncedAt = company?.ch_last_synced_at;
+
+  // Loading state
+  if (companyLoading || syncLoading) {
+    return <RegistersTabSkeleton />;
+  }
+
+  // Error state
+  if (companyError || syncError) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load registers data. Please try refreshing the page.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -104,16 +152,32 @@ export function RegistersTab({ companyId, organizationId }: RegistersTabProps) {
                 disabled={syncMutation.isPending || !company?.company_number}
                 variant="outline"
                 size="sm"
+                className="min-w-[120px]"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                Sync with CH
+                {syncMutation.isPending ? "Syncing..." : "Sync with CH"}
               </Button>
             </div>
           </div>
         </CardHeader>
 
+        {/* Sync Progress Bar */}
+        {syncMutation.isPending && (
+          <CardContent className="pt-0 pb-3">
+            <div className="space-y-2">
+              <Progress value={syncProgress} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                {syncProgress < 30 && "Connecting to Companies House..."}
+                {syncProgress >= 30 && syncProgress < 60 && "Fetching company data..."}
+                {syncProgress >= 60 && syncProgress < 90 && "Comparing registers..."}
+                {syncProgress >= 90 && "Finalizing sync..."}
+              </p>
+            </div>
+          </CardContent>
+        )}
+
         {/* Discrepancies Alert */}
-        {discrepancies.length > 0 && (
+        {discrepancies.length > 0 && !syncMutation.isPending && (
           <CardContent className="pt-0">
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
               <div className="flex items-start gap-3">
@@ -167,14 +231,26 @@ export function RegistersTab({ companyId, organizationId }: RegistersTabProps) {
         )}
       </Card>
 
-      {/* Register Tabs */}
+      {/* Register Tabs - mobile responsive */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="officers">Officers</TabsTrigger>
-          <TabsTrigger value="pscs">PSCs</TabsTrigger>
-          <TabsTrigger value="share-classes">Share Classes</TabsTrigger>
-          <TabsTrigger value="shareholders">Shareholders</TabsTrigger>
-          <TabsTrigger value="events">Events</TabsTrigger>
+        <TabsList className="h-auto flex-wrap sm:flex-nowrap w-full gap-1">
+          <TabsTrigger value="officers" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+            Officers
+          </TabsTrigger>
+          <TabsTrigger value="pscs" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+            PSCs
+          </TabsTrigger>
+          <TabsTrigger value="share-classes" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+            <span className="hidden sm:inline">Share Classes</span>
+            <span className="sm:hidden">Shares</span>
+          </TabsTrigger>
+          <TabsTrigger value="shareholders" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+            <span className="hidden sm:inline">Shareholders</span>
+            <span className="sm:hidden">Holders</span>
+          </TabsTrigger>
+          <TabsTrigger value="events" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+            Events
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="officers" className="mt-4">
