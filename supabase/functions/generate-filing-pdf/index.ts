@@ -8,7 +8,16 @@ const corsHeaders = {
 
 interface GeneratePDFRequest {
   filingId: string;
-  documentType: "sa100_summary" | "tax_computation" | "ct600_summary" | "company_accounts" | "vat_summary";
+  documentType: 
+    | "sa100_summary" 
+    | "tax_computation" 
+    | "ct600_summary" 
+    | "company_accounts" 
+    | "vat_summary"
+    | "cs01_summary"
+    | "ap01_confirmation"
+    | "tm01_confirmation"
+    | "sh01_statement";
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -40,13 +49,17 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`[generate-filing-pdf] Generating ${documentType} for filing ${filingId}`);
 
-    // Fetch filing data
+    // Fetch filing data with extended relations for CoSec
     const { data: filing, error: filingError } = await supabase
       .from("filings")
       .select(`
         *,
         clients (first_name, last_name, utr, national_insurance_number),
-        companies (company_name, company_number)
+        companies (
+          id, company_name, company_number, company_type, incorporation_date,
+          registered_office_address, sic_codes,
+          confirmation_statement_made_up_to, confirmation_statement_next_due
+        )
       `)
       .eq("id", filingId)
       .single();
@@ -57,6 +70,52 @@ const handler = async (req: Request): Promise<Response> => {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // For CoSec documents, fetch additional company data
+    let companyData: any = null;
+    if (["cs01_summary", "ap01_confirmation", "tm01_confirmation", "sh01_statement"].includes(documentType)) {
+      const companyId = filing.company_id;
+      if (companyId) {
+        // Fetch officers
+        const { data: officers } = await supabase
+          .from("company_officers")
+          .select(`
+            *,
+            company_persons (first_name, last_name, date_of_birth, service_address_line_1, service_city, service_postcode)
+          `)
+          .eq("company_id", companyId)
+          .is("resigned_at", null);
+
+        // Fetch PSCs
+        const { data: pscs } = await supabase
+          .from("company_pscs")
+          .select(`
+            *,
+            company_persons (first_name, last_name, date_of_birth)
+          `)
+          .eq("company_id", companyId)
+          .is("ceased_at", null);
+
+        // Fetch share classes
+        const { data: shareClasses } = await supabase
+          .from("company_share_classes")
+          .select("*")
+          .eq("company_id", companyId);
+
+        // Fetch shareholders
+        const { data: shareholders } = await supabase
+          .from("company_shareholders")
+          .select(`
+            *,
+            company_persons (first_name, last_name),
+            company_share_classes (class_name, currency, nominal_value)
+          `)
+          .eq("company_id", companyId)
+          .gt("shares_held", 0);
+
+        companyData = { officers, pscs, shareClasses, shareholders };
+      }
     }
 
     // Generate HTML based on document type
@@ -79,6 +138,22 @@ const handler = async (req: Request): Promise<Response> => {
       case "vat_summary":
         html = generateVATSummaryHTML(filing);
         documentName = `VAT Return Summary`;
+        break;
+      case "cs01_summary":
+        html = generateCS01SummaryHTML(filing, companyData);
+        documentName = `CS01 Confirmation Statement Summary`;
+        break;
+      case "ap01_confirmation":
+        html = generateAP01ConfirmationHTML(filing, companyData);
+        documentName = `AP01 Director Appointment Confirmation`;
+        break;
+      case "tm01_confirmation":
+        html = generateTM01ConfirmationHTML(filing, companyData);
+        documentName = `TM01 Director Termination Confirmation`;
+        break;
+      case "sh01_statement":
+        html = generateSH01StatementHTML(filing, companyData);
+        documentName = `SH01 Statement of Capital`;
         break;
       default:
         html = generateGenericSummaryHTML(filing);
@@ -470,6 +545,562 @@ function generateVATSummaryHTML(filing: any): string {
   <div style="margin-top: 40px; font-size: 12px; color: #666;">
     <p>Generated: ${new Date().toLocaleString('en-GB')}</p>
     <p>Status: ${filing.status?.toUpperCase() || 'DRAFT'}</p>
+  </div>
+</body>
+</html>
+  `;
+}
+
+// ==================== COSEC HTML GENERATORS ====================
+
+function generateCS01SummaryHTML(filing: any, companyData: any): string {
+  const company = filing.companies;
+  const filingData = filing.filing_data || {};
+  const officers = companyData?.officers || [];
+  const pscs = companyData?.pscs || [];
+  const shareClasses = companyData?.shareClasses || [];
+  const shareholders = companyData?.shareholders || [];
+  const sicCodes = company?.sic_codes || [];
+  const registeredOffice = company?.registered_office_address || {};
+
+  const totalShares = shareClasses.reduce((sum: number, sc: any) => sum + (sc.total_shares_issued || 0), 0);
+  const totalCapital = shareClasses.reduce((sum: number, sc: any) => 
+    sum + ((sc.total_shares_issued || 0) * (sc.nominal_value || 0)), 0);
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Confirmation Statement Summary (CS01)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #333; font-size: 13px; }
+    .header { border-bottom: 3px solid #00703c; padding-bottom: 20px; margin-bottom: 30px; }
+    .header h1 { color: #00703c; margin: 0 0 5px; font-size: 24px; }
+    .header .company-number { color: #666; font-size: 14px; }
+    .made-up-date { background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 30px; text-align: center; }
+    .made-up-date strong { font-size: 18px; color: #00703c; }
+    .section { margin-bottom: 25px; }
+    .section h2 { color: #00703c; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 15px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f9fafb; font-weight: 600; }
+    .address { line-height: 1.6; }
+    .sic-codes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .sic-code { background: #e5e7eb; padding: 4px 10px; border-radius: 4px; font-size: 12px; }
+    .capital-summary { background: #f0fdf4; padding: 15px; border-radius: 8px; margin-top: 10px; }
+    .capital-summary strong { color: #166534; }
+    .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #666; }
+    .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(0,0,0,0.05); z-index: -1; }
+  </style>
+</head>
+<body>
+  ${filing.status !== "filed" ? '<div class="draft-watermark">DRAFT</div>' : ''}
+  
+  <div class="header">
+    <h1>${company?.company_name || 'Company Name'}</h1>
+    <p class="company-number">Company Number: ${company?.company_number || 'N/A'}</p>
+    <p>Company Type: ${company?.company_type || 'Private Limited Company'}</p>
+  </div>
+  
+  <div class="made-up-date">
+    <p>Confirmation Statement Made Up To:</p>
+    <strong>${filingData.made_up_to_date ? new Date(filingData.made_up_to_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : company?.confirmation_statement_made_up_to ? new Date(company.confirmation_statement_made_up_to).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'}</strong>
+  </div>
+  
+  <div class="section">
+    <h2>Registered Office Address</h2>
+    <div class="address">
+      ${registeredOffice.address_line_1 || 'Address Line 1'}<br>
+      ${registeredOffice.address_line_2 ? registeredOffice.address_line_2 + '<br>' : ''}
+      ${registeredOffice.locality || ''} ${registeredOffice.region || ''}<br>
+      ${registeredOffice.postal_code || ''}<br>
+      ${registeredOffice.country || 'United Kingdom'}
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Directors</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Role</th>
+          <th>Appointed</th>
+          <th>Service Address</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${officers.length > 0 ? officers.map((o: any) => `
+          <tr>
+            <td>${o.company_persons?.first_name || ''} ${o.company_persons?.last_name || ''}</td>
+            <td>${o.role || 'Director'}</td>
+            <td>${o.appointed_at ? new Date(o.appointed_at).toLocaleDateString('en-GB') : 'N/A'}</td>
+            <td>${o.company_persons?.service_address_line_1 || ''}, ${o.company_persons?.service_city || ''} ${o.company_persons?.service_postcode || ''}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="4">No officers recorded</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="section">
+    <h2>Persons with Significant Control (PSCs)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Nature of Control</th>
+          <th>Notified Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pscs.length > 0 ? pscs.map((p: any) => `
+          <tr>
+            <td>${p.company_persons?.first_name || ''} ${p.company_persons?.last_name || ''}</td>
+            <td>${(p.nature_of_control || []).join(', ')}</td>
+            <td>${p.notified_at ? new Date(p.notified_at).toLocaleDateString('en-GB') : 'N/A'}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="3">No PSCs recorded</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="section">
+    <h2>Statement of Capital</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Share Class</th>
+          <th>Currency</th>
+          <th>Nominal Value</th>
+          <th>Shares Issued</th>
+          <th>Aggregate Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${shareClasses.length > 0 ? shareClasses.map((sc: any) => `
+          <tr>
+            <td>${sc.class_name || 'Ordinary'}</td>
+            <td>${sc.currency || 'GBP'}</td>
+            <td>£${formatNumber(sc.nominal_value)}</td>
+            <td>${(sc.total_shares_issued || 0).toLocaleString()}</td>
+            <td>£${formatNumber((sc.total_shares_issued || 0) * (sc.nominal_value || 0))}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="5">No share classes recorded</td></tr>'}
+      </tbody>
+    </table>
+    <div class="capital-summary">
+      <strong>Total Shares: ${totalShares.toLocaleString()}</strong><br>
+      <strong>Total Aggregate Nominal Value: £${formatNumber(totalCapital)}</strong>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Shareholders</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Share Class</th>
+          <th>Shares Held</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${shareholders.length > 0 ? shareholders.map((sh: any) => `
+          <tr>
+            <td>${sh.company_persons?.first_name || ''} ${sh.company_persons?.last_name || ''}</td>
+            <td>${sh.company_share_classes?.class_name || 'Ordinary'}</td>
+            <td>${(sh.shares_held || 0).toLocaleString()}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="3">No shareholders recorded</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="section">
+    <h2>SIC Codes</h2>
+    <div class="sic-codes">
+      ${Array.isArray(sicCodes) && sicCodes.length > 0 
+        ? sicCodes.map((code: string) => `<span class="sic-code">${code}</span>`).join('')
+        : '<span>No SIC codes recorded</span>'}
+    </div>
+  </div>
+  
+  <div class="footer">
+    <p>Generated: ${new Date().toLocaleString('en-GB')}</p>
+    <p>Status: ${filing.status?.toUpperCase() || 'DRAFT'}</p>
+    ${filing.filing_reference ? `<p>Companies House Reference: ${filing.filing_reference}</p>` : ''}
+    <p style="margin-top: 15px; font-style: italic;">This document is a summary for review purposes. The official confirmation statement is filed with Companies House.</p>
+  </div>
+</body>
+</html>
+  `;
+}
+
+function generateAP01ConfirmationHTML(filing: any, companyData: any): string {
+  const company = filing.companies;
+  const filingData = filing.filing_data || {};
+  const appointmentData = filingData.appointment_details || filingData;
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Director Appointment Confirmation (AP01)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 50px; color: #333; line-height: 1.6; }
+    .letterhead { border-bottom: 2px solid #1a365d; padding-bottom: 20px; margin-bottom: 40px; }
+    .letterhead h1 { color: #1a365d; margin: 0; font-size: 20px; }
+    .letterhead p { margin: 5px 0 0; color: #666; }
+    .title { text-align: center; margin: 30px 0; }
+    .title h2 { color: #1a365d; font-size: 18px; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+    .details-box { background: #f8fafc; padding: 25px; border-radius: 8px; margin: 25px 0; }
+    .details-box h3 { color: #1a365d; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; }
+    .detail-row { display: flex; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { width: 180px; font-weight: 600; color: #4b5563; }
+    .detail-value { flex: 1; }
+    .confirmation-text { margin: 30px 0; padding: 20px; background: #f0fdf4; border-left: 4px solid #22c55e; }
+    .signature-section { margin-top: 60px; }
+    .signature-line { border-top: 1px solid #333; width: 250px; margin-top: 60px; padding-top: 5px; }
+    .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #666; }
+    .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(0,0,0,0.05); z-index: -1; }
+  </style>
+</head>
+<body>
+  ${filing.status !== "filed" ? '<div class="draft-watermark">DRAFT</div>' : ''}
+  
+  <div class="letterhead">
+    <h1>${company?.company_name || 'Company Name'}</h1>
+    <p>Company Number: ${company?.company_number || 'N/A'}</p>
+  </div>
+  
+  <div class="title">
+    <h2>Director Appointment Confirmation</h2>
+    <p style="color: #666; margin-top: 5px;">Form AP01 - Appointment of Director</p>
+  </div>
+  
+  <div class="details-box">
+    <h3>Director Details</h3>
+    <div class="detail-row">
+      <span class="detail-label">Full Name:</span>
+      <span class="detail-value">${appointmentData.title || ''} ${appointmentData.first_name || ''} ${appointmentData.middle_names || ''} ${appointmentData.last_name || ''}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Date of Birth:</span>
+      <span class="detail-value">${appointmentData.date_of_birth ? new Date(appointmentData.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Nationality:</span>
+      <span class="detail-value">${appointmentData.nationality || 'British'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Occupation:</span>
+      <span class="detail-value">${appointmentData.occupation || 'N/A'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Country of Residence:</span>
+      <span class="detail-value">${appointmentData.country_of_residence || 'United Kingdom'}</span>
+    </div>
+  </div>
+  
+  <div class="details-box">
+    <h3>Service Address</h3>
+    <div class="detail-row">
+      <span class="detail-label">Address:</span>
+      <span class="detail-value">
+        ${appointmentData.service_address_line_1 || ''}<br>
+        ${appointmentData.service_address_line_2 ? appointmentData.service_address_line_2 + '<br>' : ''}
+        ${appointmentData.service_city || ''} ${appointmentData.service_postcode || ''}<br>
+        ${appointmentData.service_country || 'United Kingdom'}
+      </span>
+    </div>
+  </div>
+  
+  <div class="details-box">
+    <h3>Appointment Details</h3>
+    <div class="detail-row">
+      <span class="detail-label">Appointment Date:</span>
+      <span class="detail-value"><strong>${appointmentData.appointment_date ? new Date(appointmentData.appointment_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Role:</span>
+      <span class="detail-value">${appointmentData.role || 'Director'}</span>
+    </div>
+  </div>
+  
+  <div class="confirmation-text">
+    <strong>Consent Confirmation:</strong><br>
+    I confirm that I consent to act as a director of ${company?.company_name || 'the company'} and that I am not disqualified from acting as a director.
+  </div>
+  
+  <div class="signature-section">
+    <p><strong>Signed by the Director:</strong></p>
+    <div class="signature-line">
+      <p>Name: ${appointmentData.first_name || ''} ${appointmentData.last_name || ''}</p>
+      <p>Date: ________________</p>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <p>Generated: ${new Date().toLocaleString('en-GB')}</p>
+    <p>Status: ${filing.status?.toUpperCase() || 'DRAFT'}</p>
+    ${filing.filing_reference ? `<p>Companies House Reference: ${filing.filing_reference}</p>` : ''}
+  </div>
+</body>
+</html>
+  `;
+}
+
+function generateTM01ConfirmationHTML(filing: any, companyData: any): string {
+  const company = filing.companies;
+  const filingData = filing.filing_data || {};
+  const terminationData = filingData.termination_details || filingData;
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Director Termination Confirmation (TM01)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 50px; color: #333; line-height: 1.6; }
+    .letterhead { border-bottom: 2px solid #1a365d; padding-bottom: 20px; margin-bottom: 40px; }
+    .letterhead h1 { color: #1a365d; margin: 0; font-size: 20px; }
+    .letterhead p { margin: 5px 0 0; color: #666; }
+    .title { text-align: center; margin: 30px 0; }
+    .title h2 { color: #b91c1c; font-size: 18px; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+    .details-box { background: #f8fafc; padding: 25px; border-radius: 8px; margin: 25px 0; }
+    .details-box h3 { color: #1a365d; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; }
+    .detail-row { display: flex; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { width: 180px; font-weight: 600; color: #4b5563; }
+    .detail-value { flex: 1; }
+    .termination-notice { margin: 30px 0; padding: 20px; background: #fef2f2; border-left: 4px solid #dc2626; }
+    .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #666; }
+    .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(0,0,0,0.05); z-index: -1; }
+  </style>
+</head>
+<body>
+  ${filing.status !== "filed" ? '<div class="draft-watermark">DRAFT</div>' : ''}
+  
+  <div class="letterhead">
+    <h1>${company?.company_name || 'Company Name'}</h1>
+    <p>Company Number: ${company?.company_number || 'N/A'}</p>
+  </div>
+  
+  <div class="title">
+    <h2>Director Termination Confirmation</h2>
+    <p style="color: #666; margin-top: 5px;">Form TM01 - Termination of Appointment of Director</p>
+  </div>
+  
+  <div class="details-box">
+    <h3>Director Details</h3>
+    <div class="detail-row">
+      <span class="detail-label">Full Name:</span>
+      <span class="detail-value">${terminationData.director_name || `${terminationData.first_name || ''} ${terminationData.last_name || ''}`}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Role:</span>
+      <span class="detail-value">${terminationData.role || 'Director'}</span>
+    </div>
+  </div>
+  
+  <div class="details-box">
+    <h3>Termination Details</h3>
+    <div class="detail-row">
+      <span class="detail-label">Date of Resignation:</span>
+      <span class="detail-value"><strong>${terminationData.resignation_date ? new Date(terminationData.resignation_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'}</strong></span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Reason:</span>
+      <span class="detail-value">${terminationData.reason || 'Resigned'}</span>
+    </div>
+  </div>
+  
+  <div class="termination-notice">
+    <strong>Notice:</strong><br>
+    The above-named person has ceased to be a director of ${company?.company_name || 'the company'} with effect from the date stated above. This termination has been notified to Companies House.
+  </div>
+  
+  ${terminationData.notes ? `
+  <div class="details-box">
+    <h3>Additional Notes</h3>
+    <p>${terminationData.notes}</p>
+  </div>
+  ` : ''}
+  
+  <div class="footer">
+    <p>Generated: ${new Date().toLocaleString('en-GB')}</p>
+    <p>Status: ${filing.status?.toUpperCase() || 'DRAFT'}</p>
+    ${filing.filing_reference ? `<p>Companies House Reference: ${filing.filing_reference}</p>` : ''}
+  </div>
+</body>
+</html>
+  `;
+}
+
+function generateSH01StatementHTML(filing: any, companyData: any): string {
+  const company = filing.companies;
+  const filingData = filing.filing_data || {};
+  const allotmentData = filingData.allotment_details || filingData;
+  const shareClasses = companyData?.shareClasses || [];
+
+  // Calculate totals
+  const totalSharesBefore = shareClasses.reduce((sum: number, sc: any) => sum + (sc.total_shares_issued || 0), 0);
+  const sharesAllotted = allotmentData.shares_allotted || 0;
+  const totalSharesAfter = totalSharesBefore + sharesAllotted;
+  const nominalValue = allotmentData.nominal_value || allotmentData.price_per_share || 1;
+  const totalCapitalAfter = shareClasses.reduce((sum: number, sc: any) => {
+    const shares = sc.class_name === allotmentData.share_class_name 
+      ? (sc.total_shares_issued || 0) + sharesAllotted
+      : (sc.total_shares_issued || 0);
+    return sum + (shares * (sc.nominal_value || 0));
+  }, 0);
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Statement of Capital (SH01)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 50px; color: #333; line-height: 1.6; }
+    .letterhead { border-bottom: 2px solid #1a365d; padding-bottom: 20px; margin-bottom: 40px; }
+    .letterhead h1 { color: #1a365d; margin: 0; font-size: 20px; }
+    .letterhead p { margin: 5px 0 0; color: #666; }
+    .title { text-align: center; margin: 30px 0; }
+    .title h2 { color: #1a365d; font-size: 18px; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+    .details-box { background: #f8fafc; padding: 25px; border-radius: 8px; margin: 25px 0; }
+    .details-box h3 { color: #1a365d; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; }
+    .detail-row { display: flex; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { width: 200px; font-weight: 600; color: #4b5563; }
+    .detail-value { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    th, td { padding: 10px; text-align: left; border: 1px solid #e5e7eb; }
+    th { background: #f3f4f6; font-weight: 600; }
+    td:last-child, th:last-child { text-align: right; }
+    .capital-summary { background: #f0fdf4; padding: 20px; border-radius: 8px; margin-top: 25px; }
+    .capital-summary h3 { color: #166534; margin: 0 0 15px; }
+    .capital-total { font-size: 18px; font-weight: bold; color: #166534; }
+    .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #666; }
+    .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(0,0,0,0.05); z-index: -1; }
+  </style>
+</head>
+<body>
+  ${filing.status !== "filed" ? '<div class="draft-watermark">DRAFT</div>' : ''}
+  
+  <div class="letterhead">
+    <h1>${company?.company_name || 'Company Name'}</h1>
+    <p>Company Number: ${company?.company_number || 'N/A'}</p>
+  </div>
+  
+  <div class="title">
+    <h2>Statement of Capital</h2>
+    <p style="color: #666; margin-top: 5px;">Form SH01 - Return of Allotment of Shares</p>
+  </div>
+  
+  <div class="details-box">
+    <h3>Allotment Details</h3>
+    <div class="detail-row">
+      <span class="detail-label">Date of Allotment:</span>
+      <span class="detail-value"><strong>${allotmentData.allotment_date ? new Date(allotmentData.allotment_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Share Class:</span>
+      <span class="detail-value">${allotmentData.share_class_name || 'Ordinary'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Number of Shares Allotted:</span>
+      <span class="detail-value"><strong>${sharesAllotted.toLocaleString()}</strong></span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Nominal Value per Share:</span>
+      <span class="detail-value">£${formatNumber(nominalValue)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Price Paid per Share:</span>
+      <span class="detail-value">£${formatNumber(allotmentData.price_per_share || nominalValue)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Total Consideration:</span>
+      <span class="detail-value"><strong>£${formatNumber(allotmentData.total_consideration || (sharesAllotted * (allotmentData.price_per_share || nominalValue)))}</strong></span>
+    </div>
+  </div>
+  
+  <div class="details-box">
+    <h3>Allottee / Subscriber</h3>
+    <div class="detail-row">
+      <span class="detail-label">Name:</span>
+      <span class="detail-value">${allotmentData.shareholder_name || 'N/A'}</span>
+    </div>
+  </div>
+  
+  <div class="details-box">
+    <h3>Statement of Capital (After Allotment)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Share Class</th>
+          <th>Currency</th>
+          <th>Nominal Value</th>
+          <th>Shares Issued</th>
+          <th>Aggregate Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${shareClasses.length > 0 ? shareClasses.map((sc: any) => {
+          const shares = sc.class_name === allotmentData.share_class_name 
+            ? (sc.total_shares_issued || 0) + sharesAllotted
+            : (sc.total_shares_issued || 0);
+          return `
+          <tr>
+            <td>${sc.class_name || 'Ordinary'}${sc.class_name === allotmentData.share_class_name ? ' *' : ''}</td>
+            <td>${sc.currency || 'GBP'}</td>
+            <td>£${formatNumber(sc.nominal_value)}</td>
+            <td>${shares.toLocaleString()}</td>
+            <td>£${formatNumber(shares * (sc.nominal_value || 0))}</td>
+          </tr>
+        `;}).join('') : `
+          <tr>
+            <td>${allotmentData.share_class_name || 'Ordinary'} *</td>
+            <td>GBP</td>
+            <td>£${formatNumber(nominalValue)}</td>
+            <td>${sharesAllotted.toLocaleString()}</td>
+            <td>£${formatNumber(sharesAllotted * nominalValue)}</td>
+          </tr>
+        `}
+      </tbody>
+    </table>
+    <p style="font-size: 12px; color: #666;">* Share class affected by this allotment</p>
+  </div>
+  
+  <div class="capital-summary">
+    <h3>Capital Summary</h3>
+    <div class="detail-row">
+      <span class="detail-label">Total Shares Before:</span>
+      <span class="detail-value">${totalSharesBefore.toLocaleString()}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Shares Allotted:</span>
+      <span class="detail-value">+ ${sharesAllotted.toLocaleString()}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Total Shares After:</span>
+      <span class="detail-value capital-total">${totalSharesAfter.toLocaleString()}</span>
+    </div>
+    <div class="detail-row" style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #166534;">
+      <span class="detail-label">Total Aggregate Nominal Value:</span>
+      <span class="detail-value capital-total">£${formatNumber(totalCapitalAfter || (totalSharesAfter * nominalValue))}</span>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <p>Generated: ${new Date().toLocaleString('en-GB')}</p>
+    <p>Status: ${filing.status?.toUpperCase() || 'DRAFT'}</p>
+    ${filing.filing_reference ? `<p>Companies House Reference: ${filing.filing_reference}</p>` : ''}
   </div>
 </body>
 </html>

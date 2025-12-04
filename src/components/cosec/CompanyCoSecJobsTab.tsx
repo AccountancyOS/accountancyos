@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { 
@@ -26,7 +27,9 @@ import {
   UserMinus, 
   Coins,
   Eye,
-  Loader2
+  Loader2,
+  FileText,
+  Download
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -56,6 +59,7 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
   const [showAP01Dialog, setShowAP01Dialog] = useState(false);
   const [showTM01Dialog, setShowTM01Dialog] = useState(false);
   const [showSH01Dialog, setShowSH01Dialog] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   // Fetch CoSec jobs for this company
   const { data: jobs, isLoading } = useQuery({
@@ -142,6 +146,51 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
       setShowTM01Dialog(true);
     } else if (job.service_type === "SH01") {
       setShowSH01Dialog(true);
+    }
+  };
+
+  const handleGeneratePdf = async (job: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const filing = job.filings?.[0];
+    if (!filing) {
+      toast.error("No filing found", { description: "Create a filing first before generating PDF" });
+      return;
+    }
+
+    const documentTypeMap: Record<string, string> = {
+      CS01: "cs01_summary",
+      AP01: "ap01_confirmation",
+      TM01: "tm01_confirmation",
+      SH01: "sh01_statement",
+    };
+
+    const documentType = documentTypeMap[job.service_type];
+    if (!documentType) {
+      toast.error("PDF generation not supported for this filing type");
+      return;
+    }
+
+    setGeneratingPdf(job.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-filing-pdf", {
+        body: { filingId: filing.id, documentType },
+      });
+
+      if (error) throw error;
+
+      if (data.html) {
+        // Decode base64 HTML and open in new window for viewing/printing
+        const htmlContent = atob(data.html);
+        const blob = new Blob([htmlContent], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        toast.success("PDF generated", { description: data.documentName });
+      }
+    } catch (error: any) {
+      console.error("PDF generation error:", error);
+      toast.error("Failed to generate PDF", { description: error.message });
+    } finally {
+      setGeneratingPdf(null);
     }
   };
 
@@ -276,13 +325,29 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
+                            {generatingPdf === job.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleOpenJob(job)}>
                             <Eye className="h-4 w-4 mr-2" />
                             Open Workpaper
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={(e) => handleGeneratePdf(job, e)}
+                            disabled={!filing || generatingPdf === job.id}
+                          >
+                            {generatingPdf === job.id ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <FileText className="h-4 w-4 mr-2" />
+                            )}
+                            Generate PDF
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

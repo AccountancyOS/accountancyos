@@ -19,7 +19,9 @@ import {
   Users,
   Building2,
   Coins,
-  Scale
+  Scale,
+  Download,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
@@ -40,6 +42,7 @@ export function CS01WorkpaperTab({ companyId, jobId, workpaperId }: CS01Workpape
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("overview");
   const [resolutionsComplete, setResolutionsComplete] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   // Fetch company data
   const { data: company, isLoading: companyLoading } = useQuery({
@@ -584,10 +587,38 @@ export function CS01WorkpaperTab({ companyId, jobId, workpaperId }: CS01Workpape
                 </div>
 
                 {existingFiling.status === "draft" && (
-                  <Button className="w-full">
-                    <Send className="h-4 w-4 mr-2" />
-                    Send for Client Approval
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline"
+                      onClick={async () => {
+                        setGeneratingPdf(true);
+                        try {
+                          const { data, error } = await supabase.functions.invoke("generate-filing-pdf", {
+                            body: { filingId: existingFiling.id, documentType: "cs01_summary" },
+                          });
+                          if (error) throw error;
+                          if (data.html) {
+                            const htmlContent = atob(data.html);
+                            const blob = new Blob([htmlContent], { type: "text/html" });
+                            window.open(URL.createObjectURL(blob), "_blank");
+                            toast.success("PDF generated");
+                          }
+                        } catch (err: any) {
+                          toast.error("Failed to generate PDF", { description: err.message });
+                        } finally {
+                          setGeneratingPdf(false);
+                        }
+                      }}
+                      disabled={generatingPdf}
+                    >
+                      {generatingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                      Generate PDF
+                    </Button>
+                    <Button className="flex-1">
+                      <Send className="h-4 w-4 mr-2" />
+                      Send for Client Approval
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
