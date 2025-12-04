@@ -453,3 +453,83 @@ export async function addAdjustmentLine(
     };
   }
 }
+
+/**
+ * Trigger records request for a job via RPC
+ */
+export async function triggerRecordsRequest(jobId: string): Promise<{
+  success: boolean;
+  questionnaireInstanceId?: string;
+  error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.rpc('trigger_records_request', {
+      p_job_id: jobId,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const result = data as { success: boolean; questionnaire_instance_id?: string; error?: string };
+    
+    return {
+      success: result.success,
+      questionnaireInstanceId: result.questionnaire_instance_id,
+      error: result.error,
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+/**
+ * Create a job from a template via RPC
+ */
+export async function createJobFromTemplate(params: {
+  templateId: string;
+  organizationId: string;
+  clientId?: string;
+  companyId?: string;
+  engagementId?: string;
+  serviceId?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  filingDeadline?: string;
+  name?: string;
+}): Promise<{
+  success: boolean;
+  jobId?: string;
+  workpaperInstanceId?: string;
+  error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.rpc('create_job_from_template', {
+      p_template_id: params.templateId,
+      p_organization_id: params.organizationId,
+      p_client_id: params.clientId || null,
+      p_company_id: params.companyId || null,
+      p_engagement_id: params.engagementId || null,
+      p_service_id: params.serviceId || null,
+      p_period_start: params.periodStart || null,
+      p_period_end: params.periodEnd || null,
+      p_filing_deadline: params.filingDeadline || null,
+      p_name: params.name || null,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const result = data as { success: boolean; job_id?: string; workpaper_instance_id?: string; error?: string };
+    
+    return {
+      success: result.success,
+      jobId: result.job_id,
+      workpaperInstanceId: result.workpaper_instance_id,
+      error: result.error,
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}

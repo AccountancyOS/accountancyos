@@ -178,7 +178,7 @@ export default function TemplateDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {currentType === "questionnaire" && (
+            {(currentType === "questionnaire" || currentType === "records_request") && (
               <ToggleGroup type="single" value={questionnaireView} onValueChange={(v) => v && setQuestionnaireView(v as "flow" | "list")}>
                 <ToggleGroupItem value="flow" aria-label="Flow view">
                   Flow View
@@ -284,7 +284,7 @@ export default function TemplateDetail() {
             </CardContent>
           </Card>
         )}
-        {currentType === "questionnaire" && (
+        {(currentType === "questionnaire" || currentType === "records_request") && (
           <>
             {questionnaireView === "flow" ? (
               <QuestionnaireFlowBuilder content={content} onChange={setContent} />
