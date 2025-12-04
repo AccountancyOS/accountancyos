@@ -58,6 +58,7 @@ export default function Templates() {
       case "checklist": return ListChecks;
       case "automation": return Workflow;
       case "questionnaire": return ClipboardCheck;
+      case "records_request": return ClipboardCheck;
       default: return FileText;
     }
   };
@@ -119,6 +120,10 @@ export default function Templates() {
                 <ClipboardCheck className="mr-2 h-4 w-4" />
                 Questionnaire Template
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateTemplate("records_request")}>
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                Records Request Template
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -149,6 +154,7 @@ export default function Templates() {
                   <SelectItem value="checklist">Checklist</SelectItem>
                   <SelectItem value="automation">Automation</SelectItem>
                   <SelectItem value="questionnaire">Questionnaire</SelectItem>
+                  <SelectItem value="records_request">Records Request</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>

@@ -2468,20 +2468,69 @@ export type Database = {
           },
         ]
       }
+      job_questionnaire_instances: {
+        Row: {
+          created_at: string | null
+          feeds_workpaper: boolean | null
+          id: string
+          job_id: string
+          questionnaire_instance_id: string
+          questionnaire_type: string
+          trigger_status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          feeds_workpaper?: boolean | null
+          id?: string
+          job_id: string
+          questionnaire_instance_id: string
+          questionnaire_type?: string
+          trigger_status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          feeds_workpaper?: boolean | null
+          id?: string
+          job_id?: string
+          questionnaire_instance_id?: string
+          questionnaire_type?: string
+          trigger_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_questionnaire_instances_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_questionnaire_instances_questionnaire_instance_id_fkey"
+            columns: ["questionnaire_instance_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_tasks: {
         Row: {
           assigned_to: string | null
           completed_at: string | null
           created_at: string
           dependencies: Json | null
+          dependency_task_ids: string[] | null
           description: string | null
           due_date: string | null
           id: string
+          is_client_facing: boolean | null
           job_id: string
           organization_id: string
+          relative_due_days: number | null
           stage: string | null
           status: string
           task_order: number | null
+          template_task_id: string | null
           title: string
           updated_at: string
         }
@@ -2490,14 +2539,18 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           dependencies?: Json | null
+          dependency_task_ids?: string[] | null
           description?: string | null
           due_date?: string | null
           id?: string
+          is_client_facing?: boolean | null
           job_id: string
           organization_id: string
+          relative_due_days?: number | null
           stage?: string | null
           status?: string
           task_order?: number | null
+          template_task_id?: string | null
           title: string
           updated_at?: string
         }
@@ -2506,14 +2559,18 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           dependencies?: Json | null
+          dependency_task_ids?: string[] | null
           description?: string | null
           due_date?: string | null
           id?: string
+          is_client_facing?: boolean | null
           job_id?: string
           organization_id?: string
+          relative_due_days?: number | null
           stage?: string | null
           status?: string
           task_order?: number | null
+          template_task_id?: string | null
           title?: string
           updated_at?: string
         }
@@ -2652,6 +2709,8 @@ export type Database = {
           created_at: string
           filing_deadline: string | null
           id: string
+          info_received_at: string | null
+          info_requested_at: string | null
           internal_target_date: string | null
           is_recurring: boolean | null
           job_name: string
@@ -2664,10 +2723,12 @@ export type Database = {
           progress: number | null
           recurrence_rule: Json | null
           service_type: string
+          source_template_id: string | null
           status: string
           tags: Json | null
           template_id: string | null
           updated_at: string
+          workpaper_instance_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -2678,6 +2739,8 @@ export type Database = {
           created_at?: string
           filing_deadline?: string | null
           id?: string
+          info_received_at?: string | null
+          info_requested_at?: string | null
           internal_target_date?: string | null
           is_recurring?: boolean | null
           job_name: string
@@ -2690,10 +2753,12 @@ export type Database = {
           progress?: number | null
           recurrence_rule?: Json | null
           service_type: string
+          source_template_id?: string | null
           status?: string
           tags?: Json | null
           template_id?: string | null
           updated_at?: string
+          workpaper_instance_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -2704,6 +2769,8 @@ export type Database = {
           created_at?: string
           filing_deadline?: string | null
           id?: string
+          info_received_at?: string | null
+          info_requested_at?: string | null
           internal_target_date?: string | null
           is_recurring?: boolean | null
           job_name?: string
@@ -2716,10 +2783,12 @@ export type Database = {
           progress?: number | null
           recurrence_rule?: Json | null
           service_type?: string
+          source_template_id?: string | null
           status?: string
           tags?: Json | null
           template_id?: string | null
           updated_at?: string
+          workpaper_instance_id?: string | null
         }
         Relationships: [
           {
@@ -2741,6 +2810,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_source_template_id_fkey"
+            columns: ["source_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_workpaper_instance_id_fkey"
+            columns: ["workpaper_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_instances"
             referencedColumns: ["id"]
           },
         ]
@@ -4599,6 +4682,7 @@ export type Database = {
           billing_model: string
           code: string
           created_at: string
+          default_job_template_id: string | null
           default_price: number
           description: string | null
           id: string
@@ -4606,15 +4690,18 @@ export type Database = {
           is_bookkeeping_related: boolean | null
           name: string
           organization_id: string
+          records_request_template_id: string | null
           trigger_date_offset_days: number | null
           trigger_date_type: string | null
           updated_at: string
+          workpaper_template_id: string | null
         }
         Insert: {
           active?: boolean | null
           billing_model: string
           code: string
           created_at?: string
+          default_job_template_id?: string | null
           default_price: number
           description?: string | null
           id?: string
@@ -4622,15 +4709,18 @@ export type Database = {
           is_bookkeeping_related?: boolean | null
           name: string
           organization_id: string
+          records_request_template_id?: string | null
           trigger_date_offset_days?: number | null
           trigger_date_type?: string | null
           updated_at?: string
+          workpaper_template_id?: string | null
         }
         Update: {
           active?: boolean | null
           billing_model?: string
           code?: string
           created_at?: string
+          default_job_template_id?: string | null
           default_price?: number
           description?: string | null
           id?: string
@@ -4638,11 +4728,20 @@ export type Database = {
           is_bookkeeping_related?: boolean | null
           name?: string
           organization_id?: string
+          records_request_template_id?: string | null
           trigger_date_offset_days?: number | null
           trigger_date_type?: string | null
           updated_at?: string
+          workpaper_template_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "services_catalog_default_job_template_id_fkey"
+            columns: ["default_job_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "services_catalog_information_request_template_id_fkey"
             columns: ["information_request_template_id"]
@@ -4655,6 +4754,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_catalog_records_request_template_id_fkey"
+            columns: ["records_request_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_catalog_workpaper_template_id_fkey"
+            columns: ["workpaper_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
             referencedColumns: ["id"]
           },
         ]
@@ -5457,6 +5570,21 @@ export type Database = {
         }
         Returns: boolean
       }
+      create_job_from_template: {
+        Args: {
+          p_client_id?: string
+          p_company_id?: string
+          p_engagement_id?: string
+          p_filing_deadline?: string
+          p_name?: string
+          p_organization_id: string
+          p_period_end?: string
+          p_period_start?: string
+          p_service_id?: string
+          p_template_id: string
+        }
+        Returns: Json
+      }
       create_organization_with_owner: {
         Args: { org_name: string }
         Returns: string
@@ -5576,6 +5704,10 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      process_questionnaire_submission: {
+        Args: { p_questionnaire_instance_id: string }
+        Returns: Json
+      }
       seed_default_chart_of_accounts: {
         Args: {
           p_client_id?: string
@@ -5592,6 +5724,7 @@ export type Database = {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
       }
+      trigger_records_request: { Args: { p_job_id: string }; Returns: Json }
       user_has_org_role: {
         Args: {
           check_org_id: string
