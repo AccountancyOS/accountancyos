@@ -9,9 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Lock, Unlock, AlertTriangle, Calendar } from "lucide-react";
+import { Lock, Unlock, AlertTriangle, Calendar, History } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 interface PeriodLockTabProps {
   entityType: 'client' | 'company';
@@ -20,10 +29,12 @@ interface PeriodLockTabProps {
 
 export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
   const { organization } = useOrganization();
+  const { user } = useAuth();
   const organizationId = organization?.id;
   const queryClient = useQueryClient();
   const [newLockDate, setNewLockDate] = useState("");
   const [lockReason, setLockReason] = useState("");
+  const [unlockReason, setUnlockReason] = useState("");
 
   const { data: periodLock, isLoading } = useQuery({
     queryKey: ['period-lock', organizationId, entityType, entityId],
@@ -40,6 +51,25 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
       }
 
       const { data, error } = await query.maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!organizationId && !!entityId,
+  });
+
+  // Fetch audit history for period locks
+  const { data: auditHistory } = useQuery({
+    queryKey: ['period-lock-audit', organizationId, entityType, entityId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('*')
+        .eq('organization_id', organizationId!)
+        .eq('entity_type', 'period_lock')
+        .or(`metadata->client_id.eq.${entityId},metadata->company_id.eq.${entityId}`)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
       if (error) throw error;
       return data;
     },
@@ -72,6 +102,8 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
 
   const lockMutation = useMutation({
     mutationFn: async () => {
+      const oldLockDate = periodLock?.lock_date;
+      
       if (periodLock) {
         // Update existing lock
         const { error } = await supabase
@@ -80,6 +112,7 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
             lock_date: newLockDate,
             reason: lockReason || null,
             locked_at: new Date().toISOString(),
+            locked_by: user?.id,
           })
           .eq('id', periodLock.id);
         if (error) throw error;
@@ -93,12 +126,30 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
             company_id: entityType === 'company' ? entityId : null,
             lock_date: newLockDate,
             reason: lockReason || null,
+            locked_by: user?.id,
           });
         if (error) throw error;
       }
+
+      // Log to audit
+      await supabase.from('audit_log').insert({
+        organization_id: organizationId!,
+        entity_type: 'period_lock',
+        entity_id: periodLock?.id || 'new',
+        action: periodLock ? 'lock_updated' : 'lock_created',
+        user_id: user?.id,
+        old_value: oldLockDate || null,
+        new_value: newLockDate,
+        metadata: {
+          client_id: entityType === 'client' ? entityId : null,
+          company_id: entityType === 'company' ? entityId : null,
+          reason: lockReason || null,
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['period-lock'] });
+      queryClient.invalidateQueries({ queryKey: ['period-lock-audit'] });
       toast.success("Period lock updated");
       setLockReason("");
     },
@@ -111,6 +162,24 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
   const unlockMutation = useMutation({
     mutationFn: async () => {
       if (!periodLock) return;
+      
+      // Log to audit before deletion
+      await supabase.from('audit_log').insert({
+        organization_id: organizationId!,
+        entity_type: 'period_lock',
+        entity_id: periodLock.id,
+        action: 'lock_removed',
+        user_id: user?.id,
+        old_value: periodLock.lock_date,
+        new_value: null,
+        metadata: {
+          client_id: entityType === 'client' ? entityId : null,
+          company_id: entityType === 'company' ? entityId : null,
+          reason: unlockReason || null,
+          previous_lock_date: periodLock.lock_date,
+        },
+      });
+
       const { error } = await supabase
         .from('period_locks')
         .delete()
@@ -119,10 +188,32 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['period-lock'] });
+      queryClient.invalidateQueries({ queryKey: ['period-lock-audit'] });
       toast.success("Period lock removed");
       setNewLockDate("");
+      setUnlockReason("");
     },
   });
+
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case 'lock_created': return 'Lock Created';
+      case 'lock_updated': return 'Lock Updated';
+      case 'lock_removed': return 'Lock Removed';
+      case 'period_lock_blocked': return 'Write Blocked';
+      default: return action;
+    }
+  };
+
+  const getActionBadgeVariant = (action: string) => {
+    switch (action) {
+      case 'lock_created': return 'default';
+      case 'lock_updated': return 'secondary';
+      case 'lock_removed': return 'destructive';
+      case 'period_lock_blocked': return 'destructive';
+      default: return 'outline';
+    }
+  };
 
   if (isLoading) {
     return <div className="p-4">Loading...</div>;
@@ -239,6 +330,53 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
         </CardContent>
       </Card>
 
+      {/* Audit History */}
+      {auditHistory && auditHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Lock History
+            </CardTitle>
+            <CardDescription>
+              Audit trail of period lock changes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Lock Date</TableHead>
+                  <TableHead>Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {auditHistory.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="text-sm">
+                      {format(new Date(entry.created_at), 'dd MMM yyyy HH:mm')}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getActionBadgeVariant(entry.action) as any}>
+                        {getActionLabel(entry.action)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {entry.new_value || entry.old_value || '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {(entry.metadata as any)?.reason || '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>What Gets Locked?</CardTitle>
@@ -251,8 +389,8 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
             <li>Any ledger entries within the locked period</li>
           </ul>
           <p className="mt-4 text-sm text-muted-foreground">
-            <strong>Note:</strong> Period locking is enforced at the application level. 
-            Admins can still remove or adjust the lock if necessary.
+            <strong>Note:</strong> Period locking is enforced at the database level. 
+            Attempts to modify locked entries will be blocked and logged.
           </p>
         </CardContent>
       </Card>

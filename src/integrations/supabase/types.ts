@@ -2061,6 +2061,36 @@ export type Database = {
           },
         ]
       }
+      fx_rates: {
+        Row: {
+          base_currency: string
+          created_at: string | null
+          id: string
+          rate: number
+          rate_date: string
+          source: string | null
+          target_currency: string
+        }
+        Insert: {
+          base_currency?: string
+          created_at?: string | null
+          id?: string
+          rate: number
+          rate_date: string
+          source?: string | null
+          target_currency: string
+        }
+        Update: {
+          base_currency?: string
+          created_at?: string | null
+          id?: string
+          rate?: number
+          rate_date?: string
+          source?: string | null
+          target_currency?: string
+        }
+        Relationships: []
+      }
       gmail_auth_states: {
         Row: {
           created_at: string
@@ -2893,6 +2923,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string
+          fx_rate_to_base: number | null
           id: string
           is_posted: boolean | null
           is_reversed: boolean | null
@@ -2901,10 +2932,12 @@ export type Database = {
           organization_id: string
           posted_at: string | null
           reference: string | null
+          reversal_date: string | null
           reverse_date: string | null
           reverses_journal_id: string | null
           total_credit: number | null
           total_debit: number | null
+          transaction_currency: string | null
           updated_at: string | null
         }
         Insert: {
@@ -2913,6 +2946,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description: string
+          fx_rate_to_base?: number | null
           id?: string
           is_posted?: boolean | null
           is_reversed?: boolean | null
@@ -2921,10 +2955,12 @@ export type Database = {
           organization_id: string
           posted_at?: string | null
           reference?: string | null
+          reversal_date?: string | null
           reverse_date?: string | null
           reverses_journal_id?: string | null
           total_credit?: number | null
           total_debit?: number | null
+          transaction_currency?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -2933,6 +2969,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string
+          fx_rate_to_base?: number | null
           id?: string
           is_posted?: boolean | null
           is_reversed?: boolean | null
@@ -2941,10 +2978,12 @@ export type Database = {
           organization_id?: string
           posted_at?: string | null
           reference?: string | null
+          reversal_date?: string | null
           reverse_date?: string | null
           reverses_journal_id?: string | null
           total_credit?: number | null
           total_debit?: number | null
+          transaction_currency?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -3103,6 +3142,7 @@ export type Database = {
       ledger_entries: {
         Row: {
           account_id: string
+          base_currency: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
@@ -3111,18 +3151,23 @@ export type Database = {
           debit: number | null
           description: string | null
           document_id: string | null
+          fx_rate_to_base: number | null
           id: string
           is_locked: boolean | null
           organization_id: string
           source_id: string | null
           source_type: string
+          transaction_credit: number | null
+          transaction_currency: string | null
           transaction_date: string
+          transaction_debit: number | null
           updated_at: string | null
           updated_by: string | null
           vat_code_id: string | null
         }
         Insert: {
           account_id: string
+          base_currency?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -3131,18 +3176,23 @@ export type Database = {
           debit?: number | null
           description?: string | null
           document_id?: string | null
+          fx_rate_to_base?: number | null
           id?: string
           is_locked?: boolean | null
           organization_id: string
           source_id?: string | null
           source_type: string
+          transaction_credit?: number | null
+          transaction_currency?: string | null
           transaction_date: string
+          transaction_debit?: number | null
           updated_at?: string | null
           updated_by?: string | null
           vat_code_id?: string | null
         }
         Update: {
           account_id?: string
+          base_currency?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -3151,12 +3201,16 @@ export type Database = {
           debit?: number | null
           description?: string | null
           document_id?: string | null
+          fx_rate_to_base?: number | null
           id?: string
           is_locked?: boolean | null
           organization_id?: string
           source_id?: string | null
           source_type?: string
+          transaction_credit?: number | null
+          transaction_currency?: string | null
           transaction_date?: string
+          transaction_debit?: number | null
           updated_at?: string | null
           updated_by?: string | null
           vat_code_id?: string | null
@@ -5685,6 +5739,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_period_locked: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+          p_target_date: string
+        }
+        Returns: boolean
+      }
       lifecycle_accept_portal_invitation: {
         Args: { p_token: string }
         Returns: Json
@@ -5706,6 +5769,14 @@ export type Database = {
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
+        Returns: Json
+      }
+      reverse_journal: {
+        Args: {
+          p_journal_id: string
+          p_reason?: string
+          p_reversal_date: string
+        }
         Returns: Json
       }
       seed_default_chart_of_accounts: {

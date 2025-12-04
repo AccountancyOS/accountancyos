@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import type { BookkeepingEntity } from "./EntitySelector";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, RotateCcw } from "lucide-react";
 import { JournalEditor } from "./JournalEditor";
+import { ReverseJournalDialog } from "./ReverseJournalDialog";
 import { formatCurrency, getJournalTypeLabel } from "@/lib/bookkeeping-utils";
 import { format } from "date-fns";
 import {
@@ -17,6 +18,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface JournalsTabProps {
   entity: BookkeepingEntity;
@@ -25,6 +32,8 @@ interface JournalsTabProps {
 export function JournalsTab({ entity }: JournalsTabProps) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editJournal, setEditJournal] = useState<any>(null);
+  const [reverseDialogOpen, setReverseDialogOpen] = useState(false);
+  const [journalToReverse, setJournalToReverse] = useState<any>(null);
   const { organization } = useOrganization();
 
   const { data: journals, isLoading } = useQuery({
@@ -50,6 +59,12 @@ export function JournalsTab({ entity }: JournalsTabProps) {
     },
     enabled: !!organization?.id,
   });
+
+  const handleReverse = (journal: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setJournalToReverse(journal);
+    setReverseDialogOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -89,6 +104,7 @@ export function JournalsTab({ entity }: JournalsTabProps) {
                 <TableHead className="text-right">Total Dr</TableHead>
                 <TableHead className="text-right">Total Cr</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-[80px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -103,7 +119,14 @@ export function JournalsTab({ entity }: JournalsTabProps) {
                 >
                   <TableCell>{format(new Date(journal.journal_date), "dd/MM/yyyy")}</TableCell>
                   <TableCell className="font-mono">{journal.reference || "—"}</TableCell>
-                  <TableCell>{journal.description}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {journal.description}
+                      {journal.reverses_journal_id && (
+                        <Badge variant="outline" className="text-xs">Reversal</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">
                       {getJournalTypeLabel(journal.journal_type)}
@@ -116,10 +139,33 @@ export function JournalsTab({ entity }: JournalsTabProps) {
                     {formatCurrency(journal.total_credit)}
                   </TableCell>
                   <TableCell>
-                    {journal.is_posted ? (
-                      <Badge variant="default">Posted</Badge>
-                    ) : (
-                      <Badge variant="secondary">Draft</Badge>
+                    <div className="flex items-center gap-1">
+                      {journal.is_posted ? (
+                        <Badge variant="default">Posted</Badge>
+                      ) : (
+                        <Badge variant="secondary">Draft</Badge>
+                      )}
+                      {journal.is_reversed && (
+                        <Badge variant="destructive" className="text-xs">Reversed</Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {journal.is_posted && !journal.is_reversed && !journal.reverses_journal_id && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => handleReverse(journal, e)}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Reverse this journal</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                   </TableCell>
                 </TableRow>
@@ -134,6 +180,12 @@ export function JournalsTab({ entity }: JournalsTabProps) {
         onOpenChange={setEditorOpen}
         entity={entity}
         journal={editJournal}
+      />
+
+      <ReverseJournalDialog
+        open={reverseDialogOpen}
+        onOpenChange={setReverseDialogOpen}
+        journal={journalToReverse}
       />
     </div>
   );

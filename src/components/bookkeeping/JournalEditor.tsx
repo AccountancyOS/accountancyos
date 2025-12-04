@@ -23,10 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Plus, X } from "lucide-react";
+import { Plus, X, AlertTriangle, RefreshCw } from "lucide-react";
 import { validateJournalBalance, formatCurrency } from "@/lib/bookkeeping-utils";
 import { Badge } from "@/components/ui/badge";
+import { SUPPORTED_CURRENCIES, getFXRate, calculateBaseCurrencyAmount } from "@/lib/fx-service";
 
 interface JournalEditorProps {
   open: boolean;
@@ -52,10 +54,38 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
   const [description, setDescription] = useState("");
   const [journalType, setJournalType] = useState("MANUAL");
   const [reverseDate, setReverseDate] = useState("");
+  const [transactionCurrency, setTransactionCurrency] = useState("GBP");
+  const [fxRateToBase, setFxRateToBase] = useState(1.0);
+  const [isFetchingRate, setIsFetchingRate] = useState(false);
   const [lines, setLines] = useState<JournalLine[]>([
     { account_id: "", debit: null, credit: null, description: "" },
     { account_id: "", debit: null, credit: null, description: "" },
   ]);
+
+  // Check for period lock
+  const { data: periodLock } = useQuery({
+    queryKey: ["period-lock", organization?.id, entity.type, entity.id],
+    queryFn: async () => {
+      if (!organization?.id) return null;
+      
+      const query = supabase
+        .from("period_locks")
+        .select("lock_date, reason")
+        .eq("organization_id", organization.id);
+      
+      if (entity.type === "client") {
+        query.eq("client_id", entity.id);
+      } else {
+        query.eq("company_id", entity.id);
+      }
+      
+      const { data } = await query.order("lock_date", { ascending: false }).limit(1).single();
+      return data;
+    },
+    enabled: !!organization?.id && open,
+  });
+
+  const isPeriodLocked = periodLock?.lock_date && new Date(journalDate) <= new Date(periodLock.lock_date);
 
   // Fetch accounts for dropdowns
   const { data: accounts } = useQuery({
@@ -91,7 +121,8 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
       setDescription(journal.description);
       setJournalType(journal.journal_type);
       setReverseDate(journal.reverse_date || "");
-      // Load lines would require fetching journal_lines
+      setTransactionCurrency(journal.transaction_currency || "GBP");
+      setFxRateToBase(Number(journal.fx_rate_to_base) || 1.0);
     } else {
       // Reset form
       setJournalDate(new Date().toISOString().split("T")[0]);
@@ -99,6 +130,8 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
       setDescription("");
       setJournalType("MANUAL");
       setReverseDate("");
+      setTransactionCurrency("GBP");
+      setFxRateToBase(1.0);
       setLines([
         { account_id: "", debit: null, credit: null, description: "" },
         { account_id: "", debit: null, credit: null, description: "" },
@@ -106,12 +139,41 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
     }
   }, [journal, open]);
 
+  // Auto-fetch FX rate when currency or date changes
+  const fetchFXRate = async () => {
+    if (transactionCurrency === "GBP") {
+      setFxRateToBase(1.0);
+      return;
+    }
+    
+    setIsFetchingRate(true);
+    try {
+      const result = await getFXRate("GBP", transactionCurrency, journalDate);
+      setFxRateToBase(result.rate);
+    } catch (error) {
+      console.error("Failed to fetch FX rate:", error);
+    } finally {
+      setIsFetchingRate(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open && transactionCurrency !== "GBP") {
+      fetchFXRate();
+    }
+  }, [transactionCurrency, journalDate, open]);
+
   const validation = validateJournalBalance(lines);
 
   const saveMutation = useMutation({
     mutationFn: async (isPosted: boolean) => {
       if (!organization?.id || !user) throw new Error("Missing context");
       if (!validation.isValid) throw new Error("Debits must equal credits");
+      if (isPeriodLocked) throw new Error(`Cannot post to locked period (locked until ${periodLock?.lock_date})`);
+
+      // Calculate base currency totals
+      const baseDebit = calculateBaseCurrencyAmount(validation.totalDebit, fxRateToBase);
+      const baseCredit = calculateBaseCurrencyAmount(validation.totalCredit, fxRateToBase);
 
       const journalPayload: any = {
         organization_id: organization.id,
@@ -120,8 +182,10 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
         description,
         journal_type: journalType,
         reverse_date: journalType === "REVERSING" && reverseDate ? reverseDate : null,
-        total_debit: validation.totalDebit,
-        total_credit: validation.totalCredit,
+        total_debit: baseDebit,
+        total_credit: baseCredit,
+        transaction_currency: transactionCurrency,
+        fx_rate_to_base: fxRateToBase,
         is_posted: isPosted,
         created_by: user.id,
       };
@@ -148,8 +212,8 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
           journal_id: journalData.id,
           line_number: idx + 1,
           account_id: line.account_id,
-          debit: line.debit,
-          credit: line.credit,
+          debit: line.debit ? calculateBaseCurrencyAmount(line.debit, fxRateToBase) : null,
+          credit: line.credit ? calculateBaseCurrencyAmount(line.credit, fxRateToBase) : null,
           description: line.description || null,
         }));
 
@@ -159,7 +223,7 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
 
       if (linesError) throw linesError;
 
-      // If posted, create ledger entries
+      // If posted, create ledger entries with multi-currency support
       if (isPosted) {
         const ledgerPayloads = lines
           .filter((line) => line.account_id && (line.debit || line.credit))
@@ -167,14 +231,21 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
             organization_id: organization.id,
             client_id: entity.type === "client" ? entity.id : null,
             company_id: entity.type === "company" ? entity.id : null,
+            entry_date: journalDate,
             transaction_date: journalDate,
             account_id: line.account_id,
-            debit: line.debit,
-            credit: line.credit,
+            debit: line.debit ? calculateBaseCurrencyAmount(line.debit, fxRateToBase) : null,
+            credit: line.credit ? calculateBaseCurrencyAmount(line.credit, fxRateToBase) : null,
             description: line.description || description,
-            source_type: "JOURNAL",
+            reference: reference || null,
+            journal_id: journalData.id,
+            source_type: 'JOURNAL',
             source_id: journalData.id,
-            created_by: user.id,
+            transaction_currency: transactionCurrency,
+            transaction_debit: line.debit,
+            transaction_credit: line.credit,
+            fx_rate_to_base: fxRateToBase,
+            base_currency: "GBP",
           }));
 
         const { error: ledgerError } = await supabase
@@ -222,7 +293,18 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          {/* Period Lock Warning */}
+          {isPeriodLocked && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                The selected date is in a locked period. Entries before {periodLock?.lock_date} cannot be posted.
+                {periodLock?.reason && <> Reason: {periodLock.reason}</>}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Date</Label>
               <Input
@@ -254,7 +336,52 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Currency</Label>
+              <Select value={transactionCurrency} onValueChange={setTransactionCurrency}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUPPORTED_CURRENCIES.map((curr) => (
+                    <SelectItem key={curr} value={curr}>{curr}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {/* FX Rate (show only for non-GBP) */}
+          {transactionCurrency !== "GBP" && (
+            <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 border">
+              <div className="flex-1">
+                <Label className="text-sm">FX Rate (1 GBP = {transactionCurrency})</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    value={fxRateToBase}
+                    onChange={(e) => setFxRateToBase(parseFloat(e.target.value) || 1)}
+                    className="w-32"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchFXRate}
+                    disabled={isFetchingRate}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-1 ${isFetchingRate ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Base currency amounts will be calculated automatically
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Description</Label>
@@ -278,7 +405,7 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Journal Lines</Label>
+              <Label>Journal Lines {transactionCurrency !== "GBP" && `(in ${transactionCurrency})`}</Label>
               <Button type="button" size="sm" onClick={addLine}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Line
@@ -354,17 +481,22 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="flex gap-4">
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Total Dr:</span>{" "}
+                  <span className="text-muted-foreground">Total Dr ({transactionCurrency}):</span>{" "}
                   <span className="font-mono font-medium">
-                    {formatCurrency(validation.totalDebit)}
+                    {validation.totalDebit.toFixed(2)}
                   </span>
                 </div>
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Total Cr:</span>{" "}
+                  <span className="text-muted-foreground">Total Cr ({transactionCurrency}):</span>{" "}
                   <span className="font-mono font-medium">
-                    {formatCurrency(validation.totalCredit)}
+                    {validation.totalCredit.toFixed(2)}
                   </span>
                 </div>
+                {transactionCurrency !== "GBP" && (
+                  <div className="text-sm text-muted-foreground">
+                    Base (GBP): {formatCurrency(calculateBaseCurrencyAmount(validation.totalDebit, fxRateToBase))}
+                  </div>
+                )}
               </div>
               {validation.isValid ? (
                 <Badge variant="default">Balanced</Badge>
@@ -388,7 +520,7 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
           </Button>
           <Button
             onClick={() => saveMutation.mutate(true)}
-            disabled={saveMutation.isPending || !validation.isValid}
+            disabled={saveMutation.isPending || !validation.isValid || isPeriodLocked}
           >
             Post Journal
           </Button>
