@@ -32,6 +32,7 @@ import Filings from "./pages/Filings";
 import FilingDetail from "./pages/FilingDetail";
 import Workpapers from "./pages/Workpapers";
 import Bookkeeping from "./pages/Bookkeeping";
+import CompanyDetail from "./pages/CompanyDetail";
 import Settings from "./pages/Settings";
 import Emails from "./pages/Emails";
 import GmailCallback from "./pages/GmailCallback";
@@ -137,6 +138,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ClientPortal />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/companies/:companyId"
+              element={
+                <ProtectedRoute>
+                  <CompanyDetail />
                 </ProtectedRoute>
               }
             />
