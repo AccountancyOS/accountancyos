@@ -65,8 +65,8 @@ const PayRunDetail = () => {
           *,
           paye_schemes (
             id,
-            employer_name,
-            paye_reference,
+            name,
+            employer_paye_reference,
             accounts_office_reference,
             company_id,
             client_id
@@ -94,7 +94,7 @@ const PayRunDetail = () => {
             first_name,
             last_name,
             tax_code,
-            ni_category
+            nic_category
           )
         `)
         .eq("pay_run_id", payRunId)
@@ -227,8 +227,8 @@ const PayRunDetail = () => {
       paye: acc.paye + (p.paye_tax || 0),
       employeeNic: acc.employeeNic + (p.employee_nic || 0),
       employerNic: acc.employerNic + (p.employer_nic || 0),
-      studentLoan: acc.studentLoan + (p.student_loan_deduction || 0),
-      pension: acc.pension + (p.pension_employee || 0),
+      studentLoan: acc.studentLoan + (p.student_loan || 0),
+      pension: acc.pension + (p.employee_pension || 0),
       net: acc.net + (p.net_pay || 0),
     }),
     { gross: 0, paye: 0, employeeNic: 0, employerNic: 0, studentLoan: 0, pension: 0, net: 0 }
