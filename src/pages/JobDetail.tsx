@@ -6,7 +6,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
@@ -42,6 +42,47 @@ export default function JobDetail() {
         .single();
 
       if (error) throw error;
+      return data;
+    },
+    enabled: !!jobId,
+  });
+
+  // Fetch source job name if this is auto-generated
+  const { data: sourceJob } = useQuery({
+    queryKey: ["source-job", job?.source_job_id],
+    queryFn: async () => {
+      if (!job?.source_job_id) return null;
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("id, job_name")
+        .eq("id", job.source_job_id)
+        .single();
+
+      if (error) return null;
+      return data;
+    },
+    enabled: !!job?.source_job_id,
+  });
+
+  // Fetch next year job if it exists via filing
+  const { data: nextYearJob } = useQuery({
+    queryKey: ["next-year-job", jobId],
+    queryFn: async () => {
+      const { data: filing } = await supabase
+        .from("filings")
+        .select("next_year_job_id")
+        .eq("job_id", jobId)
+        .maybeSingle();
+
+      if (!filing?.next_year_job_id) return null;
+
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("id, job_name")
+        .eq("id", filing.next_year_job_id)
+        .single();
+
+      if (error) return null;
       return data;
     },
     enabled: !!jobId,
@@ -144,6 +185,50 @@ export default function JobDetail() {
             )}
           </div>
         </div>
+
+        {/* Auto-generated indicator */}
+        {job.is_auto_generated && (
+          <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5">
+            <RefreshCw className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-primary">Auto-generated Job</p>
+              <p className="text-xs text-muted-foreground">
+                Created automatically from previous year's filing
+              </p>
+            </div>
+            {sourceJob && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate(`/jobs/${sourceJob.id}`)}
+              >
+                Source: {sourceJob.job_name}
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Next year job indicator */}
+        {nextYearJob && (
+          <div className="flex items-center gap-3 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+            <ChevronRight className="h-5 w-5 text-emerald-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-emerald-600">Next Year Job Created</p>
+              <p className="text-xs text-muted-foreground">
+                Auto-rollover completed after filing
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => navigate(`/jobs/${nextYearJob.id}`)}
+            >
+              {nextYearJob.job_name}
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        )}
 
         {/* Status Bar */}
         <div className="flex items-center gap-6 p-4 bg-muted/50 rounded-lg">

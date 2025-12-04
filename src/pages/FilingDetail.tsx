@@ -60,13 +60,29 @@ export default function FilingDetail() {
           *,
           clients(first_name, last_name, email),
           companies(company_name, email),
-          jobs(job_name, service_type)
+          jobs(job_name, service_type, is_auto_generated, source_job_id)
         `)
         .eq("id", filingId)
         .single();
 
       if (error) throw error;
       return data;
+    },
+    enabled: !!filingId,
+  });
+
+  // Fetch actual documents from filing_documents table
+  const { data: filingDocuments } = useQuery({
+    queryKey: ["filing-documents", filingId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("filing_documents")
+        .select("*")
+        .eq("filing_id", filingId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!filingId,
   });
@@ -190,11 +206,12 @@ export default function FilingDetail() {
   const entityName = filing.companies?.company_name || 
     (filing.clients ? `${filing.clients.first_name} ${filing.clients.last_name}` : "Unknown");
   
-  const documents = (filing.generated_documents as any[]) || [];
+  const documents = filingDocuments || [];
   const canSendForApproval = ["draft", "in_progress", "rejected"].includes(filing.status);
   const canMarkAsFiled = ["approved", "ready_to_file"].includes(filing.status);
   const canReopen = filing.status === "rejected" && !filing.is_locked;
   const isFiled = filing.status === "filed";
+  const jobData = filing.jobs as any;
 
   return (
     <DashboardLayout>
@@ -304,17 +321,45 @@ export default function FilingDetail() {
                         <div className="flex items-center gap-3">
                           <FileText className="h-5 w-5 text-muted-foreground" />
                           <div>
-                            <p className="font-medium">{doc.name}</p>
+                            <p className="font-medium">{doc.document_type || doc.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              Generated {format(new Date(doc.generated_at), "d MMM yyyy HH:mm")}
+                              Generated {doc.created_at ? format(new Date(doc.created_at), "d MMM yyyy HH:mm") : "Unknown"}
                             </p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm">
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        {doc.file_url ? (
+                          <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="sm">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        ) : (
+                          <Button variant="ghost" size="sm" disabled>
+                            <Download className="h-4 w-4 opacity-50" />
+                          </Button>
+                        )}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Rollover Info */}
+                {jobData?.is_auto_generated && (
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="flex items-center gap-2 text-sm">
+                      <RefreshCw className="h-4 w-4 text-primary" />
+                      <span className="text-muted-foreground">Auto-generated from rollover</span>
+                      {jobData.source_job_id && (
+                        <Button 
+                          variant="link" 
+                          size="sm" 
+                          className="p-0 h-auto"
+                          onClick={() => navigate(`/jobs/${jobData.source_job_id}`)}
+                        >
+                          View source job
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </CardContent>
