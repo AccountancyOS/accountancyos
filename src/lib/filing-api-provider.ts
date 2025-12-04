@@ -240,11 +240,174 @@ export class CompaniesHouseSandboxProvider implements FilingAPIProvider {
   }
 }
 
+// ==================== HMRC RTI SANDBOX PROVIDER ====================
+
+export class HmrcRTISandboxProvider implements FilingAPIProvider {
+  name = "HMRC RTI Sandbox";
+  filingBody = "HMRC_RTI";
+  isProduction = false;
+  
+  async submitFiling(request: FilingSubmissionRequest): Promise<FilingSubmissionResponse> {
+    console.log(`[HMRC RTI Sandbox] Submitting ${request.filingType} for tax year ${request.taxYear}`);
+    
+    const validationErrors = await this.validateFiling(request);
+    if (validationErrors.length > 0) {
+      return {
+        success: false,
+        status: "rejected",
+        message: "Validation failed",
+        validationErrors,
+      };
+    }
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const submissionId = `RTI-SB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const filingReference = `RTI-${request.filingType.replace('RTI_', '')}-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+    
+    return {
+      success: true,
+      submissionId,
+      filingReference,
+      status: "accepted",
+      message: "RTI filing accepted (sandbox mode)",
+      rawResponse: {
+        environment: "sandbox",
+        timestamp: new Date().toISOString(),
+        filingType: request.filingType,
+        taxYear: request.taxYear,
+      },
+    };
+  }
+  
+  async checkStatus(request: FilingStatusCheckRequest): Promise<FilingStatusResponse> {
+    console.log(`[HMRC RTI Sandbox] Checking status for ${request.submissionId}`);
+    
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    return {
+      success: true,
+      status: "accepted",
+      filingReference: `RTI-${Date.now().toString(36).toUpperCase()}`,
+      message: "RTI filing processed successfully (sandbox mode)",
+    };
+  }
+  
+  async validateFiling(request: FilingSubmissionRequest): Promise<FilingValidationError[]> {
+    const errors: FilingValidationError[] = [];
+    
+    if (!request.filingType) {
+      errors.push({ field: "filingType", message: "Filing type is required", code: "MISSING_FIELD" });
+    }
+    
+    // Validate PAYE reference
+    const payeRef = request.filingData?.paye_reference;
+    if (!payeRef || !/^\d{3}\/[A-Z0-9]+$/.test(String(payeRef))) {
+      errors.push({ field: "paye_reference", message: "Valid PAYE reference required (format: XXX/XXXXX)", code: "INVALID_PAYE_REF" });
+    }
+    
+    // Validate Accounts Office Reference
+    const aoRef = request.filingData?.accounts_office_reference;
+    if (!aoRef) {
+      errors.push({ field: "accounts_office_reference", message: "Accounts Office Reference required", code: "MISSING_AO_REF" });
+    }
+    
+    // FPS-specific validation
+    if (request.filingType === "RTI_FPS") {
+      const employees = request.filingData?.employees;
+      if (!employees || !Array.isArray(employees) || employees.length === 0) {
+        errors.push({ field: "employees", message: "At least one employee required for FPS", code: "NO_EMPLOYEES" });
+      }
+    }
+    
+    return errors;
+  }
+}
+
+// ==================== HMRC CIS SANDBOX PROVIDER ====================
+
+export class HmrcCISSandboxProvider implements FilingAPIProvider {
+  name = "HMRC CIS Sandbox";
+  filingBody = "HMRC_CIS";
+  isProduction = false;
+  
+  async submitFiling(request: FilingSubmissionRequest): Promise<FilingSubmissionResponse> {
+    console.log(`[HMRC CIS Sandbox] Submitting ${request.filingType}`);
+    
+    const validationErrors = await this.validateFiling(request);
+    if (validationErrors.length > 0) {
+      return {
+        success: false,
+        status: "rejected",
+        message: "Validation failed",
+        validationErrors,
+      };
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const submissionId = `CIS-SB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const filingReference = `CIS-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+    
+    return {
+      success: true,
+      submissionId,
+      filingReference,
+      status: "accepted",
+      message: "CIS filing accepted (sandbox mode)",
+      rawResponse: {
+        environment: "sandbox",
+        timestamp: new Date().toISOString(),
+        filingType: request.filingType,
+      },
+    };
+  }
+  
+  async checkStatus(request: FilingStatusCheckRequest): Promise<FilingStatusResponse> {
+    console.log(`[HMRC CIS Sandbox] Checking status for ${request.submissionId}`);
+    
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    return {
+      success: true,
+      status: "accepted",
+      filingReference: `CIS-${Date.now().toString(36).toUpperCase()}`,
+      message: "CIS filing processed successfully (sandbox mode)",
+    };
+  }
+  
+  async validateFiling(request: FilingSubmissionRequest): Promise<FilingValidationError[]> {
+    const errors: FilingValidationError[] = [];
+    
+    if (!request.filingType) {
+      errors.push({ field: "filingType", message: "Filing type is required", code: "MISSING_FIELD" });
+    }
+    
+    // Validate contractor UTR
+    const contractorUTR = request.filingData?.contractor_utr;
+    if (!contractorUTR || !/^\d{10}$/.test(String(contractorUTR))) {
+      errors.push({ field: "contractor_utr", message: "Valid 10-digit contractor UTR required", code: "INVALID_UTR" });
+    }
+    
+    // Validate not a nil return without declaration
+    const isNilReturn = request.filingData?.nil_return;
+    const payments = request.filingData?.payments;
+    if (!isNilReturn && (!payments || !Array.isArray(payments) || payments.length === 0)) {
+      errors.push({ field: "payments", message: "Payments required for non-nil return", code: "NO_PAYMENTS" });
+    }
+    
+    return errors;
+  }
+}
+
 // ==================== PROVIDER FACTORY ====================
 
 const providers: Record<string, FilingAPIProvider> = {
   HMRC: new HMRCSandboxProvider(),
   COMPANIES_HOUSE: new CompaniesHouseSandboxProvider(),
+  HMRC_RTI: new HmrcRTISandboxProvider(),
+  HMRC_CIS: new HmrcCISSandboxProvider(),
 };
 
 export function getFilingProvider(filingBody: string): FilingAPIProvider | null {

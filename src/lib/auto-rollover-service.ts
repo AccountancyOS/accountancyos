@@ -368,6 +368,72 @@ async function createNextYearDeadlines(
       });
     }
     
+    // Handle RTI-specific deadlines
+    if (serviceType === "RTI_FPS" || serviceType === "RTI_EPS" || serviceType === "payroll") {
+      // RTI jobs roll over per pay period, not annually
+      // Next FPS deadline is the next payday
+      const nextPayday = new Date(periodEndDate);
+      nextPayday.setMonth(nextPayday.getMonth() + 1); // Assume monthly for now
+      
+      // EPS deadline is 19th of following month
+      const epsDeadline = new Date(nextPayday);
+      epsDeadline.setMonth(epsDeadline.getMonth() + 1);
+      epsDeadline.setDate(19);
+      
+      deadlinesToCreate.push({
+        organization_id: organizationId,
+        client_id: clientId,
+        company_id: companyId,
+        job_id: jobId,
+        name: "RTI FPS Submission",
+        deadline_type: "statutory",
+        filing_body: "HMRC_RTI",
+        due_date: nextPayday.toISOString().split("T")[0],
+        period_end: periodEnd,
+        status: "pending",
+        service_code: "RTI_FPS",
+      });
+      
+      deadlinesToCreate.push({
+        organization_id: organizationId,
+        client_id: clientId,
+        company_id: companyId,
+        job_id: jobId,
+        name: "RTI EPS Submission",
+        deadline_type: "statutory",
+        filing_body: "HMRC_RTI",
+        due_date: epsDeadline.toISOString().split("T")[0],
+        period_end: periodEnd,
+        status: "pending",
+        service_code: "RTI_EPS",
+      });
+    }
+    
+    // Handle CIS-specific deadlines
+    if (serviceType === "CIS_RETURN" || serviceType === "cis") {
+      // CIS returns are monthly, due 19th of following month
+      const nextPeriodEnd = new Date(periodEndDate);
+      nextPeriodEnd.setMonth(nextPeriodEnd.getMonth() + 1);
+      nextPeriodEnd.setDate(5); // CIS month ends on 5th
+      
+      const cisDeadline = new Date(nextPeriodEnd);
+      cisDeadline.setDate(19);
+      
+      deadlinesToCreate.push({
+        organization_id: organizationId,
+        client_id: clientId,
+        company_id: companyId,
+        job_id: jobId,
+        name: "CIS Monthly Return",
+        deadline_type: "statutory",
+        filing_body: "HMRC_CIS",
+        due_date: cisDeadline.toISOString().split("T")[0],
+        period_end: nextPeriodEnd.toISOString().split("T")[0],
+        status: "pending",
+        service_code: "CIS_RETURN",
+      });
+    }
+    
     if (deadlinesToCreate.length > 0) {
       const { error } = await supabase
         .from("deadlines")

@@ -59,3 +59,9 @@ verify_jwt = true
 
 [functions.companies-house-sync]
 verify_jwt = true
+
+[functions.rti-submit]
+verify_jwt = true
+
+[functions.cis-submit]
+verify_jwt = true
