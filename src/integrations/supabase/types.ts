@@ -1929,9 +1929,66 @@ export type Database = {
           },
         ]
       }
+      filing_documents: {
+        Row: {
+          created_at: string
+          document_name: string
+          document_type: string
+          file_size: number | null
+          filing_id: string
+          generated_at: string
+          generated_by: string | null
+          id: string
+          mime_type: string | null
+          public_url: string | null
+          storage_path: string | null
+          version: number | null
+        }
+        Insert: {
+          created_at?: string
+          document_name: string
+          document_type: string
+          file_size?: number | null
+          filing_id: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          mime_type?: string | null
+          public_url?: string | null
+          storage_path?: string | null
+          version?: number | null
+        }
+        Update: {
+          created_at?: string
+          document_name?: string
+          document_type?: string
+          file_size?: number | null
+          filing_id?: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          mime_type?: string | null
+          public_url?: string | null
+          storage_path?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_documents_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filings: {
         Row: {
+          api_response: Json | null
+          api_submission_id: string | null
           approval_requested_at: string | null
+          approval_token: string | null
+          approval_token_expires_at: string | null
           approved_at: string | null
           approved_by: string | null
           client_id: string | null
@@ -1948,6 +2005,7 @@ export type Database = {
           id: string
           is_locked: boolean | null
           job_id: string
+          next_year_job_id: string | null
           organization_id: string
           payment_deadline: string | null
           period_end: string | null
@@ -1955,6 +2013,7 @@ export type Database = {
           rejection_reason: string | null
           second_payment_date: string | null
           status: string
+          submission_payload: Json | null
           tax_due: number | null
           tax_refund: number | null
           tax_year: string | null
@@ -1962,7 +2021,11 @@ export type Database = {
           workpaper_instance_id: string | null
         }
         Insert: {
+          api_response?: Json | null
+          api_submission_id?: string | null
           approval_requested_at?: string | null
+          approval_token?: string | null
+          approval_token_expires_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
           client_id?: string | null
@@ -1979,6 +2042,7 @@ export type Database = {
           id?: string
           is_locked?: boolean | null
           job_id: string
+          next_year_job_id?: string | null
           organization_id: string
           payment_deadline?: string | null
           period_end?: string | null
@@ -1986,6 +2050,7 @@ export type Database = {
           rejection_reason?: string | null
           second_payment_date?: string | null
           status?: string
+          submission_payload?: Json | null
           tax_due?: number | null
           tax_refund?: number | null
           tax_year?: string | null
@@ -1993,7 +2058,11 @@ export type Database = {
           workpaper_instance_id?: string | null
         }
         Update: {
+          api_response?: Json | null
+          api_submission_id?: string | null
           approval_requested_at?: string | null
+          approval_token?: string | null
+          approval_token_expires_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
           client_id?: string | null
@@ -2010,6 +2079,7 @@ export type Database = {
           id?: string
           is_locked?: boolean | null
           job_id?: string
+          next_year_job_id?: string | null
           organization_id?: string
           payment_deadline?: string | null
           period_end?: string | null
@@ -2017,6 +2087,7 @@ export type Database = {
           rejection_reason?: string | null
           second_payment_date?: string | null
           status?: string
+          submission_payload?: Json | null
           tax_due?: number | null
           tax_refund?: number | null
           tax_year?: string | null
@@ -2041,6 +2112,13 @@ export type Database = {
           {
             foreignKeyName: "filings_job_id_fkey"
             columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_next_year_job_id_fkey"
+            columns: ["next_year_job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
             referencedColumns: ["id"]
@@ -2742,6 +2820,7 @@ export type Database = {
           info_received_at: string | null
           info_requested_at: string | null
           internal_target_date: string | null
+          is_auto_generated: boolean | null
           is_recurring: boolean | null
           job_name: string
           last_activity_at: string | null
@@ -2753,6 +2832,7 @@ export type Database = {
           progress: number | null
           recurrence_rule: Json | null
           service_type: string
+          source_job_id: string | null
           source_template_id: string | null
           status: string
           tags: Json | null
@@ -2772,6 +2852,7 @@ export type Database = {
           info_received_at?: string | null
           info_requested_at?: string | null
           internal_target_date?: string | null
+          is_auto_generated?: boolean | null
           is_recurring?: boolean | null
           job_name: string
           last_activity_at?: string | null
@@ -2783,6 +2864,7 @@ export type Database = {
           progress?: number | null
           recurrence_rule?: Json | null
           service_type: string
+          source_job_id?: string | null
           source_template_id?: string | null
           status?: string
           tags?: Json | null
@@ -2802,6 +2884,7 @@ export type Database = {
           info_received_at?: string | null
           info_requested_at?: string | null
           internal_target_date?: string | null
+          is_auto_generated?: boolean | null
           is_recurring?: boolean | null
           job_name?: string
           last_activity_at?: string | null
@@ -2813,6 +2896,7 @@ export type Database = {
           progress?: number | null
           recurrence_rule?: Json | null
           service_type?: string
+          source_job_id?: string | null
           source_template_id?: string | null
           status?: string
           tags?: Json | null
@@ -2840,6 +2924,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_source_job_id_fkey"
+            columns: ["source_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
@@ -4169,6 +4260,7 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           created_at: string
+          created_by_rollover: boolean | null
           id: string
           job_id: string | null
           name: string
@@ -4194,6 +4286,7 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          created_by_rollover?: boolean | null
           id?: string
           job_id?: string | null
           name: string
@@ -4219,6 +4312,7 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          created_by_rollover?: boolean | null
           id?: string
           job_id?: string | null
           name?: string
@@ -4742,6 +4836,7 @@ export type Database = {
           id: string
           information_request_template_id: string | null
           is_bookkeeping_related: boolean | null
+          is_recurring: boolean | null
           name: string
           organization_id: string
           records_request_template_id: string | null
@@ -4761,6 +4856,7 @@ export type Database = {
           id?: string
           information_request_template_id?: string | null
           is_bookkeeping_related?: boolean | null
+          is_recurring?: boolean | null
           name: string
           organization_id: string
           records_request_template_id?: string | null
@@ -4780,6 +4876,7 @@ export type Database = {
           id?: string
           information_request_template_id?: string | null
           is_bookkeeping_related?: boolean | null
+          is_recurring?: boolean | null
           name?: string
           organization_id?: string
           records_request_template_id?: string | null
@@ -5652,6 +5749,10 @@ export type Database = {
           match_source: string
         }[]
       }
+      generate_filing_approval_token: {
+        Args: { p_filing_id: string }
+        Returns: string
+      }
       generate_invite_token: { Args: never; Returns: string }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
@@ -5811,6 +5912,14 @@ export type Database = {
       user_in_organization: {
         Args: { check_org_id: string; check_user_id: string }
         Returns: boolean
+      }
+      validate_filing_approval_token: {
+        Args: { p_token: string }
+        Returns: {
+          error_message: string
+          filing_id: string
+          is_valid: boolean
+        }[]
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
     }
