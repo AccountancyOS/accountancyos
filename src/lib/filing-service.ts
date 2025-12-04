@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logAudit, checkCanFinalise } from "@/lib/audit-service";
 import { executeAutoRollover } from "@/lib/auto-rollover-service";
+import { emitFilingSubmittedEvent, emitFilingAcceptedEvent, emitFilingRejectedEvent } from "@/lib/filing-event-service";
+import { isPayrollFilingType } from "@/lib/filing-api-provider";
 
 export type FilingStatus = 
   | "not_started" 
@@ -687,7 +689,7 @@ export async function generateFilingDocuments(
  */
 export async function submitFilingToAuthority(
   filingId: string
-): Promise<{ success: boolean; submissionId?: string; error?: string }> {
+): Promise<{ success: boolean; submissionId?: string; filingReference?: string; error?: string }> {
   try {
     // Get filing details
     const { data: filing, error: fetchError } = await supabase
@@ -722,6 +724,14 @@ export async function submitFilingToAuthority(
       organizationId: filing.organization_id,
     };
 
+    // Emit submission event
+    await emitFilingSubmittedEvent(
+      filingId,
+      filing.filing_type,
+      filing.organization_id,
+      { provider: filing.filing_body }
+    );
+
     // Submit via provider
     const result = await provider.submitFiling(submissionPayload);
 
@@ -740,6 +750,23 @@ export async function submitFilingToAuthority(
       })
       .eq("id", filingId);
 
+    // Emit accepted/rejected event based on result
+    if (result.success) {
+      await emitFilingAcceptedEvent(
+        filingId,
+        filing.filing_type,
+        filing.organization_id,
+        result.filingReference
+      );
+    } else {
+      await emitFilingRejectedEvent(
+        filingId,
+        filing.filing_type,
+        filing.organization_id,
+        result.message
+      );
+    }
+
     // Log audit
     await logAudit({
       organizationId: filing.organization_id,
@@ -752,9 +779,79 @@ export async function submitFilingToAuthority(
     return { 
       success: result.success, 
       submissionId: result.submissionId,
+      filingReference: result.filingReference,
       error: result.message,
     };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+/**
+ * Submit RTI/CIS filing directly without client approval
+ * Per CTO directive: No client approval for payroll filings
+ * Workflow: draft → ready_to_file → filed (skip awaiting_approval)
+ */
+export async function submitPayrollFiling(
+  filingId: string,
+  userId: string
+): Promise<{ success: boolean; filingReference?: string; nextYearJobId?: string; error?: string }> {
+  try {
+    // Get filing
+    const { data: filing, error: fetchError } = await supabase
+      .from("filings")
+      .select("*")
+      .eq("id", filingId)
+      .single();
+
+    if (fetchError || !filing) {
+      return { success: false, error: "Filing not found" };
+    }
+
+    // Verify it's a payroll filing type
+    if (!isPayrollFilingType(filing.filing_type)) {
+      return { success: false, error: "Not a payroll filing type. Use standard approval workflow." };
+    }
+
+    // Check permission
+    const canFile = await checkCanFinalise(filing.organization_id);
+    if (!canFile) {
+      return { success: false, error: "You don't have permission to submit filings" };
+    }
+
+    // Skip client approval - go directly to ready_to_file
+    await updateFilingStatus(filingId, "ready_to_file");
+
+    // Submit to authority via provider
+    const submissionResult = await submitFilingToAuthority(filingId);
+
+    if (!submissionResult.success) {
+      // Revert to draft on failure
+      await updateFilingStatus(filingId, "draft");
+      return { success: false, error: submissionResult.error };
+    }
+
+    // Mark as filed
+    const filedResult = await markFilingAsFiled(filingId, userId, submissionResult.filingReference);
+
+    if (!filedResult.success) {
+      return { success: false, error: filedResult.error };
+    }
+
+    return { 
+      success: true, 
+      filingReference: submissionResult.filingReference,
+      nextYearJobId: filedResult.nextYearJobId,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Check if a filing type requires client approval
+ * RTI and CIS filings do NOT require client approval per CTO directive
+ */
+export function filingRequiresClientApproval(filingType: string): boolean {
+  return !isPayrollFilingType(filingType);
 }

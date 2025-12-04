@@ -3373,6 +3373,60 @@ export type Database = {
           },
         ]
       }
+      filing_events: {
+        Row: {
+          created_at: string | null
+          emitted_at: string
+          event_type: string
+          filing_id: string
+          filing_type: string
+          id: string
+          metadata: Json | null
+          organization_id: string
+          processed_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          emitted_at?: string
+          event_type: string
+          filing_id: string
+          filing_type: string
+          id?: string
+          metadata?: Json | null
+          organization_id: string
+          processed_at?: string | null
+          status: string
+        }
+        Update: {
+          created_at?: string | null
+          emitted_at?: string
+          event_type?: string
+          filing_id?: string
+          filing_type?: string
+          id?: string
+          metadata?: Json | null
+          organization_id?: string
+          processed_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_events_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filings: {
         Row: {
           api_response: Json | null
