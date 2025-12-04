@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { FileCheck, Send, CheckCircle, FileText, Download, RefreshCw, Clock, XCircle, Loader2 } from "lucide-react";
+import { FileCheck, Send, CheckCircle, FileText, Download, RefreshCw, Clock, XCircle, Loader2, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { sendFilingForApproval, markFilingAsFiled, generateFilingDocuments, getDocumentTypesForFiling } from "@/lib/filing-service";
 
 interface JobFilingTabProps {
@@ -23,13 +23,30 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("filings")
-        .select("*")
+        .select("*, jobs!inner(is_auto_generated, source_job_id)")
         .eq("job_id", jobId)
         .maybeSingle();
 
       if (error) throw error;
       return data;
     },
+  });
+
+  // Fetch actual documents from filing_documents table
+  const { data: filingDocuments } = useQuery({
+    queryKey: ["filing-documents", filing?.id],
+    queryFn: async () => {
+      if (!filing?.id) return [];
+      const { data, error } = await supabase
+        .from("filing_documents")
+        .select("*")
+        .eq("filing_id", filing.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!filing?.id,
   });
 
   const sendForApprovalMutation = useMutation({
@@ -121,10 +138,11 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
     );
   }
 
-  const documents = (filing.generated_documents as any[]) || [];
+  const documents = filingDocuments || [];
   const canSendForApproval = ["draft", "in_progress", "rejected"].includes(filing.status);
   const canFile = filing.status === "approved" || filing.status === "ready_to_file";
   const isFiled = filing.status === "filed";
+  const jobData = (filing as any).jobs;
 
   return (
     <div className="space-y-6">
@@ -202,10 +220,18 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
               <div className="space-y-2">
                 {documents.slice(0, 3).map((doc: any) => (
                   <div key={doc.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate">{doc.name}</span>
-                    <Button variant="ghost" size="sm">
-                      <Download className="h-3 w-3" />
-                    </Button>
+                    <span className="truncate">{doc.document_type || doc.name}</span>
+                    {doc.file_url ? (
+                      <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="sm">
+                          <Download className="h-3 w-3" />
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button variant="ghost" size="sm" disabled>
+                        <Download className="h-3 w-3 opacity-50" />
+                      </Button>
+                    )}
                   </div>
                 ))}
                 {documents.length > 3 && (
@@ -216,6 +242,23 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Rollover Indicator */}
+      {jobData?.is_auto_generated && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-4 flex items-center gap-3">
+            <RefreshCw className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Auto-generated Job</p>
+              {jobData.source_job_id && (
+                <Link to={`/jobs/${jobData.source_job_id}`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                  View source job <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions */}
       <Card>
