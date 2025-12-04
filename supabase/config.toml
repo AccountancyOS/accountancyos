@@ -56,3 +56,6 @@ verify_jwt = true
 
 [functions.stripe-connect-charge]
 verify_jwt = true
+
+[functions.companies-house-sync]
+verify_jwt = true
