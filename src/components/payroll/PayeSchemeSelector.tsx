@@ -20,8 +20,9 @@ import { useOrganization } from "@/lib/organization-context";
 
 interface PayeScheme {
   id: string;
-  paye_reference: string;
+  employer_paye_reference: string;
   accounts_office_reference: string | null;
+  name: string;
 }
 
 interface PayeSchemeSelectorProps {
@@ -47,7 +48,7 @@ export function PayeSchemeSelector({
       
       let query = supabase
         .from("paye_schemes")
-        .select("id, paye_reference, accounts_office_reference")
+        .select("id, employer_paye_reference, accounts_office_reference, name")
         .eq("organization_id", organization.id);
 
       if (entityType === "company") {
@@ -56,7 +57,7 @@ export function PayeSchemeSelector({
         query = query.eq("client_id", entityId);
       }
 
-      const { data, error } = await query.order("paye_reference");
+      const { data, error } = await query.order("employer_paye_reference");
       if (error) throw error;
       return data as PayeScheme[];
     },
@@ -80,7 +81,7 @@ export function PayeSchemeSelector({
           className="w-[220px] justify-between"
         >
           {selectedScheme ? (
-            <span>{selectedScheme.paye_reference}</span>
+            <span>{selectedScheme.employer_paye_reference}</span>
           ) : (
             "All PAYE Schemes"
           )}
@@ -110,7 +111,7 @@ export function PayeSchemeSelector({
             {schemes?.map((scheme) => (
               <CommandItem
                 key={scheme.id}
-                value={scheme.paye_reference}
+                value={scheme.employer_paye_reference}
                 onSelect={() => {
                   onValueChange(scheme.id === value ? null : scheme.id);
                   setOpen(false);
@@ -122,7 +123,7 @@ export function PayeSchemeSelector({
                     value === scheme.id ? "opacity-100" : "opacity-0"
                   )}
                 />
-                {scheme.paye_reference}
+                {scheme.employer_paye_reference}
               </CommandItem>
             ))}
           </CommandGroup>
