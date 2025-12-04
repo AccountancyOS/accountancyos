@@ -199,3 +199,281 @@ export async function updateDeadlineRiskScore(deadlineId: string): Promise<void>
     console.error("[Deadline Engine] Error updating risk score:", err);
   }
 }
+
+// ==================== RTI DEADLINES ====================
+
+/**
+ * Generate RTI deadlines for a PAYE scheme
+ * FPS due on/before payday, EPS due by 19th of following month
+ */
+export async function generateRTIDeadlines(
+  organizationId: string,
+  payeSchemeId: string,
+  companyId: string,
+  payFrequency: string,
+  taxYear: string
+): Promise<DeadlineGenerationResult[]> {
+  const results: DeadlineGenerationResult[] = [];
+  
+  try {
+    // Parse tax year (e.g., "2024/25")
+    const [startYear] = taxYear.split("/").map(Number);
+    const taxYearStart = new Date(startYear, 3, 6); // April 6th
+    const taxYearEnd = new Date(startYear + 1, 3, 5); // April 5th
+    
+    // Generate EPS deadlines for each month (due 19th of following month)
+    for (let month = 0; month < 12; month++) {
+      const periodMonth = new Date(taxYearStart);
+      periodMonth.setMonth(periodMonth.getMonth() + month);
+      
+      const epsDeadline = new Date(periodMonth);
+      epsDeadline.setMonth(epsDeadline.getMonth() + 1);
+      epsDeadline.setDate(19);
+      
+      // Warning 7 days before
+      const warningDate = new Date(epsDeadline);
+      warningDate.setDate(warningDate.getDate() - 7);
+      
+      // Check for existing
+      const { data: existing } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("company_id", companyId)
+        .eq("service_code", "RTI_EPS")
+        .eq("due_date", epsDeadline.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existing) {
+        const taxMonth = ((periodMonth.getMonth() - 3 + 12) % 12) + 1;
+        
+        const { data: deadline, error } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            company_id: companyId,
+            name: `EPS Month ${taxMonth} - ${taxYear}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC_RTI",
+            service_code: "RTI_EPS",
+            due_date: epsDeadline.toISOString().split("T")[0],
+            warning_date: warningDate.toISOString().split("T")[0],
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        if (error) {
+          results.push({ success: false, error: error.message });
+        } else {
+          results.push({ success: true, deadlineId: deadline.id });
+        }
+      } else {
+        results.push({ success: true, skipped: true, reason: "Deadline already exists", deadlineId: existing.id });
+      }
+    }
+    
+    // Generate P60 deadline (31 May following tax year)
+    const p60Deadline = new Date(startYear + 1, 4, 31); // May 31st
+    const { data: existingP60 } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "RTI_P60")
+      .eq("due_date", p60Deadline.toISOString().split("T")[0])
+      .maybeSingle();
+    
+    if (!existingP60) {
+      const { data: p60, error: p60Error } = await supabase
+        .from("deadlines")
+        .insert({
+          organization_id: organizationId,
+          company_id: companyId,
+          name: `P60 Distribution - ${taxYear}`,
+          deadline_type: "statutory",
+          filing_body: "HMRC_RTI",
+          service_code: "RTI_P60",
+          due_date: p60Deadline.toISOString().split("T")[0],
+          warning_date: new Date(startYear + 1, 4, 24).toISOString().split("T")[0],
+          status: "pending",
+          risk_score: 0,
+        })
+        .select()
+        .single();
+      
+      results.push(p60Error ? { success: false, error: p60Error.message } : { success: true, deadlineId: p60.id });
+    }
+    
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating RTI deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
+
+// ==================== CIS DEADLINES ====================
+
+/**
+ * Generate CIS deadlines for a contractor
+ * CIS returns due by 19th of each month
+ */
+export async function generateCISDeadlines(
+  organizationId: string,
+  contractorId: string,
+  companyId: string | null,
+  clientId: string | null,
+  taxYear: string
+): Promise<DeadlineGenerationResult[]> {
+  const results: DeadlineGenerationResult[] = [];
+  
+  try {
+    const [startYear] = taxYear.split("/").map(Number);
+    const taxYearStart = new Date(startYear, 3, 6); // April 6th
+    
+    // Generate monthly CIS return deadlines (due 19th of following month)
+    for (let month = 0; month < 12; month++) {
+      const periodMonth = new Date(taxYearStart);
+      periodMonth.setMonth(periodMonth.getMonth() + month);
+      
+      const cisDeadline = new Date(periodMonth);
+      cisDeadline.setMonth(cisDeadline.getMonth() + 1);
+      cisDeadline.setDate(19);
+      
+      const warningDate = new Date(cisDeadline);
+      warningDate.setDate(warningDate.getDate() - 7);
+      
+      // Period end is 5th of the month
+      const periodEnd = new Date(cisDeadline.getFullYear(), cisDeadline.getMonth(), 5);
+      
+      const taxMonth = ((periodMonth.getMonth() - 3 + 12) % 12) + 1;
+      
+      // Check for existing
+      const { data: existing } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("service_code", "CIS_RETURN")
+        .eq("due_date", cisDeadline.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existing) {
+        const { data: deadline, error } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            company_id: companyId,
+            client_id: clientId,
+            name: `CIS Return Month ${taxMonth} - ${taxYear}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC_CIS",
+            service_code: "CIS_RETURN",
+            due_date: cisDeadline.toISOString().split("T")[0],
+            period_end: periodEnd.toISOString().split("T")[0],
+            warning_date: warningDate.toISOString().split("T")[0],
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        if (error) {
+          results.push({ success: false, error: error.message });
+        } else {
+          results.push({ success: true, deadlineId: deadline.id });
+        }
+      } else {
+        results.push({ success: true, skipped: true, reason: "Deadline already exists", deadlineId: existing.id });
+      }
+    }
+    
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating CIS deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
+
+// ==================== VAT DEADLINES ====================
+
+/**
+ * Generate VAT return deadlines based on company VAT configuration
+ */
+export async function generateVATDeadlines(
+  organizationId: string,
+  companyId: string,
+  vatFrequency: string,
+  vatStaggerGroup: number | null,
+  periodStart: Date
+): Promise<DeadlineGenerationResult[]> {
+  const results: DeadlineGenerationResult[] = [];
+  
+  try {
+    let quarterEndMonths: number[] = [];
+    
+    if (vatFrequency === 'QUARTERLY' && vatStaggerGroup) {
+      // Stagger groups: 1 = Jan/Apr/Jul/Oct, 2 = Feb/May/Aug/Nov, 3 = Mar/Jun/Sep/Dec
+      switch (vatStaggerGroup) {
+        case 1: quarterEndMonths = [0, 3, 6, 9]; break; // Jan, Apr, Jul, Oct
+        case 2: quarterEndMonths = [1, 4, 7, 10]; break; // Feb, May, Aug, Nov
+        case 3: quarterEndMonths = [2, 5, 8, 11]; break; // Mar, Jun, Sep, Dec
+      }
+    } else if (vatFrequency === 'MONTHLY') {
+      quarterEndMonths = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    } else if (vatFrequency === 'ANNUAL') {
+      // Annual based on year end
+      quarterEndMonths = [periodStart.getMonth()];
+    }
+    
+    // Generate for next 4 periods
+    for (let i = 0; i < Math.min(4, quarterEndMonths.length); i++) {
+      const periodEnd = new Date(periodStart.getFullYear(), quarterEndMonths[i] + 1, 0); // Last day of month
+      
+      // VAT deadline: period end + 1 month + 7 days
+      const vatDeadline = new Date(periodEnd);
+      vatDeadline.setMonth(vatDeadline.getMonth() + 1);
+      vatDeadline.setDate(vatDeadline.getDate() + 7);
+      
+      const warningDate = new Date(vatDeadline);
+      warningDate.setDate(warningDate.getDate() - 14);
+      
+      const { data: existing } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("company_id", companyId)
+        .eq("service_code", "VAT_RETURN")
+        .eq("period_end", periodEnd.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existing) {
+        const { data: deadline, error } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            company_id: companyId,
+            name: `VAT Return Q${i + 1}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC",
+            service_code: "VAT_RETURN",
+            due_date: vatDeadline.toISOString().split("T")[0],
+            payment_date: vatDeadline.toISOString().split("T")[0],
+            period_end: periodEnd.toISOString().split("T")[0],
+            warning_date: warningDate.toISOString().split("T")[0],
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        results.push(error ? { success: false, error: error.message } : { success: true, deadlineId: deadline.id });
+      }
+    }
+    
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating VAT deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
