@@ -22,8 +22,10 @@ export interface RolloverConfig {
   clientId?: string;
   companyId?: string;
   serviceType: string;
+  periodStart?: string;
   periodEnd: string;
   taxYear?: string;
+  assignedTo?: string;
 }
 
 /**
@@ -97,7 +99,7 @@ export async function executeAutoRollover(config: RolloverConfig): Promise<Rollo
         priority: originalJob.priority || "medium",
         period_start: nextPeriodStart.toISOString().split("T")[0],
         period_end: nextPeriodEnd.toISOString().split("T")[0],
-        assigned_to: originalJob.assigned_to,
+        assigned_to: config.assignedTo || originalJob.assigned_to,
         template_id: originalJob.template_id,
         tags: originalJob.tags,
         is_auto_generated: true,

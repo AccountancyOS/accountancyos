@@ -1,9 +1,28 @@
 /**
  * TB → Workpaper Pipeline
  * Creates workpapers from Trial Balance snapshots with UK category mappings
+ * Integrates tax calculation engine for SA, CT, and VAT
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { applyTaxCalculationsToWorkpaper } from "@/lib/tax-calculation-engine";
+
+/**
+ * Derive tax year from period end date
+ */
+function deriveTaxYear(periodEnd: string): string {
+  const date = new Date(periodEnd);
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-indexed
+  const day = date.getDate();
+  
+  // UK tax year runs 6 April to 5 April
+  // If period end is after 5 April, tax year is that year/next
+  if (month > 3 || (month === 3 && day >= 6)) {
+    return `${year}/${String(year + 1).slice(-2)}`;
+  }
+  return `${year - 1}/${String(year).slice(-2)}`;
+}
 
 // Standard UK workpaper categories for different filing types
 export const UK_WORKPAPER_CATEGORIES = {
@@ -228,9 +247,15 @@ export function mapTBToWorkpaperLines(
 }
 
 /**
- * Calculate computed fields in workpaper
+ * Calculate computed fields in workpaper including tax calculations
+ * Integrates with tax-calculation-engine for SA, CT, and VAT
  */
-export function calculateWorkpaperFields(lines: WorkpaperLine[]): WorkpaperLine[] {
+export function calculateWorkpaperFields(
+  lines: WorkpaperLine[],
+  workpaperType?: string,
+  taxYear?: string,
+  periodEnd?: string
+): WorkpaperLine[] {
   const linesByCategory = new Map<string, WorkpaperLine>();
   lines.forEach(l => {
     if (l.isKeyField) linesByCategory.set(l.category, l);
@@ -273,6 +298,51 @@ export function calculateWorkpaperFields(lines: WorkpaperLine[]): WorkpaperLine[
       line.amount = seTurnover - Math.abs(seExpenses);
     }
   });
+
+  // If workpaper type provided, apply full tax calculations
+  if (workpaperType) {
+    // Convert lines to field_values for tax engine
+    const fieldValues: Record<string, any> = {};
+    lines.forEach(line => {
+      fieldValues[line.category] = {
+        label: line.label,
+        amount: line.amount,
+        source: line.source,
+        sourceReference: line.sourceReference,
+        isKeyField: line.isKeyField,
+        displayOrder: line.displayOrder,
+      };
+    });
+
+    // Apply tax calculations
+    const calculatedFieldValues = applyTaxCalculationsToWorkpaper(
+      fieldValues,
+      workpaperType,
+      taxYear,
+      periodEnd
+    );
+
+    // Update lines with tax calculation results
+    for (const [key, value] of Object.entries(calculatedFieldValues)) {
+      if (typeof value === 'object' && value !== null && 'amount' in value) {
+        const existingLine = lines.find(l => l.category === key);
+        if (existingLine) {
+          existingLine.amount = value.amount;
+        } else {
+          // Add new calculated tax fields
+          lines.push({
+            category: key,
+            label: value.label || key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+            source: 'calculation',
+            sourceReference: 'tax_engine',
+            amount: value.amount,
+            isKeyField: true,
+            displayOrder: lines.length,
+          });
+        }
+      }
+    }
+  }
 
   return lines;
 }
@@ -354,8 +424,11 @@ export async function createWorkpaperFromSnapshot(
     // Map to workpaper lines
     let lines = mapTBToWorkpaperLines(balances, workpaperType);
     
-    // Calculate computed fields
-    lines = calculateWorkpaperFields(lines);
+    // Calculate computed fields including tax calculations
+    // Derive tax year from period_end
+    const periodEnd = snapshot.period_end as string;
+    const taxYear = deriveTaxYear(periodEnd);
+    lines = calculateWorkpaperFields(lines, workpaperType, taxYear, periodEnd);
 
     // Convert lines to field_values format
     const fieldValues: Record<string, any> = {};
@@ -469,7 +542,9 @@ async function updateWorkpaperFromSnapshot(
 
     // Map to workpaper lines
     let lines = mapTBToWorkpaperLines(balances, workpaperType);
-    lines = calculateWorkpaperFields(lines);
+    const periodEnd = snapshot.period_end as string;
+    const taxYear = deriveTaxYear(periodEnd);
+    lines = calculateWorkpaperFields(lines, workpaperType, taxYear, periodEnd);
 
     // Convert to field_values
     const fieldValues: Record<string, any> = {};
