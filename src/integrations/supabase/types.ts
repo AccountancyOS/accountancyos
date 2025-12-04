@@ -894,9 +894,14 @@ export type Database = {
           aml_verified_at: string | null
           aml_verified_by: string | null
           archived_at: string | null
+          ch_company_profile: Json | null
+          ch_last_synced_at: string | null
           city: string | null
           company_name: string
           company_number: string | null
+          company_type: string | null
+          confirmation_statement_made_up_to: string | null
+          confirmation_statement_next_due: string | null
           country: string | null
           created_at: string
           disengaged_at: string | null
@@ -907,6 +912,8 @@ export type Database = {
           organization_id: string
           phone: string | null
           postcode: string | null
+          registered_office_address: Json | null
+          sic_codes: Json | null
           status: string
           tags: Json | null
           updated_at: string
@@ -925,9 +932,14 @@ export type Database = {
           aml_verified_at?: string | null
           aml_verified_by?: string | null
           archived_at?: string | null
+          ch_company_profile?: Json | null
+          ch_last_synced_at?: string | null
           city?: string | null
           company_name: string
           company_number?: string | null
+          company_type?: string | null
+          confirmation_statement_made_up_to?: string | null
+          confirmation_statement_next_due?: string | null
           country?: string | null
           created_at?: string
           disengaged_at?: string | null
@@ -938,6 +950,8 @@ export type Database = {
           organization_id: string
           phone?: string | null
           postcode?: string | null
+          registered_office_address?: Json | null
+          sic_codes?: Json | null
           status?: string
           tags?: Json | null
           updated_at?: string
@@ -956,9 +970,14 @@ export type Database = {
           aml_verified_at?: string | null
           aml_verified_by?: string | null
           archived_at?: string | null
+          ch_company_profile?: Json | null
+          ch_last_synced_at?: string | null
           city?: string | null
           company_name?: string
           company_number?: string | null
+          company_type?: string | null
+          confirmation_statement_made_up_to?: string | null
+          confirmation_statement_next_due?: string | null
           country?: string | null
           created_at?: string
           disengaged_at?: string | null
@@ -969,6 +988,8 @@ export type Database = {
           organization_id?: string
           phone?: string | null
           postcode?: string | null
+          registered_office_address?: Json | null
+          sic_codes?: Json | null
           status?: string
           tags?: Json | null
           updated_at?: string
@@ -985,6 +1006,620 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_officers: {
+        Row: {
+          appointed_at: string
+          ch_appointment_id: string | null
+          ch_links: Json | null
+          company_id: string
+          created_at: string
+          id: string
+          person_id: string
+          resigned_at: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          appointed_at: string
+          ch_appointment_id?: string | null
+          ch_links?: Json | null
+          company_id: string
+          created_at?: string
+          id?: string
+          person_id: string
+          resigned_at?: string | null
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          appointed_at?: string
+          ch_appointment_id?: string | null
+          ch_links?: Json | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          person_id?: string
+          resigned_at?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_officers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_officers_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_persons: {
+        Row: {
+          ch_officer_id: string | null
+          country_of_residence: string | null
+          created_at: string
+          date_of_birth: string | null
+          email: string | null
+          first_name: string
+          former_names: Json | null
+          id: string
+          last_name: string
+          linked_client_id: string | null
+          middle_names: string | null
+          nationality: string | null
+          occupation: string | null
+          organization_id: string
+          phone: string | null
+          residential_address_line_1: string | null
+          residential_address_line_2: string | null
+          residential_city: string | null
+          residential_country: string | null
+          residential_county: string | null
+          residential_postcode: string | null
+          service_address_line_1: string | null
+          service_address_line_2: string | null
+          service_city: string | null
+          service_country: string | null
+          service_county: string | null
+          service_postcode: string | null
+          title: string | null
+          updated_at: string
+          use_registered_office_as_service: boolean | null
+        }
+        Insert: {
+          ch_officer_id?: string | null
+          country_of_residence?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          first_name: string
+          former_names?: Json | null
+          id?: string
+          last_name: string
+          linked_client_id?: string | null
+          middle_names?: string | null
+          nationality?: string | null
+          occupation?: string | null
+          organization_id: string
+          phone?: string | null
+          residential_address_line_1?: string | null
+          residential_address_line_2?: string | null
+          residential_city?: string | null
+          residential_country?: string | null
+          residential_county?: string | null
+          residential_postcode?: string | null
+          service_address_line_1?: string | null
+          service_address_line_2?: string | null
+          service_city?: string | null
+          service_country?: string | null
+          service_county?: string | null
+          service_postcode?: string | null
+          title?: string | null
+          updated_at?: string
+          use_registered_office_as_service?: boolean | null
+        }
+        Update: {
+          ch_officer_id?: string | null
+          country_of_residence?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          first_name?: string
+          former_names?: Json | null
+          id?: string
+          last_name?: string
+          linked_client_id?: string | null
+          middle_names?: string | null
+          nationality?: string | null
+          occupation?: string | null
+          organization_id?: string
+          phone?: string | null
+          residential_address_line_1?: string | null
+          residential_address_line_2?: string | null
+          residential_city?: string | null
+          residential_country?: string | null
+          residential_county?: string | null
+          residential_postcode?: string | null
+          service_address_line_1?: string | null
+          service_address_line_2?: string | null
+          service_city?: string | null
+          service_country?: string | null
+          service_county?: string | null
+          service_postcode?: string | null
+          title?: string | null
+          updated_at?: string
+          use_registered_office_as_service?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_persons_linked_client_id_fkey"
+            columns: ["linked_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_persons_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_pscs: {
+        Row: {
+          ceased_at: string | null
+          ch_links: Json | null
+          ch_psc_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          nature_of_control: string[]
+          notified_at: string
+          person_id: string
+          updated_at: string
+        }
+        Insert: {
+          ceased_at?: string | null
+          ch_links?: Json | null
+          ch_psc_id?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          nature_of_control?: string[]
+          notified_at: string
+          person_id: string
+          updated_at?: string
+        }
+        Update: {
+          ceased_at?: string | null
+          ch_links?: Json | null
+          ch_psc_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          nature_of_control?: string[]
+          notified_at?: string
+          person_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_pscs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_pscs_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_register_events: {
+        Row: {
+          allotment_id: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          details: Json
+          event_date: string
+          event_type: string
+          filing_id: string | null
+          id: string
+          officer_id: string | null
+          person_id: string | null
+          psc_id: string | null
+          shareholder_id: string | null
+          source: string
+          transfer_id: string | null
+          workpaper_instance_id: string | null
+        }
+        Insert: {
+          allotment_id?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json
+          event_date: string
+          event_type: string
+          filing_id?: string | null
+          id?: string
+          officer_id?: string | null
+          person_id?: string | null
+          psc_id?: string | null
+          shareholder_id?: string | null
+          source?: string
+          transfer_id?: string | null
+          workpaper_instance_id?: string | null
+        }
+        Update: {
+          allotment_id?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json
+          event_date?: string
+          event_type?: string
+          filing_id?: string | null
+          id?: string
+          officer_id?: string | null
+          person_id?: string | null
+          psc_id?: string | null
+          shareholder_id?: string | null
+          source?: string
+          transfer_id?: string | null
+          workpaper_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_register_events_allotment_id_fkey"
+            columns: ["allotment_id"]
+            isOneToOne: false
+            referencedRelation: "company_share_allotments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_officer_id_fkey"
+            columns: ["officer_id"]
+            isOneToOne: false
+            referencedRelation: "company_officers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_psc_id_fkey"
+            columns: ["psc_id"]
+            isOneToOne: false
+            referencedRelation: "company_pscs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_shareholder_id_fkey"
+            columns: ["shareholder_id"]
+            isOneToOne: false
+            referencedRelation: "company_shareholders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "company_share_transfers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_register_events_workpaper_instance_id_fkey"
+            columns: ["workpaper_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_share_allotments: {
+        Row: {
+          allotment_date: string
+          company_id: string
+          created_at: string
+          filing_id: string | null
+          id: string
+          price_per_share: number | null
+          share_class_id: string
+          shareholder_id: string
+          shares_allotted: number
+          total_consideration: number | null
+          workpaper_instance_id: string | null
+        }
+        Insert: {
+          allotment_date: string
+          company_id: string
+          created_at?: string
+          filing_id?: string | null
+          id?: string
+          price_per_share?: number | null
+          share_class_id: string
+          shareholder_id: string
+          shares_allotted: number
+          total_consideration?: number | null
+          workpaper_instance_id?: string | null
+        }
+        Update: {
+          allotment_date?: string
+          company_id?: string
+          created_at?: string
+          filing_id?: string | null
+          id?: string
+          price_per_share?: number | null
+          share_class_id?: string
+          shareholder_id?: string
+          shares_allotted?: number
+          total_consideration?: number | null
+          workpaper_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_share_allotments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_allotments_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_allotments_share_class_id_fkey"
+            columns: ["share_class_id"]
+            isOneToOne: false
+            referencedRelation: "company_share_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_allotments_shareholder_id_fkey"
+            columns: ["shareholder_id"]
+            isOneToOne: false
+            referencedRelation: "company_shareholders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_allotments_workpaper_instance_id_fkey"
+            columns: ["workpaper_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_share_classes: {
+        Row: {
+          capital_rights: boolean | null
+          class_name: string
+          company_id: string
+          created_at: string
+          currency: string
+          dividend_rights: boolean | null
+          id: string
+          nominal_value: number
+          rights_description: string | null
+          total_shares_issued: number
+          updated_at: string
+          voting_rights: boolean | null
+        }
+        Insert: {
+          capital_rights?: boolean | null
+          class_name: string
+          company_id: string
+          created_at?: string
+          currency?: string
+          dividend_rights?: boolean | null
+          id?: string
+          nominal_value: number
+          rights_description?: string | null
+          total_shares_issued?: number
+          updated_at?: string
+          voting_rights?: boolean | null
+        }
+        Update: {
+          capital_rights?: boolean | null
+          class_name?: string
+          company_id?: string
+          created_at?: string
+          currency?: string
+          dividend_rights?: boolean | null
+          id?: string
+          nominal_value?: number
+          rights_description?: string | null
+          total_shares_issued?: number
+          updated_at?: string
+          voting_rights?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_share_classes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_share_transfers: {
+        Row: {
+          company_id: string
+          consideration: number | null
+          created_at: string
+          filing_id: string | null
+          from_shareholder_id: string
+          id: string
+          share_class_id: string
+          shares_transferred: number
+          to_shareholder_id: string
+          transfer_date: string
+          workpaper_instance_id: string | null
+        }
+        Insert: {
+          company_id: string
+          consideration?: number | null
+          created_at?: string
+          filing_id?: string | null
+          from_shareholder_id: string
+          id?: string
+          share_class_id: string
+          shares_transferred: number
+          to_shareholder_id: string
+          transfer_date: string
+          workpaper_instance_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          consideration?: number | null
+          created_at?: string
+          filing_id?: string | null
+          from_shareholder_id?: string
+          id?: string
+          share_class_id?: string
+          shares_transferred?: number
+          to_shareholder_id?: string
+          transfer_date?: string
+          workpaper_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_share_transfers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_transfers_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_transfers_from_shareholder_id_fkey"
+            columns: ["from_shareholder_id"]
+            isOneToOne: false
+            referencedRelation: "company_shareholders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_transfers_share_class_id_fkey"
+            columns: ["share_class_id"]
+            isOneToOne: false
+            referencedRelation: "company_share_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_transfers_to_shareholder_id_fkey"
+            columns: ["to_shareholder_id"]
+            isOneToOne: false
+            referencedRelation: "company_shareholders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_share_transfers_workpaper_instance_id_fkey"
+            columns: ["workpaper_instance_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_shareholders: {
+        Row: {
+          as_at_date: string
+          company_id: string
+          created_at: string
+          id: string
+          person_id: string
+          share_class_id: string
+          shares_held: number
+          updated_at: string
+        }
+        Insert: {
+          as_at_date?: string
+          company_id: string
+          created_at?: string
+          id?: string
+          person_id: string
+          share_class_id: string
+          shares_held?: number
+          updated_at?: string
+        }
+        Update: {
+          as_at_date?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          person_id?: string
+          share_class_id?: string
+          shares_held?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_shareholders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_shareholders_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_shareholders_share_class_id_fkey"
+            columns: ["share_class_id"]
+            isOneToOne: false
+            referencedRelation: "company_share_classes"
             referencedColumns: ["id"]
           },
         ]
