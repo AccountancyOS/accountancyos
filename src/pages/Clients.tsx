@@ -175,7 +175,11 @@ const Clients = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredCompanies.map((company) => (
-                    <TableRow key={company.id}>
+                    <TableRow 
+                      key={company.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/companies/${company.id}`)}
+                    >
                       <TableCell className="font-medium">
                         {company.company_name}
                       </TableCell>
