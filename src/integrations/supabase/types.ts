@@ -686,7 +686,9 @@ export type Database = {
           notes: string | null
           payment_date: string
           payment_method: string | null
+          payment_type: string | null
           reference: string | null
+          unallocated_amount: number | null
         }
         Insert: {
           amount: number
@@ -699,7 +701,9 @@ export type Database = {
           notes?: string | null
           payment_date: string
           payment_method?: string | null
+          payment_type?: string | null
           reference?: string | null
+          unallocated_amount?: number | null
         }
         Update: {
           amount?: number
@@ -712,7 +716,9 @@ export type Database = {
           notes?: string | null
           payment_date?: string
           payment_method?: string | null
+          payment_type?: string | null
           reference?: string | null
+          unallocated_amount?: number | null
         }
         Relationships: [
           {
@@ -757,6 +763,7 @@ export type Database = {
           posted_by: string | null
           receipt_path: string | null
           reference: string | null
+          remaining_balance: number | null
           status: string | null
           supplier_id: string | null
           total_gross: number | null
@@ -782,6 +789,7 @@ export type Database = {
           posted_by?: string | null
           receipt_path?: string | null
           reference?: string | null
+          remaining_balance?: number | null
           status?: string | null
           supplier_id?: string | null
           total_gross?: number | null
@@ -807,6 +815,7 @@ export type Database = {
           posted_by?: string | null
           receipt_path?: string | null
           reference?: string | null
+          remaining_balance?: number | null
           status?: string | null
           supplier_id?: string | null
           total_gross?: number | null
@@ -2497,6 +2506,316 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_note_allocations: {
+        Row: {
+          allocation_date: string
+          amount: number
+          bill_id: string | null
+          created_at: string
+          created_by: string | null
+          credit_note_id: string
+          fx_rate: number | null
+          id: string
+          invoice_id: string | null
+          journal_id: string | null
+          notes: string | null
+          organization_id: string
+        }
+        Insert: {
+          allocation_date: string
+          amount: number
+          bill_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_note_id: string
+          fx_rate?: number | null
+          id?: string
+          invoice_id?: string | null
+          journal_id?: string | null
+          notes?: string | null
+          organization_id: string
+        }
+        Update: {
+          allocation_date?: string
+          amount?: number
+          bill_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_note_id?: string
+          fx_rate?: number | null
+          id?: string
+          invoice_id?: string | null
+          journal_id?: string | null
+          notes?: string | null
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_note_allocations_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_note_allocations_credit_note_id_fkey"
+            columns: ["credit_note_id"]
+            isOneToOne: false
+            referencedRelation: "credit_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_note_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_note_allocations_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_note_allocations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_note_lines: {
+        Row: {
+          account_id: string | null
+          created_at: string | null
+          credit_note_id: string
+          description: string | null
+          discount_rate: number | null
+          gross_amount: number | null
+          id: string
+          line_number: number
+          net_amount: number
+          quantity: number | null
+          unit_price: number | null
+          vat_amount: number | null
+          vat_code_id: string | null
+          vat_rate: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string | null
+          credit_note_id: string
+          description?: string | null
+          discount_rate?: number | null
+          gross_amount?: number | null
+          id?: string
+          line_number?: number
+          net_amount?: number
+          quantity?: number | null
+          unit_price?: number | null
+          vat_amount?: number | null
+          vat_code_id?: string | null
+          vat_rate?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string | null
+          credit_note_id?: string
+          description?: string | null
+          discount_rate?: number | null
+          gross_amount?: number | null
+          id?: string
+          line_number?: number
+          net_amount?: number
+          quantity?: number | null
+          unit_price?: number | null
+          vat_amount?: number | null
+          vat_code_id?: string | null
+          vat_rate?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_note_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_note_lines_credit_note_id_fkey"
+            columns: ["credit_note_id"]
+            isOneToOne: false
+            referencedRelation: "credit_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_note_lines_vat_code_id_fkey"
+            columns: ["vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_notes: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          credit_note_number: string | null
+          credit_note_type: string
+          currency: string
+          customer_id: string | null
+          external_reference: string | null
+          fx_rate: number | null
+          id: string
+          is_posted: boolean | null
+          issue_date: string
+          journal_id: string | null
+          notes: string | null
+          organization_id: string
+          original_bill_id: string | null
+          original_invoice_id: string | null
+          pdf_url: string | null
+          posted_at: string | null
+          posted_by: string | null
+          reference: string | null
+          remaining_allocation: number
+          status: string
+          subtotal: number
+          supplier_id: string | null
+          total: number
+          updated_at: string
+          updated_by: string | null
+          vat_total: number
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_note_number?: string | null
+          credit_note_type: string
+          currency?: string
+          customer_id?: string | null
+          external_reference?: string | null
+          fx_rate?: number | null
+          id?: string
+          is_posted?: boolean | null
+          issue_date: string
+          journal_id?: string | null
+          notes?: string | null
+          organization_id: string
+          original_bill_id?: string | null
+          original_invoice_id?: string | null
+          pdf_url?: string | null
+          posted_at?: string | null
+          posted_by?: string | null
+          reference?: string | null
+          remaining_allocation?: number
+          status?: string
+          subtotal?: number
+          supplier_id?: string | null
+          total?: number
+          updated_at?: string
+          updated_by?: string | null
+          vat_total?: number
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_note_number?: string | null
+          credit_note_type?: string
+          currency?: string
+          customer_id?: string | null
+          external_reference?: string | null
+          fx_rate?: number | null
+          id?: string
+          is_posted?: boolean | null
+          issue_date?: string
+          journal_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          original_bill_id?: string | null
+          original_invoice_id?: string | null
+          pdf_url?: string | null
+          posted_at?: string | null
+          posted_by?: string | null
+          reference?: string | null
+          remaining_allocation?: number
+          status?: string
+          subtotal?: number
+          supplier_id?: string | null
+          total?: number
+          updated_at?: string
+          updated_by?: string | null
+          vat_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_original_bill_id_fkey"
+            columns: ["original_bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_original_invoice_id_fkey"
+            columns: ["original_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_notes_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -4216,7 +4535,9 @@ export type Database = {
           ledger_entry_id: string | null
           payment_date: string
           payment_method: string | null
+          payment_type: string | null
           reference: string | null
+          unallocated_amount: number | null
         }
         Insert: {
           amount: number
@@ -4228,7 +4549,9 @@ export type Database = {
           ledger_entry_id?: string | null
           payment_date: string
           payment_method?: string | null
+          payment_type?: string | null
           reference?: string | null
+          unallocated_amount?: number | null
         }
         Update: {
           amount?: number
@@ -4240,7 +4563,9 @@ export type Database = {
           ledger_entry_id?: string | null
           payment_date?: string
           payment_method?: string | null
+          payment_type?: string | null
           reference?: string | null
+          unallocated_amount?: number | null
         }
         Relationships: [
           {
@@ -4291,9 +4616,11 @@ export type Database = {
           posted_at: string | null
           posted_by: string | null
           reference: string | null
+          remaining_balance: number | null
           send_status: string | null
           sent_at: string | null
           status: string
+          supplier_id: string | null
           total_gross: number
           total_net: number
           total_vat: number
@@ -4323,9 +4650,11 @@ export type Database = {
           posted_at?: string | null
           posted_by?: string | null
           reference?: string | null
+          remaining_balance?: number | null
           send_status?: string | null
           sent_at?: string | null
           status?: string
+          supplier_id?: string | null
           total_gross?: number
           total_net?: number
           total_vat?: number
@@ -4355,9 +4684,11 @@ export type Database = {
           posted_at?: string | null
           posted_by?: string | null
           reference?: string | null
+          remaining_balance?: number | null
           send_status?: string | null
           sent_at?: string | null
           status?: string
+          supplier_id?: string | null
           total_gross?: number
           total_net?: number
           total_vat?: number
@@ -4397,6 +4728,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
