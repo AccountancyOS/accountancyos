@@ -8,7 +8,8 @@ interface ServiceResult {
 }
 
 /**
- * Submit CIS return to HMRC
+ * Submit CIS return to HMRC via filing spine
+ * Per CTO: All filings go through filing spine → provider → edge function
  */
 export async function submitCISReturn(
   cisReturnId: string,
@@ -24,7 +25,10 @@ export async function submitCISReturn(
       };
     }
 
-    // Fetch CIS return
+    // Import filing service functions
+    const { createCISFilingFromReturn, submitPayrollFiling } = await import("@/lib/filing-service");
+
+    // Fetch CIS return to validate
     const { data: cisReturn, error: fetchError } = await supabase
       .from("cis_returns")
       .select(`
@@ -49,40 +53,28 @@ export async function submitCISReturn(
     }
 
     const organizationId = cisReturn.cis_contractors?.organization_id || cisReturn.organization_id;
-    const entityId = cisReturn.cis_contractors?.company_id || cisReturn.cis_contractors?.client_id;
-    const entityType = cisReturn.cis_contractors?.company_id ? 'company' : 'client';
 
-    // Create filing record
-    const { data: filing, error: filingError } = await supabase
-      .from("filings")
-      .insert({
-        organization_id: organizationId,
-        company_id: entityType === 'company' ? entityId : null,
-        client_id: entityType === 'client' ? entityId : null,
-        filing_type: "CIS_RETURN",
-        filing_body: "HMRC",
-        tax_year: cisReturn.tax_year,
-        period_start: cisReturn.period_start,
-        period_end: cisReturn.period_end,
-        status: "filed",
-        filed_at: new Date().toISOString(),
-        filing_data: {
-          cis_return_id: cisReturnId,
-          contractor_utr: cisReturn.cis_contractors?.contractor_utr,
-          accounts_office_ref: cisReturn.cis_contractors?.accounts_office_reference,
-          tax_month: cisReturn.tax_month,
-          total_gross: cisReturn.total_gross_amount,
-          total_deductions: cisReturn.total_deductions,
-          total_materials: cisReturn.total_materials_amount,
-          payments_count: cisReturn.total_payments_count,
-          employment_declaration: employmentDeclaration,
-          verification_declaration: verificationDeclaration,
-        },
-      } as any)
-      .select("id")
-      .single();
+    // Update declarations on CIS return before creating filing
+    await supabase
+      .from("cis_returns")
+      .update({
+        employment_status_declaration: employmentDeclaration,
+        subcontractor_verification_declaration: verificationDeclaration,
+      })
+      .eq("id", cisReturnId);
 
-    if (filingError) throw new Error(`Failed to create filing: ${filingError.message}`);
+    // Step 1: Create filing with status "draft" via filing service
+    const createResult = await createCISFilingFromReturn(cisReturnId);
+    if (!createResult.success || !createResult.filingId) {
+      return { success: false, error: createResult.error || "Failed to create CIS filing" };
+    }
+
+    // Step 2: Submit via filing spine (draft → ready_to_file → provider → filed)
+    const submitResult = await submitPayrollFiling(createResult.filingId, userId);
+    
+    if (!submitResult.success) {
+      return { success: false, error: submitResult.error || "CIS submission failed" };
+    }
 
     // Update CIS return status
     const { error: updateError } = await supabase
@@ -91,9 +83,7 @@ export async function submitCISReturn(
         status: "submitted",
         submitted_at: new Date().toISOString(),
         submitted_by: userId,
-        employment_status_declaration: employmentDeclaration,
-        subcontractor_verification_declaration: verificationDeclaration,
-        filing_id: filing.id,
+        filing_id: createResult.filingId,
       })
       .eq("id", cisReturnId);
 
@@ -114,10 +104,10 @@ export async function submitCISReturn(
       fieldName: "status",
       oldValue: cisReturn.status,
       newValue: "submitted",
-      metadata: { filing_id: filing.id },
+      metadata: { filing_id: createResult.filingId, filing_reference: submitResult.filingReference },
     });
 
-    return { success: true, data: { filingId: filing.id } };
+    return { success: true, data: { filingId: createResult.filingId, filingReference: submitResult.filingReference } };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

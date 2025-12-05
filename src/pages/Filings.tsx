@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -18,12 +25,24 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 
+const FILING_TYPE_OPTIONS = [
+  { value: "all", label: "All Types" },
+  { value: "RTI_FPS", label: "RTI - FPS" },
+  { value: "RTI_EPS", label: "RTI - EPS" },
+  { value: "CIS_RETURN", label: "CIS Return" },
+  { value: "self_assessment", label: "Self Assessment" },
+  { value: "ct600", label: "Corporation Tax" },
+  { value: "vat_return", label: "VAT Return" },
+  { value: "companies_house", label: "Companies House" },
+];
+
 export default function Filings() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [filingTypeFilter, setFilingTypeFilter] = useState("all");
 
   const { data: filings, isLoading } = useQuery({
-    queryKey: ["filings", searchQuery],
+    queryKey: ["filings", searchQuery, filingTypeFilter],
     queryFn: async () => {
       let query = supabase
         .from("filings")
@@ -39,6 +58,10 @@ export default function Filings() {
         query = query.or(
           `filing_type.ilike.%${searchQuery}%,tax_year.ilike.%${searchQuery}%`
         );
+      }
+
+      if (filingTypeFilter && filingTypeFilter !== "all") {
+        query = query.eq("filing_type", filingTypeFilter);
       }
 
       const { data, error } = await query;
@@ -58,9 +81,16 @@ export default function Filings() {
         return "bg-yellow-500";
       case "rejected":
         return "bg-red-500";
+      case "draft":
+        return "bg-gray-400";
       default:
         return "bg-gray-500";
     }
+  };
+
+  const getFilingTypeLabel = (filingType: string) => {
+    const option = FILING_TYPE_OPTIONS.find(o => o.value === filingType);
+    return option?.label || filingType;
   };
 
   return (
@@ -87,6 +117,18 @@ export default function Filings() {
                   className="pl-10"
                 />
               </div>
+              <Select value={filingTypeFilter} onValueChange={setFilingTypeFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FILING_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {isLoading ? (
@@ -112,7 +154,7 @@ export default function Filings() {
                           ? `${filing.clients.first_name} ${filing.clients.last_name}`
                           : filing.companies?.company_name || "N/A"}
                       </TableCell>
-                      <TableCell className="font-medium">{filing.filing_type}</TableCell>
+                      <TableCell className="font-medium">{getFilingTypeLabel(filing.filing_type)}</TableCell>
                       <TableCell>{filing.tax_year}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(filing.status)}>

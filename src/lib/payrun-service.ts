@@ -370,7 +370,8 @@ export async function approvePayRun(
 }
 
 /**
- * Submit RTI (FPS/EPS) to HMRC
+ * Submit RTI (FPS/EPS) to HMRC via filing spine
+ * Per CTO: All filings go through filing spine → provider → edge function
  */
 export async function submitPayRunRTI(
   payRunId: string,
@@ -379,6 +380,9 @@ export async function submitPayRunRTI(
   submitEPS: boolean = false
 ): Promise<ServiceResult> {
   try {
+    // Import filing service functions
+    const { createRTIFilingFromPayRun, submitPayrollFiling } = await import("@/lib/filing-service");
+    
     const payRun = await getPayRun(payRunId);
     const currentStatus = payRun.status as PayRunStatus;
     
@@ -389,72 +393,51 @@ export async function submitPayRunRTI(
       };
     }
 
-    const filingResults: any[] = [];
-    const entityId = payRun.paye_schemes?.company_id || payRun.paye_schemes?.client_id;
-    const entityType = payRun.paye_schemes?.company_id ? 'company' : 'client';
+    const filingResults: { type: string; filingId: string; reference?: string; success: boolean }[] = [];
 
-    // Create FPS filing
+    // Create and submit FPS filing via filing spine
     if (submitFPS) {
-      const { data: filing, error } = await supabase
-        .from("filings")
-        .insert({
-          organization_id: payRun.organization_id,
-          company_id: entityType === 'company' ? entityId : null,
-          client_id: entityType === 'client' ? entityId : null,
-          filing_type: "RTI_FPS",
-          filing_body: "HMRC",
-          tax_year: payRun.tax_year,
-          period_start: payRun.period_start,
-          period_end: payRun.period_end,
-          status: "filed",
-          filed_at: new Date().toISOString(),
-          filing_data: {
-            pay_run_id: payRunId,
-            paye_reference: payRun.paye_schemes?.employer_paye_reference,
-            accounts_office_ref: payRun.paye_schemes?.accounts_office_reference,
-            payment_date: payRun.payment_date,
-            employee_count: payRun.employee_count,
-            totals: {
-              gross: payRun.total_gross_pay,
-              paye: payRun.total_paye,
-              employee_nic: payRun.total_employee_nic,
-              employer_nic: payRun.total_employer_nic,
-            },
-          },
-        } as any)
-        .select("id")
-        .single();
+      // Step 1: Create filing with status "draft"
+      const createResult = await createRTIFilingFromPayRun(payRunId, 'RTI_FPS');
+      if (!createResult.success || !createResult.filingId) {
+        return { success: false, error: createResult.error || "Failed to create FPS filing" };
+      }
 
-      if (error) throw new Error(`Failed to create FPS filing: ${error.message}`);
-      filingResults.push({ type: "RTI_FPS", filingId: filing.id });
+      // Step 2: Submit via filing spine (draft → ready_to_file → provider → filed)
+      const submitResult = await submitPayrollFiling(createResult.filingId, userId);
+      
+      filingResults.push({ 
+        type: "RTI_FPS", 
+        filingId: createResult.filingId, 
+        reference: submitResult.filingReference,
+        success: submitResult.success 
+      });
+
+      if (!submitResult.success) {
+        return { success: false, error: submitResult.error || "FPS submission failed" };
+      }
     }
 
-    // Create EPS filing
+    // Create and submit EPS filing via filing spine
     if (submitEPS) {
-      const { data: filing, error } = await supabase
-        .from("filings")
-        .insert({
-          organization_id: payRun.organization_id,
-          company_id: entityType === 'company' ? entityId : null,
-          client_id: entityType === 'client' ? entityId : null,
-          filing_type: "RTI_EPS",
-          filing_body: "HMRC",
-          tax_year: payRun.tax_year,
-          period_start: payRun.period_start,
-          period_end: payRun.period_end,
-          status: "filed",
-          filed_at: new Date().toISOString(),
-          filing_data: {
-            pay_run_id: payRunId,
-            paye_reference: payRun.paye_schemes?.employer_paye_reference,
-            accounts_office_ref: payRun.paye_schemes?.accounts_office_reference,
-          },
-        } as any)
-        .select("id")
-        .single();
+      const createResult = await createRTIFilingFromPayRun(payRunId, 'RTI_EPS');
+      if (!createResult.success || !createResult.filingId) {
+        return { success: false, error: createResult.error || "Failed to create EPS filing" };
+      }
 
-      if (error) throw new Error(`Failed to create EPS filing: ${error.message}`);
-      filingResults.push({ type: "RTI_EPS", filingId: filing.id });
+      const submitResult = await submitPayrollFiling(createResult.filingId, userId);
+      
+      filingResults.push({ 
+        type: "RTI_EPS", 
+        filingId: createResult.filingId,
+        reference: submitResult.filingReference,
+        success: submitResult.success 
+      });
+
+      if (!submitResult.success) {
+        // FPS already submitted, but note EPS failure
+        console.warn("EPS submission failed:", submitResult.error);
+      }
     }
 
     // Update pay run status to submitted

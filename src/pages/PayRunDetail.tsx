@@ -21,11 +21,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PayRunStatusBadge } from "@/components/payroll/PayRunStatusBadge";
 import { PayslipViewDialog } from "@/components/payroll/PayslipViewDialog";
 import { SubmitRTIDialog } from "@/components/payroll/SubmitRTIDialog";
 import { PAY_RUN_STATUSES, PAY_FREQUENCY_LABELS, type PayRunStatus, type PayFrequency } from "@/lib/payroll-constants";
+import { 
+  calculatePayRun, 
+  markReadyForReview, 
+  approvePayRun, 
+  reopenPayRun,
+  isPayRunLocked 
+} from "@/lib/payrun-service";
+import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
@@ -34,15 +51,20 @@ import {
   CheckCircle2,
   Send,
   FileText,
-  Eye
+  Eye,
+  RotateCcw,
+  Lock
 } from "lucide-react";
 
 const PayRunDetail = () => {
   const { payRunId } = useParams<{ payRunId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [selectedPayslipId, setSelectedPayslipId] = useState<string | null>(null);
   const [showRTIDialog, setShowRTIDialog] = useState(false);
+  const [showReopenDialog, setShowReopenDialog] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
 
   // Fetch pay run details
   const { data: payRun, isLoading } = useQuery({
@@ -112,35 +134,28 @@ const PayRunDetail = () => {
     enabled: !!payRunId,
   });
 
-  // Calculate payslips mutation
+  // Calculate payslips mutation - uses service function
   const calculateMutation = useMutation({
     mutationFn: async () => {
-      if (!payRunId) throw new Error("No pay run ID");
-      // In production, this would call the payroll calculation engine
-      // For now, just update status
-      const { error } = await supabase
-        .from("pay_runs")
-        .update({ status: PAY_RUN_STATUSES.CALCULATED })
-        .eq("id", payRunId);
-      if (error) throw error;
+      if (!payRunId || !user?.id) throw new Error("Missing required data");
+      const result = await calculatePayRun(payRunId, user.id);
+      if (!result.success) throw new Error(result.error);
+      return result.data;
     },
-    onSuccess: () => {
-      toast.success("Payslips calculated");
+    onSuccess: (data) => {
+      toast.success(`Calculated ${data?.employeeCount || 0} payslips`);
       queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
       queryClient.invalidateQueries({ queryKey: ["pay-run-payslips", payRunId] });
     },
     onError: (error: any) => toast.error(error.message),
   });
 
-  // Mark ready for review mutation
+  // Mark ready for review mutation - uses service function
   const markReadyMutation = useMutation({
     mutationFn: async () => {
-      if (!payRunId) throw new Error("No pay run ID");
-      const { error } = await supabase
-        .from("pay_runs")
-        .update({ status: PAY_RUN_STATUSES.READY_FOR_REVIEW })
-        .eq("id", payRunId);
-      if (error) throw error;
+      if (!payRunId || !user?.id) throw new Error("Missing required data");
+      const result = await markReadyForReview(payRunId, user.id);
+      if (!result.success) throw new Error(result.error);
     },
     onSuccess: () => {
       toast.success("Pay run marked as ready for review");
@@ -149,22 +164,32 @@ const PayRunDetail = () => {
     onError: (error: any) => toast.error(error.message),
   });
 
-  // Approve mutation
+  // Approve mutation - uses service function
   const approveMutation = useMutation({
     mutationFn: async () => {
-      if (!payRunId) throw new Error("No pay run ID");
-      const { error } = await supabase
-        .from("pay_runs")
-        .update({ 
-          status: PAY_RUN_STATUSES.APPROVED,
-          approved_at: new Date().toISOString(),
-        })
-        .eq("id", payRunId);
-      if (error) throw error;
-      // TODO: Create payroll journal automatically
+      if (!payRunId || !user?.id) throw new Error("Missing required data");
+      const result = await approvePayRun(payRunId, user.id);
+      if (!result.success) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.journalId ? "Pay run approved and journal created" : "Pay run approved");
+      queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  // Reopen mutation - uses service function
+  const reopenMutation = useMutation({
+    mutationFn: async () => {
+      if (!payRunId || !user?.id || !reopenReason.trim()) throw new Error("Missing required data");
+      const result = await reopenPayRun(payRunId, user.id, reopenReason);
+      if (!result.success) throw new Error(result.error);
     },
     onSuccess: () => {
-      toast.success("Pay run approved");
+      toast.success("Pay run reopened");
+      setShowReopenDialog(false);
+      setReopenReason("");
       queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
     },
     onError: (error: any) => toast.error(error.message),
@@ -210,6 +235,7 @@ const PayRunDetail = () => {
 
   const status = payRun.status as PayRunStatus;
   const frequency = payRun.pay_frequency as PayFrequency;
+  const isLocked = isPayRunLocked(status);
 
   return (
     <DashboardLayout>
@@ -247,6 +273,12 @@ const PayRunDetail = () => {
                   {payRun.paye_schemes?.name || payRun.paye_schemes?.employer_paye_reference || "Pay Run"}
                 </h1>
                 <PayRunStatusBadge status={status} />
+                {isLocked && (
+                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Lock className="h-3 w-3" />
+                    Locked
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                 <span>
@@ -279,10 +311,16 @@ const PayRunDetail = () => {
               </Button>
             )}
             {status === PAY_RUN_STATUSES.APPROVED && (
-              <Button onClick={() => setShowRTIDialog(true)}>
-                <Send className="h-4 w-4 mr-2" />
-                Submit FPS/EPS
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => setShowReopenDialog(true)}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reopen
+                </Button>
+                <Button onClick={() => setShowRTIDialog(true)}>
+                  <Send className="h-4 w-4 mr-2" />
+                  Submit FPS/EPS
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -451,7 +489,7 @@ const PayRunDetail = () => {
                       <TableCell>
                         {filing.filed_at ? format(new Date(filing.filed_at), "d MMM yyyy HH:mm") : '-'}
                       </TableCell>
-                      <TableCell className="font-mono">{filing.api_submission_id || '-'}</TableCell>
+                      <TableCell className="font-mono">{filing.api_submission_id || filing.filing_reference || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -465,51 +503,85 @@ const PayRunDetail = () => {
           <CardHeader>
             <CardTitle>Payroll Journal</CardTitle>
             <CardDescription>
-              Accounting entries for this pay run
+              Journal entries created for this pay run
             </CardDescription>
           </CardHeader>
           <CardContent>
             {payRun.journal_id ? (
-              <div className="flex items-center gap-2 text-green-600">
-                <span className="h-2 w-2 rounded-full bg-green-600"></span>
-                <span>Payroll journal created</span>
-                <Button variant="link" size="sm" className="ml-2">
-                  View Journal
+              <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                <div>
+                  <p className="font-medium">Journal Created</p>
+                  <p className="text-sm text-muted-foreground">
+                    Reference: PAYROLL-{payRun.tax_year}-P{payRun.tax_period}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={`/bookkeeping?tab=journals`}>View Journal</Link>
                 </Button>
               </div>
             ) : (
-              <div className="text-muted-foreground">
-                {status === PAY_RUN_STATUSES.APPROVED || status === PAY_RUN_STATUSES.SUBMITTED 
-                  ? "Journal will be created when pay run is approved"
-                  : "Journal not yet created"}
+              <div className="text-center py-8 text-muted-foreground">
+                Journal will be created when pay run is approved
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Dialogs */}
+        {selectedPayslipId && (
+          <PayslipViewDialog
+            payslipId={selectedPayslipId}
+            open={!!selectedPayslipId}
+            onOpenChange={(open) => !open && setSelectedPayslipId(null)}
+          />
+        )}
+
+        {showRTIDialog && payRunId && payRun && (
+          <SubmitRTIDialog
+            payRunId={payRunId}
+            payeSchemeId={payRun.paye_scheme_id}
+            organizationId={payRun.organization_id}
+            open={showRTIDialog}
+            onOpenChange={setShowRTIDialog}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
+              queryClient.invalidateQueries({ queryKey: ["pay-run-filings", payRunId] });
+            }}
+          />
+        )}
+
+        {/* Reopen Dialog */}
+        <Dialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reopen Pay Run</DialogTitle>
+              <DialogDescription>
+                This will reset the pay run to "calculated" status, allowing further edits. 
+                Please provide a reason for reopening.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Textarea
+                placeholder="Reason for reopening..."
+                value={reopenReason}
+                onChange={(e) => setReopenReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowReopenDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => reopenMutation.mutate()}
+                disabled={!reopenReason.trim() || reopenMutation.isPending}
+              >
+                Reopen Pay Run
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      {/* Payslip Dialog */}
-      {selectedPayslipId && (
-        <PayslipViewDialog
-          payslipId={selectedPayslipId}
-          open={!!selectedPayslipId}
-          onOpenChange={(open) => !open && setSelectedPayslipId(null)}
-        />
-      )}
-
-      {/* RTI Submit Dialog */}
-      <SubmitRTIDialog
-        open={showRTIDialog}
-        onOpenChange={setShowRTIDialog}
-        payRunId={payRunId!}
-        payeSchemeId={payRun?.paye_scheme_id || ''}
-        organizationId={payRun?.organization_id || ''}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["pay-run-detail", payRunId] });
-          queryClient.invalidateQueries({ queryKey: ["pay-run-filings", payRunId] });
-          setShowRTIDialog(false);
-        }}
-      />
     </DashboardLayout>
   );
 };
