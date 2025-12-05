@@ -359,6 +359,143 @@ export type Database = {
           },
         ]
       }
+      bank_rule_executions: {
+        Row: {
+          applied_actions: Json | null
+          bank_rule_id: string
+          bank_transaction_id: string
+          error_message: string | null
+          executed_at: string | null
+          executed_by: string | null
+          id: string
+          matched_conditions: Json | null
+          organization_id: string
+          result: string | null
+        }
+        Insert: {
+          applied_actions?: Json | null
+          bank_rule_id: string
+          bank_transaction_id: string
+          error_message?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          id?: string
+          matched_conditions?: Json | null
+          organization_id: string
+          result?: string | null
+        }
+        Update: {
+          applied_actions?: Json | null
+          bank_rule_id?: string
+          bank_transaction_id?: string
+          error_message?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          id?: string
+          matched_conditions?: Json | null
+          organization_id?: string
+          result?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_rule_executions_bank_rule_id_fkey"
+            columns: ["bank_rule_id"]
+            isOneToOne: false
+            referencedRelation: "bank_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_rule_executions_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_rule_executions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_rules: {
+        Row: {
+          actions: Json
+          client_id: string | null
+          company_id: string | null
+          conditions: Json
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          last_applied_at: string | null
+          organization_id: string
+          priority: number | null
+          rule_name: string
+          times_applied: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          actions?: Json
+          client_id?: string | null
+          company_id?: string | null
+          conditions?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_applied_at?: string | null
+          organization_id: string
+          priority?: number | null
+          rule_name: string
+          times_applied?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          actions?: Json
+          client_id?: string | null
+          company_id?: string | null
+          conditions?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_applied_at?: string | null
+          organization_id?: string
+          priority?: number | null
+          rule_name?: string
+          times_applied?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_rules_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_transactions: {
         Row: {
           amount: number
@@ -463,6 +600,247 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bill_lines: {
+        Row: {
+          account_id: string | null
+          bill_id: string
+          created_at: string | null
+          description: string | null
+          gross_amount: number | null
+          id: string
+          line_number: number
+          net_amount: number | null
+          quantity: number | null
+          unit_price: number | null
+          vat_amount: number | null
+          vat_code_id: string | null
+          vat_rate: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          bill_id: string
+          created_at?: string | null
+          description?: string | null
+          gross_amount?: number | null
+          id?: string
+          line_number?: number
+          net_amount?: number | null
+          quantity?: number | null
+          unit_price?: number | null
+          vat_amount?: number | null
+          vat_code_id?: string | null
+          vat_rate?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          bill_id?: string
+          created_at?: string | null
+          description?: string | null
+          gross_amount?: number | null
+          id?: string
+          line_number?: number
+          net_amount?: number | null
+          quantity?: number | null
+          unit_price?: number | null
+          vat_amount?: number | null
+          vat_code_id?: string | null
+          vat_rate?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_lines_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_lines_vat_code_id_fkey"
+            columns: ["vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bill_payments: {
+        Row: {
+          amount: number
+          bank_account_id: string | null
+          bank_transaction_id: string | null
+          bill_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          payment_date: string
+          payment_method: string | null
+          reference: string | null
+        }
+        Insert: {
+          amount: number
+          bank_account_id?: string | null
+          bank_transaction_id?: string | null
+          bill_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_date: string
+          payment_method?: string | null
+          reference?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_account_id?: string | null
+          bank_transaction_id?: string | null
+          bill_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_payments_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payments_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payments_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bills: {
+        Row: {
+          amount_paid: number | null
+          bill_number: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          currency: string | null
+          due_date: string
+          exchange_rate: number | null
+          id: string
+          is_posted: boolean | null
+          issue_date: string
+          notes: string | null
+          organization_id: string
+          posted_at: string | null
+          posted_by: string | null
+          receipt_path: string | null
+          reference: string | null
+          status: string | null
+          supplier_id: string | null
+          total_gross: number | null
+          total_net: number | null
+          total_vat: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount_paid?: number | null
+          bill_number?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          due_date: string
+          exchange_rate?: number | null
+          id?: string
+          is_posted?: boolean | null
+          issue_date: string
+          notes?: string | null
+          organization_id: string
+          posted_at?: string | null
+          posted_by?: string | null
+          receipt_path?: string | null
+          reference?: string | null
+          status?: string | null
+          supplier_id?: string | null
+          total_gross?: number | null
+          total_net?: number | null
+          total_vat?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount_paid?: number | null
+          bill_number?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          due_date?: string
+          exchange_rate?: number | null
+          id?: string
+          is_posted?: boolean | null
+          issue_date?: string
+          notes?: string | null
+          organization_id?: string
+          posted_at?: string | null
+          posted_by?: string | null
+          receipt_path?: string | null
+          reference?: string | null
+          status?: string | null
+          supplier_id?: string | null
+          total_gross?: number | null
+          total_net?: number | null
+          total_vat?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bills_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -2116,6 +2494,111 @@ export type Database = {
           },
           {
             foreignKeyName: "contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address_line_1: string | null
+          address_line_2: string | null
+          city: string | null
+          client_id: string | null
+          company_id: string | null
+          country: string | null
+          created_at: string | null
+          default_account_id: string | null
+          default_vat_code_id: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          organization_id: string
+          payment_terms_days: number | null
+          phone: string | null
+          postcode: string | null
+          updated_at: string | null
+          vat_number: string | null
+        }
+        Insert: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          default_account_id?: string | null
+          default_vat_code_id?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          payment_terms_days?: number | null
+          phone?: string | null
+          postcode?: string | null
+          updated_at?: string | null
+          vat_number?: string | null
+        }
+        Update: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          default_account_id?: string | null
+          default_vat_code_id?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          payment_terms_days?: number | null
+          phone?: string | null
+          postcode?: string | null
+          updated_at?: string | null
+          vat_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_default_account_id_fkey"
+            columns: ["default_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_default_vat_code_id_fkey"
+            columns: ["default_vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -3792,8 +4275,11 @@ export type Database = {
           contact_email: string | null
           contact_name: string
           created_at: string | null
+          currency: string | null
+          customer_id: string | null
           document_id: string | null
           due_date: string
+          exchange_rate: number | null
           id: string
           invoice_number: string | null
           invoice_type: string
@@ -3801,9 +4287,12 @@ export type Database = {
           issue_date: string
           notes: string | null
           organization_id: string
+          pdf_path: string | null
           posted_at: string | null
           posted_by: string | null
           reference: string | null
+          send_status: string | null
+          sent_at: string | null
           status: string
           total_gross: number
           total_net: number
@@ -3818,8 +4307,11 @@ export type Database = {
           contact_email?: string | null
           contact_name: string
           created_at?: string | null
+          currency?: string | null
+          customer_id?: string | null
           document_id?: string | null
           due_date: string
+          exchange_rate?: number | null
           id?: string
           invoice_number?: string | null
           invoice_type: string
@@ -3827,9 +4319,12 @@ export type Database = {
           issue_date: string
           notes?: string | null
           organization_id: string
+          pdf_path?: string | null
           posted_at?: string | null
           posted_by?: string | null
           reference?: string | null
+          send_status?: string | null
+          sent_at?: string | null
           status?: string
           total_gross?: number
           total_net?: number
@@ -3844,8 +4339,11 @@ export type Database = {
           contact_email?: string | null
           contact_name?: string
           created_at?: string | null
+          currency?: string | null
+          customer_id?: string | null
           document_id?: string | null
           due_date?: string
+          exchange_rate?: number | null
           id?: string
           invoice_number?: string | null
           invoice_type?: string
@@ -3853,9 +4351,12 @@ export type Database = {
           issue_date?: string
           notes?: string | null
           organization_id?: string
+          pdf_path?: string | null
           posted_at?: string | null
           posted_by?: string | null
           reference?: string | null
+          send_status?: string | null
+          sent_at?: string | null
           status?: string
           total_gross?: number
           total_net?: number
@@ -3875,6 +4376,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
           {
@@ -4792,6 +5300,63 @@ export type Database = {
             columns: ["vat_code_id"]
             isOneToOne: false
             referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matching_candidates: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          bank_transaction_id: string
+          candidate_id: string
+          candidate_type: string
+          confidence_score: number | null
+          created_at: string | null
+          id: string
+          is_accepted: boolean | null
+          match_reasons: Json | null
+          organization_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          bank_transaction_id: string
+          candidate_id: string
+          candidate_type: string
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          is_accepted?: boolean | null
+          match_reasons?: Json | null
+          organization_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          bank_transaction_id?: string
+          candidate_id?: string
+          candidate_type?: string
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          is_accepted?: boolean | null
+          match_reasons?: Json | null
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matching_candidates_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matching_candidates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -6940,6 +7505,111 @@ export type Database = {
             columns: ["workpaper_template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suppliers: {
+        Row: {
+          address_line_1: string | null
+          address_line_2: string | null
+          city: string | null
+          client_id: string | null
+          company_id: string | null
+          country: string | null
+          created_at: string | null
+          default_account_id: string | null
+          default_vat_code_id: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          organization_id: string
+          payment_terms_days: number | null
+          phone: string | null
+          postcode: string | null
+          updated_at: string | null
+          vat_number: string | null
+        }
+        Insert: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          default_account_id?: string | null
+          default_vat_code_id?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          payment_terms_days?: number | null
+          phone?: string | null
+          postcode?: string | null
+          updated_at?: string | null
+          vat_number?: string | null
+        }
+        Update: {
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          default_account_id?: string | null
+          default_vat_code_id?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          payment_terms_days?: number | null
+          phone?: string | null
+          postcode?: string | null
+          updated_at?: string | null
+          vat_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suppliers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_default_account_id_fkey"
+            columns: ["default_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_default_vat_code_id_fkey"
+            columns: ["default_vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
