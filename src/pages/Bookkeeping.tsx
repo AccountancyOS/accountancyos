@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EntitySelector, type BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
-import { ModuleSelector, type BookkeepingModule } from "@/components/bookkeeping/ModuleSelector";
-import { ServiceNotConfiguredCard } from "@/components/bookkeeping/ServiceNotConfiguredCard";
 import { BusinessOverviewTab } from "@/components/bookkeeping/BusinessOverviewTab";
 import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab";
 import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
@@ -21,34 +20,38 @@ import { CISModule } from "@/components/cis/CISModule";
 import { useEntityServices } from "@/hooks/useEntityServices";
 
 export default function Bookkeeping() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedEntity, setSelectedEntity] = useState<BookkeepingEntity | null>(null);
-  const [activeModule, setActiveModule] = useState<BookkeepingModule>('books');
-  const [activeTab, setActiveTab] = useState("overview");
+  
+  // Get initial tab from URL or default to overview
+  const initialTab = searchParams.get("tab") || "overview";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
-  const { hasPayroll, hasCIS, isLoading: servicesLoading } = useEntityServices(
+  const { hasPayroll, hasCIS, hasBookkeeping, isLoading: servicesLoading } = useEntityServices(
     selectedEntity?.type ?? null,
     selectedEntity?.id ?? null
   );
 
-  // Reset to books module when entity changes and current module is not available
+  // Sync tab changes to URL
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
+
+  // Reset to overview if current tab becomes unavailable due to entity change
   useEffect(() => {
     if (!servicesLoading && selectedEntity) {
-      if (activeModule === 'payroll' && !hasPayroll) {
-        setActiveModule('books');
+      if (activeTab === 'payroll' && !hasPayroll) {
+        handleTabChange('overview');
       }
-      if (activeModule === 'cis' && !hasCIS) {
-        setActiveModule('books');
+      if (activeTab === 'cis' && !hasCIS) {
+        handleTabChange('overview');
       }
     }
-  }, [selectedEntity, hasPayroll, hasCIS, servicesLoading, activeModule]);
+  }, [selectedEntity, hasPayroll, hasCIS, servicesLoading, activeTab]);
 
-  const handleModuleChange = (module: BookkeepingModule) => {
-    setActiveModule(module);
-    // Reset tab when changing modules
-    if (module === 'books') {
-      setActiveTab('overview');
-    }
-  };
+  // Check if entity is VAT registered (simplified - you may have more complex logic)
+  const isVATRegistered = selectedEntity?.type === 'company'; // Placeholder - should check actual VAT status
 
   return (
     <DashboardLayout>
@@ -62,16 +65,6 @@ export default function Bookkeeping() {
 
         <div className="flex flex-wrap items-center gap-4">
           <EntitySelector value={selectedEntity} onValueChange={setSelectedEntity} />
-          
-          {selectedEntity && (
-            <ModuleSelector
-              activeModule={activeModule}
-              onModuleChange={handleModuleChange}
-              hasPayroll={hasPayroll}
-              hasCIS={hasCIS}
-              isLoading={servicesLoading}
-            />
-          )}
         </div>
 
         {!selectedEntity ? (
@@ -83,8 +76,8 @@ export default function Bookkeeping() {
               </p>
             </div>
           </div>
-        ) : activeModule === 'books' ? (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        ) : (
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
             <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
@@ -96,12 +89,20 @@ export default function Bookkeeping() {
               <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
               <TabsTrigger value="receipts">Receipts</TabsTrigger>
-              <TabsTrigger value="vat-returns">VAT Returns</TabsTrigger>
+              {isVATRegistered && (
+                <TabsTrigger value="vat-returns">VAT Returns</TabsTrigger>
+              )}
+              {hasPayroll && (
+                <TabsTrigger value="payroll">Payroll</TabsTrigger>
+              )}
+              {hasCIS && (
+                <TabsTrigger value="cis">CIS</TabsTrigger>
+              )}
               <TabsTrigger value="period-lock">Period Lock</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
-              <BusinessOverviewTab entity={selectedEntity} onTabChange={setActiveTab} />
+              <BusinessOverviewTab entity={selectedEntity} onTabChange={handleTabChange} />
             </TabsContent>
 
             <TabsContent value="trial-balance" className="space-y-4">
@@ -140,43 +141,35 @@ export default function Bookkeeping() {
               <ReceiptsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
             </TabsContent>
 
-            <TabsContent value="vat-returns" className="space-y-4">
-              <VATReturnsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
-            </TabsContent>
+            {isVATRegistered && (
+              <TabsContent value="vat-returns" className="space-y-4">
+                <VATReturnsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
+              </TabsContent>
+            )}
+
+            {hasPayroll && (
+              <TabsContent value="payroll" className="space-y-4">
+                <PayrollModule 
+                  entityType={selectedEntity.type} 
+                  entityId={selectedEntity.id} 
+                />
+              </TabsContent>
+            )}
+
+            {hasCIS && (
+              <TabsContent value="cis" className="space-y-4">
+                <CISModule 
+                  entityType={selectedEntity.type} 
+                  entityId={selectedEntity.id} 
+                />
+              </TabsContent>
+            )}
 
             <TabsContent value="period-lock" className="space-y-4">
               <PeriodLockTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
             </TabsContent>
           </Tabs>
-        ) : activeModule === 'payroll' ? (
-          hasPayroll ? (
-            <PayrollModule 
-              entityType={selectedEntity.type} 
-              entityId={selectedEntity.id} 
-            />
-          ) : (
-            <ServiceNotConfiguredCard 
-              serviceName="Payroll"
-              entityName={selectedEntity.name}
-              entityType={selectedEntity.type}
-              entityId={selectedEntity.id}
-            />
-          )
-        ) : activeModule === 'cis' ? (
-          hasCIS ? (
-            <CISModule 
-              entityType={selectedEntity.type} 
-              entityId={selectedEntity.id} 
-            />
-          ) : (
-            <ServiceNotConfiguredCard 
-              serviceName="CIS"
-              entityName={selectedEntity.name}
-              entityType={selectedEntity.type}
-              entityId={selectedEntity.id}
-            />
-          )
-        ) : null}
+        )}
       </div>
     </DashboardLayout>
   );
