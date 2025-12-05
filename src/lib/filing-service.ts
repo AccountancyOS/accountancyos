@@ -981,7 +981,7 @@ export async function createRTIFilingFromPayRun(
             employee_nic: payRun.total_employee_nic,
             employer_nic: payRun.total_employer_nic,
             student_loan: payRun.total_student_loan,
-            pension: (payRun as any).total_pension_employee || 0,
+            pension: payRun.total_employee_pension || 0,
             net: payRun.total_net_pay,
           },
         },

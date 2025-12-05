@@ -223,7 +223,7 @@ export async function calculatePayRun(
         total_employee_nic: totalEmployeeNic,
         total_employer_nic: totalEmployerNic,
         total_student_loan: totalStudentLoan,
-        total_pension_employee: totalPension,
+        total_employee_pension: totalPension,
         total_net_pay: totalNet,
         prepared_at: new Date().toISOString(),
         prepared_by: userId,
