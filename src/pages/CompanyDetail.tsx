@@ -36,7 +36,9 @@ import { RegistersTab } from "@/components/cosec/RegistersTab";
 import { CS01WorkpaperTab } from "@/components/cosec/CS01WorkpaperTab";
 import { CompanyCoSecJobsTab } from "@/components/cosec/CompanyCoSecJobsTab";
 import { CompanyDetailSkeleton } from "@/components/cosec/CompanyDetailSkeleton";
+import { CompanyPayrollTab } from "@/components/cosec/CompanyPayrollTab";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Wallet } from "lucide-react";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -226,6 +228,10 @@ const CompanyDetail = () => {
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">CoSec Jobs</span>
             </TabsTrigger>
+            <TabsTrigger value="payroll" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">Payroll</span>
+            </TabsTrigger>
             <TabsTrigger value="documents" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
@@ -376,6 +382,15 @@ const CompanyDetail = () => {
           <TabsContent value="cosec-jobs" className="mt-6">
             {organization?.id && (
               <CompanyCoSecJobsTab 
+                companyId={companyId!} 
+                organizationId={organization.id} 
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="payroll" className="mt-6">
+            {organization?.id && (
+              <CompanyPayrollTab 
                 companyId={companyId!} 
                 organizationId={organization.id} 
               />
