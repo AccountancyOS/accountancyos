@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EntitySelector, type BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
+import { ModuleSelector, type BookkeepingModule } from "@/components/bookkeeping/ModuleSelector";
+import { ServiceNotConfiguredCard } from "@/components/bookkeeping/ServiceNotConfiguredCard";
 import { BusinessOverviewTab } from "@/components/bookkeeping/BusinessOverviewTab";
 import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab";
 import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
@@ -14,10 +16,39 @@ import { InvoicesTab } from "@/components/bookkeeping/InvoicesTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
+import { PayrollModule } from "@/components/payroll/PayrollModule";
+import { CISModule } from "@/components/cis/CISModule";
+import { useEntityServices } from "@/hooks/useEntityServices";
 
 export default function Bookkeeping() {
   const [selectedEntity, setSelectedEntity] = useState<BookkeepingEntity | null>(null);
+  const [activeModule, setActiveModule] = useState<BookkeepingModule>('books');
   const [activeTab, setActiveTab] = useState("overview");
+
+  const { hasPayroll, hasCIS, isLoading: servicesLoading } = useEntityServices(
+    selectedEntity?.type ?? null,
+    selectedEntity?.id ?? null
+  );
+
+  // Reset to books module when entity changes and current module is not available
+  useEffect(() => {
+    if (!servicesLoading && selectedEntity) {
+      if (activeModule === 'payroll' && !hasPayroll) {
+        setActiveModule('books');
+      }
+      if (activeModule === 'cis' && !hasCIS) {
+        setActiveModule('books');
+      }
+    }
+  }, [selectedEntity, hasPayroll, hasCIS, servicesLoading, activeModule]);
+
+  const handleModuleChange = (module: BookkeepingModule) => {
+    setActiveModule(module);
+    // Reset tab when changing modules
+    if (module === 'books') {
+      setActiveTab('overview');
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -25,12 +56,22 @@ export default function Bookkeeping() {
         <div>
           <h1 className="text-3xl font-bold">Bookkeeping</h1>
           <p className="text-muted-foreground">
-            Manage accounts, ledgers, and financial records
+            Manage accounts, ledgers, payroll, and CIS returns
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <EntitySelector value={selectedEntity} onValueChange={setSelectedEntity} />
+          
+          {selectedEntity && (
+            <ModuleSelector
+              activeModule={activeModule}
+              onModuleChange={handleModuleChange}
+              hasPayroll={hasPayroll}
+              hasCIS={hasCIS}
+              isLoading={servicesLoading}
+            />
+          )}
         </div>
 
         {!selectedEntity ? (
@@ -42,7 +83,7 @@ export default function Bookkeeping() {
               </p>
             </div>
           </div>
-        ) : (
+        ) : activeModule === 'books' ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -107,7 +148,35 @@ export default function Bookkeeping() {
               <PeriodLockTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
             </TabsContent>
           </Tabs>
-        )}
+        ) : activeModule === 'payroll' ? (
+          hasPayroll ? (
+            <PayrollModule 
+              entityType={selectedEntity.type} 
+              entityId={selectedEntity.id} 
+            />
+          ) : (
+            <ServiceNotConfiguredCard 
+              serviceName="Payroll"
+              entityName={selectedEntity.name}
+              entityType={selectedEntity.type}
+              entityId={selectedEntity.id}
+            />
+          )
+        ) : activeModule === 'cis' ? (
+          hasCIS ? (
+            <CISModule 
+              entityType={selectedEntity.type} 
+              entityId={selectedEntity.id} 
+            />
+          ) : (
+            <ServiceNotConfiguredCard 
+              serviceName="CIS"
+              entityName={selectedEntity.name}
+              entityType={selectedEntity.type}
+              entityId={selectedEntity.id}
+            />
+          )
+        ) : null}
       </div>
     </DashboardLayout>
   );

@@ -28,8 +28,9 @@ import {
   MapPin,
   Calendar,
   Hash,
-  AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  Wallet,
+  Lock
 } from "lucide-react";
 import { format } from "date-fns";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
@@ -38,13 +39,19 @@ import { CompanyCoSecJobsTab } from "@/components/cosec/CompanyCoSecJobsTab";
 import { CompanyDetailSkeleton } from "@/components/cosec/CompanyDetailSkeleton";
 import { CompanyPayrollTab } from "@/components/cosec/CompanyPayrollTab";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Wallet } from "lucide-react";
+import { useEntityServices } from "@/hooks/useEntityServices";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Service gating for Payroll tab
+  const { hasPayroll, isLoading: servicesLoading } = useEntityServices(
+    'company',
+    companyId ?? null
+  );
 
   const { data: company, isLoading, error, refetch } = useQuery({
     queryKey: ["company-detail", companyId],
@@ -228,10 +235,12 @@ const CompanyDetail = () => {
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">CoSec Jobs</span>
             </TabsTrigger>
-            <TabsTrigger value="payroll" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <Wallet className="h-4 w-4" />
-              <span className="hidden sm:inline">Payroll</span>
-            </TabsTrigger>
+            {(hasPayroll || servicesLoading) && (
+              <TabsTrigger value="payroll" className="flex items-center gap-2 flex-1 sm:flex-initial">
+                <Wallet className="h-4 w-4" />
+                <span className="hidden sm:inline">Payroll</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="documents" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
@@ -389,11 +398,29 @@ const CompanyDetail = () => {
           </TabsContent>
 
           <TabsContent value="payroll" className="mt-6">
-            {organization?.id && (
+            {organization?.id && hasPayroll ? (
               <CompanyPayrollTab 
                 companyId={companyId!} 
                 organizationId={organization.id} 
               />
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="rounded-full bg-muted p-4 mb-4">
+                    <Lock className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    Payroll Not Enabled
+                  </h3>
+                  <p className="text-muted-foreground mb-6 max-w-md">
+                    Payroll is not configured for this company. 
+                    Add it to their engagement to start using payroll features.
+                  </p>
+                  <Button onClick={() => setActiveTab("settings")}>
+                    Configure Service
+                  </Button>
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 
