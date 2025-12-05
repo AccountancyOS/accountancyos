@@ -855,3 +855,305 @@ export async function submitPayrollFiling(
 export function filingRequiresClientApproval(filingType: string): boolean {
   return !isPayrollFilingType(filingType);
 }
+
+/**
+ * Create RTI filing from pay run data
+ * Per CTO: Creates filing with status "draft", NOT "filed"
+ */
+export async function createRTIFilingFromPayRun(
+  payRunId: string,
+  filingType: 'RTI_FPS' | 'RTI_EPS'
+): Promise<{ success: boolean; filingId?: string; error?: string }> {
+  try {
+    // Fetch pay run with PAYE scheme and payslips
+    const { data: payRun, error: payRunError } = await supabase
+      .from("pay_runs")
+      .select(`
+        *,
+        paye_schemes (
+          id,
+          name,
+          employer_paye_reference,
+          accounts_office_reference,
+          company_id,
+          client_id,
+          organization_id
+        )
+      `)
+      .eq("id", payRunId)
+      .single();
+
+    if (payRunError || !payRun) {
+      return { success: false, error: "Pay run not found" };
+    }
+
+    const payeScheme = payRun.paye_schemes as any;
+    const organizationId = payeScheme?.organization_id || payRun.organization_id;
+    const entityId = payeScheme?.company_id || payeScheme?.client_id;
+    const entityType = payeScheme?.company_id ? 'company' : 'client';
+
+    // Fetch employees with payslips for FPS
+    let employees: any[] = [];
+    if (filingType === 'RTI_FPS') {
+      const { data: payslips } = await supabase
+        .from("payslips")
+        .select(`
+          *,
+          employees (
+            id,
+            first_name,
+            last_name,
+            national_insurance_number,
+            date_of_birth,
+            tax_code,
+            nic_category,
+            is_director,
+            director_nic_method,
+            address_line_1,
+            address_line_2,
+            postcode
+          )
+        `)
+        .eq("pay_run_id", payRunId);
+
+      employees = (payslips || []).map(p => ({
+        employeeId: p.employee_id,
+        niNumber: p.employees?.national_insurance_number || '',
+        firstName: p.employees?.first_name || '',
+        lastName: p.employees?.last_name || '',
+        dateOfBirth: p.employees?.date_of_birth || '',
+        gender: 'M', // Default, should be from employee record
+        address: {
+          line1: p.employees?.address_line_1 || '',
+          line2: p.employees?.address_line_2 || '',
+          postcode: p.employees?.postcode || '',
+        },
+        taxCode: p.employees?.tax_code || '1257L',
+        nicCategory: p.employees?.nic_category || 'A',
+        isDirector: p.employees?.is_director || false,
+        directorNICMethod: p.employees?.director_nic_method,
+        taxablePay: p.taxable_pay || 0,
+        taxDeducted: p.paye_tax || 0,
+        employeeNIC: p.employee_nic || 0,
+        employerNIC: p.employer_nic || 0,
+        studentLoanDeduction: p.student_loan || 0,
+        postgraduateLoanDeduction: 0,
+        pensionContributions: p.employee_pension || 0,
+        ytdTaxablePay: p.taxable_pay || 0,
+        ytdTaxDeducted: p.paye_tax || 0,
+        ytdEmployeeNIC: p.employee_nic || 0,
+        ytdEmployerNIC: p.employer_nic || 0,
+        ytdStudentLoan: p.student_loan || 0,
+      }));
+    }
+
+    // Calculate tax month from payment date
+    const paymentDate = new Date(payRun.payment_date);
+    const taxMonth = paymentDate.getMonth() >= 3 
+      ? paymentDate.getMonth() - 2 
+      : paymentDate.getMonth() + 10;
+
+    // Create filing with status "draft"
+    const { data: filing, error: insertError } = await supabase
+      .from("filings")
+      .insert({
+        organization_id: organizationId,
+        company_id: entityType === 'company' ? entityId : null,
+        client_id: entityType === 'client' ? entityId : null,
+        filing_type: filingType,
+        filing_body: "HMRC",
+        tax_year: payRun.tax_year,
+        period_start: payRun.period_start,
+        period_end: payRun.period_end,
+        status: "draft",
+        filing_data: {
+          pay_run_id: payRunId,
+          paye_reference: payeScheme?.employer_paye_reference,
+          accounts_office_ref: payeScheme?.accounts_office_reference,
+          payment_date: payRun.payment_date,
+          pay_frequency: payRun.pay_frequency,
+          tax_month: taxMonth,
+          employee_count: payRun.employee_count,
+          employees: employees,
+          totals: {
+            gross: payRun.total_gross_pay,
+            paye: payRun.total_paye,
+            employee_nic: payRun.total_employee_nic,
+            employer_nic: payRun.total_employer_nic,
+            student_loan: payRun.total_student_loan,
+            pension: (payRun as any).total_pension_employee || 0,
+            net: payRun.total_net_pay,
+          },
+        },
+      } as any)
+      .select("id")
+      .single();
+
+    if (insertError) {
+      return { success: false, error: insertError.message };
+    }
+
+    // Log audit
+    await logAudit({
+      organizationId,
+      entityType: "filing",
+      entityId: filing.id,
+      action: "create",
+      metadata: { source: "pay_run", pay_run_id: payRunId, filing_type: filingType },
+    });
+
+    return { success: true, filingId: filing.id };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Create CIS filing from CIS return data
+ * Per CTO: Creates filing with status "draft", NOT "filed"
+ */
+export async function createCISFilingFromReturn(
+  cisReturnId: string
+): Promise<{ success: boolean; filingId?: string; error?: string }> {
+  try {
+    // Fetch CIS return with contractor and payments
+    const { data: cisReturn, error: fetchError } = await supabase
+      .from("cis_returns")
+      .select(`
+        *,
+        cis_contractors (
+          id,
+          name,
+          contractor_utr,
+          accounts_office_reference,
+          company_id,
+          client_id,
+          organization_id
+        ),
+        cis_payments (
+          id,
+          gross_amount,
+          materials_amount,
+          labour_amount,
+          deduction_amount,
+          deduction_rate,
+          payment_date,
+          invoice_number,
+          cis_subcontractors (
+            id,
+            first_name,
+            last_name,
+            business_name,
+            trading_name,
+            utr,
+            national_insurance_number,
+            verification_number,
+            deduction_rate,
+            is_partnership,
+            company_registration_number
+          )
+        )
+      `)
+      .eq("id", cisReturnId)
+      .single();
+
+    if (fetchError || !cisReturn) {
+      return { success: false, error: "CIS return not found" };
+    }
+
+    const contractor = cisReturn.cis_contractors as any;
+    const organizationId = contractor?.organization_id || cisReturn.organization_id;
+    const entityId = contractor?.company_id || contractor?.client_id;
+    const entityType = contractor?.company_id ? 'company' : 'client';
+
+    // Build subcontractors array
+    const payments = (cisReturn.cis_payments || []) as any[];
+    const subcontractorMap = new Map<string, any>();
+    
+    payments.forEach(p => {
+      const sub = p.cis_subcontractors;
+      if (sub && !subcontractorMap.has(sub.id)) {
+        subcontractorMap.set(sub.id, {
+          id: sub.id,
+          verificationType: sub.company_registration_number ? 'company' : sub.is_partnership ? 'partnership' : 'individual',
+          firstName: sub.first_name,
+          lastName: sub.last_name,
+          tradingName: sub.trading_name,
+          businessName: sub.business_name,
+          companyRegistrationNumber: sub.company_registration_number,
+          utr: sub.utr,
+          niNumber: sub.national_insurance_number,
+          verificationNumber: sub.verification_number,
+          deductionRate: sub.deduction_rate,
+        });
+      }
+    });
+
+    const subcontractors = Array.from(subcontractorMap.values());
+
+    const cisPayments = payments.map(p => ({
+      subcontractorId: p.cis_subcontractors?.id,
+      paymentDate: p.payment_date,
+      grossAmount: p.gross_amount,
+      labourAmount: p.labour_amount,
+      materialsAmount: p.materials_amount || 0,
+      deductionAmount: p.deduction_amount,
+      netAmount: p.gross_amount - p.deduction_amount,
+      deductionRate: p.deduction_rate,
+      invoiceNumber: p.invoice_number,
+    }));
+
+    // Create filing with status "draft"
+    const { data: filing, error: insertError } = await supabase
+      .from("filings")
+      .insert({
+        organization_id: organizationId,
+        company_id: entityType === 'company' ? entityId : null,
+        client_id: entityType === 'client' ? entityId : null,
+        filing_type: "CIS_RETURN",
+        filing_body: "HMRC",
+        tax_year: cisReturn.tax_year,
+        period_start: cisReturn.period_start,
+        period_end: cisReturn.period_end,
+        status: "draft",
+        filing_data: {
+          cis_return_id: cisReturnId,
+          contractor_utr: contractor?.contractor_utr,
+          contractor_name: contractor?.name,
+          accounts_office_ref: contractor?.accounts_office_reference,
+          tax_month: cisReturn.tax_month,
+          due_date: cisReturn.due_date,
+          nil_return: (cisReturn.total_payments_count || 0) === 0,
+          employment_declaration: cisReturn.employment_status_declaration,
+          verification_declaration: cisReturn.subcontractor_verification_declaration,
+          subcontractors,
+          payments: cisPayments,
+          totals: {
+            gross: cisReturn.total_gross_amount,
+            deductions: cisReturn.total_deductions,
+            materials: cisReturn.total_materials_amount,
+            payments_count: cisReturn.total_payments_count,
+          },
+        },
+      } as any)
+      .select("id")
+      .single();
+
+    if (insertError) {
+      return { success: false, error: insertError.message };
+    }
+
+    // Log audit
+    await logAudit({
+      organizationId,
+      entityType: "filing",
+      entityId: filing.id,
+      action: "create",
+      metadata: { source: "cis_return", cis_return_id: cisReturnId },
+    });
+
+    return { success: true, filingId: filing.id };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}

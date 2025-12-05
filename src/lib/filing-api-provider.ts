@@ -4,6 +4,21 @@
  * Currently implements sandbox providers - production providers can be dropped in
  */
 
+import { supabase } from "@/integrations/supabase/client";
+import { 
+  generateFPSXml, 
+  generateEPSXml, 
+  type FPSPayRunData, 
+  type FPSEmployeeData, 
+  type EPSData 
+} from "@/lib/rti-submission-engine";
+import { 
+  generateCISReturnXml, 
+  type CISReturnData, 
+  type CISSubcontractorData, 
+  type CISPaymentData 
+} from "@/lib/cis-submission-engine";
+
 // ==================== STRONGLY TYPED FILING TYPES ====================
 
 export const RTI_FILING_TYPES = {
@@ -151,7 +166,7 @@ export class HMRCSandboxProvider implements FilingAPIProvider {
   }
   
   private async submitRTIFiling(request: FilingSubmissionRequest): Promise<FilingSubmissionResponse> {
-    console.log(`[HMRC Sandbox RTI] Submitting ${request.filingType}`);
+    console.log(`[HMRC RTI] Submitting ${request.filingType} via edge function`);
     
     const validationErrors = await this.validateRTIFiling(request);
     if (validationErrors.length > 0) {
@@ -162,30 +177,96 @@ export class HMRCSandboxProvider implements FilingAPIProvider {
         validationErrors,
       };
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const submissionId = `RTI-SB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const filingReference = `RTI-${request.filingType.replace('RTI_', '')}-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
-    
-    return {
-      success: true,
-      submissionId,
-      filingReference,
-      status: "accepted",
-      message: "RTI filing accepted (sandbox mode)",
-      // Note: No raw XML in response - only safe metadata
-      rawResponse: {
-        environment: "sandbox",
-        timestamp: new Date().toISOString(),
-        filingType: request.filingType,
-        taxYear: request.taxYear,
-      },
-    };
+
+    try {
+      // Build XML from filing data
+      const filingData = request.filingData;
+      const payRunData: FPSPayRunData = {
+        payeReference: filingData.paye_reference || '',
+        accountsOfficeReference: filingData.accounts_office_ref || '',
+        taxYear: request.taxYear || '',
+        taxMonth: filingData.tax_month || 1,
+        paymentDate: filingData.payment_date || '',
+        periodStart: request.periodStart || '',
+        periodEnd: request.periodEnd || '',
+        payFrequency: filingData.pay_frequency || 'monthly',
+        isLateFiling: filingData.is_late_filing,
+        lateFilingReason: filingData.late_filing_reason,
+      };
+
+      const employees: FPSEmployeeData[] = filingData.employees || [];
+      
+      // Generate XML based on filing type
+      let xmlPayload: string;
+      let messageType: 'FPS' | 'EPS' | 'P45' | 'P46' | 'EYU' | 'NVR';
+      
+      if (request.filingType === RTI_FILING_TYPES.FPS) {
+        xmlPayload = generateFPSXml(payRunData, employees);
+        messageType = 'FPS';
+      } else if (request.filingType === RTI_FILING_TYPES.EPS) {
+        const epsData: EPSData = {
+          payeReference: filingData.paye_reference || '',
+          accountsOfficeReference: filingData.accounts_office_ref || '',
+          taxYear: request.taxYear || '',
+          taxMonth: filingData.tax_month || 1,
+          ...filingData.eps_data,
+        };
+        xmlPayload = generateEPSXml(payRunData, epsData);
+        messageType = 'EPS';
+      } else {
+        // Default to FPS format for other RTI types
+        xmlPayload = generateFPSXml(payRunData, employees);
+        messageType = request.filingType.replace('RTI_', '') as any;
+      }
+
+      // Call edge function
+      const { data, error } = await supabase.functions.invoke('rti-submit', {
+        body: {
+          filingId: request.filingId,
+          messageType,
+          xmlPayload,
+          organizationId: request.organizationId,
+          payRunId: filingData.pay_run_id,
+          taxYear: request.taxYear,
+          taxMonth: filingData.tax_month,
+        },
+      });
+
+      if (error) {
+        console.error('[HMRC RTI] Edge function error:', error);
+        return {
+          success: false,
+          status: "error",
+          message: error.message || "RTI submission failed",
+        };
+      }
+
+      return {
+        success: data.success,
+        submissionId: data.correlationId,
+        filingReference: data.hmrcReference,
+        status: data.success ? "accepted" : "rejected",
+        message: data.message,
+        rawResponse: {
+          environment: "sandbox",
+          timestamp: new Date().toISOString(),
+          filingType: request.filingType,
+          correlationId: data.correlationId,
+          submissionId: data.submissionId,
+        },
+      };
+    } catch (err: any) {
+      console.error('[HMRC RTI] Submission error:', err);
+      return {
+        success: false,
+        status: "error",
+        message: err.message || "RTI submission failed",
+      };
+    }
   }
   
   private async submitCISFiling(request: FilingSubmissionRequest): Promise<FilingSubmissionResponse> {
-    console.log(`[HMRC Sandbox CIS] Submitting ${request.filingType}`);
+    console.log(`[HMRC CIS] Submitting ${request.filingType} via edge function`);
     
     const validationErrors = await this.validateCISFiling(request);
     if (validationErrors.length > 0) {
@@ -196,25 +277,78 @@ export class HMRCSandboxProvider implements FilingAPIProvider {
         validationErrors,
       };
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const submissionId = `CIS-SB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const filingReference = `CIS-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
-    
-    return {
-      success: true,
-      submissionId,
-      filingReference,
-      status: "accepted",
-      message: "CIS filing accepted (sandbox mode)",
-      // Note: No raw XML in response - only safe metadata
-      rawResponse: {
-        environment: "sandbox",
-        timestamp: new Date().toISOString(),
-        filingType: request.filingType,
-      },
-    };
+
+    try {
+      const filingData = request.filingData;
+      
+      // Build CIS return data from filing_data
+      const returnData: CISReturnData = {
+        contractor: {
+          contractorUTR: filingData.contractor_utr || '',
+          contractorName: filingData.contractor_name || '',
+          accountsOfficeReference: filingData.accounts_office_ref || '',
+          payeReference: filingData.paye_reference,
+        },
+        taxYear: request.taxYear || '',
+        taxMonth: filingData.tax_month || 1,
+        periodStart: request.periodStart || '',
+        periodEnd: request.periodEnd || '',
+        dueDate: filingData.due_date || '',
+        employmentStatusDeclaration: filingData.employment_declaration || false,
+        subcontractorVerificationDeclaration: filingData.verification_declaration || false,
+        nilReturn: filingData.nil_return || false,
+      };
+
+      const subcontractors: CISSubcontractorData[] = filingData.subcontractors || [];
+      const payments: CISPaymentData[] = filingData.payments || [];
+
+      // Generate XML
+      const xmlPayload = generateCISReturnXml(returnData, subcontractors, payments);
+
+      // Call edge function
+      const { data, error } = await supabase.functions.invoke('cis-submit', {
+        body: {
+          filingId: request.filingId,
+          returnType: request.filingType === CIS_FILING_TYPES.VERIFICATION ? 'VERIFICATION' : 'MONTHLY_RETURN',
+          xmlPayload,
+          organizationId: request.organizationId,
+          cisReturnId: filingData.cis_return_id,
+          taxYear: request.taxYear,
+          taxMonth: filingData.tax_month,
+        },
+      });
+
+      if (error) {
+        console.error('[HMRC CIS] Edge function error:', error);
+        return {
+          success: false,
+          status: "error",
+          message: error.message || "CIS submission failed",
+        };
+      }
+
+      return {
+        success: data.success,
+        submissionId: data.correlationId,
+        filingReference: data.hmrcReference || data.hmrcReceiptNumber,
+        status: data.success ? "accepted" : "rejected",
+        message: data.message,
+        rawResponse: {
+          environment: "sandbox",
+          timestamp: new Date().toISOString(),
+          filingType: request.filingType,
+          correlationId: data.correlationId,
+          hmrcReceiptNumber: data.hmrcReceiptNumber,
+        },
+      };
+    } catch (err: any) {
+      console.error('[HMRC CIS] Submission error:', err);
+      return {
+        success: false,
+        status: "error",
+        message: err.message || "CIS submission failed",
+      };
+    }
   }
   
   async checkStatus(request: FilingStatusCheckRequest): Promise<FilingStatusResponse> {
