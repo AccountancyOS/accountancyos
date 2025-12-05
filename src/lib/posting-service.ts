@@ -209,21 +209,13 @@ export async function reverseLedgerEntries(
   context: Omit<PostingContext, "sourceId">,
   reason?: string
 ): Promise<PostingResult> {
-  // Fetch original entries - use explicit typing to avoid deep instantiation
-  const result = await supabase
-    .from("ledger_entries")
+  // Fetch original entries - manual fetch to avoid TS2589
+  const { data: originalEntries, error: fetchError } = await (supabase
+    .from("ledger_entries") as any)
     .select("account_id, debit, credit, description, vat_code_id")
     .eq("journal_id", journalId);
 
-  const originalEntries = result.data as Array<{
-    account_id: string;
-    debit: number | null;
-    credit: number | null;
-    description: string | null;
-    vat_code_id: string | null;
-  }> | null;
-
-  if (result.error || !originalEntries?.length) {
+  if (fetchError || !originalEntries?.length) {
     return { success: false, error: "Could not find original entries to reverse" };
   }
 
