@@ -37,6 +37,11 @@ import Settings from "./pages/Settings";
 import Emails from "./pages/Emails";
 import GmailCallback from "./pages/GmailCallback";
 import OutlookCallback from "./pages/OutlookCallback";
+import Payroll from "./pages/Payroll";
+import PayRunDetail from "./pages/PayRunDetail";
+import EmployeeDetail from "./pages/EmployeeDetail";
+import CIS from "./pages/CIS";
+import CISReturnDetail from "./pages/CISReturnDetail";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -319,6 +324,46 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <OutlookCallback />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payroll"
+              element={
+                <ProtectedRoute>
+                  <Payroll />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payroll/pay-runs/:payRunId"
+              element={
+                <ProtectedRoute>
+                  <PayRunDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payroll/employees/:employeeId"
+              element={
+                <ProtectedRoute>
+                  <EmployeeDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cis"
+              element={
+                <ProtectedRoute>
+                  <CIS />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cis/returns/:cisReturnId"
+              element={
+                <ProtectedRoute>
+                  <CISReturnDetail />
                 </ProtectedRoute>
               }
             />

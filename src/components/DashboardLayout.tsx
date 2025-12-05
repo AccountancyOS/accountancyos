@@ -25,6 +25,8 @@ import {
   UserCheck,
   CreditCard,
   Mail,
+  Wallet,
+  HardHat,
 } from "lucide-react";
 
 const navigation = [
@@ -36,6 +38,8 @@ const navigation = [
   { name: "Quotes", href: "/quotes", icon: Receipt },
   { name: "Onboarding", href: "/onboarding", icon: UserCheck },
   { name: "Bookkeeping", href: "/bookkeeping", icon: BookOpen },
+  { name: "Payroll", href: "/payroll", icon: Wallet },
+  { name: "CIS", href: "/cis", icon: HardHat },
   { name: "Jobs", href: "/jobs", icon: ClipboardList },
   { name: "Workpapers", href: "/workpapers", icon: FileText },
   { name: "Deadlines", href: "/deadlines", icon: Calendar },
