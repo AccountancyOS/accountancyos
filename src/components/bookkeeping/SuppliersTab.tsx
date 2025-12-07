@@ -19,10 +19,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FileText, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import SupplierEditorDialog from "./SupplierEditorDialog";
 import SupplierStatementDialog from "./SupplierStatementDialog";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 import type { BookkeepingEntity } from "./EntitySelector";
 
@@ -101,9 +102,11 @@ export default function SuppliersTab({ entity }: SuppliersTabProps) {
 
   if (!entity) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to view suppliers
-      </div>
+      <BookkeepingEmptyState
+        icon={Building2}
+        title="No entity selected"
+        description="Select a client or company above to view suppliers"
+      />
     );
   }
 
@@ -137,33 +140,33 @@ export default function SuppliersTab({ entity }: SuppliersTabProps) {
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Payment Terms</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-[300px]">
+          <p className="text-muted-foreground">Loading suppliers...</p>
+        </div>
+      ) : filteredSuppliers.length === 0 ? (
+        <BookkeepingEmptyState
+          icon={Building2}
+          title="No suppliers yet"
+          description="Add your first supplier to start creating bills and tracking payables"
+          actionLabel="Add Supplier"
+          onAction={handleNew}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Payment Terms</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : filteredSuppliers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No suppliers found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredSuppliers.map((supplier) => (
+            </TableHeader>
+            <TableBody>
+              {filteredSuppliers.map((supplier) => (
                 <TableRow key={supplier.id}>
                   <TableCell className="font-medium">{supplier.name}</TableCell>
                   <TableCell>{supplier.email || "—"}</TableCell>
@@ -201,11 +204,11 @@ export default function SuppliersTab({ entity }: SuppliersTabProps) {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       <SupplierEditorDialog
         open={editorOpen}

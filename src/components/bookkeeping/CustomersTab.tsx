@@ -19,11 +19,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FileText, Users } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/bookkeeping-utils";
 import CustomerEditorDialog from "./CustomerEditorDialog";
 import CustomerStatementDialog from "./CustomerStatementDialog";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 import type { BookkeepingEntity } from "./EntitySelector";
 
@@ -102,9 +102,11 @@ export default function CustomersTab({ entity }: CustomersTabProps) {
 
   if (!entity) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to view customers
-      </div>
+      <BookkeepingEmptyState
+        icon={Users}
+        title="No entity selected"
+        description="Select a client or company above to view customers"
+      />
     );
   }
 
@@ -138,33 +140,33 @@ export default function CustomersTab({ entity }: CustomersTabProps) {
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Payment Terms</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-[300px]">
+          <p className="text-muted-foreground">Loading customers...</p>
+        </div>
+      ) : filteredCustomers.length === 0 ? (
+        <BookkeepingEmptyState
+          icon={Users}
+          title="No customers yet"
+          description="Add your first customer to start creating sales invoices and tracking receivables"
+          actionLabel="Add Customer"
+          onAction={handleNew}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Payment Terms</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : filteredCustomers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No customers found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredCustomers.map((customer) => (
+            </TableHeader>
+            <TableBody>
+              {filteredCustomers.map((customer) => (
                 <TableRow key={customer.id}>
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.email || "—"}</TableCell>
@@ -202,11 +204,11 @@ export default function CustomersTab({ entity }: CustomersTabProps) {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       <CustomerEditorDialog
         open={editorOpen}

@@ -32,25 +32,29 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { BankRuleEditorDialog } from "./BankRuleEditorDialog";
 import { RuleTestRunDialog } from "./RuleTestRunDialog";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 interface BankRulesTabProps {
   entity: BookkeepingEntity | null;
 }
 
 export function BankRulesTab({ entity }: BankRulesTabProps) {
-  if (!entity) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to view bank rules
-      </div>
-    );
-  }
   const [bankAccountFilter, setBankAccountFilter] = useState("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [testRunOpen, setTestRunOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<any>(null);
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
+
+  if (!entity) {
+    return (
+      <BookkeepingEmptyState
+        icon={Wand2}
+        title="No entity selected"
+        description="Select a client or company above to view bank rules"
+      />
+    );
+  }
 
   const { data: bankAccounts } = useQuery({
     queryKey: ["bank-accounts-for-rules", organization?.id, entity.type, entity.id],
@@ -169,6 +173,11 @@ export function BankRulesTab({ entity }: BankRulesTabProps) {
     return actions.map((a: any) => `${a.type}: ${a.value}`).join(", ");
   };
 
+  const handleNew = () => {
+    setSelectedRule(null);
+    setEditorOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -178,12 +187,7 @@ export function BankRulesTab({ entity }: BankRulesTabProps) {
             Automate categorization of bank transactions
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedRule(null);
-            setEditorOpen(true);
-          }}
-        >
+        <Button onClick={handleNew}>
           <Plus className="h-4 w-4 mr-2" />
           New Rule
         </Button>
@@ -212,18 +216,16 @@ export function BankRulesTab({ entity }: BankRulesTabProps) {
       {/* Rules Table */}
       {isLoading ? (
         <div className="flex items-center justify-center h-[300px]">
-          <p>Loading rules...</p>
+          <p className="text-muted-foreground">Loading rules...</p>
         </div>
       ) : !rules || rules.length === 0 ? (
-        <div className="flex items-center justify-center h-[300px] border border-dashed rounded-lg">
-          <div className="text-center space-y-2">
-            <Wand2 className="h-12 w-12 mx-auto text-muted-foreground" />
-            <p className="text-lg font-medium">No bank rules</p>
-            <p className="text-sm text-muted-foreground">
-              Create rules to automatically categorize transactions
-            </p>
-          </div>
-        </div>
+        <BookkeepingEmptyState
+          icon={Wand2}
+          title="No bank rules yet"
+          description="Create rules to automatically categorize and code bank transactions as they come in"
+          actionLabel="Create Rule"
+          onAction={handleNew}
+        />
       ) : (
         <div className="border rounded-lg">
           <Table>

@@ -16,12 +16,19 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { toast } from "sonner";
-import { Check, X, Wand2 } from "lucide-react";
+import { Wand2, X, Scale } from "lucide-react";
 import { MatchingSuggestionsPanel } from "./MatchingSuggestionsPanel";
 import { autoMatchHighConfidence } from "@/lib/matching-service";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 interface BankReconciliationTabProps {
   entity: BookkeepingEntity | null;
@@ -36,15 +43,18 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
   const [selectedBankTransactions, setSelectedBankTransactions] = useState<Set<string>>(new Set());
   const [selectedLedgerEntries, setSelectedLedgerEntries] = useState<Set<string>>(new Set());
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [matchingPanelOpen, setMatchingPanelOpen] = useState(false);
   const { organization } = useOrganization();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   if (!entity) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to perform bank reconciliation
-      </div>
+      <BookkeepingEmptyState
+        icon={Scale}
+        title="No entity selected"
+        description="Select a client or company above to perform bank reconciliation"
+      />
     );
   }
 
@@ -131,12 +141,6 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
       const bankTotal = Array.from(selectedBankTransactions).reduce((sum, id) => {
         const tx = bankTransactions?.find((t) => t.id === id);
         return sum + (tx?.amount || 0);
-      }, 0);
-
-      const ledgerTotal = Array.from(selectedLedgerEntries).reduce((sum, id) => {
-        const entry = ledgerEntries?.find((e) => e.id === id);
-        const amount = (entry?.debit || 0) - (entry?.credit || 0);
-        return sum + amount;
       }, 0);
 
       const difference = parseFloat(closingBalance) - parseFloat(openingBalance) - bankTotal;
@@ -256,6 +260,11 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
   const calculatedClosing = parseFloat(openingBalance || "0") + bankTotal;
   const difference = parseFloat(closingBalance || "0") - calculatedClosing;
 
+  const handleTransactionClick = (txId: string) => {
+    setSelectedTransactionId(txId);
+    setMatchingPanelOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -349,14 +358,11 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
       </Card>
 
       {!selectedBankAccount || !startDate || !endDate ? (
-        <div className="flex items-center justify-center h-[400px] border border-dashed rounded-lg">
-          <div className="text-center space-y-2">
-            <p className="text-lg font-medium">Set reconciliation parameters</p>
-            <p className="text-sm text-muted-foreground">
-              Select bank account and date range to begin
-            </p>
-          </div>
-        </div>
+        <BookkeepingEmptyState
+          icon={Scale}
+          title="Set reconciliation parameters"
+          description="Select a bank account and date range to begin reconciling transactions"
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -369,7 +375,7 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
                 {bankTransactions?.map((tx) => (
                   <div
                     key={tx.id}
-                    onClick={() => setSelectedTransactionId(tx.id)}
+                    onClick={() => handleTransactionClick(tx.id)}
                     className={`flex items-start gap-2 p-2 border rounded cursor-pointer transition-colors ${
                       selectedTransactionId === tx.id
                         ? "bg-primary/10 ring-2 ring-primary"
@@ -456,19 +462,6 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
               </div>
             </Card>
           </div>
-
-          {/* Matching Suggestions Panel */}
-          {selectedTransactionId && (
-            <MatchingSuggestionsPanel
-              transactionId={selectedTransactionId}
-              onMatchApplied={() => {
-                queryClient.invalidateQueries({ queryKey: ["bank-transactions-rec"] });
-                queryClient.invalidateQueries({ queryKey: ["invoices"] });
-                queryClient.invalidateQueries({ queryKey: ["bills"] });
-                setSelectedTransactionId(null);
-              }}
-            />
-          )}
         </>
       )}
 
@@ -485,24 +478,43 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
         <Button
           onClick={() => completeMutation.mutate()}
           disabled={
-            Math.abs(difference) > 0.01 ||
             completeMutation.isPending ||
-            !selectedBankAccount
+            Math.abs(difference) > 0.01 ||
+            !selectedBankAccount ||
+            !startDate ||
+            !endDate ||
+            !openingBalance ||
+            !closingBalance
           }
         >
-          {Math.abs(difference) < 0.01 ? (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              Complete Reconciliation
-            </>
-          ) : (
-            <>
-              <X className="h-4 w-4 mr-2" />
-              Difference Must Be Zero
-            </>
-          )}
+          {completeMutation.isPending ? "Completing..." : "Complete Reconciliation"}
         </Button>
       </div>
+
+      {/* Matching Suggestions Side Panel */}
+      <Sheet open={matchingPanelOpen} onOpenChange={setMatchingPanelOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center justify-between">
+              Matching Suggestions
+            </SheetTitle>
+          </SheetHeader>
+          {selectedTransactionId && (
+            <div className="mt-4">
+              <MatchingSuggestionsPanel
+                transactionId={selectedTransactionId}
+                onMatchApplied={() => {
+                  queryClient.invalidateQueries({ queryKey: ["bank-transactions-rec"] });
+                  queryClient.invalidateQueries({ queryKey: ["invoices"] });
+                  queryClient.invalidateQueries({ queryKey: ["bills"] });
+                  setMatchingPanelOpen(false);
+                  setSelectedTransactionId(null);
+                }}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
