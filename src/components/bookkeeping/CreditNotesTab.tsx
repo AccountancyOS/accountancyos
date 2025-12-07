@@ -69,7 +69,7 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
           original_bill:bills(id, bill_number)
         `)
         .eq("organization_id", organization.id)
-        .order("credit_note_date", { ascending: false });
+        .order("issue_date", { ascending: false });
 
       if (entity.type === "client") {
         query.eq("client_id", entity.id);
@@ -88,10 +88,10 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
       }
 
       if (dateFrom) {
-        query.gte("credit_note_date", dateFrom);
+        query.gte("issue_date", dateFrom);
       }
       if (dateTo) {
-        query.lte("credit_note_date", dateTo);
+        query.lte("issue_date", dateTo);
       }
 
       const { data, error } = await query;
@@ -248,11 +248,11 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
             </TableHeader>
             <TableBody>
               {creditNotes.map((cn) => {
-                const remaining = Number(cn.total_gross || 0) - Number(cn.allocated_amount || 0);
+                const remaining = Number(cn.remaining_allocation || 0);
                 const contactName =
                   cn.credit_note_type === "SALES"
-                    ? cn.customer?.name || cn.customer_name
-                    : cn.supplier?.name || cn.supplier_name;
+                    ? cn.customer?.name
+                    : cn.supplier?.name;
                 const originalDoc =
                   cn.credit_note_type === "SALES"
                     ? cn.original_invoice?.invoice_number
@@ -261,7 +261,7 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
                 return (
                   <TableRow key={cn.id}>
                     <TableCell>
-                      {format(new Date(cn.credit_note_date), "dd/MM/yyyy")}
+                      {format(new Date(cn.issue_date), "dd/MM/yyyy")}
                     </TableCell>
                     <TableCell className="font-medium">
                       {cn.credit_note_number || cn.id.substring(0, 8)}
@@ -279,7 +279,7 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(cn.total_gross)}
+                      {formatCurrency(cn.total)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
                       {formatCurrency(remaining)}

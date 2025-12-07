@@ -81,7 +81,7 @@ export function CreditNoteEditorDialog({
   useEffect(() => {
     if (creditNote) {
       setCreditNoteNumber(creditNote.credit_note_number || "");
-      setCreditNoteDate(creditNote.credit_note_date || new Date().toISOString().split("T")[0]);
+      setCreditNoteDate(creditNote.issue_date || creditNote.credit_note_date || new Date().toISOString().split("T")[0]);
       setCustomerId(creditNote.customer_id || "");
       setSupplierId(creditNote.supplier_id || "");
       setOriginalInvoiceId(creditNote.original_invoice_id || "");
@@ -266,17 +266,17 @@ export function CreditNoteEditorDialog({
         company_id: entity.type === "company" ? entity.id : null,
         credit_note_type: creditNoteType.toUpperCase(),
         credit_note_number: creditNoteNumber || null,
-        credit_note_date: creditNoteDate,
+        issue_date: creditNoteDate,
         customer_id: creditNoteType === "sales" ? customerId || null : null,
         supplier_id: creditNoteType === "purchase" ? supplierId || null : null,
         original_invoice_id: creditNoteType === "sales" ? originalInvoiceId || null : null,
         original_bill_id: creditNoteType === "purchase" ? originalBillId || null : null,
         currency,
         notes: notes || null,
-        total_net: totals.net,
-        total_vat: totals.vat,
-        total_gross: totals.gross,
-        allocated_amount: 0,
+        subtotal: totals.net,
+        vat_total: totals.vat,
+        total: totals.gross,
+        remaining_allocation: totals.gross,
         status: approve ? "APPROVED" : "DRAFT",
         is_posted: approve,
       };
@@ -295,7 +295,7 @@ export function CreditNoteEditorDialog({
         // Insert new
         const { data, error } = await supabase
           .from("credit_notes")
-          .insert(creditNoteData)
+          .insert([creditNoteData])
           .select("id")
           .single();
         if (error) throw error;

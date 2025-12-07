@@ -47,7 +47,7 @@ export function AllocateCreditDialog({
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
 
   const isSalesCredit = creditNote?.credit_note_type === "SALES";
-  const remainingCredit = Number(creditNote?.total_gross || 0) - Number(creditNote?.allocated_amount || 0);
+  const remainingCredit = Number(creditNote?.remaining_allocation || creditNote?.total || 0);
 
   // Fetch eligible documents (invoices for sales CN, bills for purchase CN)
   const { data: documents, isLoading } = useQuery({
@@ -171,12 +171,13 @@ export function AllocateCreditDialog({
 
       // Insert allocation records
       const allocationRecords = allocationsToApply.map((a) => ({
+        organization_id: organization.id,
         credit_note_id: creditNote.id,
         invoice_id: isSalesCredit ? a.documentId : null,
         bill_id: !isSalesCredit ? a.documentId : null,
-        allocated_amount: a.allocation,
+        amount: a.allocation,
         allocation_date: new Date().toISOString().split("T")[0],
-        allocated_by: user.id,
+        created_by: user.id,
       }));
 
       const { error: allocError } = await supabase
@@ -231,13 +232,14 @@ export function AllocateCreditDialog({
       }
 
       // Update credit note
-      const newAllocated = Number(creditNote.allocated_amount || 0) + totalAllocated;
-      const newStatus = newAllocated >= Number(creditNote.total_gross) ? "FULLY_ALLOCATED" : "PARTIALLY_ALLOCATED";
+      // Update credit note remaining_allocation
+      const newRemaining = remainingCredit - totalAllocated;
+      const newStatus = newRemaining <= 0 ? "FULLY_ALLOCATED" : "PARTIALLY_ALLOCATED";
 
       await supabase
         .from("credit_notes")
         .update({
-          allocated_amount: newAllocated,
+          remaining_allocation: Math.max(0, newRemaining),
           status: newStatus,
         })
         .eq("id", creditNote.id);
@@ -275,11 +277,11 @@ export function AllocateCreditDialog({
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">Original Amount:</span>
-            <span className="font-mono">{formatCurrency(creditNote?.total_gross || 0)}</span>
+            <span className="font-mono">{formatCurrency(creditNote?.total || 0)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">Already Allocated:</span>
-            <span className="font-mono">{formatCurrency(creditNote?.allocated_amount || 0)}</span>
+            <span className="font-mono">{formatCurrency(Number(creditNote?.total || 0) - Number(creditNote?.remaining_allocation || 0))}</span>
           </div>
           <div className="flex justify-between font-bold border-t pt-2">
             <span>Available to Allocate:</span>
