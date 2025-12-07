@@ -259,17 +259,15 @@ export default function SalesTab({ entity }: SalesTabProps) {
         </Table>
       </div>
 
-      <InvoiceEditorDialog
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        invoice={selectedInvoice}
-        entity={entity}
-        invoiceType="SALES"
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["sales-invoices"] });
-          setEditorOpen(false);
-        }}
-      />
+      {editorOpen && (
+        <InvoiceEditorDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          invoice={selectedInvoice}
+          entity={{ type: entity.type, id: entity.id, name: "", displayName: "" }}
+          invoiceType="SALES"
+        />
+      )}
 
       {paymentInvoiceId && (
         <RecordPaymentDialog
