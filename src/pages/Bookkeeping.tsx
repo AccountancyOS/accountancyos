@@ -17,7 +17,6 @@ import BillsTab from "@/components/bookkeeping/BillsTab";
 import SuppliersTab from "@/components/bookkeeping/SuppliersTab";
 import { CreditNotesTab } from "@/components/bookkeeping/CreditNotesTab";
 import { BankRulesTab } from "@/components/bookkeeping/BankRulesTab";
-import { InvoicesTab } from "@/components/bookkeeping/InvoicesTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
@@ -97,7 +96,6 @@ export default function Bookkeeping() {
               <TabsTrigger value="customers">Customers</TabsTrigger>
               <TabsTrigger value="bills">Bills</TabsTrigger>
               <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
-              <TabsTrigger value="invoices">Invoices</TabsTrigger>
               <TabsTrigger value="credit-notes">Credit Notes</TabsTrigger>
               <TabsTrigger value="receipts">Receipts</TabsTrigger>
               <TabsTrigger value="bank-rules">Bank Rules</TabsTrigger>
@@ -159,10 +157,6 @@ export default function Bookkeeping() {
 
             <TabsContent value="suppliers" className="space-y-4">
               <SuppliersTab entity={selectedEntity} />
-            </TabsContent>
-
-            <TabsContent value="invoices" className="space-y-4">
-              <InvoicesTab entity={selectedEntity} />
             </TabsContent>
 
             <TabsContent value="credit-notes" className="space-y-4">

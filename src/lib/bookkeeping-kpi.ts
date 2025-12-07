@@ -374,10 +374,9 @@ export async function getAgedPayables(
   entityId: string
 ): Promise<{ current: number; days30: number; days60: number; days90Plus: number; total: number }> {
   const { data, error } = await supabase
-    .from('invoices')
+    .from('bills')
     .select('total_gross, amount_paid, due_date')
     .eq(entityType === 'client' ? 'client_id' : 'company_id', entityId)
-    .eq('invoice_type', 'PURCHASE')
     .neq('status', 'PAID')
     .neq('status', 'VOID');
 
@@ -389,9 +388,9 @@ export async function getAgedPayables(
   const now = new Date();
   const result = { current: 0, days30: 0, days60: 0, days90Plus: 0, total: 0 };
 
-  (data || []).forEach((invoice) => {
-    const outstanding = invoice.total_gross - invoice.amount_paid;
-    const dueDate = new Date(invoice.due_date);
+  (data || []).forEach((bill) => {
+    const outstanding = (bill.total_gross || 0) - (bill.amount_paid || 0);
+    const dueDate = new Date(bill.due_date);
     const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
 
     result.total += outstanding;
