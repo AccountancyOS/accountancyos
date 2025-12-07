@@ -11,6 +11,12 @@ import { JournalsTab } from "@/components/bookkeeping/JournalsTab";
 import { BankAccountsTab } from "@/components/bookkeeping/BankAccountsTab";
 import { BankFeedsTab } from "@/components/bookkeeping/BankFeedsTab";
 import { BankReconciliationTab } from "@/components/bookkeeping/BankReconciliationTab";
+import SalesTab from "@/components/bookkeeping/SalesTab";
+import CustomersTab from "@/components/bookkeeping/CustomersTab";
+import BillsTab from "@/components/bookkeeping/BillsTab";
+import SuppliersTab from "@/components/bookkeeping/SuppliersTab";
+import { CreditNotesTab } from "@/components/bookkeeping/CreditNotesTab";
+import { BankRulesTab } from "@/components/bookkeeping/BankRulesTab";
 import { InvoicesTab } from "@/components/bookkeeping/InvoicesTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
@@ -87,8 +93,14 @@ export default function Bookkeeping() {
               <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
               <TabsTrigger value="bank-feeds">Bank Feeds</TabsTrigger>
               <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
+              <TabsTrigger value="sales">Sales</TabsTrigger>
+              <TabsTrigger value="customers">Customers</TabsTrigger>
+              <TabsTrigger value="bills">Bills</TabsTrigger>
+              <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
+              <TabsTrigger value="credit-notes">Credit Notes</TabsTrigger>
               <TabsTrigger value="receipts">Receipts</TabsTrigger>
+              <TabsTrigger value="bank-rules">Bank Rules</TabsTrigger>
               {isVATRegistered && (
                 <TabsTrigger value="vat-returns">VAT Returns</TabsTrigger>
               )}
@@ -133,12 +145,36 @@ export default function Bookkeeping() {
               <BankReconciliationTab entity={selectedEntity} />
             </TabsContent>
 
+            <TabsContent value="sales" className="space-y-4">
+              <SalesTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="customers" className="space-y-4">
+              <CustomersTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="bills" className="space-y-4">
+              <BillsTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="suppliers" className="space-y-4">
+              <SuppliersTab entity={selectedEntity} />
+            </TabsContent>
+
             <TabsContent value="invoices" className="space-y-4">
               <InvoicesTab entity={selectedEntity} />
             </TabsContent>
 
+            <TabsContent value="credit-notes" className="space-y-4">
+              <CreditNotesTab entity={selectedEntity} />
+            </TabsContent>
+
             <TabsContent value="receipts" className="space-y-4">
               <ReceiptsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
+            </TabsContent>
+
+            <TabsContent value="bank-rules" className="space-y-4">
+              <BankRulesTab entity={selectedEntity} />
             </TabsContent>
 
             {isVATRegistered && (

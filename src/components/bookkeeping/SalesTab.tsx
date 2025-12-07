@@ -27,8 +27,10 @@ import { format } from "date-fns";
 import { InvoiceEditorDialog } from "./InvoiceEditorDialog";
 import RecordPaymentDialog from "./RecordPaymentDialog";
 
+import type { BookkeepingEntity } from "./EntitySelector";
+
 interface SalesTabProps {
-  entity: { type: "client" | "company"; id: string } | null;
+  entity: BookkeepingEntity | null;
 }
 
 const statusColors: Record<string, string> = {

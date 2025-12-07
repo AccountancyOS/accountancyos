@@ -24,8 +24,10 @@ import { toast } from "sonner";
 import SupplierEditorDialog from "./SupplierEditorDialog";
 import SupplierStatementDialog from "./SupplierStatementDialog";
 
+import type { BookkeepingEntity } from "./EntitySelector";
+
 interface SuppliersTabProps {
-  entity: { type: "client" | "company"; id: string } | null;
+  entity: BookkeepingEntity | null;
 }
 
 export default function SuppliersTab({ entity }: SuppliersTabProps) {
