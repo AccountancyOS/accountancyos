@@ -8,9 +8,7 @@ import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab"
 import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
 import { TrialBalanceTab } from "@/components/bookkeeping/TrialBalanceTab";
 import { JournalsTab } from "@/components/bookkeeping/JournalsTab";
-import { BankAccountsTab } from "@/components/bookkeeping/BankAccountsTab";
-import { BankFeedsTab } from "@/components/bookkeeping/BankFeedsTab";
-import { BankReconciliationTab } from "@/components/bookkeeping/BankReconciliationTab";
+import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import SalesTab from "@/components/bookkeeping/SalesTab";
 import CustomersTab from "@/components/bookkeeping/CustomersTab";
 import BillsTab from "@/components/bookkeeping/BillsTab";
@@ -97,9 +95,7 @@ export default function Bookkeeping() {
                 <Separator orientation="vertical" className="mx-1 h-6" />
                 
                 {/* Banking Group */}
-                <TabsTrigger value="bank-accounts" className="text-xs sm:text-sm">Bank Accounts</TabsTrigger>
-                <TabsTrigger value="bank-feeds" className="text-xs sm:text-sm">Bank Feeds</TabsTrigger>
-                <TabsTrigger value="bank-reconciliation" className="text-xs sm:text-sm">Bank Reconciliation</TabsTrigger>
+                <TabsTrigger value="banking" className="text-xs sm:text-sm">Banking</TabsTrigger>
                 <TabsTrigger value="bank-rules" className="text-xs sm:text-sm">Bank Rules</TabsTrigger>
                 
                 <Separator orientation="vertical" className="mx-1 h-6" />
@@ -149,16 +145,8 @@ export default function Bookkeeping() {
               <JournalsTab entity={selectedEntity} />
             </TabsContent>
 
-            <TabsContent value="bank-accounts" className="space-y-4">
-              <BankAccountsTab entity={selectedEntity} />
-            </TabsContent>
-
-            <TabsContent value="bank-feeds" className="space-y-4">
-              <BankFeedsTab entity={selectedEntity} />
-            </TabsContent>
-
-            <TabsContent value="bank-reconciliation" className="space-y-4">
-              <BankReconciliationTab entity={selectedEntity} />
+            <TabsContent value="banking" className="space-y-4">
+              <BankingTab entity={selectedEntity} />
             </TabsContent>
 
             <TabsContent value="sales" className="space-y-4">
