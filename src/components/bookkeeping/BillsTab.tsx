@@ -20,11 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Eye, CreditCard } from "lucide-react";
+import { Plus, Search, Eye, CreditCard, Receipt } from "lucide-react";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { format } from "date-fns";
 import BillEditorDialog from "./BillEditorDialog";
 import RecordBillPaymentDialog from "./RecordBillPaymentDialog";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 import type { BookkeepingEntity } from "./EntitySelector";
 
@@ -121,9 +122,11 @@ export default function BillsTab({ entity }: BillsTabProps) {
 
   if (!entity) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to view bills
-      </div>
+      <BookkeepingEmptyState
+        icon={Receipt}
+        title="No entity selected"
+        description="Select a client or company above to view bills"
+      />
     );
   }
 
@@ -174,35 +177,35 @@ export default function BillsTab({ entity }: BillsTabProps) {
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Number</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Supplier</TableHead>
-              <TableHead>Due Date</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Outstanding</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-[300px]">
+          <p className="text-muted-foreground">Loading bills...</p>
+        </div>
+      ) : filteredBills.length === 0 ? (
+        <BookkeepingEmptyState
+          icon={Receipt}
+          title="No bills yet"
+          description="Create your first bill to start tracking accounts payable and supplier invoices"
+          actionLabel="Create Bill"
+          onAction={handleNew}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>Number</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Outstanding</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : filteredBills.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No bills found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredBills.map((bill) => (
+            </TableHeader>
+            <TableBody>
+              {filteredBills.map((bill) => (
                 <TableRow key={bill.id}>
                   <TableCell className="font-medium">
                     {bill.bill_number || "—"}
@@ -252,11 +255,11 @@ export default function BillsTab({ entity }: BillsTabProps) {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       <BillEditorDialog
         open={editorOpen}

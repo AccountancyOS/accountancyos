@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { Button } from "@/components/ui/button";
@@ -20,12 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Eye, CreditCard, FileX } from "lucide-react";
-import { toast } from "sonner";
+import { Plus, Search, Eye, CreditCard, FileText } from "lucide-react";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { format } from "date-fns";
 import { InvoiceEditorDialog } from "./InvoiceEditorDialog";
 import RecordPaymentDialog from "./RecordPaymentDialog";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 import type { BookkeepingEntity } from "./EntitySelector";
 
@@ -124,9 +124,11 @@ export default function SalesTab({ entity }: SalesTabProps) {
 
   if (!entity) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to view sales invoices
-      </div>
+      <BookkeepingEmptyState
+        icon={FileText}
+        title="No entity selected"
+        description="Select a client or company above to view sales invoices"
+      />
     );
   }
 
@@ -177,35 +179,35 @@ export default function SalesTab({ entity }: SalesTabProps) {
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Number</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Due Date</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Outstanding</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-[300px]">
+          <p className="text-muted-foreground">Loading invoices...</p>
+        </div>
+      ) : filteredInvoices.length === 0 ? (
+        <BookkeepingEmptyState
+          icon={FileText}
+          title="No sales invoices"
+          description="Create your first sales invoice to start tracking accounts receivable"
+          actionLabel="Create Invoice"
+          onAction={handleNew}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>Number</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Outstanding</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : filteredInvoices.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No invoices found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredInvoices.map((invoice) => (
+            </TableHeader>
+            <TableBody>
+              {filteredInvoices.map((invoice) => (
                 <TableRow key={invoice.id}>
                   <TableCell className="font-medium">
                     {invoice.invoice_number || "—"}
@@ -255,11 +257,11 @@ export default function SalesTab({ entity }: SalesTabProps) {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {editorOpen && (
         <InvoiceEditorDialog

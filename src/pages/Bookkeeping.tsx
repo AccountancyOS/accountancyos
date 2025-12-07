@@ -23,6 +23,8 @@ import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
 import { PayrollModule } from "@/components/payroll/PayrollModule";
 import { CISModule } from "@/components/cis/CISModule";
 import { useEntityServices } from "@/hooks/useEntityServices";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 export default function Bookkeeping() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -83,33 +85,49 @@ export default function Bookkeeping() {
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-            <TabsList className="flex-wrap h-auto gap-1">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
-              <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
-              <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
-              <TabsTrigger value="journals">Journals</TabsTrigger>
-              <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
-              <TabsTrigger value="bank-feeds">Bank Feeds</TabsTrigger>
-              <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
-              <TabsTrigger value="sales">Sales</TabsTrigger>
-              <TabsTrigger value="customers">Customers</TabsTrigger>
-              <TabsTrigger value="bills">Bills</TabsTrigger>
-              <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
-              <TabsTrigger value="credit-notes">Credit Notes</TabsTrigger>
-              <TabsTrigger value="receipts">Receipts</TabsTrigger>
-              <TabsTrigger value="bank-rules">Bank Rules</TabsTrigger>
-              {isVATRegistered && (
-                <TabsTrigger value="vat-returns">VAT Returns</TabsTrigger>
-              )}
-              {hasPayroll && (
-                <TabsTrigger value="payroll">Payroll</TabsTrigger>
-              )}
-              {hasCIS && (
-                <TabsTrigger value="cis">CIS</TabsTrigger>
-              )}
-              <TabsTrigger value="period-lock">Period Lock</TabsTrigger>
-            </TabsList>
+            <ScrollArea className="w-full whitespace-nowrap">
+              <TabsList className="inline-flex h-auto p-1 gap-0.5">
+                {/* Core Group */}
+                <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+                <TabsTrigger value="trial-balance" className="text-xs sm:text-sm">Trial Balance</TabsTrigger>
+                <TabsTrigger value="general-ledger" className="text-xs sm:text-sm">General Ledger</TabsTrigger>
+                <TabsTrigger value="chart-of-accounts" className="text-xs sm:text-sm">Chart of Accounts</TabsTrigger>
+                <TabsTrigger value="journals" className="text-xs sm:text-sm">Journals</TabsTrigger>
+                
+                <Separator orientation="vertical" className="mx-1 h-6" />
+                
+                {/* Banking Group */}
+                <TabsTrigger value="bank-accounts" className="text-xs sm:text-sm">Bank Accounts</TabsTrigger>
+                <TabsTrigger value="bank-feeds" className="text-xs sm:text-sm">Bank Feeds</TabsTrigger>
+                <TabsTrigger value="bank-reconciliation" className="text-xs sm:text-sm">Bank Reconciliation</TabsTrigger>
+                <TabsTrigger value="bank-rules" className="text-xs sm:text-sm">Bank Rules</TabsTrigger>
+                
+                <Separator orientation="vertical" className="mx-1 h-6" />
+                
+                {/* AR/AP Group */}
+                <TabsTrigger value="sales" className="text-xs sm:text-sm">Sales</TabsTrigger>
+                <TabsTrigger value="customers" className="text-xs sm:text-sm">Customers</TabsTrigger>
+                <TabsTrigger value="bills" className="text-xs sm:text-sm">Bills</TabsTrigger>
+                <TabsTrigger value="suppliers" className="text-xs sm:text-sm">Suppliers</TabsTrigger>
+                <TabsTrigger value="credit-notes" className="text-xs sm:text-sm">Credit Notes</TabsTrigger>
+                
+                <Separator orientation="vertical" className="mx-1 h-6" />
+                
+                {/* Other Group */}
+                <TabsTrigger value="receipts" className="text-xs sm:text-sm">Receipts</TabsTrigger>
+                {isVATRegistered && (
+                  <TabsTrigger value="vat-returns" className="text-xs sm:text-sm">VAT Returns</TabsTrigger>
+                )}
+                {hasPayroll && (
+                  <TabsTrigger value="payroll" className="text-xs sm:text-sm">Payroll</TabsTrigger>
+                )}
+                {hasCIS && (
+                  <TabsTrigger value="cis" className="text-xs sm:text-sm">CIS</TabsTrigger>
+                )}
+                <TabsTrigger value="period-lock" className="text-xs sm:text-sm">Period Lock</TabsTrigger>
+              </TabsList>
+              <ScrollBar orientation="horizontal" className="invisible" />
+            </ScrollArea>
 
             <TabsContent value="overview" className="space-y-4">
               <BusinessOverviewTab entity={selectedEntity} onTabChange={handleTabChange} />

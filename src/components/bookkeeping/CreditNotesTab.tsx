@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { CreditNoteEditorDialog } from "./CreditNoteEditorDialog";
 import { AllocateCreditDialog } from "./AllocateCreditDialog";
+import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 interface CreditNotesTabProps {
   entity: BookkeepingEntity | null;
@@ -35,13 +36,6 @@ type CreditNoteType = "all" | "sales" | "purchase";
 type CreditNoteStatus = "all" | "draft" | "approved" | "allocated" | "void";
 
 export function CreditNotesTab({ entity }: CreditNotesTabProps) {
-  if (!entity) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        Select an entity to view credit notes
-      </div>
-    );
-  }
   const [typeFilter, setTypeFilter] = useState<CreditNoteType>("all");
   const [statusFilter, setStatusFilter] = useState<CreditNoteStatus>("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -51,6 +45,16 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
   const [selectedCreditNote, setSelectedCreditNote] = useState<any>(null);
   const [editorType, setEditorType] = useState<"sales" | "purchase">("sales");
   const { organization } = useOrganization();
+
+  if (!entity) {
+    return (
+      <BookkeepingEmptyState
+        icon={CreditCard}
+        title="No entity selected"
+        description="Select a client or company above to view credit notes"
+      />
+    );
+  }
 
   const { data: creditNotes, isLoading } = useQuery({
     queryKey: [
@@ -127,11 +131,11 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
 
   const getTypeBadge = (type: string) => {
     return type === "SALES" ? (
-      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800">
         Sales
       </Badge>
     ) : (
-      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800">
         Purchase
       </Badge>
     );
@@ -225,18 +229,16 @@ export function CreditNotesTab({ entity }: CreditNotesTabProps) {
       {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center h-[300px]">
-          <p>Loading credit notes...</p>
+          <p className="text-muted-foreground">Loading credit notes...</p>
         </div>
       ) : !creditNotes || creditNotes.length === 0 ? (
-        <div className="flex items-center justify-center h-[300px] border border-dashed rounded-lg">
-          <div className="text-center space-y-2">
-            <CreditCard className="h-12 w-12 mx-auto text-muted-foreground" />
-            <p className="text-lg font-medium">No credit notes</p>
-            <p className="text-sm text-muted-foreground">
-              Create a sales or purchase credit note to get started
-            </p>
-          </div>
-        </div>
+        <BookkeepingEmptyState
+          icon={CreditCard}
+          title="No credit notes"
+          description="Create a sales or purchase credit note to adjust invoices or bills"
+          actionLabel="Create Sales Credit Note"
+          onAction={() => handleNewCreditNote("sales")}
+        />
       ) : (
         <div className="border rounded-lg">
           <Table>
