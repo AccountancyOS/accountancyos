@@ -296,6 +296,64 @@ export function BusinessOverviewTab({ entity, onTabChange }: BusinessOverviewTab
         </Card>
       </div>
 
+      {/* Overdue KPIs */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => onTabChange?.('sales')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Overdue Receivables</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            {loadingAR ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-destructive">
+                  {formatCurrency(
+                    (agedReceivables?.days30 || 0) + 
+                    (agedReceivables?.days60 || 0) + 
+                    (agedReceivables?.days90Plus || 0)
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click to view overdue invoices
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => onTabChange?.('bills')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Overdue Payables</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            {loadingAP ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-destructive">
+                  {formatCurrency(
+                    (agedPayables?.days30 || 0) + 
+                    (agedPayables?.days60 || 0) + 
+                    (agedPayables?.days90Plus || 0)
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click to view overdue bills
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Secondary Panels */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Bank Status */}
