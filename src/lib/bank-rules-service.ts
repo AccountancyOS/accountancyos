@@ -306,7 +306,7 @@ export async function applyRuleToTransaction(
       return { success: false, error: "Transaction already categorized" };
     }
 
-    const actions = rule.actions as RuleAction[];
+    const actions = rule.actions as unknown as RuleAction[];
     let accountId: string | null = null;
     let vatCodeId: string | null = null;
     let category: string | null = null;
@@ -344,7 +344,6 @@ export async function applyRuleToTransaction(
       sourceType: "BANK_TRANSACTION",
       sourceId: transactionId,
       userId,
-      description: transaction.description,
     };
 
     // Determine debit/credit based on amount
