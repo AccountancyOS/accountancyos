@@ -25,8 +25,10 @@ import { formatCurrency } from "@/lib/bookkeeping-utils";
 import CustomerEditorDialog from "./CustomerEditorDialog";
 import CustomerStatementDialog from "./CustomerStatementDialog";
 
+import type { BookkeepingEntity } from "./EntitySelector";
+
 interface CustomersTabProps {
-  entity: { type: "client" | "company"; id: string } | null;
+  entity: BookkeepingEntity | null;
 }
 
 export default function CustomersTab({ entity }: CustomersTabProps) {

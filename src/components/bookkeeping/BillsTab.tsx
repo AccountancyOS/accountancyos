@@ -26,8 +26,10 @@ import { format } from "date-fns";
 import BillEditorDialog from "./BillEditorDialog";
 import RecordBillPaymentDialog from "./RecordBillPaymentDialog";
 
+import type { BookkeepingEntity } from "./EntitySelector";
+
 interface BillsTabProps {
-  entity: { type: "client" | "company"; id: string } | null;
+  entity: BookkeepingEntity | null;
 }
 
 const statusColors: Record<string, string> = {

@@ -28,13 +28,20 @@ import { CreditNoteEditorDialog } from "./CreditNoteEditorDialog";
 import { AllocateCreditDialog } from "./AllocateCreditDialog";
 
 interface CreditNotesTabProps {
-  entity: BookkeepingEntity;
+  entity: BookkeepingEntity | null;
 }
 
 type CreditNoteType = "all" | "sales" | "purchase";
 type CreditNoteStatus = "all" | "draft" | "approved" | "allocated" | "void";
 
 export function CreditNotesTab({ entity }: CreditNotesTabProps) {
+  if (!entity) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Select an entity to view credit notes
+      </div>
+    );
+  }
   const [typeFilter, setTypeFilter] = useState<CreditNoteType>("all");
   const [statusFilter, setStatusFilter] = useState<CreditNoteStatus>("all");
   const [dateFrom, setDateFrom] = useState("");

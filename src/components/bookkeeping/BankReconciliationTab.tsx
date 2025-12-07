@@ -19,10 +19,12 @@ import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { toast } from "sonner";
-import { Check, X } from "lucide-react";
+import { Check, X, Wand2 } from "lucide-react";
+import { MatchingSuggestionsPanel } from "./MatchingSuggestionsPanel";
+import { autoMatchHighConfidence } from "@/lib/matching-service";
 
 interface BankReconciliationTabProps {
-  entity: BookkeepingEntity;
+  entity: BookkeepingEntity | null;
 }
 
 export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
@@ -33,9 +35,18 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
   const [closingBalance, setClosingBalance] = useState("");
   const [selectedBankTransactions, setSelectedBankTransactions] = useState<Set<string>>(new Set());
   const [selectedLedgerEntries, setSelectedLedgerEntries] = useState<Set<string>>(new Set());
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const { organization } = useOrganization();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  if (!entity) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Select an entity to perform bank reconciliation
+      </div>
+    );
+  }
 
   const { data: bankAccounts } = useQuery({
     queryKey: ["bank-accounts", organization?.id, entity.type, entity.id],
@@ -205,6 +216,32 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
     },
   });
 
+  // Auto-match high confidence mutation
+  const autoMatchMutation = useMutation({
+    mutationFn: async () => {
+      if (!organization?.id || !user?.id) throw new Error("Missing context");
+      return autoMatchHighConfidence(
+        organization.id,
+        entity.type,
+        entity.id,
+        user.id
+      );
+    },
+    onSuccess: (result) => {
+      if (result) {
+        toast.success(`Auto-matched ${result.matched} transactions`, {
+          description: `${result.skipped} transactions skipped (no 100% match)`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions-rec"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+    },
+    onError: (error) => {
+      toast.error("Auto-match failed", { description: error.message });
+    },
+  });
+
   const bankTotal = Array.from(selectedBankTransactions).reduce((sum, id) => {
     const tx = bankTransactions?.find((t) => t.id === id);
     return sum + (tx?.amount || 0);
@@ -221,11 +258,21 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold">Bank Reconciliation</h2>
-        <p className="text-sm text-muted-foreground">
-          Match bank statement to ledger entries
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Bank Reconciliation</h2>
+          <p className="text-sm text-muted-foreground">
+            Match bank statement to ledger entries
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => autoMatchMutation.mutate()}
+          disabled={autoMatchMutation.isPending}
+        >
+          <Wand2 className="mr-2 h-4 w-4" />
+          {autoMatchMutation.isPending ? "Matching..." : "Auto-match 100% Confidence"}
+        </Button>
       </div>
 
       <Card className="p-4">
@@ -311,97 +358,118 @@ export function BankReconciliationTab({ entity }: BankReconciliationTabProps) {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Bank Transactions Column */}
-          <Card className="p-4">
-            <h3 className="font-bold mb-4">
-              Bank Statement ({bankTransactions?.length || 0} transactions)
-            </h3>
-            <div className="space-y-2 max-h-[500px] overflow-auto">
-              {bankTransactions?.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-start gap-2 p-2 border rounded hover:bg-muted"
-                >
-                  <Checkbox
-                    checked={selectedBankTransactions.has(tx.id)}
-                    onCheckedChange={(checked) => {
-                      const newSet = new Set(selectedBankTransactions);
-                      if (checked) {
-                        newSet.add(tx.id);
-                      } else {
-                        newSet.delete(tx.id);
-                      }
-                      setSelectedBankTransactions(newSet);
-                    }}
-                  />
-                  <div className="flex-1 text-sm">
-                    <div className="font-medium">{format(new Date(tx.transaction_date), "dd/MM/yyyy")}</div>
-                    <div className="text-muted-foreground">{tx.description}</div>
-                    <div
-                      className={`font-mono ${
-                        tx.amount > 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {formatCurrency(tx.amount)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex justify-between font-bold">
-                <span>Selected Total:</span>
-                <span>{formatCurrency(bankTotal)}</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Ledger Entries Column */}
-          <Card className="p-4">
-            <h3 className="font-bold mb-4">
-              Ledger Entries ({ledgerEntries?.length || 0} entries)
-            </h3>
-            <div className="space-y-2 max-h-[500px] overflow-auto">
-              {ledgerEntries?.map((entry) => {
-                const amount = (entry.debit || 0) - (entry.credit || 0);
-                return (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Bank Transactions Column */}
+            <Card className="p-4">
+              <h3 className="font-bold mb-4">
+                Bank Statement ({bankTransactions?.length || 0} transactions)
+              </h3>
+              <div className="space-y-2 max-h-[400px] overflow-auto">
+                {bankTransactions?.map((tx) => (
                   <div
-                    key={entry.id}
-                    className="flex items-start gap-2 p-2 border rounded hover:bg-muted"
+                    key={tx.id}
+                    onClick={() => setSelectedTransactionId(tx.id)}
+                    className={`flex items-start gap-2 p-2 border rounded cursor-pointer transition-colors ${
+                      selectedTransactionId === tx.id
+                        ? "bg-primary/10 ring-2 ring-primary"
+                        : "hover:bg-muted"
+                    }`}
                   >
                     <Checkbox
-                      checked={selectedLedgerEntries.has(entry.id)}
+                      checked={selectedBankTransactions.has(tx.id)}
                       onCheckedChange={(checked) => {
-                        const newSet = new Set(selectedLedgerEntries);
+                        const newSet = new Set(selectedBankTransactions);
                         if (checked) {
-                          newSet.add(entry.id);
+                          newSet.add(tx.id);
                         } else {
-                          newSet.delete(entry.id);
+                          newSet.delete(tx.id);
                         }
-                        setSelectedLedgerEntries(newSet);
+                        setSelectedBankTransactions(newSet);
                       }}
+                      onClick={(e) => e.stopPropagation()}
                     />
                     <div className="flex-1 text-sm">
-                      <div className="font-medium">{format(new Date(entry.transaction_date), "dd/MM/yyyy")}</div>
-                      <div className="text-muted-foreground">{entry.description}</div>
-                      <div className="flex gap-4 font-mono">
-                        {entry.debit && <span>Dr: {formatCurrency(entry.debit)}</span>}
-                        {entry.credit && <span>Cr: {formatCurrency(entry.credit)}</span>}
+                      <div className="font-medium">{format(new Date(tx.transaction_date), "dd/MM/yyyy")}</div>
+                      <div className="text-muted-foreground">{tx.description}</div>
+                      <div
+                        className={`font-mono ${
+                          tx.amount > 0 ? "text-green-600" : "text-red-600"
+                        }`}
+                      >
+                        {formatCurrency(tx.amount)}
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex justify-between font-bold">
-                <span>Selected Total:</span>
-                <span>{formatCurrency(ledgerTotal)}</span>
+                ))}
               </div>
-            </div>
-          </Card>
-        </div>
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex justify-between font-bold">
+                  <span>Selected Total:</span>
+                  <span>{formatCurrency(bankTotal)}</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Ledger Entries Column */}
+            <Card className="p-4">
+              <h3 className="font-bold mb-4">
+                Ledger Entries ({ledgerEntries?.length || 0} entries)
+              </h3>
+              <div className="space-y-2 max-h-[400px] overflow-auto">
+                {ledgerEntries?.map((entry) => {
+                  const amount = (entry.debit || 0) - (entry.credit || 0);
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex items-start gap-2 p-2 border rounded hover:bg-muted"
+                    >
+                      <Checkbox
+                        checked={selectedLedgerEntries.has(entry.id)}
+                        onCheckedChange={(checked) => {
+                          const newSet = new Set(selectedLedgerEntries);
+                          if (checked) {
+                            newSet.add(entry.id);
+                          } else {
+                            newSet.delete(entry.id);
+                          }
+                          setSelectedLedgerEntries(newSet);
+                        }}
+                      />
+                      <div className="flex-1 text-sm">
+                        <div className="font-medium">{format(new Date(entry.transaction_date), "dd/MM/yyyy")}</div>
+                        <div className="text-muted-foreground">{entry.description}</div>
+                        <div className="flex gap-4 font-mono">
+                          {entry.debit && <span>Dr: {formatCurrency(entry.debit)}</span>}
+                          {entry.credit && <span>Cr: {formatCurrency(entry.credit)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex justify-between font-bold">
+                  <span>Selected Total:</span>
+                  <span>{formatCurrency(ledgerTotal)}</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Matching Suggestions Panel */}
+          {selectedTransactionId && (
+            <MatchingSuggestionsPanel
+              transactionId={selectedTransactionId}
+              onMatchApplied={() => {
+                queryClient.invalidateQueries({ queryKey: ["bank-transactions-rec"] });
+                queryClient.invalidateQueries({ queryKey: ["invoices"] });
+                queryClient.invalidateQueries({ queryKey: ["bills"] });
+                setSelectedTransactionId(null);
+              }}
+            />
+          )}
+        </>
       )}
 
       <div className="flex justify-end gap-2">

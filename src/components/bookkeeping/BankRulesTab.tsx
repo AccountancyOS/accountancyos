@@ -34,10 +34,17 @@ import { BankRuleEditorDialog } from "./BankRuleEditorDialog";
 import { RuleTestRunDialog } from "./RuleTestRunDialog";
 
 interface BankRulesTabProps {
-  entity: BookkeepingEntity;
+  entity: BookkeepingEntity | null;
 }
 
 export function BankRulesTab({ entity }: BankRulesTabProps) {
+  if (!entity) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Select an entity to view bank rules
+      </div>
+    );
+  }
   const [bankAccountFilter, setBankAccountFilter] = useState("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [testRunOpen, setTestRunOpen] = useState(false);

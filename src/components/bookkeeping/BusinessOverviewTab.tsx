@@ -354,15 +354,26 @@ export function BusinessOverviewTab({ entity, onTabChange }: BusinessOverviewTab
                   <span className="text-sm">Payables</span>
                   <span className="font-medium">{formatCurrency(agedPayables?.total ?? 0)}</span>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full"
-                  onClick={() => onTabChange?.('invoices')}
-                >
-                  View invoices
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => onTabChange?.('sales')}
+                  >
+                    Receivables
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => onTabChange?.('bills')}
+                  >
+                    Payables
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
