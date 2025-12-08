@@ -4,6 +4,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { generateJobFromTemplate, GenerateJobResult } from "./job-template-engine";
 
 export interface DeadlineGenerationResult {
   success: boolean;
@@ -474,6 +475,90 @@ export async function generateVATDeadlines(
     return results;
   } catch (err: any) {
     console.error("[Deadline Engine] Error generating VAT deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
+
+// ==================== DEADLINE → JOB GENERATION ====================
+
+/**
+ * Generate jobs from templates when a deadline enters its active window
+ * Called when deadline status transitions or on scheduled check
+ */
+export async function generateJobsForDeadline(
+  deadlineId: string
+): Promise<GenerateJobResult[]> {
+  const results: GenerateJobResult[] = [];
+
+  try {
+    // 1. Fetch deadline details
+    const { data: deadline, error: deadlineError } = await supabase
+      .from("deadlines")
+      .select("*")
+      .eq("id", deadlineId)
+      .single();
+
+    if (deadlineError || !deadline) {
+      return [{ success: false, error: "Deadline not found" }];
+    }
+
+    // 2. Determine entity from deadline
+    const entity: { type: "company" | "client"; id: string } | null = 
+      deadline.company_id 
+        ? { type: "company", id: deadline.company_id }
+        : deadline.client_id 
+        ? { type: "client", id: deadline.client_id }
+        : null;
+
+    if (!entity) {
+      return [{ success: false, error: "Deadline has no linked entity" }];
+    }
+
+    // 3. Find templates with trigger_type = 'deadline_approaching' or 'deadline_based'
+    const { data: templates, error: templatesError } = await supabase
+      .from("job_templates")
+      .select("*")
+      .eq("organization_id", deadline.organization_id)
+      .eq("is_active", true)
+      .in("trigger_type", ["deadline_approaching", "deadline_based"]);
+
+    if (templatesError || !templates || templates.length === 0) {
+      return [{ success: true, skipped: true, skipReason: "No deadline-based templates found" }];
+    }
+
+    // 4. Filter templates by service_code match
+    const matchingTemplates = templates.filter(
+      (t) => t.service_type === deadline.service_code || !t.service_type
+    );
+
+    // 5. Generate jobs from matching templates
+    for (const template of matchingTemplates) {
+      const result = await generateJobFromTemplate(
+        template.id,
+        deadline.organization_id,
+        entity,
+        {
+          periodStart: deadline.period_start ? new Date(deadline.period_start) : undefined,
+          periodEnd: deadline.period_end ? new Date(deadline.period_end) : undefined,
+          filingDeadline: new Date(deadline.due_date),
+          generationReason: `Deadline-based: ${deadline.name}`,
+        }
+      );
+
+      // Link job to deadline if created successfully
+      if (result.success && result.jobId && !result.skipped) {
+        await supabase
+          .from("deadlines")
+          .update({ job_id: result.jobId })
+          .eq("id", deadlineId);
+      }
+
+      results.push(result);
+    }
+
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating jobs for deadline:", err);
     return [{ success: false, error: err.message }];
   }
 }

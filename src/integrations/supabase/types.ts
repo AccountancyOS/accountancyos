@@ -1473,16 +1473,26 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           completed_at: string | null
+          conditional_visibility: Json | null
           created_at: string
           description: string | null
           due_date: string | null
+          file_tags: Json | null
           id: string
+          is_verified: boolean | null
+          job_id: string | null
           organization_id: string
+          request_type: string | null
+          sort_order: number | null
+          source_template_task_id: string | null
           status: string
+          target_folder: string | null
           task_order: number | null
           template_id: string | null
           title: string
           updated_at: string
+          verified_at: string | null
+          verified_by: string | null
           visibility: string
         }
         Insert: {
@@ -1490,16 +1500,26 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
+          conditional_visibility?: Json | null
           created_at?: string
           description?: string | null
           due_date?: string | null
+          file_tags?: Json | null
           id?: string
+          is_verified?: boolean | null
+          job_id?: string | null
           organization_id: string
+          request_type?: string | null
+          sort_order?: number | null
+          source_template_task_id?: string | null
           status?: string
+          target_folder?: string | null
           task_order?: number | null
           template_id?: string | null
           title: string
           updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
           visibility?: string
         }
         Update: {
@@ -1507,16 +1527,26 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
+          conditional_visibility?: Json | null
           created_at?: string
           description?: string | null
           due_date?: string | null
+          file_tags?: Json | null
           id?: string
+          is_verified?: boolean | null
+          job_id?: string | null
           organization_id?: string
+          request_type?: string | null
+          sort_order?: number | null
+          source_template_task_id?: string | null
           status?: string
+          target_folder?: string | null
           task_order?: number | null
           template_id?: string | null
           title?: string
           updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
           visibility?: string
         }
         Relationships: [
@@ -1532,6 +1562,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_tasks_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
@@ -4923,9 +4960,11 @@ export type Database = {
           due_date: string | null
           id: string
           is_client_facing: boolean | null
+          is_manual: boolean | null
           job_id: string
           organization_id: string
           relative_due_days: number | null
+          source_template_task_id: string | null
           stage: string | null
           status: string
           task_order: number | null
@@ -4943,9 +4982,11 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_client_facing?: boolean | null
+          is_manual?: boolean | null
           job_id: string
           organization_id: string
           relative_due_days?: number | null
+          source_template_task_id?: string | null
           stage?: string | null
           status?: string
           task_order?: number | null
@@ -4963,9 +5004,11 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_client_facing?: boolean | null
+          is_manual?: boolean | null
           job_id?: string
           organization_id?: string
           relative_due_days?: number | null
+          source_template_task_id?: string | null
           stage?: string | null
           status?: string
           task_order?: number | null

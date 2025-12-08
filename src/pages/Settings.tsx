@@ -9,7 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink } from "lucide-react";
+import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ import {
 
 export default function Settings() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -596,6 +598,26 @@ export default function Settings() {
               </ul>
             </div>
           </CardContent>
+        </Card>
+
+        {/* Job Templates Quick Link */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Job Templates
+                </CardTitle>
+                <CardDescription>
+                  Create and manage reusable job templates for automated job generation
+                </CardDescription>
+              </div>
+              <Button onClick={() => navigate("/settings/job-templates")}>
+                Manage Templates
+              </Button>
+            </div>
+          </CardHeader>
         </Card>
 
         {/* Stripe Connect Section */}
