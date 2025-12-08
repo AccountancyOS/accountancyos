@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Briefcase, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   not_started: { label: "Not Started", color: "hsl(var(--muted-foreground))" },

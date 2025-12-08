@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { PermissionGuard } from "@/components/ui/permission-guard";
 
 export default function HMRCSettings() {
   const navigate = useNavigate();
@@ -159,7 +160,8 @@ export default function HMRCSettings() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <PermissionGuard permission="can_manage_integrations" title="HMRC Integration">
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
@@ -388,7 +390,8 @@ export default function HMRCSettings() {
             </div>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </PermissionGuard>
     </DashboardLayout>
   );
 }

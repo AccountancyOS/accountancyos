@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar, ArrowRight } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { Link } from "react-router-dom";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 export const DeadlineWidget = () => {
   const { organization } = useOrganization();
