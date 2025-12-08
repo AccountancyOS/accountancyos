@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { CheckCircle2, XCircle, Clock, Zap } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "react-router-dom";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 export const AutomationActivityFeed = () => {
   const { organization } = useOrganization();

@@ -4,6 +4,7 @@ import { useOrganization } from "@/lib/organization-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Briefcase, AlertTriangle, Zap } from "lucide-react";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 export const DashboardKPICards = () => {
   const { organization } = useOrganization();
@@ -49,6 +50,25 @@ export const DashboardKPICards = () => {
       };
     },
     enabled: !!organization?.id,
+  });
+
+  // Real-time subscriptions
+  useRealtimeSubscription({
+    table: 'jobs',
+    organizationId: organization?.id,
+    queryKeys: [['dashboard-kpis', organization?.id || '']],
+  });
+
+  useRealtimeSubscription({
+    table: 'deadlines',
+    organizationId: organization?.id,
+    queryKeys: [['dashboard-kpis', organization?.id || '']],
+  });
+
+  useRealtimeSubscription({
+    table: 'clients',
+    organizationId: organization?.id,
+    queryKeys: [['dashboard-kpis', organization?.id || '']],
   });
 
   if (isLoading) {

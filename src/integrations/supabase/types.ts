@@ -9340,6 +9340,14 @@ export type Database = {
       get_user_organization_id:
         | { Args: { check_user_id: string }; Returns: string }
         | { Args: never; Returns: string }
+      get_user_role: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: string
+      }
+      has_any_role: {
+        Args: { _org_id: string; _roles: string[]; _user_id: string }
+        Returns: boolean
+      }
       has_organization_role: {
         Args: { required_role: string }
         Returns: boolean
@@ -9348,6 +9356,14 @@ export type Database = {
         Args: {
           _org_id: string
           _role: Database["public"]["Enums"]["portal_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _org_id: string
+          _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
@@ -9457,6 +9473,7 @@ export type Database = {
         | "revoked_by_client"
         | "revoked_by_practice"
         | "switched_out"
+      app_role: "owner" | "admin" | "manager" | "staff" | "viewer"
       email_direction: "inbound" | "outbound"
       email_match_type: "auto" | "manual"
       link_initiator: "client" | "practice"
@@ -9599,6 +9616,7 @@ export const Constants = {
         "revoked_by_practice",
         "switched_out",
       ],
+      app_role: ["owner", "admin", "manager", "staff", "viewer"],
       email_direction: ["inbound", "outbound"],
       email_match_type: ["auto", "manual"],
       link_initiator: ["client", "practice"],

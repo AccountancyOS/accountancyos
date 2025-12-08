@@ -17,6 +17,7 @@ import { BrandPreviewEmail } from "@/components/branding/BrandPreviewEmail";
 import { BrandPreviewInvoice } from "@/components/branding/BrandPreviewInvoice";
 import { BrandPreviewPortal } from "@/components/branding/BrandPreviewPortal";
 import { Database } from "@/integrations/supabase/types";
+import { PermissionGuard } from "@/components/ui/permission-guard";
 
 type OrganizationBrandingInsert = Database["public"]["Tables"]["organization_branding"]["Insert"];
 
@@ -240,7 +241,8 @@ export default function BrandingSettings() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <PermissionGuard permission="can_manage_practice_settings" title="Branding Settings">
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -634,7 +636,8 @@ export default function BrandingSettings() {
             </Card>
           </div>
         </div>
-      </div>
+        </div>
+      </PermissionGuard>
     </DashboardLayout>
   );
 }

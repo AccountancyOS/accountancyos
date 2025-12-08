@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { PermissionGuard } from "@/components/ui/permission-guard";
 
 export default function CompaniesHouseSettings() {
   const navigate = useNavigate();
@@ -199,7 +200,8 @@ export default function CompaniesHouseSettings() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <PermissionGuard permission="can_manage_integrations" title="Companies House Settings">
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
@@ -393,7 +395,8 @@ export default function CompaniesHouseSettings() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </PermissionGuard>
     </DashboardLayout>
   );
 }
