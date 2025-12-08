@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type AuditEntityType = "trial_balance_snapshot" | "workpaper_instance" | "filing" | "pay_run" | "payslip" | "cis_return" | "cis_payment" | "employee";
-export type AuditAction = "create" | "update" | "finalise" | "reopen" | "approve" | "reject" | "file" | "override" | "send_for_approval" | "client_approve" | "client_reject" | "api_submit" | "calculate" | "status_change" | "submit_rti" | "submit";
+export type AuditEntityType = "trial_balance_snapshot" | "workpaper_instance" | "filing" | "pay_run" | "payslip" | "cis_return" | "cis_payment" | "employee" | "job" | "deadline" | "job_template";
+export type AuditAction = "create" | "update" | "finalise" | "reopen" | "approve" | "reject" | "file" | "override" | "send_for_approval" | "client_approve" | "client_reject" | "api_submit" | "calculate" | "status_change" | "submit_rti" | "submit" | "rollback" | "close" | "generate";
 
 export interface AuditLogEntry {
   id: string;
