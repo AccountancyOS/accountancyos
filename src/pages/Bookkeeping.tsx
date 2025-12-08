@@ -5,8 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EntitySelector, type BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
 import { BusinessOverviewTab } from "@/components/bookkeeping/BusinessOverviewTab";
 import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab";
-import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
-import { TrialBalanceTab } from "@/components/bookkeeping/TrialBalanceTab";
 import { JournalsTab } from "@/components/bookkeeping/JournalsTab";
 import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import { SalesModule } from "@/components/bookkeeping/SalesModule";
@@ -86,8 +84,7 @@ export default function Bookkeeping() {
                 <TabsList className="inline-flex h-auto p-1 gap-0.5">
                   {/* Core Group */}
                   <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-                  <TabsTrigger value="trial-balance" className="text-xs sm:text-sm">Trial Balance</TabsTrigger>
-                  <TabsTrigger value="general-ledger" className="text-xs sm:text-sm">General Ledger</TabsTrigger>
+                  <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
                   <TabsTrigger value="chart-of-accounts" className="text-xs sm:text-sm">Chart of Accounts</TabsTrigger>
                   <TabsTrigger value="journals" className="text-xs sm:text-sm">Journals</TabsTrigger>
                   
@@ -99,14 +96,13 @@ export default function Bookkeeping() {
                   
                   <Separator orientation="vertical" className="mx-1 h-6" />
                   
-                  {/* AR/AP Group - Consolidated */}
+                  {/* AR/AP Group */}
                   <TabsTrigger value="sales" className="text-xs sm:text-sm">Sales</TabsTrigger>
                   <TabsTrigger value="purchases" className="text-xs sm:text-sm">Purchases</TabsTrigger>
-                  <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
                   
                   <Separator orientation="vertical" className="mx-1 h-6" />
                   
-                  {/* Other Group */}
+                  {/* Operations Group */}
                   <TabsTrigger value="receipts" className="text-xs sm:text-sm">Receipts</TabsTrigger>
                   {isVATRegistered && (
                     <TabsTrigger value="vat-returns" className="text-xs sm:text-sm">VAT Returns</TabsTrigger>
@@ -129,12 +125,8 @@ export default function Bookkeeping() {
               <BusinessOverviewTab entity={selectedEntity} onTabChange={handleTabChange} />
             </TabsContent>
 
-            <TabsContent value="trial-balance" className="space-y-4">
-              <TrialBalanceTab entity={selectedEntity} />
-            </TabsContent>
-
-            <TabsContent value="general-ledger" className="space-y-4">
-              <GeneralLedgerTab entity={selectedEntity} />
+            <TabsContent value="reports" className="space-y-4">
+              <ReportsTab entity={selectedEntity} />
             </TabsContent>
 
             <TabsContent value="chart-of-accounts" className="space-y-4">
@@ -149,6 +141,10 @@ export default function Bookkeeping() {
               <BankingTab entity={selectedEntity} />
             </TabsContent>
 
+            <TabsContent value="bank-rules" className="space-y-4">
+              <BankRulesTab entity={selectedEntity} />
+            </TabsContent>
+
             <TabsContent value="sales" className="space-y-4">
               <SalesModule entity={selectedEntity} />
             </TabsContent>
@@ -157,16 +153,8 @@ export default function Bookkeeping() {
               <PurchasesModule entity={selectedEntity} />
             </TabsContent>
 
-            <TabsContent value="reports" className="space-y-4">
-              <ReportsTab entity={selectedEntity} />
-            </TabsContent>
-
             <TabsContent value="receipts" className="space-y-4">
               <ReceiptsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
-            </TabsContent>
-
-            <TabsContent value="bank-rules" className="space-y-4">
-              <BankRulesTab entity={selectedEntity} />
             </TabsContent>
 
             {isVATRegistered && (
