@@ -134,6 +134,120 @@ export type Database = {
           },
         ]
       }
+      automation_events: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          new_value: Json | null
+          old_value: Json | null
+          organization_id: string
+          processed_at: string | null
+          processed_by_execution_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
+          organization_id: string
+          processed_at?: string | null
+          processed_by_execution_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
+          organization_id?: string
+          processed_at?: string | null
+          processed_by_execution_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_events_processed_by_execution_id_fkey"
+            columns: ["processed_by_execution_id"]
+            isOneToOne: false
+            referencedRelation: "automation_executions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_executions: {
+        Row: {
+          action_result: Json | null
+          automation_rule_id: string
+          created_at: string
+          error_message: string | null
+          executed_at: string | null
+          execution_hash: string | null
+          id: string
+          organization_id: string
+          status: string
+          triggered_by_entity: string
+          triggered_by_id: string
+        }
+        Insert: {
+          action_result?: Json | null
+          automation_rule_id: string
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          execution_hash?: string | null
+          id?: string
+          organization_id: string
+          status?: string
+          triggered_by_entity: string
+          triggered_by_id: string
+        }
+        Update: {
+          action_result?: Json | null
+          automation_rule_id?: string
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          execution_hash?: string | null
+          id?: string
+          organization_id?: string
+          status?: string
+          triggered_by_entity?: string
+          triggered_by_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_executions_automation_rule_id_fkey"
+            columns: ["automation_rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_executions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_rules: {
         Row: {
           action_config: Json
@@ -9089,6 +9203,10 @@ export type Database = {
         }
         Returns: string
       }
+      can_execute_automation: {
+        Args: { p_execution_hash: string; p_rule_id: string }
+        Returns: boolean
+      }
       can_finalise: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
@@ -9120,6 +9238,18 @@ export type Database = {
       }
       create_organization_with_owner: {
         Args: { org_name: string }
+        Returns: string
+      }
+      emit_automation_event: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_event_type: string
+          p_metadata?: Json
+          p_new_value?: Json
+          p_old_value?: Json
+          p_organization_id: string
+        }
         Returns: string
       }
       find_entities_by_email: {
@@ -9253,6 +9383,19 @@ export type Database = {
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
+      }
+      record_automation_execution: {
+        Args: {
+          p_action_result?: Json
+          p_error_message?: string
+          p_execution_hash: string
+          p_organization_id: string
+          p_rule_id: string
+          p_status: string
+          p_triggered_by_entity: string
+          p_triggered_by_id: string
+        }
+        Returns: string
       }
       reverse_journal: {
         Args: {
