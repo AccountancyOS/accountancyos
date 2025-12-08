@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -39,8 +40,14 @@ import {
   ChevronDown,
   Settings2,
   History,
+  Blocks,
+  Code2,
+  PanelRightOpen,
+  PanelRightClose,
+  Calendar,
+  AlertCircle,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, addDays, addMonths } from "date-fns";
 import {
   JobTemplateContent,
   TaskTemplate,
@@ -51,6 +58,8 @@ import {
   TRIGGER_OPERATORS,
 } from "@/lib/job-template-types";
 import { publishTemplateVersion } from "@/lib/job-template-engine";
+import { ReusableBlocksPanel } from "./ReusableBlocksPanel";
+import { DynamicPlaceholdersPreview } from "./DynamicPlaceholdersPreview";
 
 interface JobTemplateEditorFullscreenProps {
   templateId: string;
@@ -66,6 +75,9 @@ export function JobTemplateEditorFullscreen({
   const [activeTab, setActiveTab] = useState("tasks");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"blocks" | "placeholders">("blocks");
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
 
   // Form state
   const [name, setName] = useState("");
@@ -82,6 +94,85 @@ export function JobTemplateEditorFullscreen({
   const [entityFilters, setEntityFilters] = useState<EntityFilter>({});
   const [tasks, setTasks] = useState<TaskTemplate[]>([]);
   const [recordsRequests, setRecordsRequests] = useState<RecordsRequestItem[]>([]);
+
+  // Sample dates for due-date preview
+  const sampleDates = useMemo(() => {
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    const filingDeadline = addDays(periodEnd, relativeDueOffset);
+    const jobStart = periodStart;
+    const jobEnd = filingDeadline;
+    return { periodStart, periodEnd, filingDeadline, jobStart, jobEnd };
+  }, [relativeDueOffset]);
+
+  // Calculate sample due date for a task
+  const calculateSampleDueDate = (task: TaskTemplate): Date | null => {
+    const days = task.relativeDueDays || 0;
+    const ref = task.relativeDueReference || "job_end";
+    
+    let baseDate: Date;
+    switch (ref) {
+      case "job_start":
+        baseDate = sampleDates.jobStart;
+        break;
+      case "job_end":
+        baseDate = sampleDates.jobEnd;
+        break;
+      case "filing_deadline":
+        baseDate = sampleDates.filingDeadline;
+        break;
+      case "period_start":
+        baseDate = sampleDates.periodStart;
+        break;
+      case "period_end":
+        baseDate = sampleDates.periodEnd;
+        break;
+      default:
+        baseDate = sampleDates.jobEnd;
+    }
+    
+    return addDays(baseDate, days);
+  };
+
+  // Get due date preview text
+  const getDueDatePreview = (task: TaskTemplate): string => {
+    const dueDate = calculateSampleDueDate(task);
+    if (!dueDate) return "";
+    
+    const days = task.relativeDueDays || 0;
+    const ref = task.relativeDueReference || "job_end";
+    const refLabel = ref.replace(/_/g, " ");
+    
+    const dayText = days === 0 ? "on" : days > 0 ? `${days}d after` : `${Math.abs(days)}d before`;
+    
+    return `Due ${dayText} ${refLabel} → e.g. ${format(dueDate, "dd MMM yyyy")}`;
+  };
+
+  // Handle block insertion
+  const handleInsertBlock = (blockTasks: TaskTemplate[]) => {
+    const startOrder = tasks.length;
+    const tasksWithOrder = blockTasks.map((t, i) => ({
+      ...t,
+      order: startOrder + i,
+    }));
+    setTasks([...tasks, ...tasksWithOrder]);
+    setHasChanges(true);
+  };
+
+  // Toggle task selection
+  const toggleTaskSelection = (taskId: string) => {
+    const newSet = new Set(selectedTaskIds);
+    if (newSet.has(taskId)) {
+      newSet.delete(taskId);
+    } else {
+      newSet.add(taskId);
+    }
+    setSelectedTaskIds(newSet);
+  };
+
+  // Get selected tasks for block creation
+  const selectedTasks = tasks.filter((t) => selectedTaskIds.has(t.id));
 
   // Fetch template
   const { data: template, isLoading } = useQuery({
@@ -309,13 +400,26 @@ export function JobTemplateEditorFullscreen({
             variant="outline"
             onClick={() => publishMutation.mutate()}
             disabled={publishMutation.isPending || hasChanges}
+            title={hasChanges ? "Save changes before publishing" : undefined}
           >
             <History className="h-4 w-4 mr-2" />
-            Publish Version
+            Publish v{(template?.version ?? 1) + 1}
           </Button>
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             <Save className="h-4 w-4 mr-2" />
             Save
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowSidebar(!showSidebar)}
+            title={showSidebar ? "Hide sidebar" : "Show sidebar"}
+          >
+            {showSidebar ? (
+              <PanelRightClose className="h-4 w-4" />
+            ) : (
+              <PanelRightOpen className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>
@@ -341,25 +445,60 @@ export function JobTemplateEditorFullscreen({
                     Define the tasks that will be created when this job is generated
                   </p>
                 </div>
-                <Button onClick={addTask}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Task
-                </Button>
+                <div className="flex items-center gap-2">
+                  {selectedTaskIds.size > 0 && (
+                    <Badge variant="secondary">
+                      {selectedTaskIds.size} selected
+                    </Badge>
+                  )}
+                  <Button onClick={addTask}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Task
+                  </Button>
+                </div>
               </div>
 
               {tasks.length === 0 ? (
                 <Card className="border-dashed">
                   <CardContent className="py-8 text-center text-muted-foreground">
-                    No tasks defined. Add your first task to get started.
+                    No tasks defined. Add your first task to get started, or drag a block from the sidebar.
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-2">
+                <div 
+                  className="space-y-2"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const blockTasks = e.dataTransfer.getData("block-tasks");
+                    if (blockTasks) {
+                      try {
+                        const parsedTasks = JSON.parse(blockTasks) as TaskTemplate[];
+                        handleInsertBlock(parsedTasks.map(t => ({
+                          ...t,
+                          id: crypto.randomUUID(),
+                          isFromBlock: true,
+                        })));
+                      } catch (err) {
+                        console.error("Failed to parse block tasks:", err);
+                      }
+                    }
+                  }}
+                >
                   {tasks.map((task, index) => (
-                    <Card key={task.id} className="group">
+                    <Card 
+                      key={task.id} 
+                      className={`group transition-colors ${
+                        selectedTaskIds.has(task.id) ? "ring-2 ring-primary" : ""
+                      } ${task.isFromBlock ? "border-l-4 border-l-primary/50" : ""}`}
+                    >
                       <CardContent className="py-3 px-4">
-                        <div className="flex items-start gap-4">
-                          <div className="flex items-center gap-2 text-muted-foreground">
+                        <div className="flex items-start gap-3">
+                          <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                            <Checkbox
+                              checked={selectedTaskIds.has(task.id)}
+                              onCheckedChange={() => toggleTaskSelection(task.id)}
+                            />
                             <GripVertical className="h-4 w-4 cursor-grab" />
                             <span className="text-sm font-mono w-6">{index + 1}</span>
                           </div>
@@ -446,12 +585,30 @@ export function JobTemplateEditorFullscreen({
                                 <span className="text-muted-foreground">Client visible</span>
                               </div>
                             </div>
+                            {/* Due Date Preview */}
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Calendar className="h-3 w-3" />
+                              <span>{getDueDatePreview(task)}</span>
+                              {task.isFromBlock && (
+                                <>
+                                  <Separator orientation="vertical" className="h-3" />
+                                  <Badge variant="outline" className="text-xs h-5">
+                                    <Blocks className="h-3 w-3 mr-1" />
+                                    From block
+                                  </Badge>
+                                </>
+                              )}
+                            </div>
                           </div>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="opacity-0 group-hover:opacity-100"
-                            onClick={() => deleteTask(task.id)}
+                            onClick={() => {
+                              deleteTask(task.id);
+                              selectedTaskIds.delete(task.id);
+                              setSelectedTaskIds(new Set(selectedTaskIds));
+                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -803,8 +960,42 @@ export function JobTemplateEditorFullscreen({
                 </p>
               </div>
 
+              {/* Current Version Info */}
+              <Card className="border-primary/50">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <Badge>v{template?.version ?? 1} (current)</Badge>
+                      <div>
+                        <p className="font-medium">Current working version</p>
+                        <p className="text-sm text-muted-foreground">
+                          {hasChanges ? (
+                            <span className="text-amber-600 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              Unsaved changes
+                            </span>
+                          ) : (
+                            "All changes saved"
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => publishMutation.mutate()}
+                      disabled={publishMutation.isPending || hasChanges}
+                    >
+                      <History className="h-4 w-4 mr-2" />
+                      Publish as v{(template?.version ?? 1) + 1}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
               {versions && versions.length > 0 ? (
                 <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">Published Versions</h3>
                   {versions.map((version) => (
                     <Card key={version.id}>
                       <CardContent className="py-3 px-4">
@@ -814,7 +1005,7 @@ export function JobTemplateEditorFullscreen({
                             <div>
                               <p className="font-medium">{version.change_notes || "No notes"}</p>
                               <p className="text-sm text-muted-foreground">
-                                {format(new Date(version.created_at), "dd MMM yyyy HH:mm")}
+                                Published {format(new Date(version.created_at), "dd MMM yyyy HH:mm")}
                               </p>
                             </div>
                           </div>
@@ -834,48 +1025,55 @@ export function JobTemplateEditorFullscreen({
                   </CardContent>
                 </Card>
               )}
+
+              {/* Versioning Info */}
+              <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                <h4 className="font-medium mb-2">How versioning works</h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>• Jobs created from this template are locked to the version used at creation</li>
+                  <li>• Publishing creates a snapshot that can be referenced later</li>
+                  <li>• Existing jobs are not affected when you publish a new version</li>
+                </ul>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
 
-        {/* Sidebar Preview */}
-        <div className="w-80 border-l bg-muted/30 p-4 overflow-y-auto">
-          <h3 className="font-medium mb-4">Template Preview</h3>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-muted-foreground text-xs">STATUS</Label>
-              <div className="flex items-center gap-2 mt-1">
-                {isActive ? (
-                  <Badge className="bg-green-500/10 text-green-600">Active</Badge>
-                ) : (
-                  <Badge variant="secondary">Inactive</Badge>
-                )}
-              </div>
+        {/* Right Sidebar - Blocks & Placeholders */}
+        {showSidebar && (
+          <aside className="w-80 border-l flex flex-col bg-muted/30">
+            <div className="border-b p-2">
+              <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "blocks" | "placeholders")}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="blocks" className="flex-1">
+                    <Blocks className="h-4 w-4 mr-2" />
+                    Blocks
+                  </TabsTrigger>
+                  <TabsTrigger value="placeholders" className="flex-1">
+                    <Code2 className="h-4 w-4 mr-2" />
+                    Placeholders
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-            <div>
-              <Label className="text-muted-foreground text-xs">TASKS</Label>
-              <p className="font-medium">{tasks.length} tasks defined</p>
-            </div>
-            <div>
-              <Label className="text-muted-foreground text-xs">RECORDS REQUESTS</Label>
-              <p className="font-medium">{recordsRequests.length} requests</p>
-            </div>
-            <div>
-              <Label className="text-muted-foreground text-xs">TRIGGER CONDITIONS</Label>
-              <p className="font-medium">
-                {triggerConditions.length === 0 ? "No conditions" : `${triggerConditions.length} conditions`}
-              </p>
-            </div>
-            <Separator />
-            <div>
-              <Label className="text-muted-foreground text-xs">GENERATION PREVIEW</Label>
-              <p className="text-sm text-muted-foreground mt-1">
-                When this template triggers, it will create a job with {tasks.length} tasks
-                {recordsRequests.length > 0 && ` and request ${recordsRequests.length} documents from the client`}.
-              </p>
-            </div>
-          </div>
-        </div>
+
+            {sidebarTab === "blocks" ? (
+              <ReusableBlocksPanel
+                onInsertBlock={handleInsertBlock}
+                selectedTasks={selectedTasks}
+              />
+            ) : (
+              <DynamicPlaceholdersPreview
+                metadata={{
+                  relativeDueOffset,
+                  frequency: frequency as "one_off" | "monthly" | "quarterly" | "annual",
+                }}
+                periodStart={sampleDates.periodStart}
+                periodEnd={sampleDates.periodEnd}
+              />
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );

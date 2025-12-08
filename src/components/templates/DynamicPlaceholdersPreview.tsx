@@ -244,7 +244,7 @@ export function DynamicPlaceholdersPreview({
   }, {} as Record<string, PlaceholderDefinition[]>);
 
   return (
-    <div className="flex flex-col h-full border-l bg-muted/30">
+    <div className="flex flex-col h-full flex-1 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b">
         <div className="flex items-center gap-2 mb-3">
