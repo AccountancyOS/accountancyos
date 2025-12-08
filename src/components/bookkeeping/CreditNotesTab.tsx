@@ -30,13 +30,14 @@ import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 interface CreditNotesTabProps {
   entity: BookkeepingEntity | null;
+  defaultType?: "all" | "sales" | "purchase";
 }
 
 type CreditNoteType = "all" | "sales" | "purchase";
 type CreditNoteStatus = "all" | "draft" | "approved" | "allocated" | "void";
 
-export function CreditNotesTab({ entity }: CreditNotesTabProps) {
-  const [typeFilter, setTypeFilter] = useState<CreditNoteType>("all");
+export function CreditNotesTab({ entity, defaultType = "all" }: CreditNotesTabProps) {
+  const [typeFilter, setTypeFilter] = useState<CreditNoteType>(defaultType);
   const [statusFilter, setStatusFilter] = useState<CreditNoteStatus>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
