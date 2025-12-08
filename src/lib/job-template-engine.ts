@@ -167,7 +167,7 @@ export async function generateJobFromTemplate(
       .from("jobs")
       .insert({
         organization_id: organizationId,
-        name: jobName,
+        job_name: jobName,
         service_type: template.service_type,
         status: "not_started",
         priority: "normal",
@@ -422,15 +422,17 @@ export async function publishTemplateVersion(
     const newVersion = ((template.version as number) || 1) + 1;
 
     // Create version snapshot
+    const userId = (await supabase.auth.getUser()).data.user?.id || null;
+    const contentJson = JSON.parse(JSON.stringify(template.tasks || {}));
     const { data: versionRecord, error: versionError } = await supabase
       .from("template_versions")
-      .insert({
+      .insert([{
         template_id: templateId,
         version_number: newVersion,
-        content: template.tasks || {},
+        content: contentJson,
         change_notes: changeNotes,
-        created_by: (await supabase.auth.getUser()).data.user?.id || null,
-      })
+        created_by: userId,
+      }])
       .select()
       .single();
 
@@ -675,7 +677,7 @@ function calculateNextPeriod(
  * Calculates next period for a specific entity and template
  */
 async function calculateNextPeriodForEntity(
-  template: ExtendedJobTemplate,
+  template: ExtendedTemplate,
   entity: { type: "company" | "client"; id: string },
   organizationId: string
 ): Promise<{ start: Date; end: Date; deadline: Date } | null> {

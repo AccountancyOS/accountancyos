@@ -170,7 +170,7 @@ export default function JobTemplates() {
 
   // Filter templates
   const filteredTemplates = templates?.filter((template) => {
-    const templateName = template.template_name || template.name || "";
+    const templateName = template.template_name || "";
     const matchesSearch =
       searchQuery === "" ||
       templateName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -356,7 +356,7 @@ export default function JobTemplates() {
                 </TableRow>
               ) : (
                 filteredTemplates?.map((template) => {
-                  const templateName = template.template_name || template.name || "Untitled";
+                  const templateName = template.template_name || "Untitled";
                   return (
                     <TableRow
                       key={template.id}
