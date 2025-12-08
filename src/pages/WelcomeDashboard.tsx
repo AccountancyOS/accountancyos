@@ -31,10 +31,10 @@ export default function WelcomeDashboard() {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
-    { id: "branding", label: "Confirm branding", completed: false, action: "/settings", icon: Sparkles },
+    { id: "branding", label: "Confirm branding", completed: false, action: "/settings/branding", icon: Sparkles },
     { id: "clients", label: "Import clients", completed: false, action: "/clients", icon: Upload },
     { id: "lead", label: "Add first lead", completed: false, action: "/crm", icon: UserPlus },
-    { id: "compliance", label: "Connect Companies House & HMRC", completed: false, action: "/settings", icon: Building2 },
+    { id: "compliance", label: "Connect Companies House & HMRC", completed: false, action: "/settings/hmrc", icon: Building2 },
   ]);
   const [loading, setLoading] = useState(true);
 
@@ -46,32 +46,53 @@ export default function WelcomeDashboard() {
     if (!organization) return;
 
     try {
-      // Check if branding is set
-      const hasBranding = !!organization.logo_url;
+      // BRANDING CHECK - Source of truth: organization_branding
+      const { data: brandingData, error: brandingError } = await supabase
+        .from("organization_branding")
+        .select("logo_light_url, logo_dark_url, trading_name, accent_color")
+        .eq("organization_id", organization.id)
+        .maybeSingle();
 
-      // Check if clients exist
-      const { count: clientsCount } = await supabase
-        .from("clients")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organization.id);
+      if (brandingError) {
+        console.error("Error checking branding status:", brandingError);
+      }
 
-      // Check if leads exist
-      const { count: leadsCount } = await supabase
-        .from("leads")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organization.id);
+      const hasBranding = !!(
+        brandingData?.logo_light_url ||
+        brandingData?.logo_dark_url ||
+        brandingData?.trading_name ||
+        (brandingData?.accent_color && brandingData.accent_color !== "#3b82f6")
+      );
 
-      // Check if compliance credentials exist
-      const { count: credentialsCount } = await supabase
-        .from("external_credentials")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organization.id);
+      // COMPLIANCE / INTEGRATIONS CHECK
+      const [{ data: hmrcData }, { data: chData }, { count: clientsCount }, { count: leadsCount }] = await Promise.all([
+        supabase
+          .from("organization_integrations_hmrc")
+          .select("mtd_vat_connected")
+          .eq("organization_id", organization.id)
+          .maybeSingle(),
+        supabase
+          .from("organization_integrations_companies_house")
+          .select("connected_at")
+          .eq("organization_id", organization.id)
+          .maybeSingle(),
+        supabase
+          .from("clients")
+          .select("*", { count: "exact", head: true })
+          .eq("organization_id", organization.id),
+        supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("organization_id", organization.id),
+      ]);
+
+      const hasCompliance = !!(hmrcData?.mtd_vat_connected || chData?.connected_at);
 
       setChecklist(prev => prev.map(item => {
         if (item.id === "branding") return { ...item, completed: hasBranding };
         if (item.id === "clients") return { ...item, completed: (clientsCount || 0) > 0 };
         if (item.id === "lead") return { ...item, completed: (leadsCount || 0) > 0 };
-        if (item.id === "compliance") return { ...item, completed: (credentialsCount || 0) > 0 };
+        if (item.id === "compliance") return { ...item, completed: hasCompliance };
         return item;
       }));
     } catch (error) {
