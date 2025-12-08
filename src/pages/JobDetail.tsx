@@ -30,6 +30,7 @@ import { JobPipelineOverview } from "@/components/jobs/JobPipelineOverview";
 import { JobAuditTrail } from "@/components/jobs/JobAuditTrail";
 import { RecordsRequestManager } from "@/components/jobs/RecordsRequestManager";
 import { rollbackJobGeneration } from "@/lib/job-template-engine";
+import { completeJob } from "@/lib/job-status-service";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -121,16 +122,22 @@ export default function JobDetail() {
 
   const markCompleteMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      if (!jobId) throw new Error("Job ID is required");
+      
+      // Use centralized job status service with automation triggers
+      const result = await completeJob(jobId, {
+        reason: "Manually marked complete by user",
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || "Failed to complete job");
+      }
+      
+      // Also update progress to 100%
+      await supabase
         .from("jobs")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          progress: 100,
-        })
+        .update({ progress: 100 })
         .eq("id", jobId);
-
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["job", jobId] });

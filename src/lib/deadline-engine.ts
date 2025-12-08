@@ -5,6 +5,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { generateJobFromTemplate, GenerateJobResult } from "./job-template-engine";
+import { emitDeadlineApproaching } from "./automation-triggers";
 
 export interface DeadlineGenerationResult {
   success: boolean;
@@ -476,6 +477,61 @@ export async function generateVATDeadlines(
   } catch (err: any) {
     console.error("[Deadline Engine] Error generating VAT deadlines:", err);
     return [{ success: false, error: err.message }];
+  }
+}
+
+// ==================== DEADLINE APPROACHING DETECTION ====================
+
+/**
+ * Check deadlines and emit events for those entering warning window.
+ * Called by scheduled job or when deadlines are updated.
+ */
+export async function checkAndEmitDeadlineApproachingEvents(
+  organizationId: string
+): Promise<{ emitted: number; errors: string[] }> {
+  const result = { emitted: 0, errors: [] as string[] };
+  
+  try {
+    const today = new Date();
+    const warningWindowDays = 14; // Default warning window
+    
+    // Find deadlines entering warning window (due within warningWindowDays, not completed)
+    const { data: deadlines, error } = await supabase
+      .from("deadlines")
+      .select("id, organization_id, name, due_date, status, warning_date")
+      .eq("organization_id", organizationId)
+      .in("status", ["pending", "active"])
+      .lte("warning_date", today.toISOString().split("T")[0])
+      .gte("due_date", today.toISOString().split("T")[0]);
+    
+    if (error) {
+      result.errors.push(error.message);
+      return result;
+    }
+    
+    for (const deadline of deadlines || []) {
+      const dueDate = new Date(deadline.due_date);
+      const daysRemaining = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      const eventId = await emitDeadlineApproaching(
+        deadline.organization_id,
+        deadline.id,
+        deadline.due_date,
+        daysRemaining,
+        { deadlineName: deadline.name }
+      );
+      
+      if (eventId) {
+        result.emitted++;
+      } else {
+        result.errors.push(`Failed to emit event for deadline ${deadline.id}`);
+      }
+    }
+    
+    return result;
+  } catch (err: any) {
+    result.errors.push(err.message);
+    return result;
   }
 }
 

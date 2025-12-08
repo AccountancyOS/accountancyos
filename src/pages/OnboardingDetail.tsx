@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Check, X, FileText, Users, Building2, AlertTriangle } from "lucide-react";
+import { emitOnboardingApproved, emitClientOnboarded } from "@/lib/automation-triggers";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -229,6 +230,24 @@ const OnboardingDetail = () => {
       if (error) throw error;
 
       const result = data as unknown as ApprovalResult;
+
+      // Emit automation events for the onboarding approval
+      if (organization?.id && id) {
+        await emitOnboardingApproved(
+          organization.id,
+          id,
+          result.client_id || undefined,
+          result.company_id || undefined
+        );
+        
+        // Also emit client_onboarded for the newly created client/company
+        if (result.client_id) {
+          await emitClientOnboarded(organization.id, result.client_id, 'client');
+        }
+        if (result.company_id) {
+          await emitClientOnboarded(organization.id, result.company_id, 'company');
+        }
+      }
 
       toast({ 
         title: "Application approved successfully",
