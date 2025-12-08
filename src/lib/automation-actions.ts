@@ -23,38 +23,60 @@ interface ActionResult {
 
 /**
  * Execute a create_job action.
+ * Creates a new job with specified parameters.
+ * REQUIRES serviceType in actionConfig (per schema).
  */
 async function executeCreateJob(
   config: Record<string, unknown>,
   context: ActionContext
 ): Promise<ActionResult> {
   try {
-    const { templateId, clientId, companyId, name, dueDate } = config as {
+    const {
+      templateId,
+      clientId,
+      companyId,
+      jobName,
+      serviceType,
+      dueDate,
+    } = config as {
       templateId?: string;
       clientId?: string;
       companyId?: string;
-      name?: string;
+      jobName?: string;
+      serviceType?: string;
       dueDate?: string;
     };
 
+    // Enforce serviceType – automation rules must provide it
+    if (!serviceType) {
+      return {
+        success: false,
+        error: "create_job action requires serviceType in actionConfig",
+      };
+    }
+
     const { data, error } = await supabase
       .from('jobs')
-      .insert([{
+      .insert({
         organization_id: context.organizationId,
-        name: name || 'Auto-generated Job',
+        job_name: jobName || 'Auto-generated Job',
+        service_type: serviceType,
         status: 'not_started',
-        client_id: clientId || null,
-        company_id: companyId || null,
-        filing_deadline: dueDate || null,
-        template_id: templateId || null
-      }])
+        client_id: clientId ?? null,
+        company_id: companyId ?? null,
+        filing_deadline: dueDate ?? null,
+        template_id: templateId ?? null,
+        is_auto_generated: true,
+        auto_generated_at: new Date().toISOString(),
+        automation_source: context.triggeredByEntity,
+      })
       .select('id')
       .single();
 
     if (error) return { success: false, error: error.message };
     return { success: true, data: { jobId: data.id } };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error creating job' };
   }
 }
 
