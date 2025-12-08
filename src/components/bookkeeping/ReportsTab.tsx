@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProfitLossReport } from "./ProfitLossReport";
 import { BalanceSheetReport } from "./BalanceSheetReport";
 import { TrialBalanceTab } from "./TrialBalanceTab";
+import { GeneralLedgerTab } from "./GeneralLedgerTab";
 import type { BookkeepingEntity } from "./EntitySelector";
 import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 import { BarChart3 } from "lucide-react";
@@ -31,6 +32,7 @@ export function ReportsTab({ entity }: ReportsTabProps) {
           <TabsTrigger value="profit-loss">Profit & Loss</TabsTrigger>
           <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
           <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
+          <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profit-loss" className="mt-4">
@@ -43,6 +45,10 @@ export function ReportsTab({ entity }: ReportsTabProps) {
 
         <TabsContent value="trial-balance" className="mt-4">
           <TrialBalanceTab entity={entity} />
+        </TabsContent>
+
+        <TabsContent value="general-ledger" className="mt-4">
+          <GeneralLedgerTab entity={entity} />
         </TabsContent>
       </Tabs>
     </div>
