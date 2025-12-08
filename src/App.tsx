@@ -43,6 +43,9 @@ import EmployeeDetail from "./pages/EmployeeDetail";
 import CIS from "./pages/CIS";
 import CISReturnDetail from "./pages/CISReturnDetail";
 import JobTemplates from "./pages/JobTemplates";
+import BrandingSettings from "./pages/settings/BrandingSettings";
+import HMRCSettings from "./pages/settings/HMRCSettings";
+import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -373,6 +376,30 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <JobTemplates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/branding"
+              element={
+                <ProtectedRoute>
+                  <BrandingSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/hmrc"
+              element={
+                <ProtectedRoute>
+                  <HMRCSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/companies-house"
+              element={
+                <ProtectedRoute>
+                  <CompaniesHouseSettings />
                 </ProtectedRoute>
               }
             />
