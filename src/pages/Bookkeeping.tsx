@@ -9,12 +9,10 @@ import { GeneralLedgerTab } from "@/components/bookkeeping/GeneralLedgerTab";
 import { TrialBalanceTab } from "@/components/bookkeeping/TrialBalanceTab";
 import { JournalsTab } from "@/components/bookkeeping/JournalsTab";
 import { BankingTab } from "@/components/bookkeeping/BankingTab";
-import SalesTab from "@/components/bookkeeping/SalesTab";
-import CustomersTab from "@/components/bookkeeping/CustomersTab";
-import BillsTab from "@/components/bookkeeping/BillsTab";
-import SuppliersTab from "@/components/bookkeeping/SuppliersTab";
-import { CreditNotesTab } from "@/components/bookkeeping/CreditNotesTab";
+import { SalesModule } from "@/components/bookkeeping/SalesModule";
+import { PurchasesModule } from "@/components/bookkeeping/PurchasesModule";
 import { BankRulesTab } from "@/components/bookkeeping/BankRulesTab";
+import { ReportsTab } from "@/components/bookkeeping/ReportsTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
@@ -101,12 +99,10 @@ export default function Bookkeeping() {
                   
                   <Separator orientation="vertical" className="mx-1 h-6" />
                   
-                  {/* AR/AP Group */}
+                  {/* AR/AP Group - Consolidated */}
                   <TabsTrigger value="sales" className="text-xs sm:text-sm">Sales</TabsTrigger>
-                  <TabsTrigger value="customers" className="text-xs sm:text-sm">Customers</TabsTrigger>
-                  <TabsTrigger value="bills" className="text-xs sm:text-sm">Bills</TabsTrigger>
-                  <TabsTrigger value="suppliers" className="text-xs sm:text-sm">Suppliers</TabsTrigger>
-                  <TabsTrigger value="credit-notes" className="text-xs sm:text-sm">Credit Notes</TabsTrigger>
+                  <TabsTrigger value="purchases" className="text-xs sm:text-sm">Purchases</TabsTrigger>
+                  <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
                   
                   <Separator orientation="vertical" className="mx-1 h-6" />
                   
@@ -154,23 +150,15 @@ export default function Bookkeeping() {
             </TabsContent>
 
             <TabsContent value="sales" className="space-y-4">
-              <SalesTab entity={selectedEntity} />
+              <SalesModule entity={selectedEntity} />
             </TabsContent>
 
-            <TabsContent value="customers" className="space-y-4">
-              <CustomersTab entity={selectedEntity} />
+            <TabsContent value="purchases" className="space-y-4">
+              <PurchasesModule entity={selectedEntity} />
             </TabsContent>
 
-            <TabsContent value="bills" className="space-y-4">
-              <BillsTab entity={selectedEntity} />
-            </TabsContent>
-
-            <TabsContent value="suppliers" className="space-y-4">
-              <SuppliersTab entity={selectedEntity} />
-            </TabsContent>
-
-            <TabsContent value="credit-notes" className="space-y-4">
-              <CreditNotesTab entity={selectedEntity} />
+            <TabsContent value="reports" className="space-y-4">
+              <ReportsTab entity={selectedEntity} />
             </TabsContent>
 
             <TabsContent value="receipts" className="space-y-4">
