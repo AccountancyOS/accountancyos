@@ -14,6 +14,8 @@ import {
   Paperclip,
   MoreVertical,
   Trash2,
+  Layers,
+  PenLine,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -58,6 +60,7 @@ export default function JobTasksTab({ jobId }: JobTasksTabProps) {
         job_id: jobId,
         title: newTaskTitle,
         task_order: (tasks?.length || 0) + 1,
+        is_manual: true,
       });
 
       if (error) throw error;
@@ -191,6 +194,20 @@ export default function JobTasksTab({ jobId }: JobTasksTabProps) {
                               Due: {format(new Date(task.due_date), "dd MMM yyyy")}
                             </p>
                           )}
+                          <div className="flex items-center gap-2 mt-1">
+                            {task.source_template_task_id && (
+                              <Badge variant="outline" className="text-xs h-5">
+                                <Layers className="h-3 w-3 mr-1" />
+                                From template
+                              </Badge>
+                            )}
+                            {task.is_manual && (
+                              <Badge variant="outline" className="text-xs h-5 text-muted-foreground">
+                                <PenLine className="h-3 w-3 mr-1" />
+                                Added manually
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <Button

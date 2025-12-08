@@ -200,7 +200,7 @@ export function ReusableBlocksPanel({
   };
 
   return (
-    <div className="flex flex-col h-full border-l bg-muted/30">
+    <div className="flex flex-col h-full flex-1 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b">
         <div className="flex items-center justify-between mb-3">
