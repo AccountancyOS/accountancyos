@@ -4992,46 +4992,79 @@ export type Database = {
       }
       job_templates: {
         Row: {
+          auto_close_if_no_work: boolean | null
           created_at: string
           default_priority: string | null
           default_status: string | null
           default_tags: Json | null
+          description: string | null
+          entity_filters: Json | null
+          frequency: string | null
           id: string
           is_active: boolean | null
           organization_id: string
+          records_requests_template: Json | null
           recurrence_config: Json | null
+          relative_due_offset: number | null
           service_type: string
+          skip_if_no_activity: boolean | null
           tasks: Json
           template_name: string
+          trigger_conditions: Json | null
+          trigger_type: string | null
+          ui_category: string | null
           updated_at: string
+          version: number | null
         }
         Insert: {
+          auto_close_if_no_work?: boolean | null
           created_at?: string
           default_priority?: string | null
           default_status?: string | null
           default_tags?: Json | null
+          description?: string | null
+          entity_filters?: Json | null
+          frequency?: string | null
           id?: string
           is_active?: boolean | null
           organization_id: string
+          records_requests_template?: Json | null
           recurrence_config?: Json | null
+          relative_due_offset?: number | null
           service_type: string
+          skip_if_no_activity?: boolean | null
           tasks?: Json
           template_name: string
+          trigger_conditions?: Json | null
+          trigger_type?: string | null
+          ui_category?: string | null
           updated_at?: string
+          version?: number | null
         }
         Update: {
+          auto_close_if_no_work?: boolean | null
           created_at?: string
           default_priority?: string | null
           default_status?: string | null
           default_tags?: Json | null
+          description?: string | null
+          entity_filters?: Json | null
+          frequency?: string | null
           id?: string
           is_active?: boolean | null
           organization_id?: string
+          records_requests_template?: Json | null
           recurrence_config?: Json | null
+          relative_due_offset?: number | null
           service_type?: string
+          skip_if_no_activity?: boolean | null
           tasks?: Json
           template_name?: string
+          trigger_conditions?: Json | null
+          trigger_type?: string | null
+          ui_category?: string | null
           updated_at?: string
+          version?: number | null
         }
         Relationships: [
           {
@@ -5101,12 +5134,15 @@ export type Database = {
       jobs: {
         Row: {
           assigned_to: string | null
+          auto_generated_at: string | null
           automation_source: string | null
+          can_undo_until: string | null
           client_id: string | null
           company_id: string | null
           completed_at: string | null
           created_at: string
           filing_deadline: string | null
+          generation_reason: string | null
           id: string
           info_received_at: string | null
           info_requested_at: string | null
@@ -5115,6 +5151,7 @@ export type Database = {
           is_recurring: boolean | null
           job_name: string
           last_activity_at: string | null
+          name: string | null
           organization_id: string
           period_end: string | null
           period_label: string | null
@@ -5128,17 +5165,21 @@ export type Database = {
           status: string
           tags: Json | null
           template_id: string | null
+          template_version: number | null
           updated_at: string
           workpaper_instance_id: string | null
         }
         Insert: {
           assigned_to?: string | null
+          auto_generated_at?: string | null
           automation_source?: string | null
+          can_undo_until?: string | null
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
           created_at?: string
           filing_deadline?: string | null
+          generation_reason?: string | null
           id?: string
           info_received_at?: string | null
           info_requested_at?: string | null
@@ -5147,6 +5188,7 @@ export type Database = {
           is_recurring?: boolean | null
           job_name: string
           last_activity_at?: string | null
+          name?: string | null
           organization_id: string
           period_end?: string | null
           period_label?: string | null
@@ -5160,17 +5202,21 @@ export type Database = {
           status?: string
           tags?: Json | null
           template_id?: string | null
+          template_version?: number | null
           updated_at?: string
           workpaper_instance_id?: string | null
         }
         Update: {
           assigned_to?: string | null
+          auto_generated_at?: string | null
           automation_source?: string | null
+          can_undo_until?: string | null
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
           created_at?: string
           filing_deadline?: string | null
+          generation_reason?: string | null
           id?: string
           info_received_at?: string | null
           info_requested_at?: string | null
@@ -5179,6 +5225,7 @@ export type Database = {
           is_recurring?: boolean | null
           job_name?: string
           last_activity_at?: string | null
+          name?: string | null
           organization_id?: string
           period_end?: string | null
           period_label?: string | null
@@ -5192,6 +5239,7 @@ export type Database = {
           status?: string
           tags?: Json | null
           template_id?: string | null
+          template_version?: number | null
           updated_at?: string
           workpaper_instance_id?: string | null
         }
@@ -8144,7 +8192,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          published_at: string | null
           template_id: string
+          version: number | null
           version_number: number
         }
         Insert: {
@@ -8153,7 +8203,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          published_at?: string | null
           template_id: string
+          version?: number | null
           version_number: number
         }
         Update: {
@@ -8162,7 +8214,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          published_at?: string | null
           template_id?: string
+          version?: number | null
           version_number?: number
         }
         Relationships: [

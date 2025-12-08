@@ -292,7 +292,7 @@ export function JobTemplateEditorFullscreen({
           <div>
             <h1 className="text-lg font-semibold">{name || "Untitled Template"}</h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline">v{(template as Record<string, unknown>)?.version || 1}</Badge>
+              <Badge variant="outline">v{template?.version ?? 1}</Badge>
               <span>•</span>
               <span>{frequency?.replace("_", " ")}</span>
               {hasChanges && (

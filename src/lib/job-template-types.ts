@@ -640,18 +640,29 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
 // =====================================================
 
 export interface EntityContext {
+  entityType?: "company" | "client";
+  entityId?: string;
+  organizationId?: string;
   company?: {
     id: string;
+    company_name?: string | null;
+    company_number?: string | null;
+    vat_registered?: boolean;
     vat_stagger?: number | null;
+    vat_stagger_group?: number | null;
     vat_frequency?: string | null;
     year_end_month?: number | null;
     year_end_day?: number | null;
     company_type?: string | null;
     vat_number?: string | null;
     vat_scheme?: string | null;
+    status?: string | null;
   };
   client?: {
     id: string;
+    first_name?: string | null;
+    last_name?: string | null;
+    email?: string | null;
     status?: string | null;
     utr?: string | null;
   };
