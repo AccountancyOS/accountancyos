@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ShieldCheck, Building } from "lucide-react";
+import { Loader2, ShieldCheck, Building, ExternalLink } from "lucide-react";
 
 interface ComplianceSetupStepProps {
   organizationId: string;
@@ -15,6 +16,7 @@ interface ComplianceSetupStepProps {
 
 export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: ComplianceSetupStepProps) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [hmrcLabel, setHmrcLabel] = useState("");
   const [companiesHouseLabel, setCompaniesHouseLabel] = useState("");
@@ -82,7 +84,7 @@ export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: Comp
               Store a reference label for your HMRC credentials (not the actual password)
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="hmrc_label">Credential Label</Label>
               <Input
@@ -95,6 +97,15 @@ export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: Comp
                 This is just a label to help you identify which credentials to use
               </p>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/settings/hmrc")}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Configure HMRC in Settings
+            </Button>
           </CardContent>
         </Card>
 
@@ -108,7 +119,7 @@ export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: Comp
               Store a reference label for your Companies House API credentials
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ch_label">Credential Label</Label>
               <Input
@@ -121,6 +132,15 @@ export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: Comp
                 This is just a label to help you identify which credentials to use
               </p>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/settings/companies-house")}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Configure Companies House in Settings
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -137,7 +157,7 @@ export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: Comp
           )}
         </Button>
         <Button type="button" variant="ghost" onClick={onSkip}>
-          Skip for Now
+          I'll configure this later
         </Button>
       </div>
     </form>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText, Palette, Building2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
@@ -301,6 +300,59 @@ export default function Settings() {
           <p className="text-muted-foreground">
             Manage email integrations and system settings
           </p>
+        </div>
+
+        {/* Navigation Cards */}
+        <div className="space-y-6">
+          {/* Practice Setup */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">Practice Setup</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => navigate("/settings/branding")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Palette className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">Branding</CardTitle>
+                    <CardDescription className="text-sm">Logo, colors, and practice details</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </div>
+          </div>
+
+          {/* Filing & Integrations */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">Filing & Integrations</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => navigate("/settings/hmrc")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <ShieldCheck className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">HMRC Integrations</CardTitle>
+                    <CardDescription className="text-sm">MTD VAT, PAYE, Self Assessment</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => navigate("/settings/companies-house")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Building2 className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">Companies House</CardTitle>
+                    <CardDescription className="text-sm">Filing credentials and presenter details</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </div>
+          </div>
         </div>
 
         <Separator />
