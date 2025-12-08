@@ -8060,6 +8060,53 @@ export type Database = {
           },
         ]
       }
+      template_blocks: {
+        Row: {
+          block_name: string
+          block_type: string
+          content: Json
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          organization_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          block_name: string
+          block_type: string
+          content?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          organization_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          block_name?: string
+          block_type?: string
+          content?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          organization_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_blocks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       template_merge_fields: {
         Row: {
           created_at: string
