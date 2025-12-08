@@ -123,11 +123,13 @@ async function executeAction(
   try {
     switch (actionType) {
       case "create_job": {
-        const { templateId, clientId, companyId, jobName, serviceType, dueDate } = config as {
+        // Support both job_name and jobName for flexibility
+        const { templateId, clientId, companyId, jobName, job_name, serviceType, dueDate } = config as {
           templateId?: string;
           clientId?: string;
           companyId?: string;
           jobName?: string;
+          job_name?: string;
           serviceType?: string;
           dueDate?: string;
         };
@@ -136,11 +138,16 @@ async function executeAction(
           return { success: false, error: "create_job action requires serviceType" };
         }
 
+        const finalJobName = jobName || job_name || "Auto-generated Job";
+
+        // automation_source must be 'manual', 'scheduled', or 'template'
+        const validSource = context.triggeredByEntity === 'deadline' ? 'scheduled' : 'template';
+        
         const { data, error } = await supabase
           .from("jobs")
           .insert({
             organization_id: context.organizationId,
-            job_name: jobName || "Auto-generated Job",
+            job_name: finalJobName,
             service_type: serviceType,
             status: "not_started",
             client_id: clientId ?? null,
@@ -149,7 +156,7 @@ async function executeAction(
             template_id: templateId ?? null,
             is_auto_generated: true,
             auto_generated_at: new Date().toISOString(),
-            automation_source: context.triggeredByEntity,
+            automation_source: validSource,
           })
           .select("id")
           .single();
@@ -221,21 +228,46 @@ async function executeAction(
       }
 
       case "send_notification": {
-        const { userId, title, message, entityType, entityId } = config as {
+        const { userId, title, message, entityType, entityId, broadcastToOrg } = config as {
           userId?: string;
           title?: string;
           message?: string;
           entityType?: string;
           entityId?: string;
+          broadcastToOrg?: boolean;
         };
 
-        if (!userId) {
-          return { success: false, error: "send_notification requires userId" };
+        // If broadcastToOrg is true, send to all org users; otherwise require userId
+        if (!userId && !broadcastToOrg) {
+          // Get all users in organization
+          const { data: orgUsers } = await supabase
+            .from("organization_users")
+            .select("user_id")
+            .eq("organization_id", context.organizationId);
+
+          if (orgUsers && orgUsers.length > 0) {
+            const notifications = orgUsers.map((ou: { user_id: string }) => ({
+              organization_id: context.organizationId,
+              user_id: ou.user_id,
+              type: "automation",
+              title: title || "Notification",
+              message: message || "",
+              entity_type: entityType ?? context.triggeredByEntity,
+              entity_id: entityId ?? context.triggeredById,
+              is_read: false,
+            }));
+
+            const { error } = await supabase.from("notifications").insert(notifications);
+            if (error) return { success: false, error: error.message };
+            return { success: true, data: { notificationCount: notifications.length } };
+          }
+          return { success: false, error: "No users in organization to notify" };
         }
 
         const { data, error } = await supabase
           .from("notifications")
           .insert({
+            organization_id: context.organizationId,
             user_id: userId,
             type: "automation",
             title: title || "Notification",
