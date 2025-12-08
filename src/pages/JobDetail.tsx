@@ -6,8 +6,18 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers } from "lucide-react";
+import { format, differenceInDays, isFuture } from "date-fns";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
@@ -18,6 +28,8 @@ import { JobWorkpaperTab } from "@/components/jobs/JobWorkpaperTab";
 import { JobFilingTab } from "@/components/jobs/JobFilingTab";
 import { JobPipelineOverview } from "@/components/jobs/JobPipelineOverview";
 import { JobAuditTrail } from "@/components/jobs/JobAuditTrail";
+import { RecordsRequestManager } from "@/components/jobs/RecordsRequestManager";
+import { rollbackJobGeneration } from "@/lib/job-template-engine";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -27,6 +39,8 @@ export default function JobDetail() {
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("pipeline");
+  const [showUndoDialog, setShowUndoDialog] = useState(false);
+  const [undoReason, setUndoReason] = useState("");
 
   const { data: job, isLoading } = useQuery({
     queryKey: ["job", jobId],
@@ -45,6 +59,23 @@ export default function JobDetail() {
       return data;
     },
     enabled: !!jobId,
+  });
+
+  // Fetch template info if job has template_id
+  const { data: template } = useQuery({
+    queryKey: ["job-template-info", job?.template_id],
+    queryFn: async () => {
+      if (!job?.template_id) return null;
+      const { data, error } = await supabase
+        .from("job_templates")
+        .select("id, template_name, version, is_active")
+        .eq("id", job.template_id)
+        .single();
+
+      if (error) return null;
+      return data;
+    },
+    enabled: !!job?.template_id,
   });
 
   // Fetch source job name if this is auto-generated
@@ -107,6 +138,30 @@ export default function JobDetail() {
     },
   });
 
+  // Undo job generation mutation
+  const undoJobMutation = useMutation({
+    mutationFn: async () => {
+      if (!organization?.id || !jobId) throw new Error("Missing required data");
+      return rollbackJobGeneration(jobId, organization.id, undoReason);
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success("Job generation undone");
+        navigate("/jobs");
+      } else {
+        toast.error(result.error || "Failed to undo job generation");
+      }
+    },
+    onError: (error) => {
+      toast.error("Failed to undo job generation");
+      console.error(error);
+    },
+    onSettled: () => {
+      setShowUndoDialog(false);
+      setUndoReason("");
+    },
+  });
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -135,6 +190,21 @@ export default function JobDetail() {
   const daysRemaining = job.filing_deadline
     ? differenceInDays(new Date(job.filing_deadline), new Date())
     : null;
+
+  // Check if undo is available (within 24-hour window and job not started)
+  const jobExtended = job as unknown as { 
+    can_undo_until?: string; 
+    auto_generated_at?: string;
+    generation_reason?: string;
+    template_version?: number;
+  };
+  const canUndo = jobExtended.can_undo_until && 
+    isFuture(new Date(jobExtended.can_undo_until)) && 
+    job.status === "not_started";
+
+  // Check if template has been updated since job creation
+  const templateUpdated = template && jobExtended.template_version && 
+    template.version > jobExtended.template_version;
 
   return (
     <DashboardLayout>
@@ -186,26 +256,89 @@ export default function JobDetail() {
           </div>
         </div>
 
-        {/* Auto-generated indicator */}
-        {job.is_auto_generated && (
+        {/* Template Metadata */}
+        {template && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Layers className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      From Template: {template.template_name}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className="text-xs">
+                        v{jobExtended.template_version || 1}
+                      </Badge>
+                      {templateUpdated && (
+                        <Badge variant="secondary" className="text-xs bg-amber-500/10 text-amber-600">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Template updated to v{template.version}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/settings/job-templates")}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Template
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Auto-generated indicator with undo */}
+        {(job.is_auto_generated || jobExtended.auto_generated_at) && (
           <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5">
-            <RefreshCw className="h-5 w-5 text-primary" />
+            <Zap className="h-5 w-5 text-primary" />
             <div className="flex-1">
               <p className="text-sm font-medium text-primary">Auto-generated Job</p>
               <p className="text-xs text-muted-foreground">
-                Created automatically from previous year's filing
+                {jobExtended.generation_reason || "Created automatically from template"}
+                {jobExtended.auto_generated_at && (
+                  <> on {format(new Date(jobExtended.auto_generated_at), "dd MMM yyyy 'at' HH:mm")}</>
+                )}
               </p>
             </div>
-            {sourceJob && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate(`/jobs/${sourceJob.id}`)}
-              >
-                Source: {sourceJob.job_name}
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {sourceJob && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate(`/jobs/${sourceJob.id}`)}
+                >
+                  Source: {sourceJob.job_name}
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              )}
+              {canUndo && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUndoDialog(true)}
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <Undo2 className="h-4 w-4 mr-2" />
+                  Undo Generation
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Undo window indicator */}
+        {canUndo && jobExtended.can_undo_until && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>
+              Undo available until {format(new Date(jobExtended.can_undo_until), "dd MMM yyyy 'at' HH:mm")}
+            </span>
           </div>
         )}
 
@@ -271,6 +404,7 @@ export default function JobDetail() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="records">Records</TabsTrigger>
             <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
             <TabsTrigger value="workpaper">Workpaper</TabsTrigger>
             <TabsTrigger value="filing">Filing</TabsTrigger>
@@ -284,8 +418,13 @@ export default function JobDetail() {
           <TabsContent value="pipeline">
             <div className="space-y-6">
               <JobPipelineOverview jobId={job.id} onNavigate={setActiveTab} />
+              <RecordsRequestManager jobId={job.id} mode="accountant" />
               <JobAuditTrail jobId={job.id} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="records">
+            <RecordsRequestManager jobId={job.id} mode="accountant" />
           </TabsContent>
 
           <TabsContent value="questionnaire">
@@ -325,6 +464,43 @@ export default function JobDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Undo Confirmation Dialog */}
+      <Dialog open={showUndoDialog} onOpenChange={setShowUndoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Undo Job Generation?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete this auto-generated job and all its associated tasks. 
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason for undoing (required)</label>
+              <Textarea
+                value={undoReason}
+                onChange={(e) => setUndoReason(e.target.value)}
+                placeholder="e.g., Created in error, wrong period, etc."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUndoDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => undoJobMutation.mutate()}
+              disabled={!undoReason.trim() || undoJobMutation.isPending}
+            >
+              <Undo2 className="h-4 w-4 mr-2" />
+              Undo Generation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

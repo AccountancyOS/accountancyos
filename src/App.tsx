@@ -42,6 +42,7 @@ import PayRunDetail from "./pages/PayRunDetail";
 import EmployeeDetail from "./pages/EmployeeDetail";
 import CIS from "./pages/CIS";
 import CISReturnDetail from "./pages/CISReturnDetail";
+import JobTemplates from "./pages/JobTemplates";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -364,6 +365,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <CISReturnDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/job-templates"
+              element={
+                <ProtectedRoute>
+                  <JobTemplates />
                 </ProtectedRoute>
               }
             />
