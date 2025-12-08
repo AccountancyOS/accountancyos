@@ -61,7 +61,7 @@ export function JobTemplateEditorFullscreen({
   templateId,
   onClose,
 }: JobTemplateEditorFullscreenProps) {
-  const { currentOrganization } = useOrganization();
+  const { organization } = useOrganization();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("tasks");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -106,7 +106,7 @@ export function JobTemplateEditorFullscreen({
         .from("template_versions")
         .select("*")
         .eq("template_id", templateId)
-        .order("version", { ascending: false });
+        .order("version_number", { ascending: false });
 
       if (error) throw error;
       return data || [];
@@ -116,23 +116,24 @@ export function JobTemplateEditorFullscreen({
   // Initialize form from template
   useEffect(() => {
     if (template) {
-      setName(template.name || "");
-      setDescription(template.description || "");
+      const t = template as Record<string, unknown>;
+      setName((t.template_name as string) || "");
+      setDescription((t.description as string) || "");
       setServiceType(template.service_type || "");
-      setFrequency(template.frequency || "one_off");
-      setTriggerType(template.trigger_type || "manual");
-      setRelativeDueOffset(template.relative_due_offset || 30);
-      setUiCategory(template.ui_category || "General");
+      setFrequency((t.frequency as string) || "one_off");
+      setTriggerType((t.trigger_type as string) || "manual");
+      setRelativeDueOffset((t.relative_due_offset as number) || 30);
+      setUiCategory((t.ui_category as string) || "General");
       setIsActive(template.is_active ?? true);
-      setSkipIfNoActivity(template.skip_if_no_activity ?? false);
-      setAutoCloseIfNoWork(template.auto_close_if_no_work ?? false);
-      setTriggerConditions((template.trigger_conditions as TriggerCondition[]) || []);
-      setEntityFilters((template.entity_filters as EntityFilter) || {});
+      setSkipIfNoActivity((t.skip_if_no_activity as boolean) ?? false);
+      setAutoCloseIfNoWork((t.auto_close_if_no_work as boolean) ?? false);
+      setTriggerConditions((t.trigger_conditions as TriggerCondition[]) || []);
+      setEntityFilters((t.entity_filters as EntityFilter) || {});
 
       // Parse content
       const content = template.tasks as JobTemplateContent | null;
       setTasks(content?.tasks || []);
-      setRecordsRequests((template.records_requests_template as RecordsRequestItem[]) || []);
+      setRecordsRequests((t.records_requests_template as RecordsRequestItem[]) || []);
     }
   }, [template]);
 
@@ -150,7 +151,7 @@ export function JobTemplateEditorFullscreen({
       const { error } = await supabase
         .from("job_templates")
         .update({
-          name,
+          template_name: name,
           description,
           service_type: serviceType,
           frequency,
@@ -165,7 +166,7 @@ export function JobTemplateEditorFullscreen({
           tasks: content,
           records_requests_template: recordsRequests,
           updated_at: new Date().toISOString(),
-        })
+        } as Record<string, unknown>)
         .eq("id", templateId);
 
       if (error) throw error;
@@ -185,8 +186,8 @@ export function JobTemplateEditorFullscreen({
   // Publish version mutation
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!currentOrganization?.id) throw new Error("No organization");
-      return publishTemplateVersion(templateId, currentOrganization.id, "Published new version");
+      if (!organization?.id) throw new Error("No organization");
+      return publishTemplateVersion(templateId, organization.id, "Published new version");
     },
     onSuccess: (result) => {
       if (result.success) {
@@ -202,10 +203,12 @@ export function JobTemplateEditorFullscreen({
   // Track changes
   useEffect(() => {
     if (template) {
+      const t = template as Record<string, unknown>;
+      const templateName = (t.template_name as string) || "";
       const hasModifications =
-        name !== (template.name || "") ||
-        description !== (template.description || "") ||
-        frequency !== (template.frequency || "one_off");
+        name !== templateName ||
+        description !== ((t.description as string) || "") ||
+        frequency !== ((t.frequency as string) || "one_off");
       setHasChanges(hasModifications);
     }
   }, [name, description, frequency, template]);
@@ -289,7 +292,7 @@ export function JobTemplateEditorFullscreen({
           <div>
             <h1 className="text-lg font-semibold">{name || "Untitled Template"}</h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline">v{template?.version || 1}</Badge>
+              <Badge variant="outline">v{(template as Record<string, unknown>)?.version || 1}</Badge>
               <span>•</span>
               <span>{frequency?.replace("_", " ")}</span>
               {hasChanges && (
@@ -450,7 +453,7 @@ export function JobTemplateEditorFullscreen({
                             className="opacity-0 group-hover:opacity-100"
                             onClick={() => deleteTask(task.id)}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </CardContent>
@@ -466,7 +469,7 @@ export function JobTemplateEditorFullscreen({
                 <div>
                   <h2 className="text-lg font-medium">Records Requests</h2>
                   <p className="text-sm text-muted-foreground">
-                    Documents and information to request from the client
+                    Define documents and information to request from the client
                   </p>
                 </div>
                 <Button onClick={addRecordsRequest}>
@@ -478,7 +481,7 @@ export function JobTemplateEditorFullscreen({
               {recordsRequests.length === 0 ? (
                 <Card className="border-dashed">
                   <CardContent className="py-8 text-center text-muted-foreground">
-                    No records requests defined. Add document requests for clients.
+                    No records requests defined. Add items to request from clients.
                   </CardContent>
                 </Card>
               ) : (
@@ -489,24 +492,20 @@ export function JobTemplateEditorFullscreen({
                         <div className="flex items-start gap-4">
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <GripVertical className="h-4 w-4 cursor-grab" />
-                            <FileUp className="h-4 w-4" />
+                            <span className="text-sm font-mono w-6">{index + 1}</span>
                           </div>
                           <div className="flex-1 space-y-3">
                             <div className="flex items-center gap-4">
                               <Input
                                 value={request.name}
-                                onChange={(e) =>
-                                  updateRecordsRequest(request.id, { name: e.target.value })
-                                }
+                                onChange={(e) => updateRecordsRequest(request.id, { name: e.target.value })}
                                 placeholder="Request name"
                                 className="flex-1"
                               />
                               <Select
                                 value={request.requestType}
                                 onValueChange={(v) =>
-                                  updateRecordsRequest(request.id, {
-                                    requestType: v as RecordsRequestItem["requestType"],
-                                  })
+                                  updateRecordsRequest(request.id, { requestType: v as RecordsRequestItem["requestType"] })
                                 }
                               >
                                 <SelectTrigger className="w-[150px]">
@@ -514,53 +513,24 @@ export function JobTemplateEditorFullscreen({
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="document">Document</SelectItem>
-                                  <SelectItem value="questionnaire">Questionnaire</SelectItem>
-                                  <SelectItem value="data_field">Data Field</SelectItem>
+                                  <SelectItem value="bank_statement">Bank Statement</SelectItem>
+                                  <SelectItem value="receipt">Receipt</SelectItem>
+                                  <SelectItem value="p60">P60</SelectItem>
+                                  <SelectItem value="invoice">Invoice</SelectItem>
+                                  <SelectItem value="other">Other</SelectItem>
                                 </SelectContent>
                               </Select>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <Textarea
-                                value={request.description || ""}
-                                onChange={(e) =>
-                                  updateRecordsRequest(request.id, { description: e.target.value })
-                                }
-                                placeholder="Description for the client"
-                                className="flex-1 h-16"
-                              />
-                            </div>
-                            <div className="flex items-center gap-4 text-sm">
                               <div className="flex items-center gap-2">
                                 <Switch
                                   checked={request.isRequired}
-                                  onCheckedChange={(v) =>
-                                    updateRecordsRequest(request.id, { isRequired: v })
-                                  }
+                                  onCheckedChange={(v) => updateRecordsRequest(request.id, { isRequired: v })}
                                 />
-                                <span className="text-muted-foreground">Required</span>
+                                <span className="text-sm text-muted-foreground">Required</span>
                               </div>
-                              {request.requestType === "document" && (
-                                <>
-                                  <Separator orientation="vertical" className="h-6" />
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground">File types:</span>
-                                    <Input
-                                      value={request.fileTypes?.join(", ") || ""}
-                                      onChange={(e) =>
-                                        updateRecordsRequest(request.id, {
-                                          fileTypes: e.target.value
-                                            .split(",")
-                                            .map((s) => s.trim())
-                                            .filter(Boolean),
-                                        })
-                                      }
-                                      placeholder="pdf, xlsx, jpg"
-                                      className="w-40 h-8"
-                                    />
-                                  </div>
-                                </>
-                              )}
                             </div>
+                            {request.description && (
+                              <p className="text-sm text-muted-foreground">{request.description}</p>
+                            )}
                           </div>
                           <Button
                             variant="ghost"
@@ -568,7 +538,7 @@ export function JobTemplateEditorFullscreen({
                             className="opacity-0 group-hover:opacity-100"
                             onClick={() => deleteRecordsRequest(request.id)}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </CardContent>
@@ -580,7 +550,6 @@ export function JobTemplateEditorFullscreen({
 
             {/* Settings Tab */}
             <TabsContent value="settings" className="space-y-6">
-              {/* Basic Settings */}
               <Card>
                 <CardHeader>
                   <CardTitle>Basic Settings</CardTitle>
@@ -595,23 +564,23 @@ export function JobTemplateEditorFullscreen({
                           setName(e.target.value);
                           setHasChanges(true);
                         }}
+                        placeholder="e.g., VAT Return Q1"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Service Type</Label>
-                      <Select value={serviceType} onValueChange={setServiceType}>
+                      <Select value={serviceType} onValueChange={(v) => { setServiceType(v); setHasChanges(true); }}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select service" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="VAT">VAT</SelectItem>
                           <SelectItem value="ACCOUNTS">Accounts</SelectItem>
-                          <SelectItem value="CT">Corporation Tax</SelectItem>
+                          <SelectItem value="CT600">Corporation Tax</SelectItem>
                           <SelectItem value="SA">Self Assessment</SelectItem>
                           <SelectItem value="BOOKKEEPING">Bookkeeping</SelectItem>
                           <SelectItem value="PAYROLL">Payroll</SelectItem>
-                          <SelectItem value="CIS">CIS</SelectItem>
-                          <SelectItem value="CS01">Confirmation Statement</SelectItem>
+                          <SelectItem value="COSEC">CoSec</SelectItem>
                           <SelectItem value="OTHER">Other</SelectItem>
                         </SelectContent>
                       </Select>
@@ -625,13 +594,14 @@ export function JobTemplateEditorFullscreen({
                         setDescription(e.target.value);
                         setHasChanges(true);
                       }}
-                      placeholder="Describe what this template is for"
+                      placeholder="Describe what this template is for..."
+                      rows={3}
                     />
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Frequency</Label>
-                      <Select value={frequency} onValueChange={setFrequency}>
+                      <Select value={frequency} onValueChange={(v) => { setFrequency(v); setHasChanges(true); }}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -645,33 +615,34 @@ export function JobTemplateEditorFullscreen({
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Trigger</Label>
-                      <Select value={triggerType} onValueChange={setTriggerType}>
+                      <Label>Trigger Type</Label>
+                      <Select value={triggerType} onValueChange={(v) => { setTriggerType(v); setHasChanges(true); }}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="manual">Manual</SelectItem>
+                          <SelectItem value="scheduled">Scheduled</SelectItem>
                           <SelectItem value="service_activated">Service Activated</SelectItem>
-                          <SelectItem value="period_start">Period Start</SelectItem>
-                          <SelectItem value="period_end">Period End</SelectItem>
+                          <SelectItem value="deadline_approaching">Deadline Approaching</SelectItem>
                           <SelectItem value="previous_job_completed">Previous Job Completed</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Due Offset (days)</Label>
-                      <Input
-                        type="number"
-                        value={relativeDueOffset}
-                        onChange={(e) => setRelativeDueOffset(parseInt(e.target.value) || 30)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={isActive} onCheckedChange={setIsActive} />
-                      <Label>Active</Label>
+                      <Label>Category</Label>
+                      <Select value={uiCategory} onValueChange={(v) => { setUiCategory(v); setHasChanges(true); }}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="General">General</SelectItem>
+                          <SelectItem value="Tax">Tax</SelectItem>
+                          <SelectItem value="Compliance">Compliance</SelectItem>
+                          <SelectItem value="Bookkeeping">Bookkeeping</SelectItem>
+                          <SelectItem value="Payroll">Payroll</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </CardContent>
@@ -680,117 +651,141 @@ export function JobTemplateEditorFullscreen({
               {/* Advanced Settings */}
               <Accordion type="single" collapsible>
                 <AccordionItem value="advanced">
-                  <AccordionTrigger className="text-base font-medium">
+                  <AccordionTrigger className="text-sm">
                     <div className="flex items-center gap-2">
                       <Settings2 className="h-4 w-4" />
                       Advanced Settings
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="pt-4 space-y-6">
-                    {/* Trigger Conditions */}
+                  <AccordionContent>
                     <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Trigger Conditions</CardTitle>
-                        <CardDescription>
-                          Only generate job when ALL conditions are met
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {triggerConditions.map((condition, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <Select
-                              value={condition.field}
-                              onValueChange={(v) => {
-                                const updated = [...triggerConditions];
-                                updated[index] = { ...condition, field: v as any };
-                                setTriggerConditions(updated);
-                              }}
-                            >
-                              <SelectTrigger className="w-[200px]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TRIGGER_FIELD_WHITELIST.map((field) => (
-                                  <SelectItem key={field} value={field}>
-                                    {field}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={condition.operator}
-                              onValueChange={(v) => {
-                                const updated = [...triggerConditions];
-                                updated[index] = { ...condition, operator: v as any };
-                                setTriggerConditions(updated);
-                              }}
-                            >
-                              <SelectTrigger className="w-[140px]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TRIGGER_OPERATORS.map((op) => (
-                                  <SelectItem key={op} value={op}>
-                                    {op.replace("_", " ")}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              value={String(condition.value || "")}
-                              onChange={(e) => {
-                                const updated = [...triggerConditions];
-                                updated[index] = { ...condition, value: e.target.value };
-                                setTriggerConditions(updated);
-                              }}
-                              placeholder="Value"
-                              className="flex-1"
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setTriggerConditions(triggerConditions.filter((_, i) => i !== index));
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        ))}
-                        <Button variant="outline" size="sm" onClick={addTriggerCondition}>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Condition
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    {/* Automation Options */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Automation Options</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <Label>Skip if no activity</Label>
-                            <p className="text-sm text-muted-foreground">
-                              Don't generate job if there's no activity to report
-                            </p>
-                          </div>
-                          <Switch checked={skipIfNoActivity} onCheckedChange={setSkipIfNoActivity} />
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="space-y-2">
+                          <Label>Due Date Offset (days from period end)</Label>
+                          <Input
+                            type="number"
+                            value={relativeDueOffset}
+                            onChange={(e) => {
+                              setRelativeDueOffset(parseInt(e.target.value) || 30);
+                              setHasChanges(true);
+                            }}
+                            className="w-32"
+                          />
                         </div>
                         <Separator />
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <Label>Auto-close if no work</Label>
-                            <p className="text-sm text-muted-foreground">
-                              Automatically close job if nil return
-                            </p>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Skip if no activity</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Don't generate job if there's no relevant activity
+                              </p>
+                            </div>
+                            <Switch
+                              checked={skipIfNoActivity}
+                              onCheckedChange={(v) => {
+                                setSkipIfNoActivity(v);
+                                setHasChanges(true);
+                              }}
+                            />
                           </div>
-                          <Switch
-                            checked={autoCloseIfNoWork}
-                            onCheckedChange={setAutoCloseIfNoWork}
-                          />
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Auto-close if no work</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically close job if no tasks are completed
+                              </p>
+                            </div>
+                            <Switch
+                              checked={autoCloseIfNoWork}
+                              onCheckedChange={(v) => {
+                                setAutoCloseIfNoWork(v);
+                                setHasChanges(true);
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <Separator />
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>Trigger Conditions</Label>
+                            <Button variant="outline" size="sm" onClick={addTriggerCondition}>
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add Condition
+                            </Button>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Only generate this job when all conditions are met
+                          </p>
+                          {triggerConditions.length > 0 && (
+                            <div className="space-y-2">
+                              {triggerConditions.map((condition, index) => (
+                                <div key={index} className="flex items-center gap-2">
+                                  <Select
+                                    value={condition.field}
+                                    onValueChange={(v) => {
+                                      const updated = [...triggerConditions];
+                                      updated[index] = { ...condition, field: v };
+                                      setTriggerConditions(updated);
+                                      setHasChanges(true);
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-[200px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {TRIGGER_FIELD_WHITELIST.map((field) => (
+                                        <SelectItem key={field} value={field}>
+                                          {field}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Select
+                                    value={condition.operator}
+                                    onValueChange={(v) => {
+                                      const updated = [...triggerConditions];
+                                      updated[index] = { ...condition, operator: v as typeof condition.operator };
+                                      setTriggerConditions(updated);
+                                      setHasChanges(true);
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-[120px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {TRIGGER_OPERATORS.map((op) => (
+                                        <SelectItem key={op} value={op}>
+                                          {op}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    value={String(condition.value || "")}
+                                    onChange={(e) => {
+                                      const updated = [...triggerConditions];
+                                      updated[index] = { ...condition, value: e.target.value };
+                                      setTriggerConditions(updated);
+                                      setHasChanges(true);
+                                    }}
+                                    placeholder="Value"
+                                    className="flex-1"
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                      setTriggerConditions(triggerConditions.filter((_, i) => i !== index));
+                                      setHasChanges(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -804,31 +799,22 @@ export function JobTemplateEditorFullscreen({
               <div>
                 <h2 className="text-lg font-medium">Version History</h2>
                 <p className="text-sm text-muted-foreground">
-                  Track changes to this template over time
+                  View and compare previous versions of this template
                 </p>
               </div>
 
-              {versions?.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-8 text-center text-muted-foreground">
-                    No version history yet. Publish a version to start tracking changes.
-                  </CardContent>
-                </Card>
-              ) : (
+              {versions && versions.length > 0 ? (
                 <div className="space-y-2">
-                  {versions?.map((version) => (
+                  {versions.map((version) => (
                     <Card key={version.id}>
                       <CardContent className="py-3 px-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <Badge variant="outline">v{version.version}</Badge>
+                            <Badge variant="outline">v{version.version_number}</Badge>
                             <div>
-                              <p className="font-medium">
-                                {version.change_notes || "No change notes"}
-                              </p>
+                              <p className="font-medium">{version.change_notes || "No notes"}</p>
                               <p className="text-sm text-muted-foreground">
-                                Published{" "}
-                                {format(new Date(version.published_at), "dd MMM yyyy 'at' HH:mm")}
+                                {format(new Date(version.created_at), "dd MMM yyyy HH:mm")}
                               </p>
                             </div>
                           </div>
@@ -841,9 +827,54 @@ export function JobTemplateEditorFullscreen({
                     </Card>
                   ))}
                 </div>
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    No versions published yet. Save and publish to create the first version.
+                  </CardContent>
+                </Card>
               )}
             </TabsContent>
           </Tabs>
+        </div>
+
+        {/* Sidebar Preview */}
+        <div className="w-80 border-l bg-muted/30 p-4 overflow-y-auto">
+          <h3 className="font-medium mb-4">Template Preview</h3>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-muted-foreground text-xs">STATUS</Label>
+              <div className="flex items-center gap-2 mt-1">
+                {isActive ? (
+                  <Badge className="bg-green-500/10 text-green-600">Active</Badge>
+                ) : (
+                  <Badge variant="secondary">Inactive</Badge>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label className="text-muted-foreground text-xs">TASKS</Label>
+              <p className="font-medium">{tasks.length} tasks defined</p>
+            </div>
+            <div>
+              <Label className="text-muted-foreground text-xs">RECORDS REQUESTS</Label>
+              <p className="font-medium">{recordsRequests.length} requests</p>
+            </div>
+            <div>
+              <Label className="text-muted-foreground text-xs">TRIGGER CONDITIONS</Label>
+              <p className="font-medium">
+                {triggerConditions.length === 0 ? "No conditions" : `${triggerConditions.length} conditions`}
+              </p>
+            </div>
+            <Separator />
+            <div>
+              <Label className="text-muted-foreground text-xs">GENERATION PREVIEW</Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                When this template triggers, it will create a job with {tasks.length} tasks
+                {recordsRequests.length > 0 && ` and request ${recordsRequests.length} documents from the client`}.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

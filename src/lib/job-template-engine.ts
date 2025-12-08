@@ -12,6 +12,20 @@ import {
 } from "./job-template-types";
 import { addDays, addMonths, startOfMonth, endOfMonth, format } from "date-fns";
 
+// Extended type for template with new columns
+type ExtendedTemplate = Record<string, unknown> & {
+  id: string;
+  template_name?: string;
+  name?: string;
+  service_type: string;
+  tasks: unknown;
+  trigger_conditions?: unknown;
+  entity_filters?: unknown;
+  relative_due_offset?: number;
+  version?: number;
+  frequency?: string;
+};
+
 // =====================================================
 // Types
 // =====================================================
@@ -55,15 +69,17 @@ export async function generateJobFromTemplate(
 ): Promise<GenerateJobResult> {
   try {
     // 1. Fetch template with all details
-    const { data: template, error: templateError } = await supabase
+    const { data: templateData, error: templateError } = await supabase
       .from("job_templates")
       .select("*")
       .eq("id", templateId)
       .single();
 
-    if (templateError || !template) {
+    if (templateError || !templateData) {
       return { success: false, error: "Template not found" };
     }
+
+    const template = templateData as ExtendedTemplate;
 
     // 2. Fetch entity details for context
     const context = await buildEntityContext(entity, organizationId);
@@ -121,9 +137,32 @@ export async function generateJobFromTemplate(
     const templateContent = (template.tasks || {}) as JobTemplateContent;
 
     // 7. Generate job name
-    const jobName = generateJobName(template.name, options.periodStart, options.periodEnd);
+    const templateName = template.template_name || template.name || "Job";
+    const jobName = generateJobName(templateName, options.periodStart, options.periodEnd);
 
     // 8. Create the job
+    const jobInsertData: Record<string, unknown> = {
+      organization_id: organizationId,
+      name: jobName,
+      service_type: template.service_type,
+      status: "not_started",
+      priority: "normal",
+      template_id: templateId,
+      template_version: template.version || 1,
+      generation_reason: options.generationReason,
+      auto_generated_at: new Date().toISOString(),
+      can_undo_until: addDays(new Date(), 1).toISOString(), // 24-hour undo window
+      filing_deadline: filingDeadline.toISOString().split("T")[0],
+      period_start: options.periodStart?.toISOString().split("T")[0] || null,
+      period_end: options.periodEnd?.toISOString().split("T")[0] || null,
+    };
+
+    if (entity.type === "company") {
+      jobInsertData.company_id = entity.id;
+    } else {
+      jobInsertData.client_id = entity.id;
+    }
+
     const { data: newJob, error: jobError } = await supabase
       .from("jobs")
       .insert({
@@ -133,10 +172,6 @@ export async function generateJobFromTemplate(
         status: "not_started",
         priority: "normal",
         template_id: templateId,
-        template_version: template.version,
-        generation_reason: options.generationReason,
-        auto_generated_at: new Date().toISOString(),
-        can_undo_until: addDays(new Date(), 1).toISOString(), // 24-hour undo window
         filing_deadline: filingDeadline.toISOString().split("T")[0],
         period_start: options.periodStart?.toISOString().split("T")[0] || null,
         period_end: options.periodEnd?.toISOString().split("T")[0] || null,
@@ -186,7 +221,7 @@ export async function generateJobFromTemplate(
       metadata: {
         source: "job_template_engine",
         template_id: templateId,
-        template_version: template.version,
+        template_version: template.version || 1,
         generation_reason: options.generationReason,
         auto_generated: true,
       },
@@ -211,16 +246,18 @@ export async function generateJobsForServiceActivation(
 
   try {
     // Find templates for this service
-    const { data: templates, error } = await supabase
+    const { data: templatesData, error } = await supabase
       .from("job_templates")
       .select("*")
       .eq("organization_id", organizationId)
       .eq("is_active", true)
       .or(`trigger_type.eq.service_activated,service_type.eq.${serviceCode}`);
 
-    if (error || !templates || templates.length === 0) {
+    if (error || !templatesData || templatesData.length === 0) {
       return [{ success: true, skipped: true, skipReason: "No templates found for service" }];
     }
+
+    const templates = templatesData as ExtendedTemplate[];
 
     // Calculate next period based on service type
     const periodDates = calculateNextPeriod(serviceCode, entity);
@@ -262,17 +299,21 @@ export async function generateRecurringJobs(
 
   try {
     // Get all active recurring templates
-    const { data: templates, error: templatesError } = await supabase
+    const { data: templatesData, error: templatesError } = await supabase
       .from("job_templates")
       .select("*")
       .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .in("frequency", ["monthly", "quarterly", "annual"]);
+      .eq("is_active", true);
 
-    if (templatesError || !templates) {
+    if (templatesError || !templatesData) {
       results.errors.push("Failed to fetch templates");
       return results;
     }
+
+    // Filter by frequency
+    const templates = (templatesData as ExtendedTemplate[]).filter(
+      t => ["monthly", "quarterly", "annual"].includes((t.frequency as string) || "")
+    );
 
     // Get all entities (companies + clients) with active engagements
     const { data: engagements, error: engagementsError } = await supabase
@@ -366,37 +407,29 @@ export async function publishTemplateVersion(
 ): Promise<TemplateVersionResult> {
   try {
     // Get current template
-    const { data: template, error: templateError } = await supabase
+    const { data: templateData, error: templateError } = await supabase
       .from("job_templates")
       .select("*")
       .eq("id", templateId)
       .eq("organization_id", organizationId)
       .single();
 
-    if (templateError || !template) {
+    if (templateError || !templateData) {
       return { success: false, error: "Template not found" };
     }
 
-    const newVersion = (template.version || 1) + 1;
+    const template = templateData as ExtendedTemplate;
+    const newVersion = ((template.version as number) || 1) + 1;
 
     // Create version snapshot
     const { data: versionRecord, error: versionError } = await supabase
       .from("template_versions")
       .insert({
         template_id: templateId,
-        version: newVersion,
+        version_number: newVersion,
         content: template.tasks || {},
-        metadata: {
-          name: template.name,
-          service_type: template.service_type,
-          frequency: template.frequency,
-          trigger_type: template.trigger_type,
-          trigger_conditions: template.trigger_conditions,
-          entity_filters: template.entity_filters,
-          records_requests_template: template.records_requests_template,
-        },
         change_notes: changeNotes,
-        published_by: (await supabase.auth.getUser()).data.user?.id,
+        created_by: (await supabase.auth.getUser()).data.user?.id || null,
       })
       .select()
       .single();
@@ -408,7 +441,7 @@ export async function publishTemplateVersion(
     // Update template version
     const { error: updateError } = await supabase
       .from("job_templates")
-      .update({ version: newVersion })
+      .update({ version: newVersion } as Record<string, unknown>)
       .eq("id", templateId);
 
     if (updateError) {
@@ -419,7 +452,7 @@ export async function publishTemplateVersion(
     if (options?.applyToDraftJobs) {
       await supabase
         .from("jobs")
-        .update({ template_version: newVersion })
+        .update({ template_version: newVersion } as Record<string, unknown>)
         .eq("template_id", templateId)
         .eq("status", "not_started");
     }
@@ -467,13 +500,14 @@ export async function rollbackJobGeneration(
       return { success: false, error: "Job not found" };
     }
 
-    // Check if within undo window
-    if (!job.can_undo_until || new Date(job.can_undo_until) < new Date()) {
+    // Check if within undo window (using type assertion for new column)
+    const jobExtended = job as unknown as { can_undo_until?: string; status: string };
+    if (!jobExtended.can_undo_until || new Date(jobExtended.can_undo_until) < new Date()) {
       return { success: false, error: "Undo window has expired (24 hours)" };
     }
 
     // Check if job has been worked on
-    if (job.status !== "not_started") {
+    if (jobExtended.status !== "not_started") {
       return { success: false, error: "Cannot undo a job that has been started" };
     }
 
@@ -499,16 +533,15 @@ export async function rollbackJobGeneration(
       return { success: false, error: deleteError.message };
     }
 
-    // Audit log
+    // Log the rollback
     await logAudit({
       organizationId,
       entityType: "job",
       entityId: jobId,
-      action: "delete",
+      action: "rollback",
       metadata: {
         reason,
-        rollback: true,
-        original_generation_reason: job.generation_reason,
+        rolled_back_at: new Date().toISOString(),
       },
     });
 
@@ -522,234 +555,233 @@ export async function rollbackJobGeneration(
 // Helper Functions
 // =====================================================
 
+/**
+ * Builds entity context for template evaluation
+ */
 async function buildEntityContext(
   entity: { type: "company" | "client"; id: string },
   organizationId: string
 ): Promise<EntityContext | null> {
-  const context: EntityContext = {};
+  try {
+    if (entity.type === "company") {
+      const { data: company, error } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("id", entity.id)
+        .single();
 
-  if (entity.type === "company") {
-    const { data: company } = await supabase
-      .from("companies")
-      .select("*")
-      .eq("id", entity.id)
-      .single();
+      if (error || !company) return null;
 
-    if (company) {
-      context.company = {
-        id: company.id,
-        vat_stagger: company.vat_stagger_group,
-        vat_frequency: company.vat_frequency,
-        year_end_month: company.year_end_month,
-        year_end_day: company.year_end_day,
-        company_type: company.company_type,
-        vat_number: company.vat_number,
-        vat_scheme: company.vat_scheme,
+      return {
+        entityType: "company",
+        entityId: entity.id,
+        organizationId,
+        company: {
+          id: company.id,
+          company_name: company.company_name,
+          company_number: company.company_number,
+          vat_registered: !!company.vat_number,
+          vat_frequency: company.vat_frequency,
+          vat_stagger_group: company.vat_stagger_group,
+          year_end_month: company.year_end_month,
+          year_end_day: company.year_end_day,
+          status: company.status,
+        },
+      };
+    } else {
+      const { data: client, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", entity.id)
+        .single();
+
+      if (error || !client) return null;
+
+      return {
+        entityType: "client",
+        entityId: entity.id,
+        organizationId,
+        client: {
+          id: client.id,
+          first_name: client.first_name,
+          last_name: client.last_name,
+          email: client.email,
+          status: client.status,
+        },
       };
     }
-  } else {
-    const { data: client } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", entity.id)
-      .single();
-
-    if (client) {
-      context.client = {
-        id: client.id,
-        status: client.status,
-        utr: client.utr,
-      };
-    }
+  } catch {
+    return null;
   }
-
-  return context;
 }
 
+/**
+ * Generates a human-readable job name
+ */
 function generateJobName(
   templateName: string,
   periodStart?: Date,
   periodEnd?: Date
 ): string {
-  if (!periodStart && !periodEnd) {
-    return templateName;
-  }
-
   if (periodStart && periodEnd) {
-    // Check if it's a full year
-    const startMonth = periodStart.getMonth();
-    const endMonth = periodEnd.getMonth();
-    const startYear = periodStart.getFullYear();
-    const endYear = periodEnd.getFullYear();
-
-    if (startMonth === 0 && endMonth === 11 && startYear === endYear) {
-      return `${templateName} ${startYear}`;
+    const startMonth = format(periodStart, "MMM yyyy");
+    const endMonth = format(periodEnd, "MMM yyyy");
+    if (startMonth === endMonth) {
+      return `${templateName} - ${startMonth}`;
     }
-
-    // Check if it's a quarter
-    const monthsDiff = (endYear - startYear) * 12 + (endMonth - startMonth);
-    if (monthsDiff === 2) {
-      const quarter = Math.floor(startMonth / 3) + 1;
-      return `${templateName} Q${quarter} ${startYear}`;
-    }
-
-    // Monthly
-    if (monthsDiff === 0) {
-      return `${templateName} ${format(periodStart, "MMMM yyyy")}`;
-    }
+    return `${templateName} - ${format(periodStart, "MMM")} to ${endMonth}`;
   }
-
-  // Default: include period dates
-  const startStr = periodStart ? format(periodStart, "dd/MM/yyyy") : "";
-  const endStr = periodEnd ? format(periodEnd, "dd/MM/yyyy") : "";
-  return `${templateName} ${startStr} - ${endStr}`.trim();
+  return templateName;
 }
 
+/**
+ * Calculates next period dates based on service type
+ */
 function calculateNextPeriod(
   serviceCode: string,
   entity: { type: "company" | "client"; id: string }
 ): { start: Date; end: Date; deadline: Date } {
-  const today = new Date();
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
 
-  // Default: next month
-  let start = startOfMonth(addMonths(today, 1));
+  // Default: next month period
+  let start = startOfMonth(addMonths(now, 1));
   let end = endOfMonth(start);
   let deadline = addDays(end, 30);
 
-  // Adjust based on service type
-  switch (serviceCode.toUpperCase()) {
-    case "VAT":
-      // Next quarter end
-      const quarterMonth = Math.floor(currentMonth / 3) * 3 + 3;
-      start = startOfMonth(new Date(currentYear, quarterMonth - 3, 1));
-      end = endOfMonth(new Date(currentYear, quarterMonth - 1, 1));
-      deadline = addDays(end, 37); // 1 month + 7 days
-      break;
-    case "PAYROLL":
-    case "BOOKKEEPING":
-      // Next month
-      start = startOfMonth(addMonths(today, 1));
-      end = endOfMonth(start);
-      deadline = addDays(end, 19);
-      break;
-    case "ACCOUNTS":
-    case "CT":
-      // Next year end - this would typically come from company data
-      start = new Date(currentYear + 1, 0, 1);
-      end = new Date(currentYear + 1, 11, 31);
-      deadline = addMonths(end, 9);
-      break;
+  // Adjust based on service
+  if (serviceCode === "VAT") {
+    // Quarterly VAT - find next quarter end
+    const quarterMonth = Math.floor(currentMonth / 3) * 3 + 2;
+    start = new Date(currentYear, quarterMonth - 2, 1);
+    end = new Date(currentYear, quarterMonth + 1, 0);
+    deadline = addDays(end, 37); // 1 month + 7 days
+  } else if (serviceCode === "ACCOUNTS" || serviceCode === "CT600") {
+    // Annual - use year end (default to March 31)
+    end = new Date(currentYear, 2, 31);
+    if (end < now) {
+      end = new Date(currentYear + 1, 2, 31);
+    }
+    start = addMonths(end, -11);
+    start = new Date(start.getFullYear(), start.getMonth(), 1);
+    deadline = addMonths(end, 9); // 9 months after year end
   }
 
   return { start, end, deadline };
 }
 
+/**
+ * Calculates next period for a specific entity and template
+ */
 async function calculateNextPeriodForEntity(
-  template: any,
+  template: ExtendedJobTemplate,
   entity: { type: "company" | "client"; id: string },
   organizationId: string
 ): Promise<{ start: Date; end: Date; deadline: Date } | null> {
-  // Find the latest job for this template/entity
-  const { data: latestJob } = await supabase
+  // Get the last job for this template/entity
+  const { data: lastJob } = await supabase
     .from("jobs")
     .select("period_start, period_end, status")
-    .eq("organization_id", organizationId)
     .eq("template_id", template.id)
     .eq(entity.type === "company" ? "company_id" : "client_id", entity.id)
     .order("period_end", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const today = new Date();
+  const frequency = template.frequency || "monthly";
 
-  if (!latestJob) {
-    // No previous job - calculate based on current period
-    return calculateNextPeriod(template.service_type || "", entity);
-  }
-
-  // Only generate next if previous is filed or approaching
-  if (latestJob.status !== "completed" && latestJob.status !== "filed") {
-    // Previous job not complete - don't generate yet (rolling generation)
-    return null;
+  if (!lastJob) {
+    // No previous job - calculate from current date
+    return calculateNextPeriod(template.service_type || "OTHER", entity);
   }
 
   // Calculate next period based on frequency
-  const lastEnd = new Date(latestJob.period_end);
-  let start: Date;
-  let end: Date;
+  const lastEnd = new Date(lastJob.period_end);
+  let nextStart: Date;
+  let nextEnd: Date;
 
-  switch (template.frequency) {
+  switch (frequency) {
     case "monthly":
-      start = startOfMonth(addMonths(lastEnd, 1));
-      end = endOfMonth(start);
+      nextStart = addDays(lastEnd, 1);
+      nextEnd = endOfMonth(nextStart);
       break;
     case "quarterly":
-      start = startOfMonth(addMonths(lastEnd, 1));
-      end = endOfMonth(addMonths(start, 2));
+      nextStart = addDays(lastEnd, 1);
+      nextEnd = endOfMonth(addMonths(nextStart, 2));
       break;
     case "annual":
-      start = addMonths(lastEnd, 1);
-      start = new Date(start.getFullYear(), lastEnd.getMonth() + 1, 1);
-      end = addMonths(start, 12);
-      end = addDays(end, -1);
+      nextStart = addDays(lastEnd, 1);
+      nextEnd = addMonths(lastEnd, 12);
       break;
     default:
       return null;
   }
 
-  const deadline = addDays(end, template.relative_due_offset || 30);
+  const deadline = addDays(nextEnd, template.relative_due_offset || 30);
 
-  return { start, end, deadline };
+  return { start: nextStart, end: nextEnd, deadline };
 }
 
+/**
+ * Creates job tasks from template tasks
+ */
 async function createTasksFromTemplate(
   jobId: string,
   organizationId: string,
-  tasks: TaskTemplate[],
+  taskTemplates: TaskTemplate[],
   context: EntityContext,
   dates: {
     jobStart: Date;
     jobEnd: Date;
     periodStart?: Date;
     periodEnd?: Date;
-    filingDeadline: Date;
+    filingDeadline?: Date;
   }
 ): Promise<void> {
-  const taskRecords = [];
+  const tasksToInsert = taskTemplates.map((taskTemplate, index) => {
+    // Calculate due date based on reference
+    let dueDate = dates.jobEnd;
+    const offset = taskTemplate.relativeDueDays || 0;
 
-  for (const task of tasks) {
-    // Evaluate conditional logic
-    if (task.showIf) {
-      const conditionMet = evaluateTriggerConditions([task.showIf as any], context);
-      if (!conditionMet) continue;
+    switch (taskTemplate.relativeDueReference) {
+      case "job_start":
+        dueDate = addDays(dates.jobStart, offset);
+        break;
+      case "job_end":
+        dueDate = addDays(dates.jobEnd, offset);
+        break;
+      case "filing_deadline":
+        dueDate = dates.filingDeadline ? addDays(dates.filingDeadline, offset) : dates.jobEnd;
+        break;
+      case "period_start":
+        dueDate = dates.periodStart ? addDays(dates.periodStart, offset) : dates.jobStart;
+        break;
+      case "period_end":
+        dueDate = dates.periodEnd ? addDays(dates.periodEnd, offset) : dates.jobEnd;
+        break;
     }
 
-    // Calculate due date
-    let dueDate: Date | null = null;
-    if (task.relativeDueDays !== undefined) {
-      const reference = getDateReference(task.relativeDueReference, dates);
-      dueDate = addDays(reference, task.relativeDueDays);
-    }
-
-    taskRecords.push({
+    return {
       job_id: jobId,
       organization_id: organizationId,
-      title: task.name,
-      description: task.description || null,
-      status: "pending",
-      due_date: dueDate?.toISOString().split("T")[0] || null,
-      task_order: task.order,
-      visibility: task.isClientFacing ? "client_visible" : "internal",
-    });
-  }
+      title: taskTemplate.name,
+      description: taskTemplate.description || null,
+      status: "not_started",
+      task_order: index,
+      due_date: dueDate.toISOString().split("T")[0],
+      is_client_visible: taskTemplate.isClientFacing,
+    };
+  });
 
-  if (taskRecords.length > 0) {
-    await supabase.from("job_tasks").insert(taskRecords);
+  if (tasksToInsert.length > 0) {
+    await supabase.from("job_tasks").insert(tasksToInsert);
   }
 }
 
+/**
+ * Creates client tasks (records requests) from template
+ */
 async function createRecordsRequestsFromTemplate(
   jobId: string,
   organizationId: string,
@@ -757,54 +789,18 @@ async function createRecordsRequestsFromTemplate(
   requests: RecordsRequestItem[],
   context: EntityContext
 ): Promise<void> {
-  const taskRecords = [];
+  const tasksToInsert = requests.map((request, index) => ({
+    organization_id: organizationId,
+    title: request.name,
+    description: request.description || `Please upload: ${request.name}`,
+    status: "pending",
+    visibility: "client" as const,
+    task_order: index,
+    template_id: jobId, // Link to job for reference
+    ...(entity.type === "company" ? { company_id: entity.id } : { client_id: entity.id }),
+  }));
 
-  for (const request of requests) {
-    // Evaluate conditional logic
-    if (request.showIf) {
-      const conditionMet = evaluateTriggerConditions([request.showIf as any], context);
-      if (!conditionMet) continue;
-    }
-
-    // Create as client_tasks (same structure used by client portal)
-    taskRecords.push({
-      organization_id: organizationId,
-      ...(entity.type === "company" ? { company_id: entity.id } : { client_id: entity.id }),
-      title: request.name,
-      description: request.description || null,
-      status: "pending",
-      visibility: "client_visible",
-      template_id: jobId, // Link to job for tracking
-    });
-  }
-
-  if (taskRecords.length > 0) {
-    await supabase.from("client_tasks").insert(taskRecords);
-  }
-}
-
-function getDateReference(
-  reference: string,
-  dates: {
-    jobStart: Date;
-    jobEnd: Date;
-    periodStart?: Date;
-    periodEnd?: Date;
-    filingDeadline: Date;
-  }
-): Date {
-  switch (reference) {
-    case "job_start":
-      return dates.jobStart;
-    case "job_end":
-      return dates.jobEnd;
-    case "filing_deadline":
-      return dates.filingDeadline;
-    case "period_start":
-      return dates.periodStart || dates.jobStart;
-    case "period_end":
-      return dates.periodEnd || dates.jobEnd;
-    default:
-      return dates.jobEnd;
+  if (tasksToInsert.length > 0) {
+    await supabase.from("client_tasks").insert(tasksToInsert);
   }
 }
