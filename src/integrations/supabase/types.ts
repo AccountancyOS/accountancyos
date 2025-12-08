@@ -4491,6 +4491,41 @@ export type Database = {
           },
         ]
       }
+      hmrc_auth_states: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          organization_id: string
+          redirect_url: string | null
+          state: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          organization_id: string
+          redirect_url?: string | null
+          state: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          organization_id?: string
+          redirect_url?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hmrc_auth_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_lines: {
         Row: {
           account_id: string
@@ -6187,6 +6222,180 @@ export type Database = {
             foreignKeyName: "onboarding_documents_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_branding: {
+        Row: {
+          accent_color: string | null
+          address_line_1: string | null
+          address_line_2: string | null
+          city: string | null
+          company_registration_number: string | null
+          country: string | null
+          created_at: string | null
+          email_footer_html: string | null
+          invoice_footer_notes: string | null
+          legal_name: string | null
+          logo_dark_url: string | null
+          logo_light_url: string | null
+          organization_id: string
+          phone: string | null
+          portal_theme: Json | null
+          postcode: string | null
+          trading_name: string | null
+          updated_at: string | null
+          vat_number: string | null
+          website: string | null
+        }
+        Insert: {
+          accent_color?: string | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          company_registration_number?: string | null
+          country?: string | null
+          created_at?: string | null
+          email_footer_html?: string | null
+          invoice_footer_notes?: string | null
+          legal_name?: string | null
+          logo_dark_url?: string | null
+          logo_light_url?: string | null
+          organization_id: string
+          phone?: string | null
+          portal_theme?: Json | null
+          postcode?: string | null
+          trading_name?: string | null
+          updated_at?: string | null
+          vat_number?: string | null
+          website?: string | null
+        }
+        Update: {
+          accent_color?: string | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          city?: string | null
+          company_registration_number?: string | null
+          country?: string | null
+          created_at?: string | null
+          email_footer_html?: string | null
+          invoice_footer_notes?: string | null
+          legal_name?: string | null
+          logo_dark_url?: string | null
+          logo_light_url?: string | null
+          organization_id?: string
+          phone?: string | null
+          portal_theme?: Json | null
+          postcode?: string | null
+          trading_name?: string | null
+          updated_at?: string | null
+          vat_number?: string | null
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_branding_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_integrations_companies_house: {
+        Row: {
+          api_key_encrypted: string | null
+          connected_at: string | null
+          created_at: string | null
+          last_test_at: string | null
+          last_test_success: boolean | null
+          organization_id: string
+          presenter_email: string | null
+          presenter_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          connected_at?: string | null
+          created_at?: string | null
+          last_test_at?: string | null
+          last_test_success?: boolean | null
+          organization_id: string
+          presenter_email?: string | null
+          presenter_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          connected_at?: string | null
+          created_at?: string | null
+          last_test_at?: string | null
+          last_test_success?: boolean | null
+          organization_id?: string
+          presenter_email?: string | null
+          presenter_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_integrations_companies_house_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_integrations_hmrc: {
+        Row: {
+          created_at: string | null
+          ct_connected: boolean | null
+          mtd_vat_access_token_encrypted: string | null
+          mtd_vat_connected: boolean | null
+          mtd_vat_connected_at: string | null
+          mtd_vat_expires_at: string | null
+          mtd_vat_refresh_token_encrypted: string | null
+          organization_id: string
+          paye_connected: boolean | null
+          sa_connected: boolean | null
+          test_mode: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          ct_connected?: boolean | null
+          mtd_vat_access_token_encrypted?: string | null
+          mtd_vat_connected?: boolean | null
+          mtd_vat_connected_at?: string | null
+          mtd_vat_expires_at?: string | null
+          mtd_vat_refresh_token_encrypted?: string | null
+          organization_id: string
+          paye_connected?: boolean | null
+          sa_connected?: boolean | null
+          test_mode?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          ct_connected?: boolean | null
+          mtd_vat_access_token_encrypted?: string | null
+          mtd_vat_connected?: boolean | null
+          mtd_vat_connected_at?: string | null
+          mtd_vat_expires_at?: string | null
+          mtd_vat_refresh_token_encrypted?: string | null
+          organization_id?: string
+          paye_connected?: boolean | null
+          sa_connected?: boolean | null
+          test_mode?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_integrations_hmrc_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
