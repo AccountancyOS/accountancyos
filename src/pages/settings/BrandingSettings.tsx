@@ -16,6 +16,9 @@ import { toast } from "sonner";
 import { BrandPreviewEmail } from "@/components/branding/BrandPreviewEmail";
 import { BrandPreviewInvoice } from "@/components/branding/BrandPreviewInvoice";
 import { BrandPreviewPortal } from "@/components/branding/BrandPreviewPortal";
+import { Database } from "@/integrations/supabase/types";
+
+type OrganizationBrandingInsert = Database["public"]["Tables"]["organization_branding"]["Insert"];
 
 interface BrandingData {
   trading_name: string;
@@ -143,28 +146,30 @@ export default function BrandingSettings() {
     mutationFn: async (data: BrandingData) => {
       if (!organization?.id) throw new Error("No organization");
 
+      const payload: OrganizationBrandingInsert = {
+        organization_id: organization.id,
+        trading_name: data.trading_name || null,
+        legal_name: data.legal_name || null,
+        phone: data.phone || null,
+        website: data.website || null,
+        vat_number: data.vat_number || null,
+        company_registration_number: data.company_registration_number || null,
+        address_line_1: data.address_line_1 || null,
+        address_line_2: data.address_line_2 || null,
+        city: data.city || null,
+        postcode: data.postcode || null,
+        country: data.country || "United Kingdom",
+        logo_light_url: data.logo_light_url || null,
+        logo_dark_url: data.logo_dark_url || null,
+        accent_color: data.accent_color || "#3b82f6",
+        invoice_footer_notes: data.invoice_footer_notes || null,
+        email_footer_html: data.email_footer_html || null,
+        portal_theme: data.portal_theme as Database["public"]["Tables"]["organization_branding"]["Insert"]["portal_theme"],
+      };
+
       const { error } = await supabase
         .from("organization_branding")
-        .upsert({
-          organization_id: organization.id,
-          trading_name: data.trading_name,
-          legal_name: data.legal_name,
-          phone: data.phone,
-          website: data.website,
-          vat_number: data.vat_number,
-          company_registration_number: data.company_registration_number,
-          address_line_1: data.address_line_1,
-          address_line_2: data.address_line_2,
-          city: data.city,
-          postcode: data.postcode,
-          country: data.country,
-          logo_light_url: data.logo_light_url,
-          logo_dark_url: data.logo_dark_url,
-          accent_color: data.accent_color,
-          invoice_footer_notes: data.invoice_footer_notes,
-          email_footer_html: data.email_footer_html,
-          portal_theme: data.portal_theme,
-        });
+        .upsert(payload);
 
       if (error) throw error;
     },
