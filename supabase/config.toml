@@ -65,3 +65,6 @@ verify_jwt = true
 
 [functions.cis-submit]
 verify_jwt = true
+
+[functions.process-automation-events]
+verify_jwt = false
