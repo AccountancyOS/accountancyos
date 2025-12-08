@@ -6,7 +6,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { logAudit } from "@/lib/audit-service";
-
+import { emitFilingStatusChange } from "@/lib/automation-triggers";
 export interface RolloverResult {
   success: boolean;
   error?: string;
@@ -153,6 +153,20 @@ export async function executeAutoRollover(config: RolloverConfig): Promise<Rollo
         questionnaire_created: questionnaireCreated,
       },
     });
+    
+    // Emit automation event for filing status change (triggers automation rules)
+    await emitFilingStatusChange(
+      config.organizationId,
+      config.filingId,
+      'approved_by_client',
+      'filed',
+      {
+        jobId: config.jobId,
+        nextYearJobId: nextJob.id,
+        serviceType: config.serviceType,
+        periodEnd: config.periodEnd,
+      }
+    );
     
     console.log(`[Rollover] Successfully created next year job ${nextJob.id} with ${deadlinesCreated} deadlines`);
     
