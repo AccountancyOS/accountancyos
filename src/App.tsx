@@ -20,6 +20,7 @@ import Onboarding from "./pages/Onboarding";
 import OnboardingDetail from "./pages/OnboardingDetail";
 import OnboardingWizard from "./pages/OnboardingWizard";
 import Subscription from "./pages/Subscription";
+import ColorComparison from "./pages/ColorComparison";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import Templates from "./pages/Templates";
@@ -105,6 +106,10 @@ const App = () => (
                   <Auth />
                 </PublicRoute>
               }
+            />
+            <Route
+              path="/color-comparison"
+              element={<ColorComparison />}
             />
             <Route
               path="/"
