@@ -15,7 +15,9 @@ export type PermissionName =
   | 'can_manage_templates'
   | 'can_create_jobs'
   | 'can_view_sensitive_data'
-  | 'can_delete_records';
+  | 'can_delete_records'
+  | 'can_send_emails'
+  | 'can_manage_email_queue';
 
 // Permission to roles mapping
 export const PERMISSIONS: Record<PermissionName, AppRole[]> = {
@@ -32,6 +34,8 @@ export const PERMISSIONS: Record<PermissionName, AppRole[]> = {
   can_create_jobs: ['owner', 'admin', 'manager', 'staff'],
   can_view_sensitive_data: ['owner', 'admin', 'manager'],
   can_delete_records: ['owner', 'admin'],
+  can_send_emails: ['owner', 'admin', 'manager', 'staff'],
+  can_manage_email_queue: ['owner', 'admin', 'manager'],
 };
 
 // Role hierarchy (higher index = more permissions)
@@ -79,4 +83,6 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   can_create_jobs: 'Create new jobs and tasks',
   can_view_sensitive_data: 'Access sensitive client financial data and tax positions',
   can_delete_records: 'Permanently delete clients, jobs, and other records',
+  can_send_emails: 'Send emails to clients via connected mailboxes',
+  can_manage_email_queue: 'View and manage the email sending queue',
 };

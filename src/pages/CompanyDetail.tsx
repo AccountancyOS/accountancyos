@@ -30,7 +30,8 @@ import {
   Hash,
   AlertCircle,
   Wallet,
-  Lock
+  Lock,
+  Send
 } from "lucide-react";
 import { format } from "date-fns";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
@@ -40,12 +41,14 @@ import { CompanyDetailSkeleton } from "@/components/cosec/CompanyDetailSkeleton"
 import { CompanyPayrollTab } from "@/components/cosec/CompanyPayrollTab";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEntityServices } from "@/hooks/useEntityServices";
+import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const [activeTab, setActiveTab] = useState("overview");
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
 
   // Service gating for Payroll tab
   const { hasPayroll, isLoading: servicesLoading } = useEntityServices(
@@ -213,6 +216,10 @@ const CompanyDetail = () => {
               </div>
             </div>
           </div>
+          <Button onClick={() => setIsComposeOpen(true)}>
+            <Send className="h-4 w-4 mr-2" />
+            Email
+          </Button>
         </div>
 
         {/* Main Tabs */}
@@ -456,6 +463,15 @@ const CompanyDetail = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Compose Email Dialog */}
+        <ComposeEmailDialog
+          open={isComposeOpen}
+          onOpenChange={setIsComposeOpen}
+          companyId={companyId}
+          defaultTo={company.email}
+          defaultToName={company.company_name}
+        />
       </div>
     </DashboardLayout>
   );

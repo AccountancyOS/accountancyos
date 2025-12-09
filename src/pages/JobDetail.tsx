@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers } from "lucide-react";
+import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send } from "lucide-react";
 import { format, differenceInDays, isFuture } from "date-fns";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
@@ -29,6 +29,7 @@ import { JobFilingTab } from "@/components/jobs/JobFilingTab";
 import { JobPipelineOverview } from "@/components/jobs/JobPipelineOverview";
 import { JobAuditTrail } from "@/components/jobs/JobAuditTrail";
 import { RecordsRequestManager } from "@/components/jobs/RecordsRequestManager";
+import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { rollbackJobGeneration } from "@/lib/job-template-engine";
 import { completeJob } from "@/lib/job-status-service";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ export default function JobDetail() {
   const [activeTab, setActiveTab] = useState("pipeline");
   const [showUndoDialog, setShowUndoDialog] = useState(false);
   const [undoReason, setUndoReason] = useState("");
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
 
   const { data: job, isLoading } = useQuery({
     queryKey: ["job", jobId],
@@ -248,6 +250,13 @@ export default function JobDetail() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsComposeOpen(true)}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Email Client
+            </Button>
             <Button
               variant="outline"
               onClick={() => navigate(`/clients/${job.client_id || job.company_id}`)}
@@ -508,6 +517,17 @@ export default function JobDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Compose Email Dialog */}
+      <ComposeEmailDialog
+        open={isComposeOpen}
+        onOpenChange={setIsComposeOpen}
+        jobId={job?.id}
+        clientId={job?.client_id || undefined}
+        companyId={job?.company_id || undefined}
+        defaultTo={job?.clients?.email || job?.companies?.email}
+        defaultToName={clientName}
+      />
     </DashboardLayout>
   );
 }

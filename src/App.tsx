@@ -50,6 +50,7 @@ import BrandingSettings from "./pages/settings/BrandingSettings";
 import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
 import PermissionsSettings from "./pages/settings/PermissionsSettings";
+import EmailTemplates from "./pages/settings/EmailTemplates";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();

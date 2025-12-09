@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { EditQueuedEmailDialog } from "@/components/email/EditQueuedEmailDialog";
+import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import {
   Search,
   Filter,
@@ -45,8 +46,12 @@ import {
   Pencil,
   RotateCw,
   Trash2,
+  Plus,
+  Play,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 type EmailStatus = "draft" | "queued" | "pending" | "failed" | "ignored";
 
@@ -89,7 +94,7 @@ const contextLabels: Record<string, string> = {
 
 export default function Emails() {
   const { organization } = useOrganization();
-  const { toast } = useToast();
+  const { toast: toastHook } = useToast();
   const queryClient = useQueryClient();
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,6 +102,8 @@ export default function Emails() {
   const [contextFilter, setContextFilter] = useState<string>("all");
   const [selectedEmail, setSelectedEmail] = useState<QueuedEmail | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Fetch email queue
   const { data: emails, isLoading, refetch } = useQuery({
@@ -148,6 +155,26 @@ export default function Emails() {
     enabled: !!organization?.id,
   });
 
+  // Process queue manually
+  const processQueueMutation = useMutation({
+    mutationFn: async () => {
+      setIsProcessing(true);
+      const { data, error } = await supabase.functions.invoke("process-email-queue");
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(`Queue processed: ${data?.processed || 0} sent, ${data?.failed || 0} failed`);
+      queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to process queue: ${error.message}`);
+    },
+    onSettled: () => {
+      setIsProcessing(false);
+    },
+  });
+
   // Retry failed email mutation
   const retryMutation = useMutation({
     mutationFn: async (emailId: string) => {
@@ -159,11 +186,31 @@ export default function Emails() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Email re-queued for sending" });
+      toastHook({ title: "Email re-queued for sending" });
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
     },
     onError: () => {
-      toast({ title: "Failed to retry email", variant: "destructive" });
+      toastHook({ title: "Failed to retry email", variant: "destructive" });
+    },
+  });
+
+  // Retry all failed emails mutation
+  const retryAllFailedMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("email_queue")
+        .update({ status: "queued", error_message: null, retry_count: 0 })
+        .eq("status", "failed")
+        .eq("organization_id", organization?.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("All failed emails re-queued for sending");
+      queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+    },
+    onError: () => {
+      toast.error("Failed to retry emails");
     },
   });
 
@@ -178,11 +225,11 @@ export default function Emails() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Email removed from queue" });
+      toastHook({ title: "Email removed from queue" });
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
     },
     onError: () => {
-      toast({ title: "Failed to delete email", variant: "destructive" });
+      toastHook({ title: "Failed to delete email", variant: "destructive" });
     },
   });
 
@@ -197,11 +244,11 @@ export default function Emails() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Email marked as ignored" });
+      toastHook({ title: "Email marked as ignored" });
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
     },
     onError: () => {
-      toast({ title: "Failed to update email", variant: "destructive" });
+      toastHook({ title: "Failed to update email", variant: "destructive" });
     },
   });
 
@@ -242,10 +289,28 @@ export default function Emails() {
               Manage outgoing emails across your firm
             </p>
           </div>
-          <Button variant="outline" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => processQueueMutation.mutate()}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              Process Queue
+            </Button>
+            <Button variant="outline" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button onClick={() => setIsComposeOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Compose
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -264,8 +329,22 @@ export default function Emails() {
                   <p className="text-sm text-muted-foreground">Drafts</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
+        
+        {/* Retry All Failed Button */}
+        {counts.failed > 0 && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => retryAllFailedMutation.mutate()}
+            disabled={retryAllFailedMutation.isPending}
+            className="text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RotateCw className={`h-4 w-4 mr-2 ${retryAllFailedMutation.isPending ? 'animate-spin' : ''}`} />
+            Retry All Failed ({counts.failed})
+          </Button>
+        )}
           <Card 
             className={`cursor-pointer transition-all hover:border-primary/50 ${statusFilter === "queued" ? "border-primary ring-1 ring-primary" : ""}`}
             onClick={() => setStatusFilter("queued")}
@@ -495,6 +574,12 @@ export default function Emails() {
           setIsEditDialogOpen(false);
           setSelectedEmail(null);
         }}
+      />
+
+      {/* Compose Email Dialog */}
+      <ComposeEmailDialog
+        open={isComposeOpen}
+        onOpenChange={setIsComposeOpen}
       />
     </DashboardLayout>
   );
