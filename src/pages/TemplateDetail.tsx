@@ -18,6 +18,7 @@ import EmailTemplateEditor from "@/components/templates/EmailTemplateEditor";
 import JobTemplateEditor from "@/components/templates/JobTemplateEditor";
 import QuestionnaireFlowBuilder from "@/components/templates/QuestionnaireFlowBuilder";
 import QuestionnaireTemplateEditor from "@/components/templates/QuestionnaireTemplateEditor";
+import { AutomationTemplateBuilder } from "@/components/automations/AutomationTemplateBuilder";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export default function TemplateDetail() {
@@ -275,14 +276,7 @@ export default function TemplateDetail() {
           </Card>
         )}
         {currentType === "automation" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Automation Rules Builder</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Automation template editor coming soon...</p>
-            </CardContent>
-          </Card>
+          <AutomationTemplateBuilder content={content} onChange={setContent} />
         )}
         {(currentType === "questionnaire" || currentType === "records_request") && (
           <>

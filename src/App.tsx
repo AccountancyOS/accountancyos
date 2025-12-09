@@ -43,6 +43,7 @@ import EmployeeDetail from "./pages/EmployeeDetail";
 import CIS from "./pages/CIS";
 import CISReturnDetail from "./pages/CISReturnDetail";
 import JobTemplates from "./pages/JobTemplates";
+import Automations from "./pages/Automations";
 import BrandingSettings from "./pages/settings/BrandingSettings";
 import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
@@ -377,6 +378,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <JobTemplates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/automations"
+              element={
+                <ProtectedRoute>
+                  <Automations />
                 </ProtectedRoute>
               }
             />
