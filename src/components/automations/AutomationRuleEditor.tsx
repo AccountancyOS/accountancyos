@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,7 +20,10 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TriggerConfigBuilder } from "./TriggerConfigBuilder";
 import { ActionConfigBuilder } from "./ActionConfigBuilder";
+import { FormFieldError } from "@/components/ui/form-field-error";
+import { automationRuleSchema, validateForm } from "@/lib/validation-schemas";
 import { Zap, Play, Save } from "lucide-react";
+import { toast } from "sonner";
 
 interface AutomationRule {
   id?: string;
@@ -69,6 +71,7 @@ export function AutomationRuleEditor({
   const [actionType, setActionType] = useState("");
   const [actionConfig, setActionConfig] = useState<Record<string, unknown>>({});
   const [isActive, setIsActive] = useState(true);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (rule) {
@@ -86,11 +89,35 @@ export function AutomationRuleEditor({
       setActionConfig({});
       setIsActive(true);
     }
+    setErrors({});
   }, [rule, open]);
 
   const handleSave = () => {
-    if (!name.trim() || !triggerType || !actionType) return;
+    setErrors({});
     
+    // Validate form data
+    const formData = {
+      name: name.trim(),
+      trigger_type: triggerType,
+      action_type: actionType,
+      trigger_config: triggerConfig,
+      action_config: actionConfig,
+    };
+
+    const validation = validateForm(automationRuleSchema, formData);
+    if (!validation.success) {
+      setErrors(validation.errors || {});
+      toast.error("Please check the form for errors");
+      return;
+    }
+
+    // Additional validation for create_job action
+    if (actionType === "create_job" && !actionConfig.serviceType) {
+      setErrors({ action_config: "Service type is required for Create Job action" });
+      toast.error("Please select a service type");
+      return;
+    }
+
     onSave({
       id: rule?.id,
       name: name.trim(),
@@ -102,11 +129,18 @@ export function AutomationRuleEditor({
     });
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    onOpenChange(newOpen);
+    if (!newOpen) {
+      setErrors({});
+    }
+  };
+
   const isValid = name.trim() && triggerType && actionType && 
     (actionType !== "create_job" || actionConfig.serviceType);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -125,7 +159,10 @@ export function AutomationRuleEditor({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Auto-create job before deadline"
+                className={errors.name ? "border-destructive" : ""}
+                maxLength={200}
               />
+              <FormFieldError error={errors.name} />
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={isActive} onCheckedChange={setIsActive} id="isActive" />
@@ -149,8 +186,9 @@ export function AutomationRuleEditor({
                 <Select value={triggerType} onValueChange={(v) => {
                   setTriggerType(v);
                   setTriggerConfig({});
+                  setErrors(prev => ({ ...prev, trigger_type: "" }));
                 }}>
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.trigger_type ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select trigger" />
                   </SelectTrigger>
                   <SelectContent>
@@ -164,6 +202,7 @@ export function AutomationRuleEditor({
                     ))}
                   </SelectContent>
                 </Select>
+                <FormFieldError error={errors.trigger_type} />
               </div>
               
               {triggerType && (
@@ -190,8 +229,9 @@ export function AutomationRuleEditor({
                 <Select value={actionType} onValueChange={(v) => {
                   setActionType(v);
                   setActionConfig({});
+                  setErrors(prev => ({ ...prev, action_type: "", action_config: "" }));
                 }}>
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.action_type ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select action" />
                   </SelectTrigger>
                   <SelectContent>
@@ -205,21 +245,25 @@ export function AutomationRuleEditor({
                     ))}
                   </SelectContent>
                 </Select>
+                <FormFieldError error={errors.action_type} />
               </div>
 
               {actionType && (
-                <ActionConfigBuilder
-                  actionType={actionType}
-                  config={actionConfig}
-                  onChange={setActionConfig}
-                />
+                <>
+                  <ActionConfigBuilder
+                    actionType={actionType}
+                    config={actionConfig}
+                    onChange={setActionConfig}
+                  />
+                  <FormFieldError error={errors.action_config} />
+                </>
               )}
             </CardContent>
           </Card>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!isValid || isSaving}>

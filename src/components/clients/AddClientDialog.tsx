@@ -16,6 +16,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus } from "lucide-react";
+import { FormFieldError } from "@/components/ui/form-field-error";
+import { 
+  individualClientSchema, 
+  companyClientSchema, 
+  validateForm,
+  type IndividualClientForm,
+  type CompanyClientForm 
+} from "@/lib/validation-schemas";
 
 export function AddClientDialog() {
   const { organization } = useOrganization();
@@ -24,15 +32,16 @@ export function AddClientDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
-  const [individualForm, setIndividualForm] = useState({
+  const [individualForm, setIndividualForm] = useState<IndividualClientForm>({
     first_name: "",
     last_name: "",
     email: "",
     phone: "",
   });
   
-  const [companyForm, setCompanyForm] = useState({
+  const [companyForm, setCompanyForm] = useState<CompanyClientForm>({
     company_name: "",
     email: "",
     phone: "",
@@ -43,6 +52,33 @@ export function AddClientDialog() {
     e.preventDefault();
     if (!organization) return;
     
+    setErrors({});
+    
+    // Validate based on client type
+    if (clientType === "individual") {
+      const validation = validateForm(individualClientSchema, individualForm);
+      if (!validation.success) {
+        setErrors(validation.errors || {});
+        toast({
+          title: "Validation Error",
+          description: "Please check the form for errors",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      const validation = validateForm(companyClientSchema, companyForm);
+      if (!validation.success) {
+        setErrors(validation.errors || {});
+        toast({
+          title: "Validation Error",
+          description: "Please check the form for errors",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     setLoading(true);
     try {
       if (clientType === "individual") {
@@ -50,7 +86,10 @@ export function AddClientDialog() {
           .from("clients")
           .insert({
             organization_id: organization.id,
-            ...individualForm,
+            first_name: individualForm.first_name.trim(),
+            last_name: individualForm.last_name.trim(),
+            email: individualForm.email.trim().toLowerCase(),
+            phone: individualForm.phone?.trim() || null,
           });
         
         if (error) throw error;
@@ -61,7 +100,10 @@ export function AddClientDialog() {
           .from("companies")
           .insert({
             organization_id: organization.id,
-            ...companyForm,
+            company_name: companyForm.company_name.trim(),
+            email: companyForm.email.trim().toLowerCase(),
+            phone: companyForm.phone?.trim() || null,
+            company_number: companyForm.company_number?.trim().toUpperCase() || null,
           });
         
         if (error) throw error;
@@ -76,6 +118,7 @@ export function AddClientDialog() {
       // Reset forms
       setIndividualForm({ first_name: "", last_name: "", email: "", phone: "" });
       setCompanyForm({ company_name: "", email: "", phone: "", company_number: "" });
+      setErrors({});
     } catch (error: any) {
       toast({
         title: "Error adding client",
@@ -87,8 +130,15 @@ export function AddClientDialog() {
     }
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    if (!newOpen) {
+      setErrors({});
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -105,7 +155,10 @@ export function AddClientDialog() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-4">
             <Label>Client Type</Label>
-            <RadioGroup value={clientType} onValueChange={(v) => setClientType(v as any)}>
+            <RadioGroup value={clientType} onValueChange={(v) => {
+              setClientType(v as any);
+              setErrors({});
+            }}>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="individual" id="individual" />
                 <Label htmlFor="individual" className="font-normal cursor-pointer">
@@ -128,23 +181,27 @@ export function AddClientDialog() {
                   <Label htmlFor="first_name">First Name *</Label>
                   <Input
                     id="first_name"
-                    required
                     value={individualForm.first_name}
                     onChange={(e) =>
                       setIndividualForm({ ...individualForm, first_name: e.target.value })
                     }
+                    className={errors.first_name ? "border-destructive" : ""}
+                    maxLength={100}
                   />
+                  <FormFieldError error={errors.first_name} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="last_name">Last Name *</Label>
                   <Input
                     id="last_name"
-                    required
                     value={individualForm.last_name}
                     onChange={(e) =>
                       setIndividualForm({ ...individualForm, last_name: e.target.value })
                     }
+                    className={errors.last_name ? "border-destructive" : ""}
+                    maxLength={100}
                   />
+                  <FormFieldError error={errors.last_name} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -152,12 +209,14 @@ export function AddClientDialog() {
                 <Input
                   id="email"
                   type="email"
-                  required
                   value={individualForm.email}
                   onChange={(e) =>
                     setIndividualForm({ ...individualForm, email: e.target.value })
                   }
+                  className={errors.email ? "border-destructive" : ""}
+                  maxLength={255}
                 />
+                <FormFieldError error={errors.email} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
@@ -168,7 +227,10 @@ export function AddClientDialog() {
                   onChange={(e) =>
                     setIndividualForm({ ...individualForm, phone: e.target.value })
                   }
+                  className={errors.phone ? "border-destructive" : ""}
+                  maxLength={20}
                 />
+                <FormFieldError error={errors.phone} />
               </div>
             </div>
           ) : (
@@ -177,24 +239,28 @@ export function AddClientDialog() {
                 <Label htmlFor="company_name">Company Name *</Label>
                 <Input
                   id="company_name"
-                  required
                   value={companyForm.company_name}
                   onChange={(e) =>
                     setCompanyForm({ ...companyForm, company_name: e.target.value })
                   }
+                  className={errors.company_name ? "border-destructive" : ""}
+                  maxLength={200}
                 />
+                <FormFieldError error={errors.company_name} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="company_email">Email *</Label>
                 <Input
                   id="company_email"
                   type="email"
-                  required
                   value={companyForm.email}
                   onChange={(e) =>
                     setCompanyForm({ ...companyForm, email: e.target.value })
                   }
+                  className={errors.email ? "border-destructive" : ""}
+                  maxLength={255}
                 />
+                <FormFieldError error={errors.email} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="company_phone">Phone</Label>
@@ -205,7 +271,10 @@ export function AddClientDialog() {
                   onChange={(e) =>
                     setCompanyForm({ ...companyForm, phone: e.target.value })
                   }
+                  className={errors.phone ? "border-destructive" : ""}
+                  maxLength={20}
                 />
+                <FormFieldError error={errors.phone} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="company_number">Company Number</Label>
@@ -215,13 +284,17 @@ export function AddClientDialog() {
                   onChange={(e) =>
                     setCompanyForm({ ...companyForm, company_number: e.target.value })
                   }
+                  placeholder="e.g., 12345678"
+                  className={errors.company_number ? "border-destructive" : ""}
+                  maxLength={20}
                 />
+                <FormFieldError error={errors.company_number} />
               </div>
             </div>
           )}
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>

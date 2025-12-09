@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { FormFieldError } from "@/components/ui/form-field-error";
+import { jobSchema, validateForm } from "@/lib/validation-schemas";
 
 interface CreateJobDialogProps {
   open: boolean;
@@ -36,6 +38,7 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
   const [status, setStatus] = useState("not_started");
   const [priority, setPriority] = useState("normal");
   const [filingDeadline, setFilingDeadline] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { data: clients } = useQuery({
     queryKey: ["clients", organization?.id],
@@ -70,12 +73,28 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
   const createJobMutation = useMutation({
     mutationFn: async () => {
       if (!organization?.id) throw new Error("No organization");
-      
+
       const isCompany = companies?.some(c => c.id === clientId);
-      
+
+      // Validate form data
+      const formData = {
+        job_name: jobName.trim(),
+        [isCompany ? "company_id" : "client_id"]: clientId,
+        service_type: serviceType,
+        status,
+        priority,
+        filing_deadline: filingDeadline || undefined,
+      };
+
+      const validation = validateForm(jobSchema, formData);
+      if (!validation.success) {
+        setErrors(validation.errors || {});
+        throw new Error("Please check the form for errors");
+      }
+
       const { error } = await supabase.from("jobs").insert({
         organization_id: organization.id,
-        job_name: jobName,
+        job_name: jobName.trim(),
         [isCompany ? "company_id" : "client_id"]: clientId,
         service_type: serviceType,
         status,
@@ -92,8 +111,9 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
       resetForm();
     },
     onError: (error) => {
-      toast.error("Failed to create job");
-      console.error(error);
+      if (error.message !== "Please check the form for errors") {
+        toast.error("Failed to create job", { description: error.message });
+      }
     },
   });
 
@@ -104,6 +124,14 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
     setStatus("not_started");
     setPriority("normal");
     setFilingDeadline("");
+    setErrors({});
+  };
+
+  const handleOpenChange = (newOpen: boolean) => {
+    onOpenChange(newOpen);
+    if (!newOpen) {
+      setErrors({});
+    }
   };
 
   const allEntities = [
@@ -111,8 +139,34 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
     ...(companies?.map(c => ({ id: c.id, name: c.company_name, type: "company" })) || []),
   ];
 
+  const handleSubmit = () => {
+    setErrors({});
+    
+    // Pre-validate required fields
+    const newErrors: Record<string, string> = {};
+    if (!jobName.trim()) {
+      newErrors.job_name = "Job name is required";
+    } else if (jobName.trim().length > 200) {
+      newErrors.job_name = "Job name must be less than 200 characters";
+    }
+    if (!clientId) {
+      newErrors.client_id = "Please select a client or company";
+    }
+    if (!serviceType) {
+      newErrors.service_type = "Service type is required";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error("Please check the form for errors");
+      return;
+    }
+
+    createJobMutation.mutate();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create New Job</DialogTitle>
@@ -123,19 +177,22 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="jobName">Job Name</Label>
+            <Label htmlFor="jobName">Job Name *</Label>
             <Input
               id="jobName"
               placeholder="e.g., FY24 Accounts Preparation"
               value={jobName}
               onChange={(e) => setJobName(e.target.value)}
+              className={errors.job_name ? "border-destructive" : ""}
+              maxLength={200}
             />
+            <FormFieldError error={errors.job_name} />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="client">Client / Company</Label>
+            <Label htmlFor="client">Client / Company *</Label>
             <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger id="client">
+              <SelectTrigger id="client" className={errors.client_id ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select client or company" />
               </SelectTrigger>
               <SelectContent>
@@ -146,13 +203,14 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
                 ))}
               </SelectContent>
             </Select>
+            <FormFieldError error={errors.client_id} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="serviceType">Service Type</Label>
+              <Label htmlFor="serviceType">Service Type *</Label>
               <Select value={serviceType} onValueChange={setServiceType}>
-                <SelectTrigger id="serviceType">
+                <SelectTrigger id="serviceType" className={errors.service_type ? "border-destructive" : ""}>
                   <SelectValue placeholder="Select service" />
                 </SelectTrigger>
                 <SelectContent>
@@ -166,6 +224,7 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
                   <SelectItem value="Company Sec">Company Sec</SelectItem>
                 </SelectContent>
               </Select>
+              <FormFieldError error={errors.service_type} />
             </div>
 
             <div className="space-y-2">
@@ -213,14 +272,14 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            onClick={() => createJobMutation.mutate()}
-            disabled={!jobName || !clientId || !serviceType || createJobMutation.isPending}
+            onClick={handleSubmit}
+            disabled={createJobMutation.isPending}
           >
-            Create Job
+            {createJobMutation.isPending ? "Creating..." : "Create Job"}
           </Button>
         </DialogFooter>
       </DialogContent>
