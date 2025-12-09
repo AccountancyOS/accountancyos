@@ -9194,6 +9194,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       calculate_deadline: {
         Args: {
           filing_type: string
@@ -9203,11 +9204,43 @@ export type Database = {
         }
         Returns: string
       }
+      can_approve_filings: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_execute_automation: {
         Args: { p_execution_hash: string; p_rule_id: string }
         Returns: boolean
       }
       can_finalise: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_finalize_workpapers: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_automation_rules: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_practice_settings: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_team: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_templates: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_modify_jobs: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_submit_filings: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
@@ -9251,6 +9284,10 @@ export type Database = {
           p_organization_id: string
         }
         Returns: string
+      }
+      finalize_workpaper_safe: {
+        Args: { p_workpaper_id: string }
+        Returns: Json
       }
       find_entities_by_email: {
         Args: { _email: string; _org_id: string }
@@ -9340,6 +9377,7 @@ export type Database = {
       get_user_organization_id:
         | { Args: { check_user_id: string }; Returns: string }
         | { Args: never; Returns: string }
+      get_user_permissions: { Args: { _org_id: string }; Returns: Json }
       get_user_role: {
         Args: { _org_id: string; _user_id: string }
         Returns: string
@@ -9437,7 +9475,20 @@ export type Database = {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
       }
+      submit_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       trigger_records_request: { Args: { p_job_id: string }; Returns: Json }
+      update_deadline_safe: {
+        Args: { p_deadline_id: string; p_updates: Json }
+        Returns: Json
+      }
+      update_job_status_safe: {
+        Args: { p_job_id: string; p_new_status: string; p_reason?: string }
+        Returns: Json
+      }
+      update_user_role_safe: {
+        Args: { p_new_role: string; p_org_id: string; p_target_user_id: string }
+        Returns: Json
+      }
       user_has_org_role: {
         Args: {
           check_org_id: string

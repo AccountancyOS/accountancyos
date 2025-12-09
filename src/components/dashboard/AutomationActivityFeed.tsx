@@ -43,6 +43,13 @@ export const AutomationActivityFeed = () => {
     enabled: !!organization?.id,
   });
 
+  // Real-time subscription for automation executions
+  useRealtimeSubscription({
+    table: "automation_executions",
+    organizationId: organization?.id,
+    queryKeys: [["automation-activity", organization?.id || ""]],
+  });
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed":

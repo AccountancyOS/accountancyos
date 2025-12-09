@@ -46,6 +46,13 @@ export const DeadlineWidget = () => {
     enabled: !!organization?.id,
   });
 
+  // Real-time subscription for deadlines
+  useRealtimeSubscription({
+    table: "deadlines",
+    organizationId: organization?.id,
+    queryKeys: [["upcoming-deadlines", organization?.id || ""]],
+  });
+
   const getRiskColor = (dueDate: string) => {
     const due = new Date(dueDate);
     const daysRemaining = differenceInDays(due, new Date());
