@@ -46,7 +46,7 @@ All colors MUST be HSL.
     --input: 212 26% 83%;
     --ring: 216 19% 26%;
 
-    --radius: 0rem;
+    --radius: 0.5rem;
 
     /* Sidebar colors */
     --sidebar-background: 0 0% 100%;
@@ -173,6 +173,27 @@ All colors MUST be HSL.
   .text-gradient {
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-primary);
+  }
+
+  .hover-scale {
+    @apply transition-transform duration-200 hover:scale-105;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  .story-link {
+    @apply relative inline-block;
+  }
+
+  .story-link::after {
+    content: '';
+    @apply absolute w-full scale-x-0 h-0.5 bottom-0 left-0 bg-primary origin-bottom-right transition-transform duration-300;
+  }
+
+  .story-link:hover::after {
+    @apply scale-x-100 origin-bottom-left;
   }
 }
 
