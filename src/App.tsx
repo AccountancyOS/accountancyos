@@ -46,6 +46,7 @@ import JobTemplates from "./pages/JobTemplates";
 import BrandingSettings from "./pages/settings/BrandingSettings";
 import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
+import PermissionsSettings from "./pages/settings/PermissionsSettings";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -400,6 +401,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <CompaniesHouseSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/permissions"
+              element={
+                <ProtectedRoute>
+                  <PermissionsSettings />
                 </ProtectedRoute>
               }
             />

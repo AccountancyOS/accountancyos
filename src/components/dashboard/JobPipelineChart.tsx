@@ -48,6 +48,13 @@ export const JobPipelineChart = () => {
     enabled: !!organization?.id,
   });
 
+  // Real-time subscription for jobs
+  useRealtimeSubscription({
+    table: "jobs",
+    organizationId: organization?.id,
+    queryKeys: [["job-pipeline-stats", organization?.id || ""]],
+  });
+
   if (isLoading) {
     return (
       <Card>

@@ -61,3 +61,31 @@ export function useAllPermissions(): Record<PermissionName, boolean> {
     return result;
   }, [role]);
 }
+
+/**
+ * Hook to check if user can finalize workpapers (server-side backed)
+ */
+export function useCanFinalize(): boolean {
+  return usePermission('can_finalize_workpapers');
+}
+
+/**
+ * Hook to check if user can approve filings (server-side backed)
+ */
+export function useCanApproveFilings(): boolean {
+  return usePermission('can_approve_filings');
+}
+
+/**
+ * Hook to check if user can submit filings (server-side backed)
+ */
+export function useCanSubmitFilings(): boolean {
+  return usePermission('can_submit_filings');
+}
+
+/**
+ * Hook to check if user can manage templates
+ */
+export function useCanManageTemplates(): boolean {
+  return usePermission('can_manage_templates');
+}

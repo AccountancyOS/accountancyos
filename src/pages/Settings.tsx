@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText, Palette, Building2, ShieldCheck } from "lucide-react";
+import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText, Palette, Building2, ShieldCheck, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
@@ -317,6 +317,18 @@ export default function Settings() {
                   <div>
                     <CardTitle className="text-base">Branding</CardTitle>
                     <CardDescription className="text-sm">Logo, colors, and practice details</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => navigate("/settings/permissions")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Users className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">Team & Permissions</CardTitle>
+                    <CardDescription className="text-sm">Manage roles and access control</CardDescription>
                   </div>
                 </CardHeader>
               </Card>
