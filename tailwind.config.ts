@@ -111,16 +111,16 @@ export default {
 		},
 		fontFamily: {
 			sans: [
-				'Inter',
+				'Neue Haas Grotesk Display Pro',
+				'Neue Haas Grotesk',
+				'Helvetica Neue',
+				'Helvetica',
 				'ui-sans-serif',
 				'system-ui',
 				'-apple-system',
 				'BlinkMacSystemFont',
 				'Segoe UI',
-				'Roboto',
-				'Helvetica Neue',
 				'Arial',
-				'Noto Sans',
 				'sans-serif'
 			],
   			serif: [
