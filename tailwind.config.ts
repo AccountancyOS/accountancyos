@@ -111,10 +111,7 @@ export default {
 		},
 		fontFamily: {
 			sans: [
-				'Neue Haas Grotesk Display Pro',
-				'Neue Haas Grotesk',
-				'Helvetica Neue',
-				'Helvetica',
+				'DM Sans',
 				'ui-sans-serif',
 				'system-ui',
 				'-apple-system',
