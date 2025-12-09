@@ -109,20 +109,20 @@ export default {
 			'enter': 'fade-in 0.3s ease-out, scale-in 0.2s ease-out',
 			'exit': 'fade-out 0.3s ease-out, scale-out 0.2s ease-out'
 		},
-  		fontFamily: {
-  			sans: [
-  				'DM Sans',
-  				'ui-sans-serif',
-  				'system-ui',
-  				'-apple-system',
-  				'BlinkMacSystemFont',
-  				'Segoe UI',
-  				'Roboto',
-  				'Helvetica Neue',
-  				'Arial',
-  				'Noto Sans',
-  				'sans-serif'
-  			],
+		fontFamily: {
+			sans: [
+				'Inter',
+				'ui-sans-serif',
+				'system-ui',
+				'-apple-system',
+				'BlinkMacSystemFont',
+				'Segoe UI',
+				'Roboto',
+				'Helvetica Neue',
+				'Arial',
+				'Noto Sans',
+				'sans-serif'
+			],
   			serif: [
   				'Crimson Pro',
   				'ui-serif',
