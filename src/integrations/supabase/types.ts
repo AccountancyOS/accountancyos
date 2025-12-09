@@ -8662,7 +8662,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
-          organization_id: string
+          organization_id: string | null
           service: string | null
           status: string
           tags: Json | null
@@ -8677,7 +8677,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
-          organization_id: string
+          organization_id?: string | null
           service?: string | null
           status?: string
           tags?: Json | null
@@ -8692,7 +8692,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
-          organization_id?: string
+          organization_id?: string | null
           service?: string | null
           status?: string
           tags?: Json | null
