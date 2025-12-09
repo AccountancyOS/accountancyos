@@ -248,6 +248,65 @@ export type Database = {
           },
         ]
       }
+      automation_rule_templates: {
+        Row: {
+          action_config: Json | null
+          action_type: string
+          category: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_system: boolean | null
+          name: string
+          organization_id: string | null
+          trigger_config: Json | null
+          trigger_type: string
+          updated_at: string | null
+          version: number | null
+        }
+        Insert: {
+          action_config?: Json | null
+          action_type: string
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          name: string
+          organization_id?: string | null
+          trigger_config?: Json | null
+          trigger_type: string
+          updated_at?: string | null
+          version?: number | null
+        }
+        Update: {
+          action_config?: Json | null
+          action_type?: string
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          name?: string
+          organization_id?: string | null
+          trigger_config?: Json | null
+          trigger_type?: string
+          updated_at?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_rule_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_rules: {
         Row: {
           action_config: Json
@@ -9375,8 +9434,8 @@ export type Database = {
         }[]
       }
       get_user_organization_id:
-        | { Args: { check_user_id: string }; Returns: string }
         | { Args: never; Returns: string }
+        | { Args: { check_user_id: string }; Returns: string }
       get_user_permissions: { Args: { _org_id: string }; Returns: Json }
       get_user_role: {
         Args: { _org_id: string; _user_id: string }

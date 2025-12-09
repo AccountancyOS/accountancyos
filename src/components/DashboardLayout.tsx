@@ -25,6 +25,7 @@ import {
   UserCheck,
   CreditCard,
   Mail,
+  Zap,
 } from "lucide-react";
 
 const navigation = [
@@ -41,6 +42,7 @@ const navigation = [
   { name: "Deadlines", href: "/deadlines", icon: Calendar },
   { name: "Filings", href: "/filings", icon: Globe },
   { name: "Templates", href: "/templates", icon: FolderOpen },
+  { name: "Automations", href: "/automations", icon: Zap },
   { name: "Subscription", href: "/subscription", icon: CreditCard },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
