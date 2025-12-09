@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical, Trash2, Calendar } from "lucide-react";
+import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical, Trash2, Calendar, Users } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -322,11 +324,45 @@ const CRM = () => {
     return pipelineStages.find((s) => s.value === stage);
   };
 
+  // Pipeline skeleton loading state
+  const PipelineSkeleton = () => (
+    <div className="flex gap-4 overflow-x-auto pb-4 animate-fade-in">
+      {pipelineStages.map((stage) => (
+        <div key={stage.value} className="flex-shrink-0 w-72">
+          <Card>
+            <CardHeader className="pb-3">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-4 w-16 mt-1" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Card key={i} className="p-3">
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-20 mt-2" />
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      ))}
+    </div>
+  );
+
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex-1 overflow-auto">
+          <div className="p-8">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <Skeleton className="h-8 w-48 mb-2" />
+                <Skeleton className="h-4 w-72" />
+              </div>
+              <Skeleton className="h-10 w-28" />
+            </div>
+            <PipelineSkeleton />
+          </div>
         </div>
       </DashboardLayout>
     );

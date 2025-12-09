@@ -6,7 +6,7 @@ import { useOrganization } from "@/lib/organization-context";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Briefcase } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/table";
 import { format, differenceInDays } from "date-fns";
 import CreateJobDialog from "@/components/jobs/CreateJobDialog";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default function Jobs() {
   const navigate = useNavigate();
@@ -197,34 +199,30 @@ export default function Jobs() {
         </div>
 
         {/* Jobs Table */}
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job Name</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Filing Deadline</TableHead>
-                <TableHead>Progress</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+        {isLoading ? (
+          <TableSkeleton columns={8} rows={6} />
+        ) : filteredJobs && filteredJobs.length > 0 ? (
+          <div className="border rounded-lg animate-fade-in">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    Loading jobs...
-                  </TableCell>
+                  <TableHead>Job Name</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Filing Deadline</TableHead>
+                  <TableHead>Progress</TableHead>
                 </TableRow>
-              ) : filteredJobs && filteredJobs.length > 0 ? (
-                filteredJobs.map((job) => {
+              </TableHeader>
+              <TableBody>
+                {filteredJobs.map((job) => {
                   const daysRemaining = getDaysRemaining(job.filing_deadline);
                   return (
                     <TableRow
                       key={job.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className="cursor-pointer transition-colors hover:bg-muted/50"
                       onClick={() => navigate(`/jobs/${job.id}`)}
                     >
                       <TableCell className="font-medium">{job.job_name}</TableCell>
@@ -265,24 +263,19 @@ export default function Jobs() {
                       </TableCell>
                     </TableRow>
                   );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    <p className="text-muted-foreground">No jobs found</p>
-                    <Button
-                      variant="link"
-                      onClick={() => setShowCreateDialog(true)}
-                      className="mt-2"
-                    >
-                      Create your first job
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={Briefcase}
+            title="No jobs yet"
+            description="Create your first job to start tracking client work, deadlines, and workflows."
+            actionLabel="Create Job"
+            onAction={() => setShowCreateDialog(true)}
+          />
+        )}
       </div>
 
       <CreateJobDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
