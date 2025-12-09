@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlaceholderPicker } from "./PlaceholderPicker";
+import { TemplatePickerDropdown } from "@/components/email/TemplatePickerDropdown";
 import { useRef } from "react";
 
 interface ActionConfigBuilderProps {
@@ -162,6 +163,20 @@ export function ActionConfigBuilder({ actionType, config, onChange }: ActionConf
       return (
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label>Email Template</Label>
+            <TemplatePickerDropdown
+              onSelect={(template) => {
+                if (template) {
+                  updateConfig("templateId", template.id);
+                  updateConfig("subject", template.subject || "");
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Select a template for the email content
+            </p>
+          </div>
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="toEmail">To Email</Label>
               <PlaceholderPicker onInsert={(p) => insertAtCursor(emailToRef, "toEmail", p)} />
@@ -176,7 +191,7 @@ export function ActionConfigBuilder({ actionType, config, onChange }: ActionConf
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="subject">Subject</Label>
+              <Label htmlFor="subject">Subject (override)</Label>
               <PlaceholderPicker onInsert={(p) => insertAtCursor(emailSubjectRef, "subject", p)} />
             </div>
             <Input
@@ -184,12 +199,9 @@ export function ActionConfigBuilder({ actionType, config, onChange }: ActionConf
               id="subject"
               value={(config.subject as string) || ""}
               onChange={(e) => updateConfig("subject", e.target.value)}
-              placeholder="e.g. Reminder: {{deadline.name}} due soon"
+              placeholder="Leave blank to use template subject"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Email body will be pulled from the selected email template.
-          </p>
         </div>
       );
 

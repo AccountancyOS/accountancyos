@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, ChevronDown, Loader2 } from "lucide-react";
 
 interface TemplatePickerDropdownProps {
-  onSelect: (template: { subject: string; body: string; htmlBody?: string }) => void;
+  onSelect: (template: { id: string; subject: string; body: string; htmlBody?: string } | null) => void;
 }
 
 interface EmailTemplate {
@@ -63,6 +63,7 @@ export function TemplatePickerDropdown({ onSelect }: TemplatePickerDropdownProps
 
   const handleSelect = (template: EmailTemplate) => {
     onSelect({
+      id: template.id,
       subject: template.content?.subject || "",
       body: template.content?.htmlBody || template.content?.body || "",
       htmlBody: template.content?.htmlBody,

@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   FileCheck,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Mail
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -43,6 +44,7 @@ import {
   getDocumentTypesForFiling,
   updateFilingStatus,
 } from "@/lib/filing-service";
+import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 
 export default function FilingDetail() {
   const { filingId } = useParams();
@@ -50,6 +52,7 @@ export default function FilingDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filingReference, setFilingReference] = useState("");
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
 
   const { data: filing, isLoading } = useQuery({
     queryKey: ["filing", filingId],
@@ -235,6 +238,10 @@ export default function FilingDetail() {
               {entityName} • {filing.tax_year || `${filing.period_start} - ${filing.period_end}`}
             </p>
           </div>
+          <Button variant="outline" onClick={() => setIsComposeOpen(true)}>
+            <Mail className="h-4 w-4 mr-2" />
+            Email Client
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -536,6 +543,17 @@ export default function FilingDetail() {
             </Card>
           </div>
         </div>
+
+        {/* Compose Email Dialog */}
+        <ComposeEmailDialog
+          open={isComposeOpen}
+          onOpenChange={setIsComposeOpen}
+          filingId={filing?.id}
+          clientId={filing?.client_id || undefined}
+          companyId={filing?.company_id || undefined}
+          defaultTo={filing?.clients?.email || filing?.companies?.email}
+          defaultToName={entityName}
+        />
       </div>
     </DashboardLayout>
   );

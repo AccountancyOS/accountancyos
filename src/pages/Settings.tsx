@@ -332,6 +332,18 @@ export default function Settings() {
                   </div>
                 </CardHeader>
               </Card>
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => navigate("/settings/email-templates")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Mail className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">Email Templates</CardTitle>
+                    <CardDescription className="text-sm">Create and manage email templates</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
             </div>
           </div>
 
