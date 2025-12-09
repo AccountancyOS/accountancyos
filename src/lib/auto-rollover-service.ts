@@ -33,6 +33,29 @@ export interface RolloverConfig {
  * Idempotent - checks for existing next-year job before creating
  */
 export async function executeAutoRollover(config: RolloverConfig): Promise<RolloverResult> {
+  // Validate required fields
+  if (!config.filingId) {
+    return { success: false, error: "Filing ID is required" };
+  }
+  if (!config.jobId) {
+    return { success: false, error: "Job ID is required" };
+  }
+  if (!config.organizationId) {
+    return { success: false, error: "Organization ID is required" };
+  }
+  if (!config.serviceType) {
+    return { success: false, error: "Service type is required" };
+  }
+  if (!config.periodEnd) {
+    return { success: false, error: "Period end date is required" };
+  }
+
+  // Validate date format
+  const periodEndDate = new Date(config.periodEnd);
+  if (isNaN(periodEndDate.getTime())) {
+    return { success: false, error: "Invalid period end date format" };
+  }
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     

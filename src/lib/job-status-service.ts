@@ -39,6 +39,20 @@ export async function updateJobStatus(
   newStatus: JobStatus,
   options: UpdateJobStatusOptions = {}
 ): Promise<UpdateJobStatusResult> {
+  // Validate inputs
+  if (!jobId || typeof jobId !== 'string') {
+    return { success: false, error: "Invalid job ID provided" };
+  }
+
+  const validStatuses: JobStatus[] = [
+    "not_started", "in_progress", "waiting_on_client", "ready_for_review",
+    "in_review", "completed", "on_hold", "cancelled"
+  ];
+
+  if (!validStatuses.includes(newStatus)) {
+    return { success: false, error: `Invalid status: ${newStatus}. Must be one of: ${validStatuses.join(', ')}` };
+  }
+
   try {
     // 1. Fetch current job to get old status and organization_id
     const { data: job, error: fetchError } = await supabase
@@ -47,8 +61,13 @@ export async function updateJobStatus(
       .eq("id", jobId)
       .single();
 
-    if (fetchError || !job) {
-      return { success: false, error: fetchError?.message || "Job not found" };
+    if (fetchError) {
+      console.error("[JobStatusService] Fetch error:", fetchError);
+      return { success: false, error: `Failed to fetch job: ${fetchError.message}` };
+    }
+
+    if (!job) {
+      return { success: false, error: "Job not found" };
     }
 
     const oldStatus = job.status;
@@ -56,6 +75,19 @@ export async function updateJobStatus(
     // Don't update if status is the same
     if (oldStatus === newStatus) {
       return { success: true };
+    }
+
+    // Validate status transitions (prevent invalid transitions)
+    const invalidTransitions: Record<string, JobStatus[]> = {
+      completed: ["not_started"], // Can't go from completed to not_started
+      cancelled: ["in_progress", "ready_for_review"], // Can't resume cancelled jobs directly
+    };
+
+    if (invalidTransitions[oldStatus]?.includes(newStatus)) {
+      return { 
+        success: false, 
+        error: `Invalid status transition from '${oldStatus}' to '${newStatus}'` 
+      };
     }
 
     // 2. Update the job status
@@ -68,43 +100,54 @@ export async function updateJobStatus(
       .eq("id", jobId);
 
     if (updateError) {
-      return { success: false, error: updateError.message };
+      console.error("[JobStatusService] Update error:", updateError);
+      return { success: false, error: `Failed to update job: ${updateError.message}` };
     }
 
     // 3. Log audit trail
-    await logAudit({
-      organizationId: job.organization_id,
-      entityType: "job",
-      entityId: jobId,
-      action: "status_change",
-      fieldName: "status",
-      oldValue: oldStatus,
-      newValue: newStatus,
-      metadata: { reason: options.reason },
-    });
+    try {
+      await logAudit({
+        organizationId: job.organization_id,
+        entityType: "job",
+        entityId: jobId,
+        action: "status_change",
+        fieldName: "status",
+        oldValue: oldStatus,
+        newValue: newStatus,
+        metadata: { reason: options.reason },
+      });
+    } catch (auditErr) {
+      console.warn("[JobStatusService] Failed to log audit:", auditErr);
+      // Don't fail the operation for audit logging issues
+    }
 
     // 4. Emit automation event (unless skipped)
     let eventId: string | null = null;
     if (!options.skipAutomation) {
-      eventId = await emitJobStatusChange(
-        job.organization_id,
-        jobId,
-        oldStatus,
-        newStatus,
-        {
-          jobName: job.job_name,
-          clientId: job.client_id,
-          companyId: job.company_id,
-          serviceType: job.service_type,
-          reason: options.reason,
-        }
-      );
+      try {
+        eventId = await emitJobStatusChange(
+          job.organization_id,
+          jobId,
+          oldStatus,
+          newStatus,
+          {
+            jobName: job.job_name,
+            clientId: job.client_id,
+            companyId: job.company_id,
+            serviceType: job.service_type,
+            reason: options.reason,
+          }
+        );
+      } catch (eventErr) {
+        console.warn("[JobStatusService] Failed to emit automation event:", eventErr);
+        // Don't fail the operation for automation event issues
+      }
     }
 
     return { success: true, eventId };
   } catch (err) {
-    console.error("[JobStatusService] Error updating job status:", err);
-    return { success: false, error: (err as Error).message };
+    console.error("[JobStatusService] Unexpected error:", err);
+    return { success: false, error: `Unexpected error: ${(err as Error).message}` };
   }
 }
 
