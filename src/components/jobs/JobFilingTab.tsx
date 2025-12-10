@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileCheck, Send, CheckCircle, FileText, Download, RefreshCw, Clock, XCircle, Loader2, ExternalLink } from "lucide-react";
+import { FileCheck, Send, CheckCircle, FileText, Download, RefreshCw, Clock, XCircle, Loader2, ExternalLink, Building, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate, Link } from "react-router-dom";
 import { sendFilingForApproval, markFilingAsFiled, generateFilingDocuments, getDocumentTypesForFiling } from "@/lib/filing-service";
+import { submitFilingToCompaniesHouse, validateFilingReadyForSubmission } from "@/lib/ch-filing-service";
 
 interface JobFilingTabProps {
   jobId: string;
@@ -17,6 +20,8 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [chEnvironment, setChEnvironment] = useState<'test' | 'production'>('test');
+  const [isSubmittingToCH, setIsSubmittingToCH] = useState(false);
 
   const { data: filing, isLoading } = useQuery({
     queryKey: ["job-filing", jobId],
@@ -108,16 +113,60 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "filed":
+      case "accepted":
         return "bg-green-500";
       case "approved":
       case "ready_to_file":
         return "bg-blue-500";
       case "awaiting_approval":
+      case "submitted":
         return "bg-yellow-500";
       case "rejected":
         return "bg-red-500";
       default:
         return "bg-gray-500";
+    }
+  };
+
+  const isCHFiling = filing?.filing_body === 'COMPANIES_HOUSE';
+
+  const handleSubmitToCH = async () => {
+    if (!filing) return;
+    
+    setIsSubmittingToCH(true);
+    try {
+      // Validate first
+      const validation = await validateFilingReadyForSubmission(filing.id);
+      if (!validation.ready) {
+        toast({
+          title: "Cannot submit filing",
+          description: validation.errors.join(', '),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Submit to CH
+      const result = await submitFilingToCompaniesHouse({
+        filingId: filing.id,
+        environment: chEnvironment,
+      });
+
+      if (result.success) {
+        toast({
+          title: "Filed to Companies House",
+          description: result.message || `Transaction ID: ${result.transactionId}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["job-filing", jobId] });
+      } else {
+        toast({
+          title: "Filing failed",
+          description: result.message || "Unknown error",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsSubmittingToCH(false);
     }
   };
 
@@ -290,7 +339,7 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
             </Button>
           )}
 
-          {canFile && (
+          {canFile && !isCHFiling && (
             <Button
               className="w-full justify-start"
               onClick={() => markAsFiledMutation.mutate()}
@@ -303,6 +352,42 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
               )}
               Mark as Filed
             </Button>
+          )}
+
+          {/* Companies House Filing */}
+          {isCHFiling && canFile && (
+            <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Building className="h-5 w-5 text-emerald-600" />
+                <span className="font-medium">File to Companies House</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Environment:</span>
+                <Select value={chEnvironment} onValueChange={(v) => setChEnvironment(v as 'test' | 'production')}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="test">Test</SelectItem>
+                    <SelectItem value="production">Production</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleSubmitToCH}
+                disabled={isSubmittingToCH}
+              >
+                {isSubmittingToCH ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Building className="mr-2 h-4 w-4" />
+                )}
+                Submit to Companies House ({chEnvironment})
+              </Button>
+            </div>
           )}
 
           {isFiled && filing.filed_at && (
