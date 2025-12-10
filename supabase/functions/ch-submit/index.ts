@@ -389,6 +389,193 @@ interface CS01BuildInput {
   filingData: any;
 }
 
+interface AccountsBuildInput {
+  companyNumber: string;
+  companyName: string;
+  periodStart: string;
+  periodEnd: string;
+  presenter: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  authCode: string;
+  filingData: any;
+  registeredOffice: {
+    line1: string;
+    line2: string;
+    city: string;
+    postcode: string;
+    country: string;
+  };
+}
+
+function buildAccountsSubmission(input: AccountsBuildInput): { xml: string; transactionId: string } {
+  const transactionId = `AA-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const timestamp = new Date().toISOString();
+  const filingData = input.filingData || {};
+  
+  // Extract balance sheet data from filing_data (mapped from workpaper)
+  const balanceSheet = filingData.balance_sheet || {};
+  const profitLoss = filingData.profit_loss || {};
+  const notes = filingData.notes || {};
+  const approval = filingData.approval || {};
+  const accountsType = filingData.accounts_type || 'micro'; // micro or small
+  
+  // Calculate totals for balance sheet
+  const fixedAssets = Number(balanceSheet.tangible_assets || 0) + 
+                      Number(balanceSheet.intangible_assets || 0) + 
+                      Number(balanceSheet.investments || 0);
+  const currentAssets = Number(balanceSheet.stock || 0) + 
+                        Number(balanceSheet.debtors || 0) + 
+                        Number(balanceSheet.cash_at_bank || 0);
+  const totalAssets = fixedAssets + currentAssets;
+  const creditorsWithin = Number(balanceSheet.creditors_within_one_year || 0);
+  const creditorsAfter = Number(balanceSheet.creditors_after_one_year || 0);
+  const netAssets = totalAssets - creditorsWithin - creditorsAfter;
+  const shareCapital = Number(balanceSheet.share_capital || 0);
+  const retainedEarnings = Number(balanceSheet.retained_earnings || 0);
+  const totalEquity = shareCapital + retainedEarnings;
+  
+  // Build a stub iXBRL document for CH sandbox
+  // In production, this would use a proper iXBRL generator (third-party or full implementation)
+  const periodStartFormatted = input.periodStart ? input.periodStart.split('T')[0] : '';
+  const periodEndFormatted = input.periodEnd ? input.periodEnd.split('T')[0] : '';
+  
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
+  <EnvelopeVersion>2.0</EnvelopeVersion>
+  <Header>
+    <MessageDetails>
+      <Class>CompaniesHouse</Class>
+      <Qualifier>request</Qualifier>
+      <Function>AnnualAccounts</Function>
+      <TransactionID>${escapeXml(transactionId)}</TransactionID>
+      <CorrelationID/>
+      <ResponseEndPoint PollInterval="10"/>
+      <Transformation>XML</Transformation>
+      <GatewayTest>0</GatewayTest>
+    </MessageDetails>
+    <SenderDetails>
+      <IDAuthentication>
+        <SenderID>${escapeXml(input.presenter.id)}</SenderID>
+        <Authentication>
+          <Method>clear</Method>
+          <Role>principal</Role>
+          <Value/>
+        </Authentication>
+      </IDAuthentication>
+      <EmailAddress>${escapeXml(input.presenter.email)}</EmailAddress>
+    </SenderDetails>
+  </Header>
+  <GovTalkDetails>
+    <Keys>
+      <Key Type="CompanyNumber">${escapeXml(input.companyNumber)}</Key>
+      <Key Type="CompanyAuthCode">${escapeXml(input.authCode)}</Key>
+    </Keys>
+  </GovTalkDetails>
+  <Body>
+    <AnnualAccounts xmlns="http://xmlgw.companieshouse.gov.uk/v1-0/schema">
+      <CompanyNumber>${escapeXml(input.companyNumber)}</CompanyNumber>
+      <CompanyName>${escapeXml(input.companyName)}</CompanyName>
+      <AccountsType>${accountsType === 'small' ? 'SmallCompany' : 'MicroEntity'}</AccountsType>
+      <AccountingStandard>${accountsType === 'small' ? 'FRS102-1A' : 'FRS105'}</AccountingStandard>
+      
+      <PeriodStart>${periodStartFormatted}</PeriodStart>
+      <PeriodEnd>${periodEndFormatted}</PeriodEnd>
+      
+      <RegisteredOffice>
+        <Line1>${escapeXml(input.registeredOffice.line1)}</Line1>
+        <Line2>${escapeXml(input.registeredOffice.line2)}</Line2>
+        <City>${escapeXml(input.registeredOffice.city)}</City>
+        <PostCode>${escapeXml(input.registeredOffice.postcode)}</PostCode>
+        <Country>${escapeXml(input.registeredOffice.country)}</Country>
+      </RegisteredOffice>
+      
+      <BalanceSheet>
+        <FixedAssets>
+          <TangibleAssets>${balanceSheet.tangible_assets || 0}</TangibleAssets>
+          <IntangibleAssets>${balanceSheet.intangible_assets || 0}</IntangibleAssets>
+          <Investments>${balanceSheet.investments || 0}</Investments>
+          <Total>${fixedAssets}</Total>
+        </FixedAssets>
+        <CurrentAssets>
+          <Stock>${balanceSheet.stock || 0}</Stock>
+          <Debtors>${balanceSheet.debtors || 0}</Debtors>
+          <CashAtBank>${balanceSheet.cash_at_bank || 0}</CashAtBank>
+          <Total>${currentAssets}</Total>
+        </CurrentAssets>
+        <TotalAssets>${totalAssets}</TotalAssets>
+        <CreditorsWithinOneYear>${creditorsWithin}</CreditorsWithinOneYear>
+        <NetCurrentAssets>${currentAssets - creditorsWithin}</NetCurrentAssets>
+        <TotalAssetsLessCurrentLiabilities>${totalAssets - creditorsWithin}</TotalAssetsLessCurrentLiabilities>
+        <CreditorsAfterOneYear>${creditorsAfter}</CreditorsAfterOneYear>
+        <NetAssets>${netAssets}</NetAssets>
+        <CapitalAndReserves>
+          <CalledUpShareCapital>${shareCapital}</CalledUpShareCapital>
+          <SharePremium>${balanceSheet.share_premium || 0}</SharePremium>
+          <ProfitAndLossReserve>${retainedEarnings}</ProfitAndLossReserve>
+          <Total>${totalEquity}</Total>
+        </CapitalAndReserves>
+      </BalanceSheet>
+      
+      ${accountsType === 'small' ? `
+      <ProfitAndLoss>
+        <Turnover>${profitLoss.turnover || 0}</Turnover>
+        <CostOfSales>${profitLoss.cost_of_sales || 0}</CostOfSales>
+        <GrossProfit>${(profitLoss.turnover || 0) - (profitLoss.cost_of_sales || 0)}</GrossProfit>
+        <AdministrativeExpenses>${profitLoss.administrative_expenses || 0}</AdministrativeExpenses>
+        <OperatingProfit>${(profitLoss.turnover || 0) - (profitLoss.cost_of_sales || 0) - (profitLoss.administrative_expenses || 0)}</OperatingProfit>
+        <InterestReceivable>${profitLoss.interest_receivable || 0}</InterestReceivable>
+        <InterestPayable>${profitLoss.interest_payable || 0}</InterestPayable>
+        <ProfitBeforeTax>${profitLoss.profit_before_tax || 0}</ProfitBeforeTax>
+        <TaxCharge>${profitLoss.corporation_tax || 0}</TaxCharge>
+        <ProfitAfterTax>${(profitLoss.profit_before_tax || 0) - (profitLoss.corporation_tax || 0)}</ProfitAfterTax>
+      </ProfitAndLoss>
+      ` : ''}
+      
+      <Notes>
+        <AccountingPolicies>
+          <GoingConcern>${notes.going_concern ? 'true' : 'false'}</GoingConcern>
+          <TurnoverPolicy>${escapeXml(notes.turnover_policy || 'Turnover represents amounts receivable for goods and services provided in the normal course of business.')}</TurnoverPolicy>
+          <DepreciationPolicy>${escapeXml(notes.depreciation_policy || 'Depreciation is provided on all tangible fixed assets at rates calculated to write off the cost over their expected useful lives.')}</DepreciationPolicy>
+        </AccountingPolicies>
+        <AverageEmployees>${notes.average_employees || 0}</AverageEmployees>
+        <DirectorsAdvances>
+          <Exist>${notes.directors_advances_exist ? 'true' : 'false'}</Exist>
+          ${notes.directors_advances_exist ? `<Details>${escapeXml(notes.directors_advances_details || '')}</Details>` : ''}
+        </DirectorsAdvances>
+        <RelatedPartyTransactions>
+          <Exist>${notes.related_party_transactions_exist ? 'true' : 'false'}</Exist>
+          ${notes.related_party_transactions_exist ? `<Details>${escapeXml(notes.related_party_details || '')}</Details>` : ''}
+        </RelatedPartyTransactions>
+        <Guarantees>
+          <Exist>${notes.guarantees_exist ? 'true' : 'false'}</Exist>
+          ${notes.guarantees_exist ? `<Details>${escapeXml(notes.guarantees_details || '')}</Details>` : ''}
+        </Guarantees>
+      </Notes>
+      
+      <Approval>
+        <ApprovedByBoard>${approval.approved_by_board ? 'true' : 'false'}</ApprovedByBoard>
+        <ApprovalDate>${approval.approval_date || new Date().toISOString().split('T')[0]}</ApprovalDate>
+        <SignatoryName>${escapeXml(approval.signatory_name || '')}</SignatoryName>
+        <SignatoryRole>${escapeXml(approval.signatory_role || 'Director')}</SignatoryRole>
+      </Approval>
+      
+      <PresenterDetails>
+        <PresenterID>${escapeXml(input.presenter.id)}</PresenterID>
+        <PresenterName>${escapeXml(input.presenter.name)}</PresenterName>
+        <PresenterEmail>${escapeXml(input.presenter.email)}</PresenterEmail>
+      </PresenterDetails>
+      
+      <Timestamp>${timestamp}</Timestamp>
+    </AnnualAccounts>
+  </Body>
+</GovTalkMessage>`;
+
+  return { xml, transactionId };
+}
+
 function buildCS01XML(input: CS01BuildInput): { xml: string; transactionId: string } {
   const transactionId = `CS01-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   const timestamp = new Date().toISOString();
