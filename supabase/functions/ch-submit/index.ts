@@ -182,11 +182,36 @@ serve(async (req: Request) => {
       });
       xmlPayload = result.xml;
       transactionId = result.transactionId;
+    } else if (filing.filing_type === 'AA' || filing.filing_type === 'companies_house_accounts') {
+      // Accounts filing - generate iXBRL
+      // For now, return a stub response as full iXBRL requires workpaper integration
+      const result = buildAccountsSubmission({
+        companyNumber: company.company_number,
+        companyName: company.company_name,
+        periodStart: filing.period_start,
+        periodEnd: filing.period_end,
+        presenter: {
+          id: orgCH?.presenter_id || '',
+          name: orgCH?.presenter_name || orgCH?.presenter_id || '',
+          email: orgCH?.presenter_email || '',
+        },
+        authCode: company.companies_house_auth_code,
+        filingData: filing.filing_data,
+        registeredOffice: {
+          line1: company.address_line_1 || '',
+          line2: company.address_line_2 || '',
+          city: company.city || '',
+          postcode: company.postcode || '',
+          country: company.country || 'United Kingdom',
+        },
+      });
+      xmlPayload = result.xml;
+      transactionId = result.transactionId;
     } else {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: `Unsupported filing type: ${filing.filing_type}. Only CS01 is currently supported.`
+          message: `Unsupported filing type: ${filing.filing_type}. Supported: CS01, AA (accounts).`
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
