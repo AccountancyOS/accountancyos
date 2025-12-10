@@ -1,5 +1,8 @@
 project_id = "moxpdejnucjjcplleefn"
 
+[functions.ch-submit]
+verify_jwt = true
+
 [functions.generate-filing-pdf]
 verify_jwt = true
 

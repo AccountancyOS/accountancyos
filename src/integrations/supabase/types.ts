@@ -1864,6 +1864,7 @@ export type Database = {
           ch_company_profile: Json | null
           ch_last_synced_at: string | null
           city: string | null
+          companies_house_auth_code: string | null
           company_name: string
           company_number: string | null
           company_type: string | null
@@ -1902,6 +1903,7 @@ export type Database = {
           ch_company_profile?: Json | null
           ch_last_synced_at?: string | null
           city?: string | null
+          companies_house_auth_code?: string | null
           company_name: string
           company_number?: string | null
           company_type?: string | null
@@ -1940,6 +1942,7 @@ export type Database = {
           ch_company_profile?: Json | null
           ch_last_synced_at?: string | null
           city?: string | null
+          companies_house_auth_code?: string | null
           company_name?: string
           company_number?: string | null
           company_type?: string | null
@@ -4439,8 +4442,78 @@ export type Database = {
           },
         ]
       }
+      filing_submissions: {
+        Row: {
+          ch_transaction_id: string | null
+          created_at: string
+          environment: string
+          error_message: string | null
+          filing_id: string | null
+          filing_type: string
+          id: string
+          organization_id: string
+          request_headers: Json | null
+          request_payload: string | null
+          response_headers: Json | null
+          response_payload: string | null
+          response_status_code: number | null
+          status: string
+          submitted_at: string
+        }
+        Insert: {
+          ch_transaction_id?: string | null
+          created_at?: string
+          environment: string
+          error_message?: string | null
+          filing_id?: string | null
+          filing_type: string
+          id?: string
+          organization_id: string
+          request_headers?: Json | null
+          request_payload?: string | null
+          response_headers?: Json | null
+          response_payload?: string | null
+          response_status_code?: number | null
+          status?: string
+          submitted_at?: string
+        }
+        Update: {
+          ch_transaction_id?: string | null
+          created_at?: string
+          environment?: string
+          error_message?: string | null
+          filing_id?: string | null
+          filing_type?: string
+          id?: string
+          organization_id?: string
+          request_headers?: Json | null
+          request_payload?: string | null
+          response_headers?: Json | null
+          response_payload?: string | null
+          response_status_code?: number | null
+          status?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_submissions_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_submissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filings: {
         Row: {
+          accepted_at: string | null
           api_response: Json | null
           api_submission_id: string | null
           approval_requested_at: string | null
@@ -4448,9 +4521,11 @@ export type Database = {
           approval_token_expires_at: string | null
           approved_at: string | null
           approved_by: string | null
+          ch_transaction_id: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
+          environment: string | null
           filed_at: string | null
           filed_by: string | null
           filing_body: string
@@ -4462,6 +4537,7 @@ export type Database = {
           id: string
           is_locked: boolean | null
           job_id: string
+          last_submission_error: string | null
           next_year_job_id: string | null
           organization_id: string
           payment_deadline: string | null
@@ -4471,6 +4547,7 @@ export type Database = {
           second_payment_date: string | null
           status: string
           submission_payload: Json | null
+          submitted_at: string | null
           tax_due: number | null
           tax_refund: number | null
           tax_year: string | null
@@ -4478,6 +4555,7 @@ export type Database = {
           workpaper_instance_id: string | null
         }
         Insert: {
+          accepted_at?: string | null
           api_response?: Json | null
           api_submission_id?: string | null
           approval_requested_at?: string | null
@@ -4485,9 +4563,11 @@ export type Database = {
           approval_token_expires_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          ch_transaction_id?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          environment?: string | null
           filed_at?: string | null
           filed_by?: string | null
           filing_body: string
@@ -4499,6 +4579,7 @@ export type Database = {
           id?: string
           is_locked?: boolean | null
           job_id: string
+          last_submission_error?: string | null
           next_year_job_id?: string | null
           organization_id: string
           payment_deadline?: string | null
@@ -4508,6 +4589,7 @@ export type Database = {
           second_payment_date?: string | null
           status?: string
           submission_payload?: Json | null
+          submitted_at?: string | null
           tax_due?: number | null
           tax_refund?: number | null
           tax_year?: string | null
@@ -4515,6 +4597,7 @@ export type Database = {
           workpaper_instance_id?: string | null
         }
         Update: {
+          accepted_at?: string | null
           api_response?: Json | null
           api_submission_id?: string | null
           approval_requested_at?: string | null
@@ -4522,9 +4605,11 @@ export type Database = {
           approval_token_expires_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
+          ch_transaction_id?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          environment?: string | null
           filed_at?: string | null
           filed_by?: string | null
           filing_body?: string
@@ -4536,6 +4621,7 @@ export type Database = {
           id?: string
           is_locked?: boolean | null
           job_id?: string
+          last_submission_error?: string | null
           next_year_job_id?: string | null
           organization_id?: string
           payment_deadline?: string | null
@@ -4545,6 +4631,7 @@ export type Database = {
           second_payment_date?: string | null
           status?: string
           submission_payload?: Json | null
+          submitted_at?: string | null
           tax_due?: number | null
           tax_refund?: number | null
           tax_year?: string | null
@@ -6479,7 +6566,6 @@ export type Database = {
       }
       organization_integrations_companies_house: {
         Row: {
-          api_key_encrypted: string | null
           connected_at: string | null
           created_at: string | null
           last_test_at: string | null
@@ -6487,10 +6573,10 @@ export type Database = {
           organization_id: string
           presenter_email: string | null
           presenter_id: string | null
+          presenter_name: string | null
           updated_at: string | null
         }
         Insert: {
-          api_key_encrypted?: string | null
           connected_at?: string | null
           created_at?: string | null
           last_test_at?: string | null
@@ -6498,10 +6584,10 @@ export type Database = {
           organization_id: string
           presenter_email?: string | null
           presenter_id?: string | null
+          presenter_name?: string | null
           updated_at?: string | null
         }
         Update: {
-          api_key_encrypted?: string | null
           connected_at?: string | null
           created_at?: string | null
           last_test_at?: string | null
@@ -6509,6 +6595,7 @@ export type Database = {
           organization_id?: string
           presenter_email?: string | null
           presenter_id?: string | null
+          presenter_name?: string | null
           updated_at?: string | null
         }
         Relationships: [

@@ -13,28 +13,26 @@ import {
   Loader2, 
   Building, 
   CheckCircle2, 
-  XCircle, 
   AlertCircle,
-  Key,
   Save,
-  TestTube
+  Shield,
+  User,
+  Mail
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { PermissionGuard } from "@/components/ui/permission-guard";
+import { getFilingSubmissions } from "@/lib/ch-filing-service";
 
 export default function CompaniesHouseSettings() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { organization } = useOrganization();
-  const [apiKey, setApiKey] = useState("");
   const [presenterId, setPresenterId] = useState("");
+  const [presenterName, setPresenterName] = useState("");
   const [presenterEmail, setPresenterEmail] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [hasApiKeyEntered, setHasApiKeyEntered] = useState(false);
 
   // Fetch CH integration data
   const { data: chData, isLoading } = useQuery({
@@ -53,6 +51,7 @@ export default function CompaniesHouseSettings() {
       // Pre-fill presenter fields
       if (data) {
         setPresenterId(data.presenter_id || "");
+        setPresenterName(data.presenter_name || "");
         setPresenterEmail(data.presenter_email || "");
       }
       
@@ -61,37 +60,17 @@ export default function CompaniesHouseSettings() {
     enabled: !!organization?.id,
   });
 
-  // Save API key mutation (via edge function for encryption)
-  const saveApiKeyMutation = useMutation({
-    mutationFn: async () => {
-      if (!organization?.id) throw new Error("No organization");
-
-      const { data, error } = await supabase.functions.invoke("integrations-save-ch-key", {
-        body: {
-          organization_id: organization.id,
-          api_key: apiKey,
-          presenter_id: presenterId,
-          presenter_email: presenterEmail,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      
-      return data;
+  // Fetch recent filing submissions
+  const { data: recentSubmissions } = useQuery({
+    queryKey: ["ch-submissions", organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      return getFilingSubmissions(organization.id, { limit: 5 });
     },
-    onSuccess: () => {
-      toast.success("API key saved securely");
-      setApiKey("");
-      setHasApiKeyEntered(false);
-      queryClient.invalidateQueries({ queryKey: ["organization-ch"] });
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to save: ${error.message}`);
-    },
+    enabled: !!organization?.id,
   });
 
-  // Save presenter details only
+  // Save presenter details
   const savePresenterMutation = useMutation({
     mutationFn: async () => {
       if (!organization?.id) throw new Error("No organization");
@@ -101,7 +80,9 @@ export default function CompaniesHouseSettings() {
         .upsert({
           organization_id: organization.id,
           presenter_id: presenterId,
+          presenter_name: presenterName,
           presenter_email: presenterEmail,
+          updated_at: new Date().toISOString(),
         });
 
       if (error) throw error;
@@ -115,78 +96,28 @@ export default function CompaniesHouseSettings() {
     },
   });
 
-  // Test connection mutation
-  const testConnectionMutation = useMutation({
-    mutationFn: async () => {
-      if (!organization?.id) throw new Error("No organization");
-
-      const { data, error } = await supabase.functions.invoke("integrations-test-ch-key", {
-        body: { organization_id: organization.id },
-      });
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        toast.success("Connection successful!");
-      } else {
-        toast.error(`Connection failed: ${data.error || "Unknown error"}`);
-      }
-      queryClient.invalidateQueries({ queryKey: ["organization-ch"] });
-    },
-    onError: (error: Error) => {
-      toast.error(`Test failed: ${error.message}`);
-    },
-  });
-
-  const handleSaveApiKey = async () => {
-    setIsSaving(true);
-    try {
-      await saveApiKeyMutation.mutateAsync();
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    try {
-      await testConnectionMutation.mutateAsync();
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
   const getConnectionStatus = () => {
-    if (!chData?.api_key_encrypted) {
-      return { status: "not_configured", label: "Not Configured", color: "secondary" as const, icon: XCircle };
+    const hasPresenter = !!chData?.presenter_id && !!chData?.presenter_email;
+    
+    if (!hasPresenter) {
+      return { 
+        status: "not_configured", 
+        label: "Presenter Not Configured", 
+        color: "secondary" as const, 
+        icon: AlertCircle 
+      };
     }
 
-    if (chData.last_test_success === true) {
-      return { status: "connected", label: "Connected", color: "default" as const, icon: CheckCircle2 };
-    }
-
-    if (chData.last_test_success === false) {
-      return { status: "error", label: "Connection Error", color: "destructive" as const, icon: AlertCircle };
-    }
-
-    return { status: "unknown", label: "Not Tested", color: "secondary" as const, icon: AlertCircle };
+    return { 
+      status: "configured", 
+      label: "Ready", 
+      color: "default" as const, 
+      icon: CheckCircle2 
+    };
   };
 
   const connectionStatus = getConnectionStatus();
   const StatusIcon = connectionStatus.icon;
-
-  // Mask API key display
-  const getMaskedKey = () => {
-    if (hasApiKeyEntered && apiKey) {
-      return apiKey;
-    }
-    if (chData?.api_key_encrypted) {
-      return "••••••••••••••••";
-    }
-    return "";
-  };
 
   if (isLoading) {
     return (
@@ -202,135 +133,124 @@ export default function CompaniesHouseSettings() {
     <DashboardLayout>
       <PermissionGuard permission="can_manage_integrations" title="Companies House Settings">
         <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Companies House</h1>
-            <p className="text-muted-foreground">
-              Configure API credentials for company filings
-            </p>
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Connection Status */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <Building className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    Connection Status
-                    <Badge variant={connectionStatus.color}>
-                      <StatusIcon className="h-3 w-3 mr-1" />
-                      {connectionStatus.label}
-                    </Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    API connection for submitting company filings
-                  </CardDescription>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {chData?.connected_at && (
-              <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                <div>
-                  <p className="text-muted-foreground">First Connected</p>
-                  <p className="font-medium">
-                    {format(new Date(chData.connected_at), "dd MMM yyyy, HH:mm")}
-                  </p>
-                </div>
-                {chData.last_test_at && (
-                  <div>
-                    <p className="text-muted-foreground">Last Tested</p>
-                    <p className="font-medium">
-                      {format(new Date(chData.last_test_at), "dd MMM yyyy, HH:mm")}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {chData?.api_key_encrypted && (
-              <Button 
-                variant="outline" 
-                onClick={handleTestConnection}
-                disabled={isTesting}
-              >
-                {isTesting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="mr-2 h-4 w-4" />
-                    Test Connection
-                  </>
-                )}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* API Key */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5" />
-              API Key
-            </CardTitle>
-            <CardDescription>
-              Your Companies House API key is stored securely and encrypted
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api_key">API Key</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="api_key"
-                  type={hasApiKeyEntered ? "text" : "password"}
-                  value={hasApiKeyEntered ? apiKey : getMaskedKey()}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setHasApiKeyEntered(true);
-                  }}
-                  onFocus={() => {
-                    if (!hasApiKeyEntered) {
-                      setApiKey("");
-                      setHasApiKeyEntered(true);
-                    }
-                  }}
-                  placeholder={chData?.api_key_encrypted ? "Enter new key to replace" : "Enter your API key"}
-                  className="font-mono"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Get your API key from the{" "}
-                <a 
-                  href="https://developer.company-information.service.gov.uk/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Companies House Developer Hub
-                </a>
+          {/* Header */}
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold">Companies House</h1>
+              <p className="text-muted-foreground">
+                Configure filing settings for company submissions
               </p>
             </div>
-            
-            {hasApiKeyEntered && apiKey && (
-              <Button onClick={handleSaveApiKey} disabled={isSaving}>
-                {isSaving ? (
+          </div>
+
+          <Separator />
+
+          {/* Connection Status */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <Building className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      Connection Status
+                      <Badge variant={connectionStatus.color}>
+                        <StatusIcon className="h-3 w-3 mr-1" />
+                        {connectionStatus.label}
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Companies House filing integration
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+                <Shield className="h-5 w-5 text-primary mt-0.5" />
+                <div>
+                  <p className="font-medium">Managed by AccountancyOS</p>
+                  <p className="text-sm text-muted-foreground">
+                    Companies House API credentials are managed centrally by AccountancyOS. 
+                    You only need to configure your presenter details below.
+                  </p>
+                </div>
+              </div>
+
+              {chData?.updated_at && (
+                <div className="text-sm text-muted-foreground">
+                  Last updated: {format(new Date(chData.updated_at), "dd MMM yyyy, HH:mm")}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Presenter Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Presenter Details
+              </CardTitle>
+              <CardDescription>
+                Your practice's filing identity for Companies House submissions. 
+                These details are used when submitting filings on behalf of your clients.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="presenter_id">Presenter ID *</Label>
+                  <Input
+                    id="presenter_id"
+                    value={presenterId}
+                    onChange={(e) => setPresenterId(e.target.value)}
+                    placeholder="Your Companies House presenter ID"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your unique presenter ID from Companies House
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="presenter_name">Presenter Name</Label>
+                  <Input
+                    id="presenter_name"
+                    value={presenterName}
+                    onChange={(e) => setPresenterName(e.target.value)}
+                    placeholder="Your name or firm name"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="presenter_email">Presenter Email *</Label>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="presenter_email"
+                    type="email"
+                    value={presenterEmail}
+                    onChange={(e) => setPresenterEmail(e.target.value)}
+                    placeholder="presenter@yourfirm.com"
+                    className="flex-1"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Email address for filing notifications from Companies House
+                </p>
+              </div>
+
+              <Button 
+                onClick={() => savePresenterMutation.mutate()}
+                disabled={savePresenterMutation.isPending || !presenterId || !presenterEmail}
+              >
+                {savePresenterMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving...
@@ -338,63 +258,54 @@ export default function CompaniesHouseSettings() {
                 ) : (
                   <>
                     <Save className="mr-2 h-4 w-4" />
-                    Save API Key
+                    Save Presenter Details
                   </>
                 )}
               </Button>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Presenter Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Filing Identity</CardTitle>
-            <CardDescription>
-              Presenter details used when submitting filings to Companies House
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="presenter_id">Presenter ID</Label>
-                <Input
-                  id="presenter_id"
-                  value={presenterId}
-                  onChange={(e) => setPresenterId(e.target.value)}
-                  placeholder="Your presenter ID"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="presenter_email">Presenter Email</Label>
-                <Input
-                  id="presenter_email"
-                  type="email"
-                  value={presenterEmail}
-                  onChange={(e) => setPresenterEmail(e.target.value)}
-                  placeholder="presenter@example.com"
-                />
-              </div>
-            </div>
-            <Button 
-              variant="outline" 
-              onClick={() => savePresenterMutation.mutate()}
-              disabled={savePresenterMutation.isPending}
-            >
-              {savePresenterMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Presenter Details
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+          {/* Recent Submissions */}
+          {recentSubmissions && recentSubmissions.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Filing Submissions</CardTitle>
+                <CardDescription>
+                  Latest submissions to Companies House from your practice
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {recentSubmissions.map((submission: any) => (
+                    <div 
+                      key={submission.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div>
+                        <p className="font-medium">{submission.filing_type}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(submission.submitted_at), "dd MMM yyyy, HH:mm")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={submission.environment === 'production' ? 'default' : 'secondary'}>
+                          {submission.environment}
+                        </Badge>
+                        <Badge variant={
+                          submission.status === 'accepted' ? 'default' :
+                          submission.status === 'rejected' ? 'destructive' :
+                          submission.status === 'error' ? 'destructive' :
+                          'secondary'
+                        }>
+                          {submission.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </PermissionGuard>
     </DashboardLayout>
