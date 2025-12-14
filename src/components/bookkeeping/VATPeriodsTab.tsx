@@ -14,11 +14,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { format } from "date-fns";
 import { 
   RefreshCw, FileText, ChevronDown, ChevronRight, 
-  AlertTriangle, CheckCircle, XCircle, Send, Calculator
+  AlertTriangle, CheckCircle, XCircle, Send, Calculator, Shield
 } from "lucide-react";
 import { toast } from "sonner";
 import { generateVATPeriod, validateVATPeriod, finaliseVATPeriod } from "@/lib/vat-period-generator";
 import type { VATReportModel, VATPeriodValidation } from "@/lib/vat-period-generator";
+import { VATReconciliationPanel } from "./VATReconciliationPanel";
+import { getReconciliation, type VATReconciliationResult } from "@/lib/vat-reconciliation-service";
 
 interface VATPeriodsTabProps {
   entityId: string;
@@ -33,6 +35,7 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
   const [reportModel, setReportModel] = useState<VATReportModel | null>(null);
   const [validation, setValidation] = useState<VATPeriodValidation | null>(null);
   const [expandedBoxes, setExpandedBoxes] = useState<Set<number>>(new Set());
+  const [reconciliation, setReconciliation] = useState<VATReconciliationResult | null>(null);
 
   const entityFilter = entityType === 'company' 
     ? { company_id: entityId }
@@ -92,9 +95,16 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
       
       return { report, validation: validationResult };
     },
-    onSuccess: ({ report, validation }) => {
+    onSuccess: async ({ report, validation }) => {
       setReportModel(report);
       setValidation(validation);
+      
+      // Fetch reconciliation for this period
+      if (report.period_id) {
+        const recon = await getReconciliation(report.period_id);
+        setReconciliation(recon);
+      }
+      
       queryClient.invalidateQueries({ queryKey: ['vat-periods'] });
       toast.success('VAT period calculated');
     },
@@ -294,8 +304,8 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
       </Card>
 
       {/* VAT Report Detail Dialog */}
-      <Dialog open={!!reportModel} onOpenChange={() => { setReportModel(null); setValidation(null); }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={!!reportModel} onOpenChange={() => { setReportModel(null); setValidation(null); setReconciliation(null); }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>VAT Return Summary</DialogTitle>
             <DialogDescription>
@@ -307,6 +317,10 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
             <Tabs defaultValue="summary">
               <TabsList>
                 <TabsTrigger value="summary">Summary</TabsTrigger>
+                <TabsTrigger value="reconciliation">
+                  <Shield className="w-4 h-4 mr-1" />
+                  Reconciliation
+                </TabsTrigger>
                 <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
                 <TabsTrigger value="validation">Validation</TabsTrigger>
               </TabsList>
@@ -387,6 +401,28 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
                   )}
                   <Badge variant="outline">{reportModel.transaction_count} transactions</Badge>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="reconciliation" className="space-y-4">
+                {organization && reportModel.period_id && (
+                  <VATReconciliationPanel
+                    organizationId={organization.id}
+                    entityId={entityId}
+                    entityType={entityType}
+                    vatPeriodId={reportModel.period_id}
+                    expectedVat={reportModel.box5_net_vat_due}
+                    periodStart={reportModel.period_start}
+                    periodEnd={reportModel.period_end}
+                    reconciliation={reconciliation}
+                    onReconciliationUpdated={async () => {
+                      if (reportModel.period_id) {
+                        const recon = await getReconciliation(reportModel.period_id);
+                        setReconciliation(recon);
+                      }
+                      queryClient.invalidateQueries({ queryKey: ['vat-periods'] });
+                    }}
+                  />
+                )}
               </TabsContent>
 
               <TabsContent value="breakdown" className="space-y-4">
