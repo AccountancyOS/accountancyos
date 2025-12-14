@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.hmrc-vat-submit]
 verify_jwt = true
+
+[functions.hmrc-ct-submit]
+verify_jwt = true
