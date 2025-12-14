@@ -4525,6 +4525,139 @@ export type Database = {
           },
         ]
       }
+      filing_payload_artifacts: {
+        Row: {
+          artifact_type: string
+          content_type: string
+          filing_id: string
+          generated_at: string
+          generator_version: string
+          id: string
+          organization_id: string
+          payload_data: Json | null
+          schema_version: string
+          sha256_hash: string
+          snapshot_id: string | null
+          storage_path: string | null
+        }
+        Insert: {
+          artifact_type: string
+          content_type: string
+          filing_id: string
+          generated_at?: string
+          generator_version?: string
+          id?: string
+          organization_id: string
+          payload_data?: Json | null
+          schema_version: string
+          sha256_hash: string
+          snapshot_id?: string | null
+          storage_path?: string | null
+        }
+        Update: {
+          artifact_type?: string
+          content_type?: string
+          filing_id?: string
+          generated_at?: string
+          generator_version?: string
+          id?: string
+          organization_id?: string
+          payload_data?: Json | null
+          schema_version?: string
+          sha256_hash?: string
+          snapshot_id?: string | null
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_payload_artifacts_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_payload_artifacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_payload_artifacts_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "filing_model_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      filing_provider_events: {
+        Row: {
+          correlation_id: string | null
+          created_at: string
+          duration_ms: number | null
+          endpoint: string
+          environment: string
+          event_type: string
+          filing_id: string | null
+          id: string
+          organization_id: string
+          payload_artifact_path: string | null
+          provider: string
+          request_summary: Json | null
+          response_status: number | null
+          response_summary: Json | null
+        }
+        Insert: {
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          endpoint: string
+          environment: string
+          event_type: string
+          filing_id?: string | null
+          id?: string
+          organization_id: string
+          payload_artifact_path?: string | null
+          provider: string
+          request_summary?: Json | null
+          response_status?: number | null
+          response_summary?: Json | null
+        }
+        Update: {
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          endpoint?: string
+          environment?: string
+          event_type?: string
+          filing_id?: string | null
+          id?: string
+          organization_id?: string
+          payload_artifact_path?: string | null
+          provider?: string
+          request_summary?: Json | null
+          response_status?: number | null
+          response_summary?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_provider_events_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_provider_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filing_submissions: {
         Row: {
           ch_transaction_id: string | null
@@ -4613,6 +4746,57 @@ export type Database = {
           },
         ]
       }
+      filing_validations: {
+        Row: {
+          created_at: string
+          filing_id: string
+          id: string
+          organization_id: string
+          results: Json
+          status: string
+          validated_at: string
+          validation_type: string
+          validator_version: string
+        }
+        Insert: {
+          created_at?: string
+          filing_id: string
+          id?: string
+          organization_id: string
+          results?: Json
+          status: string
+          validated_at?: string
+          validation_type: string
+          validator_version?: string
+        }
+        Update: {
+          created_at?: string
+          filing_id?: string
+          id?: string
+          organization_id?: string
+          results?: Json
+          status?: string
+          validated_at?: string
+          validation_type?: string
+          validator_version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_validations_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_validations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filings: {
         Row: {
           accepted_at: string | null
@@ -4646,6 +4830,7 @@ export type Database = {
           model_snapshot_id: string | null
           next_retry_at: string | null
           next_year_job_id: string | null
+          obligation_id: string | null
           organization_id: string
           payment_deadline: string | null
           period_end: string | null
@@ -4660,6 +4845,7 @@ export type Database = {
           tax_refund: number | null
           tax_year: string | null
           updated_at: string | null
+          vrn: string | null
           workpaper_instance_id: string | null
         }
         Insert: {
@@ -4694,6 +4880,7 @@ export type Database = {
           model_snapshot_id?: string | null
           next_retry_at?: string | null
           next_year_job_id?: string | null
+          obligation_id?: string | null
           organization_id: string
           payment_deadline?: string | null
           period_end?: string | null
@@ -4708,6 +4895,7 @@ export type Database = {
           tax_refund?: number | null
           tax_year?: string | null
           updated_at?: string | null
+          vrn?: string | null
           workpaper_instance_id?: string | null
         }
         Update: {
@@ -4742,6 +4930,7 @@ export type Database = {
           model_snapshot_id?: string | null
           next_retry_at?: string | null
           next_year_job_id?: string | null
+          obligation_id?: string | null
           organization_id?: string
           payment_deadline?: string | null
           period_end?: string | null
@@ -4756,6 +4945,7 @@ export type Database = {
           tax_refund?: number | null
           tax_year?: string | null
           updated_at?: string | null
+          vrn?: string | null
           workpaper_instance_id?: string | null
         }
         Relationships: [
@@ -4792,6 +4982,13 @@ export type Database = {
             columns: ["next_year_job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_obligation_id_fkey"
+            columns: ["obligation_id"]
+            isOneToOne: false
+            referencedRelation: "vat_obligations"
             referencedColumns: ["id"]
           },
           {
@@ -9150,6 +9347,76 @@ export type Database = {
           },
           {
             foreignKeyName: "vat_codes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vat_obligations: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          due_date: string
+          fetched_at: string
+          id: string
+          organization_id: string
+          period_end: string
+          period_key: string
+          period_start: string
+          raw_response: Json | null
+          received_date: string | null
+          status: string
+          vrn: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          due_date: string
+          fetched_at?: string
+          id?: string
+          organization_id: string
+          period_end: string
+          period_key: string
+          period_start: string
+          raw_response?: Json | null
+          received_date?: string | null
+          status: string
+          vrn: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          due_date?: string
+          fetched_at?: string
+          id?: string
+          organization_id?: string
+          period_end?: string
+          period_key?: string
+          period_start?: string
+          raw_response?: Json | null
+          received_date?: string | null
+          status?: string
+          vrn?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_obligations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_obligations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_obligations_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
