@@ -781,12 +781,16 @@ export type Database = {
         Row: {
           account_id: string | null
           bill_id: string
+          cash_vat_recognised: number | null
           created_at: string | null
           description: string | null
           gross_amount: number | null
           id: string
           line_number: number
           net_amount: number | null
+          paid_amount: number | null
+          paid_at: string | null
+          payment_status: string | null
           quantity: number | null
           unit_price: number | null
           vat_amount: number | null
@@ -796,12 +800,16 @@ export type Database = {
         Insert: {
           account_id?: string | null
           bill_id: string
+          cash_vat_recognised?: number | null
           created_at?: string | null
           description?: string | null
           gross_amount?: number | null
           id?: string
           line_number?: number
           net_amount?: number | null
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_status?: string | null
           quantity?: number | null
           unit_price?: number | null
           vat_amount?: number | null
@@ -811,12 +819,16 @@ export type Database = {
         Update: {
           account_id?: string | null
           bill_id?: string
+          cash_vat_recognised?: number | null
           created_at?: string | null
           description?: string | null
           gross_amount?: number | null
           id?: string
           line_number?: number
           net_amount?: number | null
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_status?: string | null
           quantity?: number | null
           unit_price?: number | null
           vat_amount?: number | null
@@ -5113,6 +5125,7 @@ export type Database = {
       invoice_lines: {
         Row: {
           account_id: string
+          cash_vat_recognised: number | null
           created_at: string | null
           description: string
           gross_amount: number
@@ -5120,6 +5133,9 @@ export type Database = {
           invoice_id: string
           line_number: number
           net_amount: number
+          paid_amount: number | null
+          paid_at: string | null
+          payment_status: string | null
           quantity: number
           unit_price: number
           vat_amount: number
@@ -5128,6 +5144,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          cash_vat_recognised?: number | null
           created_at?: string | null
           description: string
           gross_amount: number
@@ -5135,6 +5152,9 @@ export type Database = {
           invoice_id: string
           line_number: number
           net_amount: number
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_status?: string | null
           quantity?: number
           unit_price: number
           vat_amount?: number
@@ -5143,6 +5163,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          cash_vat_recognised?: number | null
           created_at?: string | null
           description?: string
           gross_amount?: number
@@ -5150,6 +5171,9 @@ export type Database = {
           invoice_id?: string
           line_number?: number
           net_amount?: number
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_status?: string | null
           quantity?: number
           unit_price?: number
           vat_amount?: number
@@ -6250,6 +6274,9 @@ export type Database = {
           jurisdiction: string | null
           net_amount: number | null
           organization_id: string
+          paid_amount: number | null
+          paid_at: string | null
+          payment_status: string | null
           reverse_charge: boolean | null
           source_id: string | null
           source_type: string
@@ -6283,6 +6310,9 @@ export type Database = {
           jurisdiction?: string | null
           net_amount?: number | null
           organization_id: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_status?: string | null
           reverse_charge?: boolean | null
           source_id?: string | null
           source_type: string
@@ -6316,6 +6346,9 @@ export type Database = {
           jurisdiction?: string | null
           net_amount?: number | null
           organization_id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_status?: string | null
           reverse_charge?: boolean | null
           source_id?: string | null
           source_type?: string
@@ -9651,6 +9684,8 @@ export type Database = {
       vat_periods: {
         Row: {
           cash_accounting_enabled: boolean | null
+          cash_excluded_vat: number | null
+          cash_included_vat: number | null
           client_id: string | null
           company_id: string | null
           computed_box1: number | null
@@ -9679,14 +9714,18 @@ export type Database = {
           period_start: string
           reconciliation_difference: number | null
           reconciliation_status: string | null
+          scheme_parameters: Json | null
           status: string
           updated_at: string
+          vat_registration_id: string | null
           vat_scheme: string
           vrn: string
           workpaper_instance_id: string | null
         }
         Insert: {
           cash_accounting_enabled?: boolean | null
+          cash_excluded_vat?: number | null
+          cash_included_vat?: number | null
           client_id?: string | null
           company_id?: string | null
           computed_box1?: number | null
@@ -9715,14 +9754,18 @@ export type Database = {
           period_start: string
           reconciliation_difference?: number | null
           reconciliation_status?: string | null
+          scheme_parameters?: Json | null
           status?: string
           updated_at?: string
+          vat_registration_id?: string | null
           vat_scheme?: string
           vrn: string
           workpaper_instance_id?: string | null
         }
         Update: {
           cash_accounting_enabled?: boolean | null
+          cash_excluded_vat?: number | null
+          cash_included_vat?: number | null
           client_id?: string | null
           company_id?: string | null
           computed_box1?: number | null
@@ -9751,8 +9794,10 @@ export type Database = {
           period_start?: string
           reconciliation_difference?: number | null
           reconciliation_status?: string | null
+          scheme_parameters?: Json | null
           status?: string
           updated_at?: string
+          vat_registration_id?: string | null
           vat_scheme?: string
           vrn?: string
           workpaper_instance_id?: string | null
@@ -9777,6 +9822,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_periods_vat_registration_id_fkey"
+            columns: ["vat_registration_id"]
+            isOneToOne: false
+            referencedRelation: "vat_registrations"
             referencedColumns: ["id"]
           },
         ]
@@ -9882,6 +9934,103 @@ export type Database = {
             columns: ["vat_period_id"]
             isOneToOne: false
             referencedRelation: "vat_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vat_registrations: {
+        Row: {
+          annual_accounting_joined_at: string | null
+          annual_accounting_payment_schedule: string | null
+          cash_scheme_joined_at: string | null
+          cash_scheme_threshold: number | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          effective_to: string | null
+          flat_rate_first_year_discount: boolean | null
+          flat_rate_percentage: number | null
+          flat_rate_trade_sector: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          partial_exemption_applicable: boolean | null
+          partial_exemption_method: string | null
+          partial_exemption_rate: number | null
+          scheme: string
+          updated_at: string
+          vrn: string
+        }
+        Insert: {
+          annual_accounting_joined_at?: string | null
+          annual_accounting_payment_schedule?: string | null
+          cash_scheme_joined_at?: string | null
+          cash_scheme_threshold?: number | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          effective_to?: string | null
+          flat_rate_first_year_discount?: boolean | null
+          flat_rate_percentage?: number | null
+          flat_rate_trade_sector?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          partial_exemption_applicable?: boolean | null
+          partial_exemption_method?: string | null
+          partial_exemption_rate?: number | null
+          scheme?: string
+          updated_at?: string
+          vrn: string
+        }
+        Update: {
+          annual_accounting_joined_at?: string | null
+          annual_accounting_payment_schedule?: string | null
+          cash_scheme_joined_at?: string | null
+          cash_scheme_threshold?: number | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          flat_rate_first_year_discount?: boolean | null
+          flat_rate_percentage?: number | null
+          flat_rate_trade_sector?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          partial_exemption_applicable?: boolean | null
+          partial_exemption_method?: string | null
+          partial_exemption_rate?: number | null
+          scheme?: string
+          updated_at?: string
+          vrn?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_registrations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_registrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_registrations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -10261,6 +10410,15 @@ export type Database = {
         Returns: Json
       }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
+      calculate_cash_vat_proportion: {
+        Args: {
+          p_gross_amount: number
+          p_net_amount: number
+          p_paid_amount: number
+          p_vat_amount: number
+        }
+        Returns: number
+      }
       calculate_deadline: {
         Args: {
           filing_type: string
@@ -10371,6 +10529,43 @@ export type Database = {
       generate_invite_token: { Args: never; Returns: string }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
+      get_active_vat_registration: {
+        Args: {
+          p_as_of_date?: string
+          p_entity_id: string
+          p_entity_type: string
+        }
+        Returns: {
+          annual_accounting_joined_at: string | null
+          annual_accounting_payment_schedule: string | null
+          cash_scheme_joined_at: string | null
+          cash_scheme_threshold: number | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          effective_to: string | null
+          flat_rate_first_year_discount: boolean | null
+          flat_rate_percentage: number | null
+          flat_rate_trade_sector: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          partial_exemption_applicable: boolean | null
+          partial_exemption_method: string | null
+          partial_exemption_rate: number | null
+          scheme: string
+          updated_at: string
+          vrn: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vat_registrations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_portal_bank_accounts_for_entity: {
         Args: { _client_id?: string; _company_id?: string; _user_id: string }
         Returns: {
