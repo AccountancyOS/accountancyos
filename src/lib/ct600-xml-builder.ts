@@ -122,9 +122,9 @@ export function buildCT600XML(input: CT600XMLInput): CT600XMLResult {
     <!-- Box 430: Corporation tax -->
     <Box430>${formatAmount(ct.corporation_tax_due)}</Box430>
     
-    ${ct.marginal_relief > 0 ? `
+    ${ct.marginal_relief_amount > 0 ? `
     <!-- Box 435: Marginal relief -->
-    <Box435>${formatAmount(ct.marginal_relief)}</Box435>
+    <Box435>${formatAmount(ct.marginal_relief_amount)}</Box435>
     ` : ''}
     
     <!-- Box 440: Net corporation tax payable -->

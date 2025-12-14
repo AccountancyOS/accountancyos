@@ -384,10 +384,10 @@ export function generateCTComputationiXBRL(
     <td class="amount">${formatNumber(result.tax_at_main_rate)}</td>
   </tr>
   
-  ${result.marginal_relief > 0 ? `
+  ${result.marginal_relief_amount > 0 ? `
   <tr>
     <td>Less: Marginal relief</td>
-    <td class="amount">(${formatNumber(result.marginal_relief)})</td>
+    <td class="amount">(${formatNumber(result.marginal_relief_amount)})</td>
   </tr>
   ` : ''}
   

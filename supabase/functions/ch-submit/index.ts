@@ -163,11 +163,16 @@ serve(async (req: Request) => {
       );
     }
 
-    // Build the XML payload based on filing type
+    // Determine filing type and build appropriate payload
     let xmlPayload: string;
     let transactionId: string;
+    let ixbrlContent: string | null = null;
+    let ixbrlHash: string | null = null;
 
-    if (filing.filing_type === 'CS01') {
+    const filingType = filing.filing_type;
+
+    if (filingType === 'CS01') {
+      // Confirmation Statement
       const result = buildCS01XML({
         companyNumber: company.company_number,
         companyName: company.company_name,
@@ -182,9 +187,49 @@ serve(async (req: Request) => {
       });
       xmlPayload = result.xml;
       transactionId = result.transactionId;
-    } else if (filing.filing_type === 'AA' || filing.filing_type === 'companies_house_accounts') {
-      // Accounts filing - generate iXBRL
-      // For now, return a stub response as full iXBRL requires workpaper integration
+
+    } else if (filingType === 'AA' || filingType === 'companies_house_accounts' || filingType === 'ACCOUNTS_CH') {
+      // Accounts filing - requires ACCOUNTS approval and iXBRL artefact
+
+      // Check for ACCOUNTS approval
+      const { data: approval } = await supabase
+        .from('filing_approvals')
+        .select('*')
+        .eq('filing_id', filingId)
+        .eq('approval_scope', 'ACCOUNTS')
+        .is('revoked_at', null)
+        .single();
+
+      if (!approval) {
+        console.error('[ch-submit] ACCOUNTS approval required');
+        return new Response(
+          JSON.stringify({ success: false, message: 'ACCOUNTS approval required before submission' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Get iXBRL accounts artefact (must already exist - no regeneration)
+      const { data: ixbrlArtefact } = await supabase
+        .from('filing_artefacts')
+        .select('*')
+        .eq('filing_id', filingId)
+        .eq('artefact_type', 'IXBRL_ACCOUNTS')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!ixbrlArtefact) {
+        console.error('[ch-submit] iXBRL accounts artefact not found');
+        return new Response(
+          JSON.stringify({ success: false, message: 'iXBRL accounts artefact not found - generate filing documents first' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      ixbrlContent = ixbrlArtefact.content;
+      ixbrlHash = ixbrlArtefact.content_hash;
+
+      // Build accounts submission XML with embedded iXBRL
       const result = buildAccountsSubmission({
         companyNumber: company.company_number,
         companyName: company.company_name,
@@ -196,24 +241,46 @@ serve(async (req: Request) => {
           email: orgCH?.presenter_email || '',
         },
         authCode: company.companies_house_auth_code,
-        filingData: filing.filing_data,
-        registeredOffice: {
-          line1: company.address_line_1 || '',
-          line2: company.address_line_2 || '',
-          city: company.city || '',
-          postcode: company.postcode || '',
-          country: company.country || 'United Kingdom',
-        },
+        ixbrlContent: ixbrlContent!,
+        accountsType: filing.filing_data?.accounts_type || 'micro',
       });
       xmlPayload = result.xml;
       transactionId = result.transactionId;
+
     } else {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: `Unsupported filing type: ${filing.filing_type}. Supported: CS01, AA (accounts).`
+          message: `Unsupported filing type: ${filingType}. Supported: CS01, AA, companies_house_accounts, ACCOUNTS_CH.`
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check idempotency
+    const snapshotHash = filing.accounts_snapshot_id ? 
+      (await supabase.from('accounts_model_snapshots').select('snapshot_hash').eq('id', filing.accounts_snapshot_id).single()).data?.snapshot_hash 
+      : null;
+    
+    const idempotencyKey = `ch:${filingType}:${filing.company_id}:${filing.period_end}:${snapshotHash || transactionId}`;
+
+    const { data: existingSubmission } = await supabase
+      .from('filing_submissions')
+      .select('id, ch_transaction_id, status')
+      .eq('idempotency_key', idempotencyKey)
+      .in('status', ['pending', 'accepted', 'submitted'])
+      .maybeSingle();
+
+    if (existingSubmission) {
+      console.log('[ch-submit] Duplicate submission detected');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Filing already submitted with this data',
+          existingSubmissionId: existingSubmission.id,
+          existingTransactionId: existingSubmission.ch_transaction_id
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 }
       );
     }
 
@@ -224,8 +291,10 @@ serve(async (req: Request) => {
         filing_id: filingId,
         organization_id: filing.organization_id,
         environment,
-        filing_type: filing.filing_type,
+        provider: 'companies_house',
+        filing_type: filingType,
         request_payload: xmlPayload,
+        idempotency_key: idempotencyKey,
         status: 'pending',
       })
       .select('id')
@@ -235,8 +304,14 @@ serve(async (req: Request) => {
       console.error('Failed to create submission record:', submissionError);
     }
 
+    // Update filing status to submitting
+    await supabase
+      .from('filings')
+      .update({ status: 'submitting' })
+      .eq('id', filingId);
+
     // Submit to Companies House
-    console.log(`Submitting ${filing.filing_type} to CH (${environment})...`);
+    console.log(`[ch-submit] Submitting ${filingType} to CH (${environment})...`);
     
     const chEndpoint = CH_ENDPOINTS[environment as keyof typeof CH_ENDPOINTS];
     const authString = btoa(`${apiKey}:`);
@@ -255,7 +330,7 @@ serve(async (req: Request) => {
       });
       
       responseText = await chResponse.text();
-      console.log(`CH Response status: ${chResponse.status}`);
+      console.log(`[ch-submit] CH Response status: ${chResponse.status}`);
     } catch (fetchError: any) {
       console.error('Failed to call Companies House API:', fetchError);
       
@@ -271,6 +346,11 @@ serve(async (req: Request) => {
           .eq('id', submission.id);
       }
 
+      await supabase
+        .from('filings')
+        .update({ status: 'submission_failed' })
+        .eq('id', filingId);
+
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -283,7 +363,7 @@ serve(async (req: Request) => {
     }
 
     // Parse the response
-    const parseResult = parseCS01Response(responseText);
+    const parseResult = parseCHResponse(responseText);
     
     // Determine final status
     let finalStatus: string;
@@ -326,6 +406,8 @@ serve(async (req: Request) => {
         filingUpdate.status = 'submitted';
         filingUpdate.ch_transaction_id = parseResult.transactionId;
       }
+    } else {
+      filingUpdate.status = 'submission_failed';
     }
 
     await supabase
@@ -344,14 +426,15 @@ serve(async (req: Request) => {
         user_id: user.id,
         metadata: {
           environment,
-          filing_type: filing.filing_type,
+          filing_type: filingType,
           status: finalStatus,
           transaction_id: parseResult.transactionId,
           submission_id: submission?.id,
+          ixbrl_hash: ixbrlHash,
         },
       });
 
-    console.log(`Filing submission complete: ${finalStatus}`);
+    console.log(`[ch-submit] Filing submission complete: ${finalStatus}`);
 
     return new Response(
       JSON.stringify({
@@ -400,47 +483,19 @@ interface AccountsBuildInput {
     email: string;
   };
   authCode: string;
-  filingData: any;
-  registeredOffice: {
-    line1: string;
-    line2: string;
-    city: string;
-    postcode: string;
-    country: string;
-  };
+  ixbrlContent: string;
+  accountsType: 'micro' | 'small';
 }
 
 function buildAccountsSubmission(input: AccountsBuildInput): { xml: string; transactionId: string } {
   const transactionId = `AA-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   const timestamp = new Date().toISOString();
-  const filingData = input.filingData || {};
   
-  // Extract balance sheet data from filing_data (mapped from workpaper)
-  const balanceSheet = filingData.balance_sheet || {};
-  const profitLoss = filingData.profit_loss || {};
-  const notes = filingData.notes || {};
-  const approval = filingData.approval || {};
-  const accountsType = filingData.accounts_type || 'micro'; // micro or small
-  
-  // Calculate totals for balance sheet
-  const fixedAssets = Number(balanceSheet.tangible_assets || 0) + 
-                      Number(balanceSheet.intangible_assets || 0) + 
-                      Number(balanceSheet.investments || 0);
-  const currentAssets = Number(balanceSheet.stock || 0) + 
-                        Number(balanceSheet.debtors || 0) + 
-                        Number(balanceSheet.cash_at_bank || 0);
-  const totalAssets = fixedAssets + currentAssets;
-  const creditorsWithin = Number(balanceSheet.creditors_within_one_year || 0);
-  const creditorsAfter = Number(balanceSheet.creditors_after_one_year || 0);
-  const netAssets = totalAssets - creditorsWithin - creditorsAfter;
-  const shareCapital = Number(balanceSheet.share_capital || 0);
-  const retainedEarnings = Number(balanceSheet.retained_earnings || 0);
-  const totalEquity = shareCapital + retainedEarnings;
-  
-  // Build a stub iXBRL document for CH sandbox
-  // In production, this would use a proper iXBRL generator (third-party or full implementation)
   const periodStartFormatted = input.periodStart ? input.periodStart.split('T')[0] : '';
   const periodEndFormatted = input.periodEnd ? input.periodEnd.split('T')[0] : '';
+  
+  // Encode iXBRL content as base64 for attachment
+  const ixbrlBase64 = btoa(unescape(encodeURIComponent(input.ixbrlContent)));
   
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
@@ -454,7 +509,7 @@ function buildAccountsSubmission(input: AccountsBuildInput): { xml: string; tran
       <CorrelationID/>
       <ResponseEndPoint PollInterval="10"/>
       <Transformation>XML</Transformation>
-      <GatewayTest>0</GatewayTest>
+      <GatewayTest>${input.presenter.id.startsWith('TEST') ? '1' : '0'}</GatewayTest>
     </MessageDetails>
     <SenderDetails>
       <IDAuthentication>
@@ -475,101 +530,33 @@ function buildAccountsSubmission(input: AccountsBuildInput): { xml: string; tran
     </Keys>
   </GovTalkDetails>
   <Body>
-    <AnnualAccounts xmlns="http://xmlgw.companieshouse.gov.uk/v1-0/schema">
-      <CompanyNumber>${escapeXml(input.companyNumber)}</CompanyNumber>
-      <CompanyName>${escapeXml(input.companyName)}</CompanyName>
-      <AccountsType>${accountsType === 'small' ? 'SmallCompany' : 'MicroEntity'}</AccountsType>
-      <AccountingStandard>${accountsType === 'small' ? 'FRS102-1A' : 'FRS105'}</AccountingStandard>
-      
-      <PeriodStart>${periodStartFormatted}</PeriodStart>
-      <PeriodEnd>${periodEndFormatted}</PeriodEnd>
-      
-      <RegisteredOffice>
-        <Line1>${escapeXml(input.registeredOffice.line1)}</Line1>
-        <Line2>${escapeXml(input.registeredOffice.line2)}</Line2>
-        <City>${escapeXml(input.registeredOffice.city)}</City>
-        <PostCode>${escapeXml(input.registeredOffice.postcode)}</PostCode>
-        <Country>${escapeXml(input.registeredOffice.country)}</Country>
-      </RegisteredOffice>
-      
-      <BalanceSheet>
-        <FixedAssets>
-          <TangibleAssets>${balanceSheet.tangible_assets || 0}</TangibleAssets>
-          <IntangibleAssets>${balanceSheet.intangible_assets || 0}</IntangibleAssets>
-          <Investments>${balanceSheet.investments || 0}</Investments>
-          <Total>${fixedAssets}</Total>
-        </FixedAssets>
-        <CurrentAssets>
-          <Stock>${balanceSheet.stock || 0}</Stock>
-          <Debtors>${balanceSheet.debtors || 0}</Debtors>
-          <CashAtBank>${balanceSheet.cash_at_bank || 0}</CashAtBank>
-          <Total>${currentAssets}</Total>
-        </CurrentAssets>
-        <TotalAssets>${totalAssets}</TotalAssets>
-        <CreditorsWithinOneYear>${creditorsWithin}</CreditorsWithinOneYear>
-        <NetCurrentAssets>${currentAssets - creditorsWithin}</NetCurrentAssets>
-        <TotalAssetsLessCurrentLiabilities>${totalAssets - creditorsWithin}</TotalAssetsLessCurrentLiabilities>
-        <CreditorsAfterOneYear>${creditorsAfter}</CreditorsAfterOneYear>
-        <NetAssets>${netAssets}</NetAssets>
-        <CapitalAndReserves>
-          <CalledUpShareCapital>${shareCapital}</CalledUpShareCapital>
-          <SharePremium>${balanceSheet.share_premium || 0}</SharePremium>
-          <ProfitAndLossReserve>${retainedEarnings}</ProfitAndLossReserve>
-          <Total>${totalEquity}</Total>
-        </CapitalAndReserves>
-      </BalanceSheet>
-      
-      ${accountsType === 'small' ? `
-      <ProfitAndLoss>
-        <Turnover>${profitLoss.turnover || 0}</Turnover>
-        <CostOfSales>${profitLoss.cost_of_sales || 0}</CostOfSales>
-        <GrossProfit>${(profitLoss.turnover || 0) - (profitLoss.cost_of_sales || 0)}</GrossProfit>
-        <AdministrativeExpenses>${profitLoss.administrative_expenses || 0}</AdministrativeExpenses>
-        <OperatingProfit>${(profitLoss.turnover || 0) - (profitLoss.cost_of_sales || 0) - (profitLoss.administrative_expenses || 0)}</OperatingProfit>
-        <InterestReceivable>${profitLoss.interest_receivable || 0}</InterestReceivable>
-        <InterestPayable>${profitLoss.interest_payable || 0}</InterestPayable>
-        <ProfitBeforeTax>${profitLoss.profit_before_tax || 0}</ProfitBeforeTax>
-        <TaxCharge>${profitLoss.corporation_tax || 0}</TaxCharge>
-        <ProfitAfterTax>${(profitLoss.profit_before_tax || 0) - (profitLoss.corporation_tax || 0)}</ProfitAfterTax>
-      </ProfitAndLoss>
-      ` : ''}
-      
-      <Notes>
-        <AccountingPolicies>
-          <GoingConcern>${notes.going_concern ? 'true' : 'false'}</GoingConcern>
-          <TurnoverPolicy>${escapeXml(notes.turnover_policy || 'Turnover represents amounts receivable for goods and services provided in the normal course of business.')}</TurnoverPolicy>
-          <DepreciationPolicy>${escapeXml(notes.depreciation_policy || 'Depreciation is provided on all tangible fixed assets at rates calculated to write off the cost over their expected useful lives.')}</DepreciationPolicy>
-        </AccountingPolicies>
-        <AverageEmployees>${notes.average_employees || 0}</AverageEmployees>
-        <DirectorsAdvances>
-          <Exist>${notes.directors_advances_exist ? 'true' : 'false'}</Exist>
-          ${notes.directors_advances_exist ? `<Details>${escapeXml(notes.directors_advances_details || '')}</Details>` : ''}
-        </DirectorsAdvances>
-        <RelatedPartyTransactions>
-          <Exist>${notes.related_party_transactions_exist ? 'true' : 'false'}</Exist>
-          ${notes.related_party_transactions_exist ? `<Details>${escapeXml(notes.related_party_details || '')}</Details>` : ''}
-        </RelatedPartyTransactions>
-        <Guarantees>
-          <Exist>${notes.guarantees_exist ? 'true' : 'false'}</Exist>
-          ${notes.guarantees_exist ? `<Details>${escapeXml(notes.guarantees_details || '')}</Details>` : ''}
-        </Guarantees>
-      </Notes>
-      
-      <Approval>
-        <ApprovedByBoard>${approval.approved_by_board ? 'true' : 'false'}</ApprovedByBoard>
-        <ApprovalDate>${approval.approval_date || new Date().toISOString().split('T')[0]}</ApprovalDate>
-        <SignatoryName>${escapeXml(approval.signatory_name || '')}</SignatoryName>
-        <SignatoryRole>${escapeXml(approval.signatory_role || 'Director')}</SignatoryRole>
-      </Approval>
-      
+    <FormSubmission xmlns="http://xmlgw.companieshouse.gov.uk/v1-0/schema">
+      <FormHeader>
+        <CompanyNumber>${escapeXml(input.companyNumber)}</CompanyNumber>
+        <CompanyName>${escapeXml(input.companyName)}</CompanyName>
+        <FormType>${input.accountsType === 'small' ? 'AA-SMALL' : 'AA-MICRO'}</FormType>
+      </FormHeader>
+      <DateSigned>${new Date().toISOString().split('T')[0]}</DateSigned>
+      <Document>
+        <Accounts>
+          <AccountsType>${input.accountsType === 'small' ? 'SmallCompany' : 'MicroEntity'}</AccountsType>
+          <AccountingStandard>${input.accountsType === 'small' ? 'FRS102-1A' : 'FRS105'}</AccountingStandard>
+          <PeriodStart>${periodStartFormatted}</PeriodStart>
+          <PeriodEnd>${periodEndFormatted}</PeriodEnd>
+          <IXBRL>
+            <Encoding>base64</Encoding>
+            <ContentType>text/html</ContentType>
+            <Content>${ixbrlBase64}</Content>
+          </IXBRL>
+        </Accounts>
+      </Document>
       <PresenterDetails>
         <PresenterID>${escapeXml(input.presenter.id)}</PresenterID>
         <PresenterName>${escapeXml(input.presenter.name)}</PresenterName>
         <PresenterEmail>${escapeXml(input.presenter.email)}</PresenterEmail>
       </PresenterDetails>
-      
       <Timestamp>${timestamp}</Timestamp>
-    </AnnualAccounts>
+    </FormSubmission>
   </Body>
 </GovTalkMessage>`;
 
@@ -655,7 +642,7 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
-interface CS01ParseResult {
+interface CHParseResult {
   success: boolean;
   transactionId?: string;
   status: 'pending' | 'accepted' | 'rejected' | 'error';
@@ -664,7 +651,7 @@ interface CS01ParseResult {
   submissionNumber?: string;
 }
 
-function parseCS01Response(responseXml: string): CS01ParseResult {
+function parseCHResponse(responseXml: string): CHParseResult {
   try {
     const getElement = (xml: string, tag: string): string | null => {
       const regex = new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i');
@@ -706,7 +693,7 @@ function parseCS01Response(responseXml: string): CS01ParseResult {
         status: submissionNumber ? 'accepted' : 'pending',
         transactionId: transactionId || undefined,
         submissionNumber: submissionNumber || undefined,
-        message: submissionNumber ? 'Confirmation Statement accepted' : 'Submission received',
+        message: submissionNumber ? 'Submission accepted' : 'Submission received',
       };
     }
 
