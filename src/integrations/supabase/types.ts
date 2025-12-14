@@ -7105,6 +7105,7 @@ export type Database = {
           stripe_subscription_id: string | null
           timezone: string | null
           updated_at: string
+          vat_reconciliation_tolerance: number | null
         }
         Insert: {
           address_line_1?: string | null
@@ -7127,6 +7128,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           timezone?: string | null
           updated_at?: string
+          vat_reconciliation_tolerance?: number | null
         }
         Update: {
           address_line_1?: string | null
@@ -7149,6 +7151,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           timezone?: string | null
           updated_at?: string
+          vat_reconciliation_tolerance?: number | null
         }
         Relationships: []
       }
@@ -9778,6 +9781,111 @@ export type Database = {
           },
         ]
       }
+      vat_reconciliations: {
+        Row: {
+          absolute_difference: number
+          acknowledged: boolean
+          acknowledged_at: string | null
+          acknowledged_by_user_id: string | null
+          acknowledgement_note: string | null
+          actual_vat: number
+          calculation_details: Json | null
+          classification: string
+          client_id: string | null
+          company_id: string | null
+          control_account_ids: string[] | null
+          created_at: string
+          difference: number
+          expected_vat: number
+          id: string
+          model_snapshot_id: string | null
+          organization_id: string
+          tolerance_amount: number
+          updated_at: string
+          vat_period_id: string
+        }
+        Insert: {
+          absolute_difference?: number
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by_user_id?: string | null
+          acknowledgement_note?: string | null
+          actual_vat?: number
+          calculation_details?: Json | null
+          classification?: string
+          client_id?: string | null
+          company_id?: string | null
+          control_account_ids?: string[] | null
+          created_at?: string
+          difference?: number
+          expected_vat?: number
+          id?: string
+          model_snapshot_id?: string | null
+          organization_id: string
+          tolerance_amount?: number
+          updated_at?: string
+          vat_period_id: string
+        }
+        Update: {
+          absolute_difference?: number
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by_user_id?: string | null
+          acknowledgement_note?: string | null
+          actual_vat?: number
+          calculation_details?: Json | null
+          classification?: string
+          client_id?: string | null
+          company_id?: string | null
+          control_account_ids?: string[] | null
+          created_at?: string
+          difference?: number
+          expected_vat?: number
+          id?: string
+          model_snapshot_id?: string | null
+          organization_id?: string
+          tolerance_amount?: number
+          updated_at?: string
+          vat_period_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_reconciliations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_reconciliations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_reconciliations_model_snapshot_id_fkey"
+            columns: ["model_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "filing_model_snapshots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_reconciliations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_reconciliations_vat_period_id_fkey"
+            columns: ["vat_period_id"]
+            isOneToOne: false
+            referencedRelation: "vat_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vat_returns: {
         Row: {
           box_1_vat_due_sales: number
@@ -10148,6 +10256,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acknowledge_vat_reconciliation: {
+        Args: { p_note?: string; p_reconciliation_id: string }
+        Returns: Json
+      }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       calculate_deadline: {
         Args: {

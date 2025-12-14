@@ -63,7 +63,8 @@ serve(async (req: Request) => {
       filingId, 
       snapshotId, 
       environment = 'sandbox',
-      vrn // VAT Registration Number
+      vrn, // VAT Registration Number
+      skipReconciliationCheck = false // For testing only
     } = await req.json();
 
     if (!filingId && !snapshotId) {
@@ -203,6 +204,76 @@ serve(async (req: Request) => {
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // PHASE 3D: Enforce reconciliation acknowledgement before submission
+    // This is a soft stop - once acknowledged, submission proceeds
+    if (!skipReconciliationCheck && filing?.id) {
+      // Get the VAT period for this filing
+      const { data: vatPeriod } = await supabase
+        .from('vat_periods')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .match(companyId ? { company_id: companyId } : {})
+        .gte('period_start', snapshot?.period_start || filing?.filing_data?.period_start)
+        .lte('period_end', snapshot?.period_end || filing?.filing_data?.period_end)
+        .maybeSingle();
+
+      if (vatPeriod) {
+        // Check for reconciliation
+        const { data: reconciliation } = await supabase
+          .from('vat_reconciliations')
+          .select('id, classification, acknowledged, difference')
+          .eq('vat_period_id', vatPeriod.id)
+          .maybeSingle();
+
+        if (reconciliation) {
+          // WARNING classification requires acknowledgement
+          if (reconciliation.classification === 'WARNING' && !reconciliation.acknowledged) {
+            // Log the blocked attempt
+            await supabase.from('audit_log').insert({
+              organization_id: organizationId,
+              entity_type: 'filing',
+              entity_id: filingId,
+              action: 'vat_submission_blocked_reconciliation',
+              user_id: user.id,
+              metadata: {
+                reconciliation_id: reconciliation.id,
+                difference: reconciliation.difference,
+                classification: reconciliation.classification,
+                message: 'Submission blocked: reconciliation warning not acknowledged',
+              },
+            });
+
+            return new Response(
+              JSON.stringify({
+                success: false,
+                message: `VAT control account difference of £${Math.abs(reconciliation.difference).toFixed(2)} requires acknowledgement before filing`,
+                error_code: 'VAT_RECONCILIATION_NOT_ACKNOWLEDGED',
+                reconciliation_id: reconciliation.id,
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Log that we're filing with an acknowledged warning
+          if (reconciliation.classification === 'WARNING' && reconciliation.acknowledged) {
+            await supabase.from('audit_log').insert({
+              organization_id: organizationId,
+              entity_type: 'filing',
+              entity_id: filingId,
+              action: 'VAT_FILED_WITH_RECONCILIATION_WARNING',
+              user_id: user.id,
+              metadata: {
+                reconciliation_id: reconciliation.id,
+                difference: reconciliation.difference,
+                classification: reconciliation.classification,
+                message: 'Filing proceeding with acknowledged reconciliation warning',
+              },
+            });
+          }
+        }
+      }
     }
 
     // Build VAT return payload from snapshot
