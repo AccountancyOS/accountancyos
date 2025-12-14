@@ -4757,6 +4757,75 @@ export type Database = {
           },
         ]
       }
+      filing_approvals: {
+        Row: {
+          approval_method: string
+          approval_reason: string | null
+          approval_scope: string
+          approved_at: string
+          approved_by: string | null
+          approved_by_role: string
+          created_at: string
+          filing_id: string
+          id: string
+          model_snapshot_id: string
+          organization_id: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          snapshot_hash: string
+        }
+        Insert: {
+          approval_method: string
+          approval_reason?: string | null
+          approval_scope: string
+          approved_at?: string
+          approved_by?: string | null
+          approved_by_role: string
+          created_at?: string
+          filing_id: string
+          id?: string
+          model_snapshot_id: string
+          organization_id: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          snapshot_hash: string
+        }
+        Update: {
+          approval_method?: string
+          approval_reason?: string | null
+          approval_scope?: string
+          approved_at?: string
+          approved_by?: string | null
+          approved_by_role?: string
+          created_at?: string
+          filing_id?: string
+          id?: string
+          model_snapshot_id?: string
+          organization_id?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          snapshot_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_approvals_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_approvals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filing_artefacts: {
         Row: {
           artefact_type: string
@@ -5131,6 +5200,88 @@ export type Database = {
           },
         ]
       }
+      filing_queue: {
+        Row: {
+          approval_id: string | null
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          filing_id: string
+          filing_type: string
+          id: string
+          idempotency_key: string
+          last_attempt_at: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          organization_id: string
+          priority: number
+          snapshot_hash: string
+          status: string
+        }
+        Insert: {
+          approval_id?: string | null
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          filing_id: string
+          filing_type: string
+          id?: string
+          idempotency_key: string
+          last_attempt_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          organization_id: string
+          priority?: number
+          snapshot_hash: string
+          status?: string
+        }
+        Update: {
+          approval_id?: string | null
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          filing_id?: string
+          filing_type?: string
+          id?: string
+          idempotency_key?: string
+          last_attempt_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          organization_id?: string
+          priority?: number
+          snapshot_hash?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_queue_approval_id_fkey"
+            columns: ["approval_id"]
+            isOneToOne: false
+            referencedRelation: "filing_approvals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_queue_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_queue_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filing_submissions: {
         Row: {
           ch_transaction_id: string | null
@@ -5273,6 +5424,9 @@ export type Database = {
       filings: {
         Row: {
           accepted_at: string | null
+          accounts_approval_id: string | null
+          accounts_snapshot_id: string | null
+          amendment_reason: string | null
           api_response: Json | null
           api_submission_id: string | null
           approval_requested_at: string | null
@@ -5284,6 +5438,8 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           created_at: string | null
+          ct_approval_id: string | null
+          ct_snapshot_id: string | null
           environment: string | null
           error_code: string | null
           error_detail: Json | null
@@ -5297,6 +5453,7 @@ export type Database = {
           generated_documents: Json | null
           id: string
           idempotency_key: string | null
+          is_amendment: boolean | null
           is_locked: boolean | null
           job_id: string
           last_submission_error: string | null
@@ -5305,6 +5462,7 @@ export type Database = {
           next_year_job_id: string | null
           obligation_id: string | null
           organization_id: string
+          original_filing_id: string | null
           payment_deadline: string | null
           period_end: string | null
           period_start: string | null
@@ -5323,6 +5481,9 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          accounts_approval_id?: string | null
+          accounts_snapshot_id?: string | null
+          amendment_reason?: string | null
           api_response?: Json | null
           api_submission_id?: string | null
           approval_requested_at?: string | null
@@ -5334,6 +5495,8 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          ct_approval_id?: string | null
+          ct_snapshot_id?: string | null
           environment?: string | null
           error_code?: string | null
           error_detail?: Json | null
@@ -5347,6 +5510,7 @@ export type Database = {
           generated_documents?: Json | null
           id?: string
           idempotency_key?: string | null
+          is_amendment?: boolean | null
           is_locked?: boolean | null
           job_id: string
           last_submission_error?: string | null
@@ -5355,6 +5519,7 @@ export type Database = {
           next_year_job_id?: string | null
           obligation_id?: string | null
           organization_id: string
+          original_filing_id?: string | null
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
@@ -5373,6 +5538,9 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          accounts_approval_id?: string | null
+          accounts_snapshot_id?: string | null
+          amendment_reason?: string | null
           api_response?: Json | null
           api_submission_id?: string | null
           approval_requested_at?: string | null
@@ -5384,6 +5552,8 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          ct_approval_id?: string | null
+          ct_snapshot_id?: string | null
           environment?: string | null
           error_code?: string | null
           error_detail?: Json | null
@@ -5397,6 +5567,7 @@ export type Database = {
           generated_documents?: Json | null
           id?: string
           idempotency_key?: string | null
+          is_amendment?: boolean | null
           is_locked?: boolean | null
           job_id?: string
           last_submission_error?: string | null
@@ -5405,6 +5576,7 @@ export type Database = {
           next_year_job_id?: string | null
           obligation_id?: string | null
           organization_id?: string
+          original_filing_id?: string | null
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
@@ -5469,6 +5641,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_original_filing_id_fkey"
+            columns: ["original_filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
             referencedColumns: ["id"]
           },
           {
@@ -11310,6 +11489,10 @@ export type Database = {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
       }
+      queue_filing_for_submission: {
+        Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
+        Returns: Json
+      }
       record_automation_execution: {
         Args: {
           p_action_result?: Json
@@ -11384,6 +11567,10 @@ export type Database = {
           filing_id: string
           is_valid: boolean
         }[]
+      }
+      validate_filing_submission: {
+        Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
+        Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
     }
