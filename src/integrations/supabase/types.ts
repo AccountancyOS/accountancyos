@@ -84,6 +84,78 @@ export type Database = {
           },
         ]
       }
+      accounts_model_snapshots: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          balance_sheet: Json
+          company_id: string
+          created_at: string
+          director_approval: Json
+          generator_version: string
+          id: string
+          notes: Json
+          organization_id: string
+          period_end: string
+          period_start: string
+          snapshot_hash: string
+          status: string
+          taxonomy_version: string
+          workpaper_instance_id: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          balance_sheet: Json
+          company_id: string
+          created_at?: string
+          director_approval?: Json
+          generator_version?: string
+          id?: string
+          notes?: Json
+          organization_id: string
+          period_end: string
+          period_start: string
+          snapshot_hash: string
+          status?: string
+          taxonomy_version?: string
+          workpaper_instance_id?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          balance_sheet?: Json
+          company_id?: string
+          created_at?: string
+          director_approval?: Json
+          generator_version?: string
+          id?: string
+          notes?: Json
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          snapshot_hash?: string
+          status?: string
+          taxonomy_version?: string
+          workpaper_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_model_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_model_snapshots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -1111,6 +1183,241 @@ export type Database = {
           },
           {
             foreignKeyName: "bookkeeping_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capital_allowance_claims: {
+        Row: {
+          amount: number
+          cap_period_id: string
+          claim_type: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          fixed_asset_id: string | null
+          id: string
+          is_manual_override: boolean
+          organization_id: string
+          override_reason: string | null
+          pool_id: string | null
+          rule_basis: Json | null
+        }
+        Insert: {
+          amount: number
+          cap_period_id: string
+          claim_type: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          fixed_asset_id?: string | null
+          id?: string
+          is_manual_override?: boolean
+          organization_id: string
+          override_reason?: string | null
+          pool_id?: string | null
+          rule_basis?: Json | null
+        }
+        Update: {
+          amount?: number
+          cap_period_id?: string
+          claim_type?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          fixed_asset_id?: string | null
+          id?: string
+          is_manual_override?: boolean
+          organization_id?: string
+          override_reason?: string | null
+          pool_id?: string | null
+          rule_basis?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_allowance_claims_cap_period_id_fkey"
+            columns: ["cap_period_id"]
+            isOneToOne: false
+            referencedRelation: "capital_allowance_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_claims_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_claims_fixed_asset_id_fkey"
+            columns: ["fixed_asset_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_claims_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_claims_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "capital_allowance_pools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capital_allowance_periods: {
+        Row: {
+          aia_limit_for_period: number
+          approved_at: string | null
+          approved_by: string | null
+          company_id: string
+          created_at: string
+          id: string
+          organization_id: string
+          period_end: string
+          period_start: string
+          short_period_factor: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          aia_limit_for_period?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          organization_id: string
+          period_end: string
+          period_start: string
+          short_period_factor?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          aia_limit_for_period?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          short_period_factor?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_allowance_periods_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_periods_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capital_allowance_pools: {
+        Row: {
+          additions: number
+          aia_claimed: number
+          balancing_allowance: number
+          balancing_charge: number
+          cap_period_id: string
+          closing_wdv: number
+          company_id: string
+          created_at: string
+          disposals: number
+          full_expensing_claimed: number
+          fya_claimed: number
+          id: string
+          metadata: Json | null
+          opening_wdv: number
+          organization_id: string
+          pool_name: string | null
+          pool_type: string
+          updated_at: string
+          wda_claimed: number
+          wda_rate: number
+        }
+        Insert: {
+          additions?: number
+          aia_claimed?: number
+          balancing_allowance?: number
+          balancing_charge?: number
+          cap_period_id: string
+          closing_wdv?: number
+          company_id: string
+          created_at?: string
+          disposals?: number
+          full_expensing_claimed?: number
+          fya_claimed?: number
+          id?: string
+          metadata?: Json | null
+          opening_wdv?: number
+          organization_id: string
+          pool_name?: string | null
+          pool_type: string
+          updated_at?: string
+          wda_claimed?: number
+          wda_rate?: number
+        }
+        Update: {
+          additions?: number
+          aia_claimed?: number
+          balancing_allowance?: number
+          balancing_charge?: number
+          cap_period_id?: string
+          closing_wdv?: number
+          company_id?: string
+          created_at?: string
+          disposals?: number
+          full_expensing_claimed?: number
+          fya_claimed?: number
+          id?: string
+          metadata?: Json | null
+          opening_wdv?: number
+          organization_id?: string
+          pool_name?: string | null
+          pool_type?: string
+          updated_at?: string
+          wda_claimed?: number
+          wda_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capital_allowance_pools_cap_period_id_fkey"
+            columns: ["cap_period_id"]
+            isOneToOne: false
+            referencedRelation: "capital_allowance_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_pools_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capital_allowance_pools_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -3045,6 +3352,109 @@ export type Database = {
           },
         ]
       }
+      ct_computation_snapshots: {
+        Row: {
+          accounting_profit: number
+          accounts_snapshot_id: string
+          add_backs: Json
+          approved_at: string | null
+          approved_by: string | null
+          balancing_charges: number
+          cap_period_id: string | null
+          claims_summary: Json
+          company_id: string
+          corporation_tax_due: number
+          corporation_tax_rate: number
+          created_at: string
+          deductions: Json
+          generator_version: string
+          id: string
+          marginal_relief: number
+          organization_id: string
+          period_end: string
+          period_start: string
+          pools_summary: Json
+          snapshot_hash: string
+          status: string
+          taxable_total_profits: number
+          total_capital_allowances: number
+        }
+        Insert: {
+          accounting_profit: number
+          accounts_snapshot_id: string
+          add_backs?: Json
+          approved_at?: string | null
+          approved_by?: string | null
+          balancing_charges?: number
+          cap_period_id?: string | null
+          claims_summary?: Json
+          company_id: string
+          corporation_tax_due: number
+          corporation_tax_rate: number
+          created_at?: string
+          deductions?: Json
+          generator_version?: string
+          id?: string
+          marginal_relief?: number
+          organization_id: string
+          period_end: string
+          period_start: string
+          pools_summary?: Json
+          snapshot_hash: string
+          status?: string
+          taxable_total_profits: number
+          total_capital_allowances?: number
+        }
+        Update: {
+          accounting_profit?: number
+          accounts_snapshot_id?: string
+          add_backs?: Json
+          approved_at?: string | null
+          approved_by?: string | null
+          balancing_charges?: number
+          cap_period_id?: string | null
+          claims_summary?: Json
+          company_id?: string
+          corporation_tax_due?: number
+          corporation_tax_rate?: number
+          created_at?: string
+          deductions?: Json
+          generator_version?: string
+          id?: string
+          marginal_relief?: number
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          pools_summary?: Json
+          snapshot_hash?: string
+          status?: string
+          taxable_total_profits?: number
+          total_capital_allowances?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ct_computation_snapshots_cap_period_id_fkey"
+            columns: ["cap_period_id"]
+            isOneToOne: false
+            referencedRelation: "capital_allowance_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ct_computation_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ct_computation_snapshots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address_line_1: string | null
@@ -4347,6 +4757,57 @@ export type Database = {
           },
         ]
       }
+      filing_artefacts: {
+        Row: {
+          artefact_type: string
+          content: string
+          content_hash: string
+          created_at: string
+          filing_id: string
+          generator_version: string
+          id: string
+          organization_id: string
+          taxonomy_version: string | null
+        }
+        Insert: {
+          artefact_type: string
+          content: string
+          content_hash: string
+          created_at?: string
+          filing_id: string
+          generator_version?: string
+          id?: string
+          organization_id: string
+          taxonomy_version?: string | null
+        }
+        Update: {
+          artefact_type?: string
+          content?: string
+          content_hash?: string
+          created_at?: string
+          filing_id?: string
+          generator_version?: string
+          id?: string
+          organization_id?: string
+          taxonomy_version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_artefacts_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_artefacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filing_documents: {
         Row: {
           created_at: string
@@ -5015,6 +5476,156 @@ export type Database = {
             columns: ["workpaper_instance_id"]
             isOneToOne: false
             referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fixed_asset_transactions: {
+        Row: {
+          accounting_period_end: string
+          accounting_period_start: string
+          amount_net: number
+          created_at: string
+          created_by: string | null
+          disposal_proceeds: number | null
+          fixed_asset_id: string
+          id: string
+          notes: string | null
+          organization_id: string
+          transaction_type: string
+        }
+        Insert: {
+          accounting_period_end: string
+          accounting_period_start: string
+          amount_net: number
+          created_at?: string
+          created_by?: string | null
+          disposal_proceeds?: number | null
+          fixed_asset_id: string
+          id?: string
+          notes?: string | null
+          organization_id: string
+          transaction_type: string
+        }
+        Update: {
+          accounting_period_end?: string
+          accounting_period_start?: string
+          amount_net?: number
+          created_at?: string
+          created_by?: string | null
+          disposal_proceeds?: number | null
+          fixed_asset_id?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_asset_transactions_fixed_asset_id_fkey"
+            columns: ["fixed_asset_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_asset_transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fixed_assets: {
+        Row: {
+          acquisition_date: string
+          asset_category: string
+          asset_name: string
+          attachment_path: string | null
+          brought_into_use_date: string | null
+          business_use_percentage: number
+          car_co2_g_km: number | null
+          car_is_electric: boolean | null
+          car_list_price: number | null
+          company_id: string
+          cost: number
+          created_at: string
+          created_by: string | null
+          default_pool_type: string
+          disposal_date: string | null
+          disposal_proceeds: number | null
+          id: string
+          invoice_reference: string | null
+          is_car: boolean
+          notes: string | null
+          organization_id: string
+          supplier: string | null
+          updated_at: string
+        }
+        Insert: {
+          acquisition_date: string
+          asset_category: string
+          asset_name: string
+          attachment_path?: string | null
+          brought_into_use_date?: string | null
+          business_use_percentage?: number
+          car_co2_g_km?: number | null
+          car_is_electric?: boolean | null
+          car_list_price?: number | null
+          company_id: string
+          cost: number
+          created_at?: string
+          created_by?: string | null
+          default_pool_type?: string
+          disposal_date?: string | null
+          disposal_proceeds?: number | null
+          id?: string
+          invoice_reference?: string | null
+          is_car?: boolean
+          notes?: string | null
+          organization_id: string
+          supplier?: string | null
+          updated_at?: string
+        }
+        Update: {
+          acquisition_date?: string
+          asset_category?: string
+          asset_name?: string
+          attachment_path?: string | null
+          brought_into_use_date?: string | null
+          business_use_percentage?: number
+          car_co2_g_km?: number | null
+          car_is_electric?: boolean | null
+          car_list_price?: number | null
+          company_id?: string
+          cost?: number
+          created_at?: string
+          created_by?: string | null
+          default_pool_type?: string
+          disposal_date?: string | null
+          disposal_proceeds?: number | null
+          id?: string
+          invoice_reference?: string | null
+          is_car?: boolean
+          notes?: string | null
+          organization_id?: string
+          supplier?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_assets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_assets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
