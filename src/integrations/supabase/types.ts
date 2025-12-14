@@ -4442,55 +4442,150 @@ export type Database = {
           },
         ]
       }
+      filing_model_snapshots: {
+        Row: {
+          approved_at: string
+          approved_by: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          generator_version: string
+          id: string
+          organization_id: string
+          period_end: string
+          period_start: string
+          snapshot_data: Json
+          snapshot_hash: string
+          snapshot_type: string
+          source_ledger_version: string | null
+          source_workpaper_id: string | null
+        }
+        Insert: {
+          approved_at?: string
+          approved_by?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          generator_version?: string
+          id?: string
+          organization_id: string
+          period_end: string
+          period_start: string
+          snapshot_data: Json
+          snapshot_hash: string
+          snapshot_type: string
+          source_ledger_version?: string | null
+          source_workpaper_id?: string | null
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          generator_version?: string
+          id?: string
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          snapshot_data?: Json
+          snapshot_hash?: string
+          snapshot_type?: string
+          source_ledger_version?: string | null
+          source_workpaper_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filing_model_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_model_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_model_snapshots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_model_snapshots_source_workpaper_id_fkey"
+            columns: ["source_workpaper_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filing_submissions: {
         Row: {
           ch_transaction_id: string | null
+          correlation_id: string | null
           created_at: string
           environment: string
           error_message: string | null
           filing_id: string | null
           filing_type: string
           id: string
+          idempotency_key: string | null
           organization_id: string
+          provider: string | null
           request_headers: Json | null
           request_payload: string | null
           response_headers: Json | null
           response_payload: string | null
           response_status_code: number | null
+          snapshot_id: string | null
           status: string
           submitted_at: string
         }
         Insert: {
           ch_transaction_id?: string | null
+          correlation_id?: string | null
           created_at?: string
           environment: string
           error_message?: string | null
           filing_id?: string | null
           filing_type: string
           id?: string
+          idempotency_key?: string | null
           organization_id: string
+          provider?: string | null
           request_headers?: Json | null
           request_payload?: string | null
           response_headers?: Json | null
           response_payload?: string | null
           response_status_code?: number | null
+          snapshot_id?: string | null
           status?: string
           submitted_at?: string
         }
         Update: {
           ch_transaction_id?: string | null
+          correlation_id?: string | null
           created_at?: string
           environment?: string
           error_message?: string | null
           filing_id?: string | null
           filing_type?: string
           id?: string
+          idempotency_key?: string | null
           organization_id?: string
+          provider?: string | null
           request_headers?: Json | null
           request_payload?: string | null
           response_headers?: Json | null
           response_payload?: string | null
           response_status_code?: number | null
+          snapshot_id?: string | null
           status?: string
           submitted_at?: string
         }
@@ -4507,6 +4602,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_submissions_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "filing_model_snapshots"
             referencedColumns: ["id"]
           },
         ]
@@ -4526,6 +4628,8 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           environment: string | null
+          error_code: string | null
+          error_detail: Json | null
           filed_at: string | null
           filed_by: string | null
           filing_body: string
@@ -4535,15 +4639,19 @@ export type Database = {
           filing_type: string
           generated_documents: Json | null
           id: string
+          idempotency_key: string | null
           is_locked: boolean | null
           job_id: string
           last_submission_error: string | null
+          model_snapshot_id: string | null
+          next_retry_at: string | null
           next_year_job_id: string | null
           organization_id: string
           payment_deadline: string | null
           period_end: string | null
           period_start: string | null
           rejection_reason: string | null
+          retry_count: number | null
           second_payment_date: string | null
           status: string
           submission_payload: Json | null
@@ -4568,6 +4676,8 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           environment?: string | null
+          error_code?: string | null
+          error_detail?: Json | null
           filed_at?: string | null
           filed_by?: string | null
           filing_body: string
@@ -4577,15 +4687,19 @@ export type Database = {
           filing_type: string
           generated_documents?: Json | null
           id?: string
+          idempotency_key?: string | null
           is_locked?: boolean | null
           job_id: string
           last_submission_error?: string | null
+          model_snapshot_id?: string | null
+          next_retry_at?: string | null
           next_year_job_id?: string | null
           organization_id: string
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
           rejection_reason?: string | null
+          retry_count?: number | null
           second_payment_date?: string | null
           status?: string
           submission_payload?: Json | null
@@ -4610,6 +4724,8 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           environment?: string | null
+          error_code?: string | null
+          error_detail?: Json | null
           filed_at?: string | null
           filed_by?: string | null
           filing_body?: string
@@ -4619,15 +4735,19 @@ export type Database = {
           filing_type?: string
           generated_documents?: Json | null
           id?: string
+          idempotency_key?: string | null
           is_locked?: boolean | null
           job_id?: string
           last_submission_error?: string | null
+          model_snapshot_id?: string | null
+          next_retry_at?: string | null
           next_year_job_id?: string | null
           organization_id?: string
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
           rejection_reason?: string | null
+          retry_count?: number | null
           second_payment_date?: string | null
           status?: string
           submission_payload?: Json | null
@@ -4658,6 +4778,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_model_snapshot_id_fkey"
+            columns: ["model_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "filing_model_snapshots"
             referencedColumns: ["id"]
           },
           {

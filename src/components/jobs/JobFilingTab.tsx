@@ -129,6 +129,9 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
   };
 
   const isCHFiling = filing?.filing_body === 'COMPANIES_HOUSE';
+  const isCS01Filing = filing?.filing_type === 'CS01';
+  // Phase 1: Only CS01 is submission-ready. Accounts requires iXBRL provider integration (Phase 2)
+  const canSubmitToCH = isCHFiling && isCS01Filing;
 
   const handleSubmitToCH = async () => {
     if (!filing) return;
@@ -354,8 +357,8 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
             </Button>
           )}
 
-          {/* Companies House Filing */}
-          {isCHFiling && canFile && (
+          {/* Companies House Filing - CS01 only for Phase 1 */}
+          {canSubmitToCH && canFile && (
             <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
               <div className="flex items-center gap-2">
                 <Building className="h-5 w-5 text-emerald-600" />
@@ -387,6 +390,21 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
                 )}
                 Submit to Companies House ({chEnvironment})
               </Button>
+            </div>
+          )}
+
+          {/* Accounts filing notice - iXBRL not yet implemented */}
+          {isCHFiling && !isCS01Filing && canFile && (
+            <div className="p-4 border border-amber-500/30 rounded-lg bg-amber-500/5">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-700">Accounts Filing Pending</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    CH accounts submission requires iXBRL generation (Phase 2). Use "Mark as Filed" for manual filing.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
