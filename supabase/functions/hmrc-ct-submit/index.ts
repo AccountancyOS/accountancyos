@@ -55,7 +55,48 @@ serve(async (req) => {
       );
     }
 
-    // Validate CT approval exists
+    // === SERVER-SIDE SUBMISSION GUARD ===
+    // Validate submission integrity using the database function
+    const { data: integrityCheck, error: integrityError } = await supabase.rpc(
+      'validate_submission_integrity',
+      { p_filing_id: filingId, p_filing_type: 'CT600_HMRC' }
+    );
+
+    if (integrityError) {
+      console.error('[hmrc-ct-submit] Integrity check error:', integrityError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Submission integrity check failed', details: integrityError.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const integrity = integrityCheck as { valid: boolean; errors: string[]; approval_id?: string; snapshot_hash?: string } | null;
+    if (integrity && !integrity.valid) {
+      console.error('[hmrc-ct-submit] Submission blocked by integrity check:', integrity.errors);
+      
+      // Log the blocked submission attempt
+      await supabase.from('filing_submissions').insert({
+        filing_id: filingId,
+        organization_id: filing.organization?.id || filing.organization_id,
+        environment,
+        status: 'blocked',
+        error_message: `Submission blocked: ${integrity.errors.join(', ')}`,
+        request_payload: { blocked_reason: 'integrity_check_failed', errors: integrity.errors }
+      });
+
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Submission blocked by integrity check',
+          errors: integrity.errors
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    console.log('[hmrc-ct-submit] Integrity check passed, approval_id:', integrity?.approval_id);
+
+    // Validate CT approval exists (already validated by integrity check, but keep for explicit check)
     const { data: approval } = await supabase
       .from('filing_approvals')
       .select('*')
@@ -72,7 +113,7 @@ serve(async (req) => {
       );
     }
 
-    // Validate snapshot hash matches
+    // Validate snapshot hash matches (already validated by integrity check)
     if (filing.ct_snapshot && approval.snapshot_hash !== filing.ct_snapshot.snapshot_hash) {
       console.error('[hmrc-ct-submit] Snapshot hash mismatch');
       return new Response(

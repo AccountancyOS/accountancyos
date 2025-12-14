@@ -156,6 +156,69 @@ export type Database = {
           },
         ]
       }
+      approval_revocation_log: {
+        Row: {
+          approval_id: string
+          approval_scope: string
+          filing_id: string
+          id: string
+          metadata: Json | null
+          new_snapshot_hash: string | null
+          new_snapshot_id: string | null
+          old_snapshot_hash: string | null
+          old_snapshot_id: string | null
+          organization_id: string
+          revocation_reason: string
+          revoked_at: string
+          system_actor: string
+        }
+        Insert: {
+          approval_id: string
+          approval_scope: string
+          filing_id: string
+          id?: string
+          metadata?: Json | null
+          new_snapshot_hash?: string | null
+          new_snapshot_id?: string | null
+          old_snapshot_hash?: string | null
+          old_snapshot_id?: string | null
+          organization_id: string
+          revocation_reason: string
+          revoked_at?: string
+          system_actor?: string
+        }
+        Update: {
+          approval_id?: string
+          approval_scope?: string
+          filing_id?: string
+          id?: string
+          metadata?: Json | null
+          new_snapshot_hash?: string | null
+          new_snapshot_id?: string | null
+          old_snapshot_hash?: string | null
+          old_snapshot_id?: string | null
+          organization_id?: string
+          revocation_reason?: string
+          revoked_at?: string
+          system_actor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_revocation_log_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_revocation_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -11560,6 +11623,10 @@ export type Database = {
         }
         Returns: string
       }
+      regress_filing_status: {
+        Args: { p_filing_id: string; p_reason: string }
+        Returns: undefined
+      }
       reverse_journal: {
         Args: {
           p_journal_id: string
@@ -11567,6 +11634,18 @@ export type Database = {
           p_reversal_date: string
         }
         Returns: Json
+      }
+      revoke_approval_with_audit: {
+        Args: {
+          p_approval_id: string
+          p_metadata?: Json
+          p_new_snapshot_hash: string
+          p_new_snapshot_id: string
+          p_old_snapshot_hash: string
+          p_old_snapshot_id: string
+          p_revocation_reason: string
+        }
+        Returns: undefined
       }
       seed_default_chart_of_accounts: {
         Args: {
@@ -11624,6 +11703,10 @@ export type Database = {
       }
       validate_filing_submission: {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
+        Returns: Json
+      }
+      validate_submission_integrity: {
+        Args: { p_filing_id: string; p_filing_type: string }
         Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
