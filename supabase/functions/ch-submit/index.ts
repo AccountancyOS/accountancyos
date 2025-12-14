@@ -124,6 +124,52 @@ serve(async (req: Request) => {
       );
     }
 
+    // === SERVER-SIDE SUBMISSION GUARD ===
+    // Validate submission integrity for ACCOUNTS filings
+    const filingTypeForValidation = filing.filing_type === 'AA' || 
+                                    filing.filing_type === 'companies_house_accounts' || 
+                                    filing.filing_type === 'ACCOUNTS_CH' 
+                                    ? 'ACCOUNTS_CH' : null;
+    
+    if (filingTypeForValidation) {
+      const { data: integrityCheck, error: integrityError } = await supabase.rpc(
+        'validate_submission_integrity',
+        { p_filing_id: filingId, p_filing_type: filingTypeForValidation }
+      );
+
+      if (integrityError) {
+        console.error('[ch-submit] Integrity check error:', integrityError);
+        return new Response(
+          JSON.stringify({ success: false, message: 'Submission integrity check failed', error: integrityError.message }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const integrity = integrityCheck as { valid: boolean; errors: string[] } | null;
+      if (integrity && !integrity.valid) {
+        console.error('[ch-submit] Submission blocked by integrity check:', integrity.errors);
+        
+        // Log the blocked submission attempt
+        await supabase.from('filing_submissions').insert({
+          filing_id: filingId,
+          organization_id: filing.organization_id,
+          environment,
+          status: 'blocked',
+          error_message: `Submission blocked: ${integrity.errors.join(', ')}`,
+          request_payload: { blocked_reason: 'integrity_check_failed', errors: integrity.errors }
+        });
+
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Submission blocked by integrity check',
+            errors: integrity.errors.map(e => ({ code: 'INTEGRITY', description: e }))
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Get presenter details from organization settings
     const { data: orgCH, error: orgCHError } = await supabase
       .from('organization_integrations_companies_house')
