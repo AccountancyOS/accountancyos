@@ -1,29 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 import { CapitalAllowancesResult } from "./capital-allowances-engine";
 
-// UK Corporation Tax Rates (19%/25% with marginal relief from April 2023)
-export const CT_RATES = {
-  // Pre-April 2023
-  PRE_2023: {
-    effective_from: new Date('2017-04-01'),
-    effective_to: new Date('2023-03-31'),
-    main_rate: 0.19,
-    small_profits_rate: 0.19,
-    lower_limit: 0,
-    upper_limit: Infinity,
-    marginal_relief_fraction: 0,
-  },
-  // From April 2023
-  POST_2023: {
-    effective_from: new Date('2023-04-01'),
-    effective_to: null,
-    main_rate: 0.25,
-    small_profits_rate: 0.19,
-    lower_limit: 50000,
-    upper_limit: 250000,
-    marginal_relief_fraction: 3 / 200, // 3/200ths
-  },
-} as const;
+// CT Rate regime interface
+export interface CTRateRegime {
+  id: string;
+  effective_from: string;
+  effective_to: string | null;
+  main_rate: number;
+  small_profits_rate: number;
+  lower_limit: number;
+  upper_limit: number;
+  marginal_relief_fraction: number;
+}
 
 export interface AddBack {
   description: string;
@@ -46,11 +34,11 @@ export interface CTComputationInput {
   accounts_snapshot_id: string;
   period_start: string;
   period_end: string;
-  accounting_profit: number; // From accounts
+  accounting_profit: number;
   add_backs: AddBack[];
   deductions: Deduction[];
   capital_allowances_result?: CapitalAllowancesResult;
-  associated_companies_count?: number; // Affects thresholds
+  associated_companies_count: number; // REQUIRED - must be explicitly provided
 }
 
 export interface CTComputationResult {
@@ -59,6 +47,9 @@ export interface CTComputationResult {
   period_start: string;
   period_end: string;
   short_period_factor: number;
+  
+  // Associated companies
+  associated_companies_count: number;
   
   // Profit reconciliation
   accounting_profit: number;
@@ -80,31 +71,56 @@ export interface CTComputationResult {
   // Rate determination
   applicable_rate: 'small_profits' | 'main' | 'marginal';
   effective_rate: number;
-  lower_limit: number;
-  upper_limit: number;
+  adjusted_lower_limit: number;
+  adjusted_upper_limit: number;
   
   // Tax calculation
   tax_at_main_rate: number;
-  marginal_relief: number;
+  marginal_relief_fraction: number;
+  marginal_relief_amount: number;
   corporation_tax_due: number;
   
   // Metadata
   snapshot_hash: string;
   generator_version: string;
+  rate_table_id: string;
+}
+
+// Fetch CT rate from database by period end date
+async function fetchCTRateRegime(periodEnd: Date): Promise<CTRateRegime> {
+  const periodEndStr = periodEnd.toISOString().split('T')[0];
+  
+  const { data, error } = await supabase
+    .from('ct_rate_tables')
+    .select('*')
+    .lte('effective_from', periodEndStr)
+    .or(`effective_to.is.null,effective_to.gte.${periodEndStr}`)
+    .order('effective_from', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    console.error('Failed to fetch CT rate regime:', error);
+    // Fallback to post-2023 rates if database lookup fails
+    return {
+      id: 'fallback-post-2023',
+      effective_from: '2023-04-01',
+      effective_to: null,
+      main_rate: 0.25,
+      small_profits_rate: 0.19,
+      lower_limit: 50000,
+      upper_limit: 250000,
+      marginal_relief_fraction: 0.015,
+    };
+  }
+
+  return data as CTRateRegime;
 }
 
 // Calculate short period factor
 function calculateShortPeriodFactor(periodStart: Date, periodEnd: Date): number {
   const days = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   return Math.min(days / 365, 1);
-}
-
-// Get applicable CT rate regime
-function getCTRateRegime(periodEnd: Date) {
-  if (periodEnd >= CT_RATES.POST_2023.effective_from) {
-    return CT_RATES.POST_2023;
-  }
-  return CT_RATES.PRE_2023;
 }
 
 // Adjust limits for short periods and associated companies
@@ -123,14 +139,6 @@ function adjustLimits(
   };
 }
 
-interface CTRateRegime {
-  main_rate: number;
-  small_profits_rate: number;
-  lower_limit: number;
-  upper_limit: number;
-  marginal_relief_fraction: number;
-}
-
 // Calculate corporation tax with marginal relief
 function calculateCorporationTax(
   taxableProfit: number,
@@ -140,10 +148,11 @@ function calculateCorporationTax(
 ): {
   applicable_rate: 'small_profits' | 'main' | 'marginal';
   effective_rate: number;
-  lower_limit: number;
-  upper_limit: number;
+  adjusted_lower_limit: number;
+  adjusted_upper_limit: number;
   tax_at_main_rate: number;
-  marginal_relief: number;
+  marginal_relief_fraction: number;
+  marginal_relief_amount: number;
   corporation_tax_due: number;
 } {
   const { adjustedLower, adjustedUpper } = adjustLimits(
@@ -154,15 +163,16 @@ function calculateCorporationTax(
   );
   
   // If no marginal relief applies (pre-2023 or single rate)
-  if (regime.marginal_relief_fraction === 0 || adjustedUpper === Infinity) {
+  if (regime.marginal_relief_fraction === 0 || regime.upper_limit === 0) {
     const tax = Math.round(taxableProfit * regime.main_rate * 100) / 100;
     return {
       applicable_rate: 'main',
       effective_rate: regime.main_rate,
-      lower_limit: adjustedLower,
-      upper_limit: adjustedUpper,
+      adjusted_lower_limit: adjustedLower,
+      adjusted_upper_limit: adjustedUpper,
       tax_at_main_rate: tax,
-      marginal_relief: 0,
+      marginal_relief_fraction: 0,
+      marginal_relief_amount: 0,
       corporation_tax_due: tax,
     };
   }
@@ -173,10 +183,11 @@ function calculateCorporationTax(
     return {
       applicable_rate: 'small_profits',
       effective_rate: regime.small_profits_rate,
-      lower_limit: adjustedLower,
-      upper_limit: adjustedUpper,
+      adjusted_lower_limit: adjustedLower,
+      adjusted_upper_limit: adjustedUpper,
       tax_at_main_rate: tax,
-      marginal_relief: 0,
+      marginal_relief_fraction: regime.marginal_relief_fraction,
+      marginal_relief_amount: 0,
       corporation_tax_due: tax,
     };
   }
@@ -187,10 +198,11 @@ function calculateCorporationTax(
     return {
       applicable_rate: 'main',
       effective_rate: regime.main_rate,
-      lower_limit: adjustedLower,
-      upper_limit: adjustedUpper,
+      adjusted_lower_limit: adjustedLower,
+      adjusted_upper_limit: adjustedUpper,
       tax_at_main_rate: tax,
-      marginal_relief: 0,
+      marginal_relief_fraction: regime.marginal_relief_fraction,
+      marginal_relief_amount: 0,
       corporation_tax_due: tax,
     };
   }
@@ -199,17 +211,18 @@ function calculateCorporationTax(
   // Tax = P × M - F × (U - P)
   // Where P = profit, M = main rate, F = marginal fraction, U = upper limit
   const taxAtMainRate = taxableProfit * regime.main_rate;
-  const marginalRelief = regime.marginal_relief_fraction * (adjustedUpper - taxableProfit);
-  const finalTax = Math.round((taxAtMainRate - marginalRelief) * 100) / 100;
+  const marginalReliefAmount = regime.marginal_relief_fraction * (adjustedUpper - taxableProfit);
+  const finalTax = Math.round((taxAtMainRate - marginalReliefAmount) * 100) / 100;
   const effectiveRate = finalTax / taxableProfit;
   
   return {
     applicable_rate: 'marginal',
     effective_rate: Math.round(effectiveRate * 10000) / 10000,
-    lower_limit: adjustedLower,
-    upper_limit: adjustedUpper,
+    adjusted_lower_limit: adjustedLower,
+    adjusted_upper_limit: adjustedUpper,
     tax_at_main_rate: Math.round(taxAtMainRate * 100) / 100,
-    marginal_relief: Math.round(marginalRelief * 100) / 100,
+    marginal_relief_fraction: regime.marginal_relief_fraction,
+    marginal_relief_amount: Math.round(marginalReliefAmount * 100) / 100,
     corporation_tax_due: finalTax,
   };
 }
@@ -227,12 +240,17 @@ async function generateSnapshotHash(data: object): Promise<string> {
 export async function computeCorporationTax(
   input: CTComputationInput
 ): Promise<CTComputationResult> {
+  // Validate required associated_companies_count
+  if (input.associated_companies_count === undefined || input.associated_companies_count === null) {
+    throw new Error('associated_companies_count is required and must be explicitly provided');
+  }
+  
   const periodStart = new Date(input.period_start);
   const periodEnd = new Date(input.period_end);
   const shortPeriodFactor = calculateShortPeriodFactor(periodStart, periodEnd);
   
-  // Get applicable rate regime
-  const regime = getCTRateRegime(periodEnd);
+  // Fetch applicable rate regime from database
+  const regime = await fetchCTRateRegime(periodEnd);
   
   // Calculate add-backs total
   const totalAddBacks = input.add_backs.reduce((sum, ab) => sum + ab.amount, 0);
@@ -247,7 +265,6 @@ export async function computeCorporationTax(
   const netCapitalAllowances = totalCapitalAllowances - balancingCharges;
   
   // Calculate taxable profits
-  // Accounting profit + Add-backs - Deductions - Capital Allowances + Balancing Charges
   const taxableProfit = Math.max(0,
     input.accounting_profit +
     totalAddBacks -
@@ -261,7 +278,7 @@ export async function computeCorporationTax(
     taxableProfit,
     regime,
     shortPeriodFactor,
-    input.associated_companies_count || 0
+    input.associated_companies_count
   );
   
   // Build result
@@ -271,6 +288,7 @@ export async function computeCorporationTax(
     period_start: input.period_start,
     period_end: input.period_end,
     short_period_factor: shortPeriodFactor,
+    associated_companies_count: input.associated_companies_count,
     
     accounting_profit: input.accounting_profit,
     total_add_backs: totalAddBacks,
@@ -289,7 +307,8 @@ export async function computeCorporationTax(
     ...taxResult,
     
     snapshot_hash: '', // Will be set below
-    generator_version: '1.0.0',
+    generator_version: '1.1.0',
+    rate_table_id: regime.id,
   };
   
   // Generate hash
@@ -320,13 +339,19 @@ export async function saveCTComputationSnapshot(
       balancing_charges: result.balancing_charges,
       taxable_total_profits: result.taxable_total_profits,
       corporation_tax_rate: result.effective_rate,
-      marginal_relief: result.marginal_relief,
+      marginal_relief: result.marginal_relief_amount,
       corporation_tax_due: result.corporation_tax_due,
       pools_summary: result.pools_summary as unknown as Record<string, unknown>,
       claims_summary: result.claims_summary as unknown as Record<string, unknown>,
       snapshot_hash: result.snapshot_hash,
       generator_version: result.generator_version,
       status: 'draft',
+      associated_companies_count: result.associated_companies_count,
+      adjusted_lower_limit: result.adjusted_lower_limit,
+      adjusted_upper_limit: result.adjusted_upper_limit,
+      short_period_factor: result.short_period_factor,
+      marginal_relief_fraction: result.marginal_relief_fraction,
+      marginal_relief_amount: result.marginal_relief_amount,
     } as any)
     .select()
     .single();
@@ -358,7 +383,8 @@ export async function getCTComputationSnapshot(
     accounts_snapshot_id: data.accounts_snapshot_id,
     period_start: data.period_start,
     period_end: data.period_end,
-    short_period_factor: 1,
+    short_period_factor: data.short_period_factor || 1,
+    associated_companies_count: data.associated_companies_count || 0,
     
     accounting_profit: data.accounting_profit,
     total_add_backs: addBacks.reduce((s, a) => s + a.amount, 0),
@@ -377,14 +403,16 @@ export async function getCTComputationSnapshot(
     applicable_rate: data.corporation_tax_rate >= 0.25 ? 'main' : 
                      data.corporation_tax_rate <= 0.19 ? 'small_profits' : 'marginal',
     effective_rate: data.corporation_tax_rate,
-    lower_limit: 50000, // Could be recalculated
-    upper_limit: 250000,
+    adjusted_lower_limit: data.adjusted_lower_limit || 50000,
+    adjusted_upper_limit: data.adjusted_upper_limit || 250000,
     tax_at_main_rate: data.taxable_total_profits * 0.25,
-    marginal_relief: data.marginal_relief,
+    marginal_relief_fraction: data.marginal_relief_fraction || 0.015,
+    marginal_relief_amount: data.marginal_relief_amount || data.marginal_relief || 0,
     corporation_tax_due: data.corporation_tax_due,
     
     snapshot_hash: data.snapshot_hash,
     generator_version: data.generator_version,
+    rate_table_id: 'from-snapshot',
   };
 }
 

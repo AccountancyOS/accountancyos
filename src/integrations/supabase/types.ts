@@ -3357,8 +3357,11 @@ export type Database = {
           accounting_profit: number
           accounts_snapshot_id: string
           add_backs: Json
+          adjusted_lower_limit: number | null
+          adjusted_upper_limit: number | null
           approved_at: string | null
           approved_by: string | null
+          associated_companies_count: number
           balancing_charges: number
           cap_period_id: string | null
           claims_summary: Json
@@ -3370,10 +3373,13 @@ export type Database = {
           generator_version: string
           id: string
           marginal_relief: number
+          marginal_relief_amount: number | null
+          marginal_relief_fraction: number | null
           organization_id: string
           period_end: string
           period_start: string
           pools_summary: Json
+          short_period_factor: number | null
           snapshot_hash: string
           status: string
           taxable_total_profits: number
@@ -3383,8 +3389,11 @@ export type Database = {
           accounting_profit: number
           accounts_snapshot_id: string
           add_backs?: Json
+          adjusted_lower_limit?: number | null
+          adjusted_upper_limit?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          associated_companies_count?: number
           balancing_charges?: number
           cap_period_id?: string | null
           claims_summary?: Json
@@ -3396,10 +3405,13 @@ export type Database = {
           generator_version?: string
           id?: string
           marginal_relief?: number
+          marginal_relief_amount?: number | null
+          marginal_relief_fraction?: number | null
           organization_id: string
           period_end: string
           period_start: string
           pools_summary?: Json
+          short_period_factor?: number | null
           snapshot_hash: string
           status?: string
           taxable_total_profits: number
@@ -3409,8 +3421,11 @@ export type Database = {
           accounting_profit?: number
           accounts_snapshot_id?: string
           add_backs?: Json
+          adjusted_lower_limit?: number | null
+          adjusted_upper_limit?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          associated_companies_count?: number
           balancing_charges?: number
           cap_period_id?: string | null
           claims_summary?: Json
@@ -3422,10 +3437,13 @@ export type Database = {
           generator_version?: string
           id?: string
           marginal_relief?: number
+          marginal_relief_amount?: number | null
+          marginal_relief_fraction?: number | null
           organization_id?: string
           period_end?: string
           period_start?: string
           pools_summary?: Json
+          short_period_factor?: number | null
           snapshot_hash?: string
           status?: string
           taxable_total_profits?: number
@@ -3454,6 +3472,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ct_rate_tables: {
+        Row: {
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          lower_limit: number
+          main_rate: number
+          marginal_relief_fraction: number
+          small_profits_rate: number
+          upper_limit: number
+        }
+        Insert: {
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          id?: string
+          lower_limit: number
+          main_rate: number
+          marginal_relief_fraction: number
+          small_profits_rate: number
+          upper_limit: number
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          lower_limit?: number
+          main_rate?: number
+          marginal_relief_fraction?: number
+          small_profits_rate?: number
+          upper_limit?: number
+        }
+        Relationships: []
       }
       customers: {
         Row: {
