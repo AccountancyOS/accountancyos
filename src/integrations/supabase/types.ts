@@ -6244,18 +6244,26 @@ export type Database = {
           description: string | null
           document_id: string | null
           fx_rate_to_base: number | null
+          gross_amount: number | null
           id: string
           is_locked: boolean | null
+          jurisdiction: string | null
+          net_amount: number | null
           organization_id: string
+          reverse_charge: boolean | null
           source_id: string | null
           source_type: string
+          supply_category: string | null
           transaction_credit: number | null
           transaction_currency: string | null
           transaction_date: string
           transaction_debit: number | null
           updated_at: string | null
           updated_by: string | null
+          vat_amount: number | null
           vat_code_id: string | null
+          vat_period_id: string | null
+          vat_period_lock: boolean | null
         }
         Insert: {
           account_id: string
@@ -6269,18 +6277,26 @@ export type Database = {
           description?: string | null
           document_id?: string | null
           fx_rate_to_base?: number | null
+          gross_amount?: number | null
           id?: string
           is_locked?: boolean | null
+          jurisdiction?: string | null
+          net_amount?: number | null
           organization_id: string
+          reverse_charge?: boolean | null
           source_id?: string | null
           source_type: string
+          supply_category?: string | null
           transaction_credit?: number | null
           transaction_currency?: string | null
           transaction_date: string
           transaction_debit?: number | null
           updated_at?: string | null
           updated_by?: string | null
+          vat_amount?: number | null
           vat_code_id?: string | null
+          vat_period_id?: string | null
+          vat_period_lock?: boolean | null
         }
         Update: {
           account_id?: string
@@ -6294,20 +6310,35 @@ export type Database = {
           description?: string | null
           document_id?: string | null
           fx_rate_to_base?: number | null
+          gross_amount?: number | null
           id?: string
           is_locked?: boolean | null
+          jurisdiction?: string | null
+          net_amount?: number | null
           organization_id?: string
+          reverse_charge?: boolean | null
           source_id?: string | null
           source_type?: string
+          supply_category?: string | null
           transaction_credit?: number | null
           transaction_currency?: string | null
           transaction_date?: string
           transaction_debit?: number | null
           updated_at?: string | null
           updated_by?: string | null
+          vat_amount?: number | null
           vat_code_id?: string | null
+          vat_period_id?: string | null
+          vat_period_lock?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_ledger_entries_vat_period"
+            columns: ["vat_period_id"]
+            isOneToOne: false
+            referencedRelation: "vat_periods"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ledger_entries_account_id_fkey"
             columns: ["account_id"]
@@ -9290,6 +9321,78 @@ export type Database = {
           },
         ]
       }
+      vat_adjustments: {
+        Row: {
+          adjustment_type: string
+          approved_at: string | null
+          approved_by: string | null
+          box_adjustments: Json | null
+          boxes_affected: number[]
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          net_adjustment: number | null
+          organization_id: string
+          reason: string
+          supporting_document_id: string | null
+          updated_at: string
+          vat_adjustment: number | null
+          vat_period_id: string
+        }
+        Insert: {
+          adjustment_type: string
+          approved_at?: string | null
+          approved_by?: string | null
+          box_adjustments?: Json | null
+          boxes_affected?: number[]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          net_adjustment?: number | null
+          organization_id: string
+          reason: string
+          supporting_document_id?: string | null
+          updated_at?: string
+          vat_adjustment?: number | null
+          vat_period_id: string
+        }
+        Update: {
+          adjustment_type?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          box_adjustments?: Json | null
+          boxes_affected?: number[]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          net_adjustment?: number | null
+          organization_id?: string
+          reason?: string
+          supporting_document_id?: string | null
+          updated_at?: string
+          vat_adjustment?: number | null
+          vat_period_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_adjustments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_adjustments_vat_period_id_fkey"
+            columns: ["vat_period_id"]
+            isOneToOne: false
+            referencedRelation: "vat_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vat_codes: {
         Row: {
           client_id: string | null
@@ -9297,11 +9400,20 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           description: string
+          hmrc_box_mapping: Json | null
           id: string
           is_active: boolean | null
+          is_reclaimable: boolean | null
+          jurisdiction: string | null
+          net_included_in_boxes: number[] | null
           organization_id: string
+          partial_exemption_applicable: boolean | null
           rate: number
+          reverse_charge: boolean | null
+          scheme_type: string | null
+          supply_category: string | null
           updated_at: string | null
+          vat_included_in_boxes: number[] | null
           vat_type: string
         }
         Insert: {
@@ -9310,11 +9422,20 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           description: string
+          hmrc_box_mapping?: Json | null
           id?: string
           is_active?: boolean | null
+          is_reclaimable?: boolean | null
+          jurisdiction?: string | null
+          net_included_in_boxes?: number[] | null
           organization_id: string
+          partial_exemption_applicable?: boolean | null
           rate: number
+          reverse_charge?: boolean | null
+          scheme_type?: string | null
+          supply_category?: string | null
           updated_at?: string | null
+          vat_included_in_boxes?: number[] | null
           vat_type: string
         }
         Update: {
@@ -9323,11 +9444,20 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           description?: string
+          hmrc_box_mapping?: Json | null
           id?: string
           is_active?: boolean | null
+          is_reclaimable?: boolean | null
+          jurisdiction?: string | null
+          net_included_in_boxes?: number[] | null
           organization_id?: string
+          partial_exemption_applicable?: boolean | null
           rate?: number
+          reverse_charge?: boolean | null
+          scheme_type?: string | null
+          supply_category?: string | null
           updated_at?: string | null
+          vat_included_in_boxes?: number[] | null
           vat_type?: string
         }
         Relationships: [
@@ -9417,6 +9547,230 @@ export type Database = {
           },
           {
             foreignKeyName: "vat_obligations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vat_period_lines: {
+        Row: {
+          box1_contribution: number | null
+          box2_contribution: number | null
+          box4_contribution: number | null
+          box6_contribution: number | null
+          box7_contribution: number | null
+          box8_contribution: number | null
+          box9_contribution: number | null
+          created_at: string
+          gross_total: number
+          id: string
+          net_total: number
+          organization_id: string
+          partial_exemption_disallowed: number | null
+          source_count: number
+          vat_code: string
+          vat_code_id: string | null
+          vat_period_id: string
+          vat_rate: number
+          vat_total: number
+          vat_type: string
+        }
+        Insert: {
+          box1_contribution?: number | null
+          box2_contribution?: number | null
+          box4_contribution?: number | null
+          box6_contribution?: number | null
+          box7_contribution?: number | null
+          box8_contribution?: number | null
+          box9_contribution?: number | null
+          created_at?: string
+          gross_total?: number
+          id?: string
+          net_total?: number
+          organization_id: string
+          partial_exemption_disallowed?: number | null
+          source_count?: number
+          vat_code: string
+          vat_code_id?: string | null
+          vat_period_id: string
+          vat_rate: number
+          vat_total?: number
+          vat_type: string
+        }
+        Update: {
+          box1_contribution?: number | null
+          box2_contribution?: number | null
+          box4_contribution?: number | null
+          box6_contribution?: number | null
+          box7_contribution?: number | null
+          box8_contribution?: number | null
+          box9_contribution?: number | null
+          created_at?: string
+          gross_total?: number
+          id?: string
+          net_total?: number
+          organization_id?: string
+          partial_exemption_disallowed?: number | null
+          source_count?: number
+          vat_code?: string
+          vat_code_id?: string | null
+          vat_period_id?: string
+          vat_rate?: number
+          vat_total?: number
+          vat_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_period_lines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_period_lines_vat_code_id_fkey"
+            columns: ["vat_code_id"]
+            isOneToOne: false
+            referencedRelation: "vat_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_period_lines_vat_period_id_fkey"
+            columns: ["vat_period_id"]
+            isOneToOne: false
+            referencedRelation: "vat_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vat_periods: {
+        Row: {
+          cash_accounting_enabled: boolean | null
+          client_id: string | null
+          company_id: string | null
+          computed_box1: number | null
+          computed_box2: number | null
+          computed_box3: number | null
+          computed_box4: number | null
+          computed_box5: number | null
+          computed_box6: number | null
+          computed_box7: number | null
+          computed_box8: number | null
+          computed_box9: number | null
+          control_account_balance: number | null
+          created_at: string
+          filing_id: string | null
+          finalised_at: string | null
+          finalised_by: string | null
+          flat_rate_category: string | null
+          flat_rate_percentage: number | null
+          generated_at: string | null
+          id: string
+          organization_id: string
+          partial_exemption_applicable: boolean | null
+          partial_exemption_rate: number | null
+          period_end: string
+          period_key: string | null
+          period_start: string
+          reconciliation_difference: number | null
+          reconciliation_status: string | null
+          status: string
+          updated_at: string
+          vat_scheme: string
+          vrn: string
+          workpaper_instance_id: string | null
+        }
+        Insert: {
+          cash_accounting_enabled?: boolean | null
+          client_id?: string | null
+          company_id?: string | null
+          computed_box1?: number | null
+          computed_box2?: number | null
+          computed_box3?: number | null
+          computed_box4?: number | null
+          computed_box5?: number | null
+          computed_box6?: number | null
+          computed_box7?: number | null
+          computed_box8?: number | null
+          computed_box9?: number | null
+          control_account_balance?: number | null
+          created_at?: string
+          filing_id?: string | null
+          finalised_at?: string | null
+          finalised_by?: string | null
+          flat_rate_category?: string | null
+          flat_rate_percentage?: number | null
+          generated_at?: string | null
+          id?: string
+          organization_id: string
+          partial_exemption_applicable?: boolean | null
+          partial_exemption_rate?: number | null
+          period_end: string
+          period_key?: string | null
+          period_start: string
+          reconciliation_difference?: number | null
+          reconciliation_status?: string | null
+          status?: string
+          updated_at?: string
+          vat_scheme?: string
+          vrn: string
+          workpaper_instance_id?: string | null
+        }
+        Update: {
+          cash_accounting_enabled?: boolean | null
+          client_id?: string | null
+          company_id?: string | null
+          computed_box1?: number | null
+          computed_box2?: number | null
+          computed_box3?: number | null
+          computed_box4?: number | null
+          computed_box5?: number | null
+          computed_box6?: number | null
+          computed_box7?: number | null
+          computed_box8?: number | null
+          computed_box9?: number | null
+          control_account_balance?: number | null
+          created_at?: string
+          filing_id?: string | null
+          finalised_at?: string | null
+          finalised_by?: string | null
+          flat_rate_category?: string | null
+          flat_rate_percentage?: number | null
+          generated_at?: string | null
+          id?: string
+          organization_id?: string
+          partial_exemption_applicable?: boolean | null
+          partial_exemption_rate?: number | null
+          period_end?: string
+          period_key?: string | null
+          period_start?: string
+          reconciliation_difference?: number | null
+          reconciliation_status?: string | null
+          status?: string
+          updated_at?: string
+          vat_scheme?: string
+          vrn?: string
+          workpaper_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_periods_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_periods_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_periods_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -9520,6 +9874,66 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vat_transaction_links: {
+        Row: {
+          created_at: string
+          id: string
+          net_amount: number
+          source_id: string
+          source_table: string
+          source_type: string
+          transaction_date: string
+          vat_amount: number
+          vat_code: string | null
+          vat_code_id: string | null
+          vat_period_id: string
+          vat_period_line_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          net_amount: number
+          source_id: string
+          source_table: string
+          source_type: string
+          transaction_date: string
+          vat_amount: number
+          vat_code?: string | null
+          vat_code_id?: string | null
+          vat_period_id: string
+          vat_period_line_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          net_amount?: number
+          source_id?: string
+          source_table?: string
+          source_type?: string
+          transaction_date?: string
+          vat_amount?: number
+          vat_code?: string | null
+          vat_code_id?: string | null
+          vat_period_id?: string
+          vat_period_line_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_transaction_links_vat_period_id_fkey"
+            columns: ["vat_period_id"]
+            isOneToOne: false
+            referencedRelation: "vat_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vat_transaction_links_vat_period_line_id_fkey"
+            columns: ["vat_period_line_id"]
+            isOneToOne: false
+            referencedRelation: "vat_period_lines"
             referencedColumns: ["id"]
           },
         ]
