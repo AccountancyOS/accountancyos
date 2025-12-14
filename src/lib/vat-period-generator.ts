@@ -4,6 +4,7 @@
 // Includes: Partial exemption logic, adjustments, control account reconciliation
 
 import { supabase } from "@/integrations/supabase/client";
+import { getVATSchemeParams, type VATSchemeParams } from "./vat-scheme-service";
 
 export interface VATTransactionLine {
   id: string;

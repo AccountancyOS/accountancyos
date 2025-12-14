@@ -14,13 +14,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { format } from "date-fns";
 import { 
   RefreshCw, FileText, ChevronDown, ChevronRight, 
-  AlertTriangle, CheckCircle, XCircle, Send, Calculator, Shield
+  AlertTriangle, CheckCircle, XCircle, Send, Calculator, Shield, Settings
 } from "lucide-react";
 import { toast } from "sonner";
 import { generateVATPeriod, validateVATPeriod, finaliseVATPeriod } from "@/lib/vat-period-generator";
 import type { VATReportModel, VATPeriodValidation } from "@/lib/vat-period-generator";
 import { VATReconciliationPanel } from "./VATReconciliationPanel";
 import { getReconciliation, type VATReconciliationResult } from "@/lib/vat-reconciliation-service";
+import { VATRegistrationSettings } from "./VATRegistrationSettings";
+import { getVATSchemeParams } from "@/lib/vat-scheme-service";
 
 interface VATPeriodsTabProps {
   entityId: string;
@@ -181,7 +183,27 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
   }
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="periods" className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="periods">VAT Periods</TabsTrigger>
+        <TabsTrigger value="settings">
+          <Settings className="w-4 h-4 mr-1" />
+          Registration Settings
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="settings">
+        {organization && (
+          <VATRegistrationSettings
+            organizationId={organization.id}
+            entityId={entityId}
+            entityType={entityType}
+            vrn={vrn}
+          />
+        )}
+      </TabsContent>
+
+      <TabsContent value="periods" className="space-y-6">
       {/* Obligations Section */}
       {obligations && obligations.length > 0 && (
         <Card>
@@ -542,6 +564,7 @@ export function VATPeriodsTab({ entityId, entityType, vrn }: VATPeriodsTabProps)
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }
