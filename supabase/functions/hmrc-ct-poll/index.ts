@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { XMLParser } from "https://esm.sh/fast-xml-parser@4.3.2";
 
 /**
  * HMRC CT600 Poll Edge Function
  * Queue-driven polling for CT600 submission status
  * Called by pg_cron, not by user request
+ * Uses fast-xml-parser for namespace-tolerant XML parsing
  */
 
 const corsHeaders = {
@@ -166,53 +168,100 @@ async function sha256Hash(content: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ============= XML PARSING =============
+// ============= XML PARSING (fast-xml-parser) =============
 
 interface GovTalkResponse {
   qualifier: 'acknowledgement' | 'response' | 'error';
   correlationId?: string;
   pollInterval?: number;
   receiptReference?: string;
+  transactionId?: string;
   errors?: Array<{ code: string; message: string }>;
 }
 
-function extractXmlValue(xml: string, tagName: string): string | undefined {
-  const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i');
-  const match = xml.match(regex);
-  return match?.[1] || undefined;
+function safeGet(obj: any, ...keys: string[]): any {
+  if (!obj) return undefined;
+  for (const key of keys) {
+    if (obj[key] !== undefined) return obj[key];
+    for (const k of Object.keys(obj)) {
+      if (k.endsWith(`:${key}`) || k === key) {
+        return obj[k];
+      }
+    }
+  }
+  return undefined;
 }
 
 function parseGovTalkResponse(responseXml: string): GovTalkResponse {
   try {
-    const qualifierStr = extractXmlValue(responseXml, 'Qualifier');
-    const qualifier = (qualifierStr?.toLowerCase() || 'error') as 'acknowledgement' | 'response' | 'error';
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      removeNSPrefix: true,
+      parseTagValue: true,
+      trimValues: true,
+    });
+
+    const parsed = parser.parse(responseXml);
     
-    const correlationId = extractXmlValue(responseXml, 'CorrelationID');
-    const pollIntervalStr = extractXmlValue(responseXml, 'PollInterval');
-    const pollInterval = pollIntervalStr ? parseInt(pollIntervalStr, 10) : undefined;
-    const receiptReference = extractXmlValue(responseXml, 'ReceiptReference') || extractXmlValue(responseXml, 'IRmarkReceipt');
+    const govTalkMsg = safeGet(parsed, 'GovTalkMessage', 'GovTalkMessage:GovTalkMessage') || parsed;
+    const header = safeGet(govTalkMsg, 'Header') || {};
+    const messageDetails = safeGet(header, 'MessageDetails') || {};
+    const govTalkDetails = safeGet(govTalkMsg, 'GovTalkDetails') || {};
+    
+    const qualifierRaw = safeGet(messageDetails, 'Qualifier');
+    const qualifier = (typeof qualifierRaw === 'string' ? qualifierRaw.toLowerCase() : 'error') as 'acknowledgement' | 'response' | 'error';
+    
+    const correlationId = safeGet(messageDetails, 'CorrelationID') as string | undefined;
+    const pollIntervalRaw = safeGet(messageDetails, 'PollInterval');
+    const pollInterval = pollIntervalRaw ? parseInt(String(pollIntervalRaw), 10) : undefined;
+    const transactionId = safeGet(messageDetails, 'TransactionID') as string | undefined;
+    
+    const receiptReference = safeGet(govTalkDetails, 'ReceiptReference') ||
+                             safeGet(govTalkDetails, 'IRmarkReceipt') as string | undefined;
     
     const errors: Array<{ code: string; message: string }> = [];
-    const errorRegex = /<Error[^>]*>([\s\S]*?)<\/Error>/gi;
-    let errorMatch;
-    while ((errorMatch = errorRegex.exec(responseXml)) !== null) {
-      const errorContent = errorMatch[1];
-      const code = extractXmlValue(errorContent, 'Number') || extractXmlValue(errorContent, 'Code') || 'UNKNOWN';
-      const message = extractXmlValue(errorContent, 'Text') || extractXmlValue(errorContent, 'Message') || 'Unknown error';
-      errors.push({ code, message });
+    
+    const govTalkErrors = safeGet(govTalkDetails, 'GovTalkErrors', 'GovTalkError');
+    if (govTalkErrors) {
+      const errorList = Array.isArray(govTalkErrors) ? govTalkErrors : [govTalkErrors];
+      for (const err of errorList) {
+        if (err.Error) {
+          const errItems = Array.isArray(err.Error) ? err.Error : [err.Error];
+          for (const e of errItems) {
+            errors.push({
+              code: String(safeGet(e, 'Number', 'Code', 'RaisedBy') || 'UNKNOWN'),
+              message: String(safeGet(e, 'Text', 'Message', 'Type') || 'Unknown error')
+            });
+          }
+        }
+      }
+    }
+    
+    const body = safeGet(govTalkMsg, 'Body') || {};
+    const bodyErrors = safeGet(body, 'ErrorResponse', 'Errors', 'Error');
+    if (bodyErrors) {
+      const errItems = Array.isArray(bodyErrors) ? bodyErrors : [bodyErrors];
+      for (const e of errItems) {
+        errors.push({
+          code: String(safeGet(e, 'Number', 'Code') || 'UNKNOWN'),
+          message: String(safeGet(e, 'Text', 'Message') || 'Unknown error')
+        });
+      }
     }
     
     return {
       qualifier: errors.length > 0 && qualifier !== 'response' ? 'error' : qualifier,
       correlationId,
       pollInterval,
+      transactionId,
       receiptReference,
       errors: errors.length > 0 ? errors : undefined
     };
   } catch (error) {
+    console.error('[parseGovTalkResponse] Parse error:', error);
     return {
       qualifier: 'error',
-      errors: [{ code: 'PARSE_EXCEPTION', message: String(error) }]
+      errors: [{ code: 'XML_PARSE_ERROR', message: String(error) }]
     };
   }
 }
@@ -300,7 +349,7 @@ serve(async (req) => {
     let processed = 0;
 
     for (const job of pendingJobs) {
-      const correlationId = job.filing?.hmrc_correlation_id || job.idempotency_key?.replace('poll:', '');
+      const correlationId = job.filing?.hmrc_correlation_id || job.metadata?.correlationId || job.idempotency_key?.replace('poll:', '');
       
       if (!correlationId) {
         console.warn(`[hmrc-ct-poll] No correlationId for job ${job.id}`);
@@ -311,29 +360,46 @@ serve(async (req) => {
         continue;
       }
 
-      // Mark as processing
+      // Mark as processing and update filing to polling status
       await supabase.from('filing_queue').update({
         status: 'processing',
         last_attempt_at: new Date().toISOString(),
         attempts: (job.attempts || 0) + 1
       }).eq('id', job.id);
 
-      try {
-        // Get environment from submission
-        const { data: submission } = await supabase
-          .from('filing_submissions')
-          .select('environment')
-          .eq('filing_id', job.filing_id)
-          .eq('status', 'submitted')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+      await supabase.from('filings').update({ status: 'polling' }).eq('id', job.filing_id);
 
-        const environment = (submission?.environment || 'test') as 'test' | 'production';
+      try {
+        // Get environment from metadata or submission
+        let environment = job.metadata?.environment as 'test' | 'production';
+        if (!environment) {
+          const { data: submission } = await supabase
+            .from('filing_submissions')
+            .select('environment')
+            .eq('filing_id', job.filing_id)
+            .eq('status', 'submitted')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          environment = (submission?.environment || 'test') as 'test' | 'production';
+        }
+
         const hmrcEndpoint = HMRC_CT_ENDPOINTS[environment];
 
         // Build poll request
         const pollXml = buildGovTalkPollEnvelope(correlationId, gatewayId, gatewayPassword);
+
+        // Store poll request artefact
+        const requestHash = await sha256Hash(pollXml);
+        await supabase.from('filing_artefacts').insert({
+          filing_id: job.filing_id,
+          organization_id: job.organization_id,
+          artefact_type: 'HMRC_CT600_POLL_REQUEST_XML',
+          content: pollXml,
+          content_hash: requestHash,
+          content_encoding: 'utf8',
+          metadata: { pollCount: (job.attempts || 0) + 1, correlationId, timestamp: new Date().toISOString() }
+        });
 
         // Send poll request
         const response = await fetch(hmrcEndpoint, {
@@ -350,48 +416,75 @@ serve(async (req) => {
         await supabase.from('filing_artefacts').insert({
           filing_id: job.filing_id,
           organization_id: job.organization_id,
-          artefact_type: 'HMRC_CT_POLL_RESPONSE',
+          artefact_type: 'HMRC_CT600_POLL_RESPONSE_XML',
           content: responseXml,
           content_hash: responseHash,
           content_encoding: 'utf8',
-          metadata: { pollCount: job.attempts + 1, qualifier: parsed.qualifier, timestamp: new Date().toISOString() }
+          metadata: { 
+            pollCount: (job.attempts || 0) + 1, 
+            qualifier: parsed.qualifier, 
+            timestamp: new Date().toISOString() 
+          }
         });
 
         if (parsed.qualifier === 'acknowledgement') {
-          // Still pending - requeue
-          const nextDelay = (parsed.pollInterval || 5) * 1000;
+          // Still pending - check max attempts
+          const currentAttempt = (job.attempts || 0) + 1;
+          const maxAttempts = job.max_attempts || 100;
           
-          if ((job.attempts || 0) + 1 >= (job.max_attempts || 100)) {
-            // Max polls reached
+          if (currentAttempt >= maxAttempts) {
+            // Polling timeout
+            console.warn(`[hmrc-ct-poll] Job ${job.id} polling timeout after ${currentAttempt} attempts`);
+            
             await supabase.from('filing_queue').update({
               status: 'failed',
-              error_message: 'Max poll attempts reached'
+              error_message: 'Polling timeout: max attempts reached'
             }).eq('id', job.id);
 
-            await supabase.from('filings').update({ status: 'submission_failed' }).eq('id', job.filing_id);
+            await supabase.from('filings').update({ 
+              status: 'polling_timeout',
+              poll_count: currentAttempt,
+              last_poll_at: new Date().toISOString()
+            }).eq('id', job.filing_id);
+
+            await supabase.from('filing_submissions').update({
+              status: 'timeout'
+            }).eq('filing_id', job.filing_id).eq('status', 'submitted');
+
           } else {
             // Requeue for next poll
+            const nextDelay = (parsed.pollInterval || job.metadata?.pollInterval || 5) * 1000;
+            
             await supabase.from('filing_queue').update({
               status: 'pending',
               next_attempt_at: new Date(Date.now() + nextDelay).toISOString()
             }).eq('id', job.id);
+
+            await supabase.from('filings').update({
+              poll_count: currentAttempt,
+              last_poll_at: new Date().toISOString()
+            }).eq('id', job.filing_id);
           }
 
-          console.log(`[hmrc-ct-poll] Job ${job.id} still pending, requeued`);
+          console.log(`[hmrc-ct-poll] Job ${job.id} still pending, attempt ${currentAttempt}`);
 
         } else if (parsed.qualifier === 'response') {
-          // Final response received
+          // Final response received - accepted
           console.log(`[hmrc-ct-poll] Job ${job.id} received final response`);
 
           // Store final response artefact
           await supabase.from('filing_artefacts').insert({
             filing_id: job.filing_id,
             organization_id: job.organization_id,
-            artefact_type: 'HMRC_CT_FINAL_RESPONSE',
+            artefact_type: 'HMRC_CT600_FINAL_RESPONSE_XML',
             content: responseXml,
             content_hash: responseHash,
             content_encoding: 'utf8',
-            metadata: { receiptReference: parsed.receiptReference, timestamp: new Date().toISOString() }
+            metadata: { 
+              receiptReference: parsed.receiptReference, 
+              transactionId: parsed.transactionId,
+              timestamp: new Date().toISOString() 
+            }
           });
 
           // Mark job as completed
@@ -421,7 +514,8 @@ serve(async (req) => {
             filing_type: 'CT600_HMRC_DELETE',
             status: 'pending',
             idempotency_key: `delete:${correlationId}`,
-            next_attempt_at: new Date().toISOString()
+            next_attempt_at: new Date().toISOString(),
+            metadata: { correlationId, environment }
           });
 
           // Audit log
@@ -434,20 +528,33 @@ serve(async (req) => {
           });
 
         } else if (parsed.qualifier === 'error') {
-          // Error response
-          console.error(`[hmrc-ct-poll] Job ${job.id} error:`, parsed.errors);
+          // Error/rejection response
+          console.error(`[hmrc-ct-poll] Job ${job.id} rejected:`, parsed.errors);
 
           await supabase.from('filing_queue').update({
             status: 'failed',
             error_message: parsed.errors?.map(e => `${e.code}: ${e.message}`).join('; ')
           }).eq('id', job.id);
 
-          await supabase.from('filings').update({ status: 'submission_failed' }).eq('id', job.filing_id);
+          await supabase.from('filings').update({ 
+            status: 'rejected',
+            poll_count: (job.attempts || 0) + 1,
+            last_poll_at: new Date().toISOString()
+          }).eq('id', job.filing_id);
 
           await supabase.from('filing_submissions').update({
-            status: 'failed',
+            status: 'rejected',
             error_message: parsed.errors?.map(e => `${e.code}: ${e.message}`).join('; ')
           }).eq('filing_id', job.filing_id).eq('status', 'submitted');
+
+          // Audit log
+          await supabase.from('audit_log').insert({
+            organization_id: job.organization_id,
+            entity_type: 'filing',
+            entity_id: job.filing_id,
+            action: 'hmrc_ct_rejected',
+            metadata: { correlationId, errors: parsed.errors }
+          });
         }
 
         processed++;
@@ -455,17 +562,21 @@ serve(async (req) => {
       } catch (pollError) {
         console.error(`[hmrc-ct-poll] Job ${job.id} error:`, pollError);
         
-        // Requeue on error (unless max attempts)
-        if ((job.attempts || 0) + 1 >= (job.max_attempts || 100)) {
+        // Requeue on network error (unless max attempts)
+        const currentAttempt = (job.attempts || 0) + 1;
+        if (currentAttempt >= (job.max_attempts || 100)) {
           await supabase.from('filing_queue').update({
             status: 'failed',
             error_message: String(pollError)
           }).eq('id', job.id);
+
+          await supabase.from('filings').update({ status: 'polling_timeout' }).eq('id', job.filing_id);
         } else {
+          // Retry in 30 seconds on error
           await supabase.from('filing_queue').update({
             status: 'pending',
-            error_message: String(pollError),
-            next_attempt_at: new Date(Date.now() + 30000).toISOString() // Retry in 30s
+            next_attempt_at: new Date(Date.now() + 30000).toISOString(),
+            error_message: String(pollError)
           }).eq('id', job.id);
         }
       }

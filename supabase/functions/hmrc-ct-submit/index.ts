@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { XMLParser } from "https://esm.sh/fast-xml-parser@4.3.2";
 
 /**
  * HMRC CT600 Submit Edge Function
  * Submits CT600 to HMRC Transaction Engine and queues polling job
  * No polling loops - queue-driven architecture
+ * Uses fast-xml-parser for namespace-tolerant XML parsing
  */
 
 const corsHeaders = {
@@ -18,12 +20,15 @@ const HMRC_CT_ENDPOINTS = {
   production: 'https://transaction-engine.tax.service.gov.uk/submission',
 };
 
+// Maximum poll attempts before timeout
+const MAX_POLL_ATTEMPTS = 100;
+
 interface SubmissionRequest {
   filingId: string;
   environment: 'test' | 'production';
 }
 
-// ============= XML UTILITIES (duplicated for edge function isolation) =============
+// ============= XML UTILITIES =============
 
 function escapeXmlSafe(str: string): string {
   if (!str) return '';
@@ -47,7 +52,6 @@ function encodeBase64Utf8(str: string): string {
 }
 
 function md5HashSync(str: string): string {
-  // MD5 implementation for GovTalk authentication
   function md5cycle(x: number[], k: number[]) {
     let a = x[0], b = x[1], c = x[2], d = x[3];
     a = ff(a, b, c, d, k[0], 7, -680876936);
@@ -188,51 +192,105 @@ async function sha256Hash(content: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ============= XML PARSING (Real DOMParser) =============
+// ============= XML PARSING (fast-xml-parser) =============
 
 interface GovTalkResponse {
   qualifier: 'acknowledgement' | 'response' | 'error';
   correlationId?: string;
   pollInterval?: number;
   transactionId?: string;
+  receiptReference?: string;
   errors?: Array<{ code: string; message: string }>;
 }
 
+/**
+ * Safely extract a value from parsed XML object, handling namespaced keys
+ */
+function safeGet(obj: any, ...keys: string[]): any {
+  if (!obj) return undefined;
+  for (const key of keys) {
+    // Try exact key first
+    if (obj[key] !== undefined) return obj[key];
+    // Try with namespace prefix removed
+    for (const k of Object.keys(obj)) {
+      if (k.endsWith(`:${key}`) || k === key) {
+        return obj[k];
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Parse GovTalk response using fast-xml-parser
+ * Namespace-tolerant, handles all GovTalk response types
+ */
 function parseGovTalkResponse(responseXml: string): GovTalkResponse {
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(responseXml, 'application/xml');
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      removeNSPrefix: true,
+      parseTagValue: true,
+      trimValues: true,
+    });
+
+    const parsed = parser.parse(responseXml);
     
-    const parseError = doc.querySelector('parsererror');
-    if (parseError) {
-      return {
-        qualifier: 'error',
-        errors: [{ code: 'XML_PARSE_ERROR', message: parseError.textContent || 'XML parsing failed' }]
-      };
+    // Navigate to GovTalkMessage (handles namespace variations)
+    const govTalkMsg = safeGet(parsed, 'GovTalkMessage', 'GovTalkMessage:GovTalkMessage') || parsed;
+    const header = safeGet(govTalkMsg, 'Header') || {};
+    const messageDetails = safeGet(header, 'MessageDetails') || {};
+    const govTalkDetails = safeGet(govTalkMsg, 'GovTalkDetails') || {};
+    
+    // Extract qualifier
+    const qualifierRaw = safeGet(messageDetails, 'Qualifier');
+    const qualifier = (typeof qualifierRaw === 'string' ? qualifierRaw.toLowerCase() : 'error') as 'acknowledgement' | 'response' | 'error';
+    
+    // Extract correlation ID
+    const correlationId = safeGet(messageDetails, 'CorrelationID') as string | undefined;
+    
+    // Extract poll interval (for acknowledgements)
+    const pollIntervalRaw = safeGet(messageDetails, 'PollInterval');
+    const pollInterval = pollIntervalRaw ? parseInt(String(pollIntervalRaw), 10) : undefined;
+    
+    // Extract transaction ID
+    const transactionId = safeGet(messageDetails, 'TransactionID') as string | undefined;
+    
+    // Extract receipt reference (for successful responses)
+    const receiptReference = safeGet(govTalkDetails, 'ReceiptReference') ||
+                             safeGet(govTalkDetails, 'IRmarkReceipt') as string | undefined;
+    
+    // Extract errors from GovTalkErrors and/or Error elements
+    const errors: Array<{ code: string; message: string }> = [];
+    
+    // Check GovTalkDetails for errors
+    const govTalkErrors = safeGet(govTalkDetails, 'GovTalkErrors', 'GovTalkError');
+    if (govTalkErrors) {
+      const errorList = Array.isArray(govTalkErrors) ? govTalkErrors : [govTalkErrors];
+      for (const err of errorList) {
+        if (err.Error) {
+          const errItems = Array.isArray(err.Error) ? err.Error : [err.Error];
+          for (const e of errItems) {
+            errors.push({
+              code: String(safeGet(e, 'Number', 'Code', 'RaisedBy') || 'UNKNOWN'),
+              message: String(safeGet(e, 'Text', 'Message', 'Type') || 'Unknown error')
+            });
+          }
+        }
+      }
     }
     
-    const qualifierEl = doc.getElementsByTagName('Qualifier')[0];
-    const qualifier = qualifierEl?.textContent?.toLowerCase() as 'acknowledgement' | 'response' | 'error' || 'error';
-    
-    const correlationEl = doc.getElementsByTagName('CorrelationID')[0];
-    const correlationId = correlationEl?.textContent || undefined;
-    
-    const pollIntervalEl = doc.getElementsByTagName('PollInterval')[0];
-    const pollInterval = pollIntervalEl ? parseInt(pollIntervalEl.textContent || '5', 10) : undefined;
-    
-    const transactionIdEl = doc.getElementsByTagName('TransactionID')[0];
-    const transactionId = transactionIdEl?.textContent || undefined;
-    
-    const errors: Array<{ code: string; message: string }> = [];
-    const errorElements = doc.getElementsByTagName('Error');
-    for (let i = 0; i < errorElements.length; i++) {
-      const errorEl = errorElements[i];
-      const codeEl = errorEl.getElementsByTagName('Number')[0] || errorEl.getElementsByTagName('Code')[0];
-      const messageEl = errorEl.getElementsByTagName('Text')[0] || errorEl.getElementsByTagName('Message')[0];
-      errors.push({
-        code: codeEl?.textContent || 'UNKNOWN',
-        message: messageEl?.textContent || 'Unknown error'
-      });
+    // Also check Body for errors
+    const body = safeGet(govTalkMsg, 'Body') || {};
+    const bodyErrors = safeGet(body, 'ErrorResponse', 'Errors', 'Error');
+    if (bodyErrors) {
+      const errItems = Array.isArray(bodyErrors) ? bodyErrors : [bodyErrors];
+      for (const e of errItems) {
+        errors.push({
+          code: String(safeGet(e, 'Number', 'Code') || 'UNKNOWN'),
+          message: String(safeGet(e, 'Text', 'Message') || 'Unknown error')
+        });
+      }
     }
     
     return {
@@ -240,12 +298,14 @@ function parseGovTalkResponse(responseXml: string): GovTalkResponse {
       correlationId,
       pollInterval,
       transactionId,
+      receiptReference,
       errors: errors.length > 0 ? errors : undefined
     };
   } catch (error) {
+    console.error('[parseGovTalkResponse] Parse error:', error);
     return {
       qualifier: 'error',
-      errors: [{ code: 'PARSE_EXCEPTION', message: String(error) }]
+      errors: [{ code: 'XML_PARSE_ERROR', message: String(error) }]
     };
   }
 }
@@ -480,194 +540,206 @@ serve(async (req) => {
       .from('filing_submissions')
       .select('id, correlation_id, status')
       .eq('idempotency_key', idempotencyKey)
-      .in('status', ['pending', 'submitted', 'polling'])
-      .maybeSingle();
+      .in('status', ['pending', 'submitted', 'polling', 'accepted'])
+      .limit(1)
+      .single();
 
     if (existingSubmission) {
-      console.log('[hmrc-ct-submit] Duplicate submission detected');
+      console.log(`[hmrc-ct-submit] Duplicate submission blocked: ${idempotencyKey}`);
       return new Response(
-        JSON.stringify({ success: false, error: 'Filing already submitted', existingSubmissionId: existingSubmission.id }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Duplicate submission', 
+          existingSubmissionId: existingSubmission.id,
+          correlationId: existingSubmission.correlation_id
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 }
       );
     }
 
+    // Update filing status to submitting
+    await supabase.from('filings').update({ status: 'submitting' }).eq('id', filingId);
+
     // Build GovTalk envelope
+    const company = filing.company as any;
     const govTalkXml = buildGovTalkSubmitEnvelope(
       gatewayId,
       gatewayPassword,
-      filing.company?.utr || '',
-      filing.company?.company_name || '',
-      filing.company?.company_number || '',
+      company.utr || '',
+      company.company_name || '',
+      company.company_number || '',
       filing.period_start,
       filing.period_end,
       ct600Artefact.content,
       ixbrlAccounts.content,
       ixbrlComputation.content,
       filing.is_amendment || false,
-      filing.original_filing_id ? (await supabase.from('filings').select('hmrc_receipt_number').eq('id', filing.original_filing_id).single()).data?.hmrc_receipt_number : undefined
+      filing.original_filing_id || undefined
     );
 
-    // Store HMRC_CT_GOVTALK_REQUEST artefact
+    // Store request artefact
     const requestHash = await sha256Hash(govTalkXml);
     await supabase.from('filing_artefacts').insert({
       filing_id: filingId,
       organization_id: filing.organization_id,
-      artefact_type: 'HMRC_CT_GOVTALK_REQUEST',
+      artefact_type: 'HMRC_CT600_SUBMIT_REQUEST_XML',
       content: govTalkXml,
       content_hash: requestHash,
       content_encoding: 'utf8',
       metadata: { environment, timestamp: new Date().toISOString() }
     });
 
-    // Update filing status to submitting
-    await supabase.from('filings').update({ status: 'submitting' }).eq('id', filingId);
-
     // Create submission record
-    const { data: submission } = await supabase
+    const { data: submissionRecord, error: submissionError } = await supabase
       .from('filing_submissions')
       .insert({
-        organization_id: filing.organization_id,
         filing_id: filingId,
-        environment,
-        provider: 'hmrc_ct',
-        idempotency_key: idempotencyKey,
+        organization_id: filing.organization_id,
         status: 'pending',
-        request_payload: { govTalkXmlHash: requestHash }
+        environment,
+        idempotency_key: idempotencyKey,
+        request_payload: govTalkXml,
+        request_headers: { 'Content-Type': 'application/xml' }
       })
-      .select('id')
+      .select()
       .single();
 
-    // Submit to HMRC Transaction Engine
-    const hmrcEndpoint = HMRC_CT_ENDPOINTS[environment];
-    console.log(`[hmrc-ct-submit] Posting to ${hmrcEndpoint}`);
-
-    let responseXml: string;
-    let responseStatus: number;
-
-    try {
-      const hmrcResponse = await fetch(hmrcEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/xml',
-          'Accept': 'application/xml',
-        },
-        body: govTalkXml,
-      });
-
-      responseStatus = hmrcResponse.status;
-      responseXml = await hmrcResponse.text();
-
-      console.log(`[hmrc-ct-submit] HMRC response status: ${responseStatus}`);
-    } catch (fetchError) {
-      console.error('[hmrc-ct-submit] Fetch error:', fetchError);
-      
-      await supabase.from('filing_submissions').update({
-        status: 'failed',
-        error_message: String(fetchError),
-        response_status_code: 0
-      }).eq('id', submission?.id);
-
-      await supabase.from('filings').update({ status: 'submission_failed' }).eq('id', filingId);
-
+    if (submissionError) {
+      console.error('[hmrc-ct-submit] Failed to create submission record:', submissionError);
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to connect to HMRC', details: String(fetchError) }),
+        JSON.stringify({ success: false, error: 'Failed to create submission record' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
-    // Store HMRC_CT_ACKNOWLEDGEMENT artefact
-    const ackHash = await sha256Hash(responseXml);
+    // Submit to HMRC
+    const hmrcEndpoint = HMRC_CT_ENDPOINTS[environment];
+    console.log(`[hmrc-ct-submit] Submitting to ${hmrcEndpoint}`);
+
+    const hmrcResponse = await fetch(hmrcEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/xml',
+        'Accept': 'application/xml',
+      },
+      body: govTalkXml,
+    });
+
+    const responseXml = await hmrcResponse.text();
+    console.log(`[hmrc-ct-submit] HMRC response status: ${hmrcResponse.status}`);
+
+    // Store acknowledgement artefact
+    const responseHash = await sha256Hash(responseXml);
     await supabase.from('filing_artefacts').insert({
       filing_id: filingId,
       organization_id: filing.organization_id,
-      artefact_type: 'HMRC_CT_ACKNOWLEDGEMENT',
+      artefact_type: 'HMRC_CT600_SUBMIT_ACK_XML',
       content: responseXml,
-      content_hash: ackHash,
+      content_hash: responseHash,
       content_encoding: 'utf8',
-      metadata: { responseStatus, timestamp: new Date().toISOString() }
+      metadata: { 
+        httpStatus: hmrcResponse.status, 
+        environment, 
+        timestamp: new Date().toISOString() 
+      }
     });
 
-    // Parse response using real XML parser
+    // Parse response
     const parsed = parseGovTalkResponse(responseXml);
+    console.log(`[hmrc-ct-submit] Parsed response:`, JSON.stringify(parsed));
 
     if (parsed.qualifier === 'error' || parsed.errors?.length) {
-      console.error('[hmrc-ct-submit] HMRC returned errors:', parsed.errors);
+      // Submission failed
+      console.error('[hmrc-ct-submit] Submission failed:', parsed.errors);
 
       await supabase.from('filing_submissions').update({
         status: 'failed',
-        correlation_id: parsed.correlationId,
-        response_status_code: responseStatus,
+        response_status_code: hmrcResponse.status,
         response_payload: responseXml,
         error_message: parsed.errors?.map(e => `${e.code}: ${e.message}`).join('; ')
-      }).eq('id', submission?.id);
+      }).eq('id', submissionRecord.id);
 
       await supabase.from('filings').update({ status: 'submission_failed' }).eq('id', filingId);
 
       return new Response(
-        JSON.stringify({ success: false, error: 'HMRC rejected submission', errors: parsed.errors }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'HMRC rejected submission', 
+          errors: parsed.errors 
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
     if (parsed.qualifier === 'acknowledgement' && parsed.correlationId) {
-      console.log(`[hmrc-ct-submit] Received acknowledgement, correlationId: ${parsed.correlationId}`);
+      // Submission acknowledged - queue polling
+      console.log(`[hmrc-ct-submit] Acknowledged with correlationId: ${parsed.correlationId}`);
 
-      // Update submission with correlation ID
+      // Update submission record
       await supabase.from('filing_submissions').update({
         status: 'submitted',
         correlation_id: parsed.correlationId,
-        poll_interval: parsed.pollInterval || 5,
-        response_status_code: responseStatus,
+        response_status_code: hmrcResponse.status,
         response_payload: responseXml
-      }).eq('id', submission?.id);
+      }).eq('id', submissionRecord.id);
 
-      // Update filing status to submitted
-      await supabase.from('filings').update({
+      // Update filing with correlation ID
+      await supabase.from('filings').update({ 
         status: 'submitted',
         hmrc_correlation_id: parsed.correlationId,
-        submitted_at: new Date().toISOString()
+        poll_count: 0,
+        last_poll_at: null
       }).eq('id', filingId);
 
       // Queue polling job
-      const pollDelay = (parsed.pollInterval || 5) * 1000; // Convert to ms
+      const pollDelay = (parsed.pollInterval || 5) * 1000;
       await supabase.from('filing_queue').insert({
         organization_id: filing.organization_id,
         filing_id: filingId,
         filing_type: 'CT600_HMRC',
         status: 'pending',
         idempotency_key: `poll:${parsed.correlationId}`,
-        snapshot_hash: snapshotHash,
         next_attempt_at: new Date(Date.now() + pollDelay).toISOString(),
-        max_attempts: 100
+        max_attempts: MAX_POLL_ATTEMPTS,
+        metadata: { 
+          correlationId: parsed.correlationId,
+          pollInterval: parsed.pollInterval || 5,
+          environment
+        }
       });
 
-      console.log(`[hmrc-ct-submit] Queued poll job for correlationId ${parsed.correlationId}`);
-
-      // Log audit event
+      // Audit log
       await supabase.from('audit_log').insert({
         organization_id: filing.organization_id,
         entity_type: 'filing',
         entity_id: filingId,
         action: 'hmrc_ct_submitted',
-        metadata: { correlationId: parsed.correlationId, environment, submissionId: submission?.id }
+        metadata: { 
+          correlationId: parsed.correlationId, 
+          environment,
+          pollInterval: parsed.pollInterval
+        }
       });
 
       return new Response(
-        JSON.stringify({
-          success: true,
+        JSON.stringify({ 
+          success: true, 
           status: 'submitted',
           correlationId: parsed.correlationId,
-          pollInterval: parsed.pollInterval,
-          message: 'CT600 submitted, polling queued'
+          pollInterval: parsed.pollInterval
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Unexpected response
-    console.warn('[hmrc-ct-submit] Unexpected response qualifier:', parsed.qualifier);
+    console.error('[hmrc-ct-submit] Unexpected response qualifier:', parsed.qualifier);
     return new Response(
-      JSON.stringify({ success: false, error: 'Unexpected HMRC response', qualifier: parsed.qualifier }),
+      JSON.stringify({ 
+        success: false, 
+        error: 'Unexpected HMRC response',
+        qualifier: parsed.qualifier 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
 
