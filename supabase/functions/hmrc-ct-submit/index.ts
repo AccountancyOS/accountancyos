@@ -1,15 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+/**
+ * HMRC CT600 Submit Edge Function
+ * Submits CT600 to HMRC Transaction Engine and queues polling job
+ * No polling loops - queue-driven architecture
+ */
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// HMRC API endpoints
-const HMRC_ENDPOINTS = {
-  test: 'https://test-api.service.hmrc.gov.uk',
-  production: 'https://api.service.hmrc.gov.uk',
+// HMRC Transaction Engine endpoints (not MTD REST API)
+const HMRC_CT_ENDPOINTS = {
+  test: 'https://test-transaction-engine.tax.service.gov.uk/submission',
+  production: 'https://transaction-engine.tax.service.gov.uk/submission',
 };
 
 interface SubmissionRequest {
@@ -17,8 +23,348 @@ interface SubmissionRequest {
   environment: 'test' | 'production';
 }
 
+// ============= XML UTILITIES (duplicated for edge function isolation) =============
+
+function escapeXmlSafe(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
+function encodeBase64Utf8(str: string): string {
+  const encoder = new TextEncoder();
+  const utf8Bytes = encoder.encode(str);
+  let binary = '';
+  for (let i = 0; i < utf8Bytes.length; i++) {
+    binary += String.fromCharCode(utf8Bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function md5HashSync(str: string): string {
+  // MD5 implementation for GovTalk authentication
+  function md5cycle(x: number[], k: number[]) {
+    let a = x[0], b = x[1], c = x[2], d = x[3];
+    a = ff(a, b, c, d, k[0], 7, -680876936);
+    d = ff(d, a, b, c, k[1], 12, -389564586);
+    c = ff(c, d, a, b, k[2], 17, 606105819);
+    b = ff(b, c, d, a, k[3], 22, -1044525330);
+    a = ff(a, b, c, d, k[4], 7, -176418897);
+    d = ff(d, a, b, c, k[5], 12, 1200080426);
+    c = ff(c, d, a, b, k[6], 17, -1473231341);
+    b = ff(b, c, d, a, k[7], 22, -45705983);
+    a = ff(a, b, c, d, k[8], 7, 1770035416);
+    d = ff(d, a, b, c, k[9], 12, -1958414417);
+    c = ff(c, d, a, b, k[10], 17, -42063);
+    b = ff(b, c, d, a, k[11], 22, -1990404162);
+    a = ff(a, b, c, d, k[12], 7, 1804603682);
+    d = ff(d, a, b, c, k[13], 12, -40341101);
+    c = ff(c, d, a, b, k[14], 17, -1502002290);
+    b = ff(b, c, d, a, k[15], 22, 1236535329);
+    a = gg(a, b, c, d, k[1], 5, -165796510);
+    d = gg(d, a, b, c, k[6], 9, -1069501632);
+    c = gg(c, d, a, b, k[11], 14, 643717713);
+    b = gg(b, c, d, a, k[0], 20, -373897302);
+    a = gg(a, b, c, d, k[5], 5, -701558691);
+    d = gg(d, a, b, c, k[10], 9, 38016083);
+    c = gg(c, d, a, b, k[15], 14, -660478335);
+    b = gg(b, c, d, a, k[4], 20, -405537848);
+    a = gg(a, b, c, d, k[9], 5, 568446438);
+    d = gg(d, a, b, c, k[14], 9, -1019803690);
+    c = gg(c, d, a, b, k[3], 14, -187363961);
+    b = gg(b, c, d, a, k[8], 20, 1163531501);
+    a = gg(a, b, c, d, k[13], 5, -1444681467);
+    d = gg(d, a, b, c, k[2], 9, -51403784);
+    c = gg(c, d, a, b, k[7], 14, 1735328473);
+    b = gg(b, c, d, a, k[12], 20, -1926607734);
+    a = hh(a, b, c, d, k[5], 4, -378558);
+    d = hh(d, a, b, c, k[8], 11, -2022574463);
+    c = hh(c, d, a, b, k[11], 16, 1839030562);
+    b = hh(b, c, d, a, k[14], 23, -35309556);
+    a = hh(a, b, c, d, k[1], 4, -1530992060);
+    d = hh(d, a, b, c, k[4], 11, 1272893353);
+    c = hh(c, d, a, b, k[7], 16, -155497632);
+    b = hh(b, c, d, a, k[10], 23, -1094730640);
+    a = hh(a, b, c, d, k[13], 4, 681279174);
+    d = hh(d, a, b, c, k[0], 11, -358537222);
+    c = hh(c, d, a, b, k[3], 16, -722521979);
+    b = hh(b, c, d, a, k[6], 23, 76029189);
+    a = hh(a, b, c, d, k[9], 4, -640364487);
+    d = hh(d, a, b, c, k[12], 11, -421815835);
+    c = hh(c, d, a, b, k[15], 16, 530742520);
+    b = hh(b, c, d, a, k[2], 23, -995338651);
+    a = ii(a, b, c, d, k[0], 6, -198630844);
+    d = ii(d, a, b, c, k[7], 10, 1126891415);
+    c = ii(c, d, a, b, k[14], 15, -1416354905);
+    b = ii(b, c, d, a, k[5], 21, -57434055);
+    a = ii(a, b, c, d, k[12], 6, 1700485571);
+    d = ii(d, a, b, c, k[3], 10, -1894986606);
+    c = ii(c, d, a, b, k[10], 15, -1051523);
+    b = ii(b, c, d, a, k[1], 21, -2054922799);
+    a = ii(a, b, c, d, k[8], 6, 1873313359);
+    d = ii(d, a, b, c, k[15], 10, -30611744);
+    c = ii(c, d, a, b, k[6], 15, -1560198380);
+    b = ii(b, c, d, a, k[13], 21, 1309151649);
+    a = ii(a, b, c, d, k[4], 6, -145523070);
+    d = ii(d, a, b, c, k[11], 10, -1120210379);
+    c = ii(c, d, a, b, k[2], 15, 718787259);
+    b = ii(b, c, d, a, k[9], 21, -343485551);
+    x[0] = add32(a, x[0]);
+    x[1] = add32(b, x[1]);
+    x[2] = add32(c, x[2]);
+    x[3] = add32(d, x[3]);
+  }
+  function cmn(q: number, a: number, b: number, x: number, s: number, t: number): number {
+    a = add32(add32(a, q), add32(x, t));
+    return add32((a << s) | (a >>> (32 - s)), b);
+  }
+  function ff(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+    return cmn((b & c) | ((~b) & d), a, b, x, s, t);
+  }
+  function gg(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+    return cmn((b & d) | (c & (~d)), a, b, x, s, t);
+  }
+  function hh(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+    return cmn(b ^ c ^ d, a, b, x, s, t);
+  }
+  function ii(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+    return cmn(c ^ (b | (~d)), a, b, x, s, t);
+  }
+  function add32(a: number, b: number): number {
+    return (a + b) & 0xFFFFFFFF;
+  }
+  function md5blk(s: string): number[] {
+    const md5blks: number[] = [];
+    for (let i = 0; i < 64; i += 4) {
+      md5blks[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) + 
+                        (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24);
+    }
+    return md5blks;
+  }
+  let n = str.length;
+  let state = [1732584193, -271733879, -1732584194, 271733878];
+  let i: number;
+  for (i = 64; i <= str.length; i += 64) {
+    md5cycle(state, md5blk(str.substring(i - 64, i)));
+  }
+  str = str.substring(i - 64);
+  const tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (i = 0; i < str.length; i++) {
+    tail[i >> 2] |= str.charCodeAt(i) << ((i % 4) << 3);
+  }
+  tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+  if (i > 55) {
+    md5cycle(state, tail);
+    for (i = 0; i < 16; i++) tail[i] = 0;
+  }
+  tail[14] = n * 8;
+  md5cycle(state, tail);
+  const hex = '0123456789abcdef';
+  let result = '';
+  for (i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      result += hex.charAt((state[i] >> (j * 8 + 4)) & 0x0F) + 
+                hex.charAt((state[i] >> (j * 8)) & 0x0F);
+    }
+  }
+  return result;
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toISOString().split('T')[0];
+}
+
+async function sha256Hash(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ============= XML PARSING (Real DOMParser) =============
+
+interface GovTalkResponse {
+  qualifier: 'acknowledgement' | 'response' | 'error';
+  correlationId?: string;
+  pollInterval?: number;
+  transactionId?: string;
+  errors?: Array<{ code: string; message: string }>;
+}
+
+function parseGovTalkResponse(responseXml: string): GovTalkResponse {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(responseXml, 'application/xml');
+    
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      return {
+        qualifier: 'error',
+        errors: [{ code: 'XML_PARSE_ERROR', message: parseError.textContent || 'XML parsing failed' }]
+      };
+    }
+    
+    const qualifierEl = doc.getElementsByTagName('Qualifier')[0];
+    const qualifier = qualifierEl?.textContent?.toLowerCase() as 'acknowledgement' | 'response' | 'error' || 'error';
+    
+    const correlationEl = doc.getElementsByTagName('CorrelationID')[0];
+    const correlationId = correlationEl?.textContent || undefined;
+    
+    const pollIntervalEl = doc.getElementsByTagName('PollInterval')[0];
+    const pollInterval = pollIntervalEl ? parseInt(pollIntervalEl.textContent || '5', 10) : undefined;
+    
+    const transactionIdEl = doc.getElementsByTagName('TransactionID')[0];
+    const transactionId = transactionIdEl?.textContent || undefined;
+    
+    const errors: Array<{ code: string; message: string }> = [];
+    const errorElements = doc.getElementsByTagName('Error');
+    for (let i = 0; i < errorElements.length; i++) {
+      const errorEl = errorElements[i];
+      const codeEl = errorEl.getElementsByTagName('Number')[0] || errorEl.getElementsByTagName('Code')[0];
+      const messageEl = errorEl.getElementsByTagName('Text')[0] || errorEl.getElementsByTagName('Message')[0];
+      errors.push({
+        code: codeEl?.textContent || 'UNKNOWN',
+        message: messageEl?.textContent || 'Unknown error'
+      });
+    }
+    
+    return {
+      qualifier: errors.length > 0 && qualifier !== 'response' ? 'error' : qualifier,
+      correlationId,
+      pollInterval,
+      transactionId,
+      errors: errors.length > 0 ? errors : undefined
+    };
+  } catch (error) {
+    return {
+      qualifier: 'error',
+      errors: [{ code: 'PARSE_EXCEPTION', message: String(error) }]
+    };
+  }
+}
+
+// ============= GOVTALK ENVELOPE BUILDER =============
+
+function buildGovTalkSubmitEnvelope(
+  gatewayId: string,
+  gatewayPassword: string,
+  utr: string,
+  companyName: string,
+  companyNumber: string,
+  periodStart: string,
+  periodEnd: string,
+  ct600Content: string,
+  ixbrlAccounts: string,
+  ixbrlComputation: string,
+  isAmendment: boolean,
+  originalReference?: string
+): string {
+  const transactionId = `CT600-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  const passwordHash = md5HashSync(gatewayPassword);
+  const accountsBase64 = encodeBase64Utf8(ixbrlAccounts);
+  const computationBase64 = encodeBase64Utf8(ixbrlComputation);
+  
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
+  <EnvelopeVersion>2.0</EnvelopeVersion>
+  <Header>
+    <MessageDetails>
+      <Class>HMRC-CT-CT600</Class>
+      <Qualifier>request</Qualifier>
+      <Function>submit</Function>
+      <TransactionID>${escapeXmlSafe(transactionId)}</TransactionID>
+      <AuditID></AuditID>
+    </MessageDetails>
+    <SenderDetails>
+      <IDAuthentication>
+        <SenderID>${escapeXmlSafe(gatewayId)}</SenderID>
+        <Authentication>
+          <Method>MD5</Method>
+          <Role>principal</Role>
+          <Value>${passwordHash}</Value>
+        </Authentication>
+      </IDAuthentication>
+    </SenderDetails>
+  </Header>
+  <GovTalkDetails>
+    <Keys>
+      <Key Type="UTR">${escapeXmlSafe(utr)}</Key>
+    </Keys>
+    <TargetDetails>
+      <Organisation>HMRC</Organisation>
+    </TargetDetails>
+    <ChannelRouting>
+      <Channel>
+        <URI>AccountancyOS</URI>
+        <Product>AccountancyOS</Product>
+        <Version>1.0.0</Version>
+      </Channel>
+    </ChannelRouting>
+  </GovTalkDetails>
+  <Body>
+    <IRenvelope xmlns="http://www.govtalk.gov.uk/taxation/CT/5">
+      <IRheader>
+        <Keys>
+          <Key Type="UTR">${escapeXmlSafe(utr)}</Key>
+        </Keys>
+        <PeriodStart>${formatDate(periodStart)}</PeriodStart>
+        <PeriodEnd>${formatDate(periodEnd)}</PeriodEnd>
+        <Principal>
+          <Contact>
+            <Name>
+              <Ttl>Mr</Ttl>
+              <Fore>Director</Fore>
+              <Sur>Company</Sur>
+            </Name>
+          </Contact>
+        </Principal>
+        <IRmark Type="generic">0</IRmark>
+        <Sender>Agent</Sender>
+      </IRheader>
+      <CompanyTaxReturn>
+        <CompanyInformation>
+          <CompanyName>${escapeXmlSafe(companyName)}</CompanyName>
+          <RegistrationNumber>${escapeXmlSafe(companyNumber)}</RegistrationNumber>
+          <Reference>${escapeXmlSafe(utr)}</Reference>
+        </CompanyInformation>
+        ${ct600Content}
+        <Accounts>
+          <AttachedAccounts>
+            <Encoding>base64</Encoding>
+            <Content>${accountsBase64}</Content>
+          </AttachedAccounts>
+        </Accounts>
+        <Computations>
+          <AttachedComputations>
+            <Encoding>base64</Encoding>
+            <Content>${computationBase64}</Content>
+          </AttachedComputations>
+        </Computations>
+        ${isAmendment ? `
+        <Amendment>
+          <OriginalSubmissionReference>${escapeXmlSafe(originalReference || '')}</OriginalSubmissionReference>
+          <Reason>Correction</Reason>
+        </Amendment>` : ''}
+        <Declaration>
+          <DeclarationStatus>Director</DeclarationStatus>
+          <DeclarationName>Director</DeclarationName>
+        </Declaration>
+      </CompanyTaxReturn>
+    </IRenvelope>
+  </Body>
+</GovTalkMessage>`;
+}
+
+// ============= MAIN HANDLER =============
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -29,8 +375,23 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { filingId, environment = 'test' }: SubmissionRequest = await req.json();
-
     console.log(`[hmrc-ct-submit] Starting CT600 submission for filing ${filingId} in ${environment} mode`);
+
+    // Check for HMRC Gateway credentials
+    const gatewayId = Deno.env.get('HMRC_CT_GATEWAY_ID');
+    const gatewayPassword = Deno.env.get('HMRC_CT_GATEWAY_PASSWORD');
+
+    if (!gatewayId || !gatewayPassword) {
+      console.error('[hmrc-ct-submit] HMRC CT Gateway credentials not configured');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'HMRC CT Gateway credentials not configured',
+          details: 'Set HMRC_CT_GATEWAY_ID and HMRC_CT_GATEWAY_PASSWORD secrets'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
 
     // Get filing with related data
     const { data: filing, error: filingError } = await supabase
@@ -41,8 +402,7 @@ serve(async (req) => {
           company_name, company_number, utr,
           address_line_1, address_line_2, city, postcode, country
         ),
-        ct_snapshot:ct_snapshot_id(*),
-        accounts_snapshot:accounts_snapshot_id(*)
+        ct_snapshot:ct_snapshot_id(*)
       `)
       .eq('id', filingId)
       .single();
@@ -55,8 +415,7 @@ serve(async (req) => {
       );
     }
 
-    // === SERVER-SIDE SUBMISSION GUARD ===
-    // Validate submission integrity using the database function
+    // Validate submission integrity
     const { data: integrityCheck, error: integrityError } = await supabase.rpc(
       'validate_submission_integrity',
       { p_filing_id: filingId, p_filing_type: 'CT600_HMRC' }
@@ -70,74 +429,16 @@ serve(async (req) => {
       );
     }
 
-    const integrity = integrityCheck as { valid: boolean; errors: string[]; approval_id?: string; snapshot_hash?: string } | null;
+    const integrity = integrityCheck as { valid: boolean; errors: string[] } | null;
     if (integrity && !integrity.valid) {
-      console.error('[hmrc-ct-submit] Submission blocked by integrity check:', integrity.errors);
-      
-      // Log the blocked submission attempt
-      await supabase.from('filing_submissions').insert({
-        filing_id: filingId,
-        organization_id: filing.organization?.id || filing.organization_id,
-        environment,
-        status: 'blocked',
-        error_message: `Submission blocked: ${integrity.errors.join(', ')}`,
-        request_payload: { blocked_reason: 'integrity_check_failed', errors: integrity.errors }
-      });
-
+      console.error('[hmrc-ct-submit] Submission blocked:', integrity.errors);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Submission blocked by integrity check',
-          errors: integrity.errors
-        }),
+        JSON.stringify({ success: false, error: 'Submission blocked by integrity check', errors: integrity.errors }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    console.log('[hmrc-ct-submit] Integrity check passed, approval_id:', integrity?.approval_id);
-
-    // Validate CT approval exists (already validated by integrity check, but keep for explicit check)
-    const { data: approval } = await supabase
-      .from('filing_approvals')
-      .select('*')
-      .eq('filing_id', filingId)
-      .eq('approval_scope', 'CT600')
-      .is('revoked_at', null)
-      .single();
-
-    if (!approval) {
-      console.error('[hmrc-ct-submit] CT600 approval required');
-      return new Response(
-        JSON.stringify({ success: false, error: 'CT600 approval required before submission' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    // Validate snapshot hash matches (already validated by integrity check)
-    if (filing.ct_snapshot && approval.snapshot_hash !== filing.ct_snapshot.snapshot_hash) {
-      console.error('[hmrc-ct-submit] Snapshot hash mismatch');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Snapshot has changed since approval - re-approval required' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    // Check for CH accounts filing status (warn-only per configuration)
-    const { data: chFiling } = await supabase
-      .from('filings')
-      .select('id, status')
-      .eq('company_id', filing.company_id)
-      .eq('filing_type', 'companies_house_accounts')
-      .eq('period_end', filing.period_end)
-      .maybeSingle();
-
-    let chWarning: string | null = null;
-    if (!chFiling || chFiling.status !== 'filed') {
-      chWarning = 'Companies House accounts filing is pending/not filed. Proceeding with CT submission.';
-      console.log(`[hmrc-ct-submit] Warning: ${chWarning}`);
-    }
-
-    // Get CT600 XML artefact
+    // Get CT600 XML content artefact
     const { data: ct600Artefact } = await supabase
       .from('filing_artefacts')
       .select('*')
@@ -148,9 +449,8 @@ serve(async (req) => {
       .single();
 
     if (!ct600Artefact) {
-      console.error('[hmrc-ct-submit] CT600 XML artefact not found');
       return new Response(
-        JSON.stringify({ success: false, error: 'CT600 XML artefact not found - generate filing documents first' }),
+        JSON.stringify({ success: false, error: 'CT600 XML artefact not found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
@@ -160,275 +460,215 @@ serve(async (req) => {
       .from('filing_artefacts')
       .select('*')
       .eq('filing_id', filingId)
-      .in('artefact_type', ['IXBRL_ACCOUNTS', 'IXBRL_CT_COMPUTATION'])
-      .order('created_at', { ascending: false });
+      .in('artefact_type', ['IXBRL_ACCOUNTS', 'IXBRL_CT_COMPUTATION']);
 
     const ixbrlAccounts = ixbrlArtefacts?.find(a => a.artefact_type === 'IXBRL_ACCOUNTS');
     const ixbrlComputation = ixbrlArtefacts?.find(a => a.artefact_type === 'IXBRL_CT_COMPUTATION');
 
     if (!ixbrlAccounts || !ixbrlComputation) {
-      console.error('[hmrc-ct-submit] Missing iXBRL artefacts');
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Missing iXBRL artefacts - both accounts and computation iXBRL required',
-          missing: {
-            accounts: !ixbrlAccounts,
-            computation: !ixbrlComputation
-          }
-        }),
+        JSON.stringify({ success: false, error: 'Missing iXBRL artefacts' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
     // Check idempotency
-    const idempotencyKey = `hmrc:CT600:${filing.company_id}:${filing.period_end}:${filing.ct_snapshot?.snapshot_hash}`;
+    const snapshotHash = filing.ct_snapshot?.snapshot_hash || 'unknown';
+    const idempotencyKey = `hmrc_ct:${filing.company_id}:${filing.period_end}:${snapshotHash}`;
 
     const { data: existingSubmission } = await supabase
       .from('filing_submissions')
-      .select('id, hmrc_receipt_number, status')
+      .select('id, correlation_id, status')
       .eq('idempotency_key', idempotencyKey)
-      .in('status', ['pending', 'accepted', 'submitted'])
+      .in('status', ['pending', 'submitted', 'polling'])
       .maybeSingle();
 
     if (existingSubmission) {
       console.log('[hmrc-ct-submit] Duplicate submission detected');
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Filing already submitted with this data',
-          existingSubmissionId: existingSubmission.id,
-          existingReceipt: existingSubmission.hmrc_receipt_number
-        }),
+        JSON.stringify({ success: false, error: 'Filing already submitted', existingSubmissionId: existingSubmission.id }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 }
       );
     }
 
-    // Build fraud prevention headers (required by HMRC)
-    const fraudPreventionHeaders: Record<string, string> = {
-      'Gov-Client-Connection-Method': 'BATCH_PROCESS_DIRECT',
-      'Gov-Client-User-Agent': 'AccountancyOS/1.1.0',
-      'Gov-Vendor-Version': 'AccountancyOS=1.1.0',
-      'Gov-Vendor-Product-Name': 'AccountancyOS',
-      'Gov-Vendor-License-IDs': 'AccountancyOS=production',
-    };
+    // Build GovTalk envelope
+    const govTalkXml = buildGovTalkSubmitEnvelope(
+      gatewayId,
+      gatewayPassword,
+      filing.company?.utr || '',
+      filing.company?.company_name || '',
+      filing.company?.company_number || '',
+      filing.period_start,
+      filing.period_end,
+      ct600Artefact.content,
+      ixbrlAccounts.content,
+      ixbrlComputation.content,
+      filing.is_amendment || false,
+      filing.original_filing_id ? (await supabase.from('filings').select('hmrc_receipt_number').eq('id', filing.original_filing_id).single()).data?.hmrc_receipt_number : undefined
+    );
 
-    // Prepare submission payload with all components
-    const submissionPayload = {
-      ct600Xml: ct600Artefact.content,
-      ct600XmlHash: ct600Artefact.content_hash,
-      ixbrlAccounts: ixbrlAccounts.content,
-      ixbrlAccountsHash: ixbrlAccounts.content_hash,
-      ixbrlComputation: ixbrlComputation.content,
-      ixbrlComputationHash: ixbrlComputation.content_hash,
-      isAmendment: filing.is_amendment || false,
-      amendmentReason: filing.amendment_reason,
-      originalReference: null as string | null,
-      companyUtr: filing.company?.utr,
-      periodStart: filing.period_start,
-      periodEnd: filing.period_end,
-    };
+    // Store HMRC_CT_GOVTALK_REQUEST artefact
+    const requestHash = await sha256Hash(govTalkXml);
+    await supabase.from('filing_artefacts').insert({
+      filing_id: filingId,
+      organization_id: filing.organization_id,
+      artefact_type: 'HMRC_CT_GOVTALK_REQUEST',
+      content: govTalkXml,
+      content_hash: requestHash,
+      content_encoding: 'utf8',
+      metadata: { environment, timestamp: new Date().toISOString() }
+    });
 
-    // If amendment, get original filing reference
-    if (filing.is_amendment && filing.original_filing_id) {
-      const { data: originalFiling } = await supabase
-        .from('filings')
-        .select('hmrc_receipt_number')
-        .eq('id', filing.original_filing_id)
-        .single();
-      
-      if (originalFiling?.hmrc_receipt_number) {
-        submissionPayload.originalReference = originalFiling.hmrc_receipt_number;
-      }
-    }
+    // Update filing status to submitting
+    await supabase.from('filings').update({ status: 'submitting' }).eq('id', filingId);
 
-    // Log submission attempt
-    const { data: submission, error: submissionError } = await supabase
+    // Create submission record
+    const { data: submission } = await supabase
       .from('filing_submissions')
       .insert({
         organization_id: filing.organization_id,
         filing_id: filingId,
         environment,
         provider: 'hmrc_ct',
-        request_payload: submissionPayload,
-        request_headers: fraudPreventionHeaders,
         idempotency_key: idempotencyKey,
-        status: 'pending'
+        status: 'pending',
+        request_payload: { govTalkXmlHash: requestHash }
       })
       .select('id')
       .single();
 
-    if (submissionError) {
-      console.error('[hmrc-ct-submit] Failed to log submission:', submissionError);
+    // Submit to HMRC Transaction Engine
+    const hmrcEndpoint = HMRC_CT_ENDPOINTS[environment];
+    console.log(`[hmrc-ct-submit] Posting to ${hmrcEndpoint}`);
+
+    let responseXml: string;
+    let responseStatus: number;
+
+    try {
+      const hmrcResponse = await fetch(hmrcEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/xml',
+          'Accept': 'application/xml',
+        },
+        body: govTalkXml,
+      });
+
+      responseStatus = hmrcResponse.status;
+      responseXml = await hmrcResponse.text();
+
+      console.log(`[hmrc-ct-submit] HMRC response status: ${responseStatus}`);
+    } catch (fetchError) {
+      console.error('[hmrc-ct-submit] Fetch error:', fetchError);
+      
+      await supabase.from('filing_submissions').update({
+        status: 'failed',
+        error_message: String(fetchError),
+        response_status_code: 0
+      }).eq('id', submission?.id);
+
+      await supabase.from('filings').update({ status: 'submission_failed' }).eq('id', filingId);
+
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to create submission record' }),
+        JSON.stringify({ success: false, error: 'Failed to connect to HMRC', details: String(fetchError) }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
-    // Update filing status to submitting
-    await supabase
-      .from('filings')
-      .update({ status: 'submitting' })
-      .eq('id', filingId);
+    // Store HMRC_CT_ACKNOWLEDGEMENT artefact
+    const ackHash = await sha256Hash(responseXml);
+    await supabase.from('filing_artefacts').insert({
+      filing_id: filingId,
+      organization_id: filing.organization_id,
+      artefact_type: 'HMRC_CT_ACKNOWLEDGEMENT',
+      content: responseXml,
+      content_hash: ackHash,
+      content_encoding: 'utf8',
+      metadata: { responseStatus, timestamp: new Date().toISOString() }
+    });
 
-    let responseData: any;
-    let responseStatus: number;
-    let receiptReference: string | null = null;
+    // Parse response using real XML parser
+    const parsed = parseGovTalkResponse(responseXml);
 
-    try {
-      const hmrcBaseUrl = HMRC_ENDPOINTS[environment];
+    if (parsed.qualifier === 'error' || parsed.errors?.length) {
+      console.error('[hmrc-ct-submit] HMRC returned errors:', parsed.errors);
 
-      if (environment === 'test') {
-        // HMRC Test endpoint - real sandbox submission
-        // Note: In production, this would use OAuth2 tokens from oauth_connections
-        console.log('[hmrc-ct-submit] Submitting to HMRC test endpoint');
-        
-        // For now, simulate a successful test submission
-        // Real implementation would call: POST ${hmrcBaseUrl}/organisations/corporation-tax/submit
-        receiptReference = `HMRC-CT-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        
-        responseData = {
-          success: true,
-          correlationId: `COR-${Date.now()}`,
-          receiptReference,
-          timestamp: new Date().toISOString(),
-          message: 'CT600 submission accepted for processing',
-          isAmendment: filing.is_amendment,
-          chFilingWarning: chWarning,
-        };
-        responseStatus = 200;
-        
-        // Update submission record with success
-        await supabase
-          .from('filing_submissions')
-          .update({
-            response_status_code: 200,
-            response_payload: responseData,
-            hmrc_receipt_number: receiptReference,
-            status: 'accepted'
-          })
-          .eq('id', submission.id);
+      await supabase.from('filing_submissions').update({
+        status: 'failed',
+        correlation_id: parsed.correlationId,
+        response_status_code: responseStatus,
+        response_payload: responseXml,
+        error_message: parsed.errors?.map(e => `${e.code}: ${e.message}`).join('; ')
+      }).eq('id', submission?.id);
 
-        // Update filing with receipt
-        await supabase
-          .from('filings')
-          .update({
-            status: 'submitted',
-            submitted_at: new Date().toISOString(),
-            hmrc_receipt_number: receiptReference,
-            hmrc_response: responseData
-          })
-          .eq('id', filingId);
+      await supabase.from('filings').update({ status: 'submission_failed' }).eq('id', filingId);
 
-      } else {
-        // Production submission
-        console.log('[hmrc-ct-submit] Production submission initiated');
-        
-        // Check for HMRC OAuth token
-        const { data: oauthConnection } = await supabase
-          .from('oauth_connections')
-          .select('*')
-          .eq('organization_id', filing.organization_id)
-          .eq('provider', 'hmrc')
-          .eq('scope', 'corporation-tax')
-          .maybeSingle();
-
-        if (!oauthConnection?.access_token) {
-          responseData = {
-            success: false,
-            error: 'HMRC OAuth connection not configured. Please connect to HMRC first.'
-          };
-          responseStatus = 400;
-
-          await supabase
-            .from('filing_submissions')
-            .update({
-              response_status_code: 400,
-              response_payload: responseData,
-              status: 'failed',
-              error_message: 'HMRC OAuth not configured'
-            })
-            .eq('id', submission.id);
-
-          await supabase
-            .from('filings')
-            .update({ status: 'ready_for_submission' })
-            .eq('id', filingId);
-
-        } else {
-          // Real HMRC API call would go here
-          // For now, return a placeholder indicating production is ready when credentials exist
-          responseData = {
-            success: false,
-            error: 'Production HMRC CT submission endpoint not yet implemented. OAuth is configured.'
-          };
-          responseStatus = 501;
-
-          await supabase
-            .from('filing_submissions')
-            .update({
-              response_status_code: 501,
-              response_payload: responseData,
-              status: 'failed',
-              error_message: 'Production endpoint not implemented'
-            })
-            .eq('id', submission.id);
-
-          await supabase
-            .from('filings')
-            .update({ status: 'ready_for_submission' })
-            .eq('id', filingId);
-        }
-      }
-    } catch (apiError) {
-      console.error('[hmrc-ct-submit] API error:', apiError);
-      
-      await supabase
-        .from('filing_submissions')
-        .update({
-          response_status_code: 500,
-          response_payload: { error: String(apiError) },
-          status: 'failed',
-          error_message: String(apiError)
-        })
-        .eq('id', submission.id);
-
-      await supabase
-        .from('filings')
-        .update({ status: 'submission_failed' })
-        .eq('id', filingId);
-
-      responseData = { success: false, error: 'HMRC API error', details: String(apiError) };
-      responseStatus = 500;
+      return new Response(
+        JSON.stringify({ success: false, error: 'HMRC rejected submission', errors: parsed.errors }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
     }
 
-    // Log audit event
-    await supabase
-      .from('audit_log')
-      .insert({
+    if (parsed.qualifier === 'acknowledgement' && parsed.correlationId) {
+      console.log(`[hmrc-ct-submit] Received acknowledgement, correlationId: ${parsed.correlationId}`);
+
+      // Update submission with correlation ID
+      await supabase.from('filing_submissions').update({
+        status: 'submitted',
+        correlation_id: parsed.correlationId,
+        poll_interval: parsed.pollInterval || 5,
+        response_status_code: responseStatus,
+        response_payload: responseXml
+      }).eq('id', submission?.id);
+
+      // Update filing status to submitted
+      await supabase.from('filings').update({
+        status: 'submitted',
+        hmrc_correlation_id: parsed.correlationId,
+        submitted_at: new Date().toISOString()
+      }).eq('id', filingId);
+
+      // Queue polling job
+      const pollDelay = (parsed.pollInterval || 5) * 1000; // Convert to ms
+      await supabase.from('filing_queue').insert({
+        organization_id: filing.organization_id,
+        filing_id: filingId,
+        filing_type: 'CT600_HMRC',
+        status: 'pending',
+        idempotency_key: `poll:${parsed.correlationId}`,
+        snapshot_hash: snapshotHash,
+        next_attempt_at: new Date(Date.now() + pollDelay).toISOString(),
+        max_attempts: 100
+      });
+
+      console.log(`[hmrc-ct-submit] Queued poll job for correlationId ${parsed.correlationId}`);
+
+      // Log audit event
+      await supabase.from('audit_log').insert({
         organization_id: filing.organization_id,
         entity_type: 'filing',
         entity_id: filingId,
-        action: 'hmrc_ct_submit',
-        metadata: {
-          environment,
-          submission_id: submission.id,
-          receipt_reference: receiptReference,
-          is_amendment: filing.is_amendment,
-          status: responseData.success ? 'success' : 'failed',
-          ch_warning: chWarning,
-        }
+        action: 'hmrc_ct_submitted',
+        metadata: { correlationId: parsed.correlationId, environment, submissionId: submission?.id }
       });
 
-    console.log(`[hmrc-ct-submit] Completed with status ${responseStatus}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'submitted',
+          correlationId: parsed.correlationId,
+          pollInterval: parsed.pollInterval,
+          message: 'CT600 submitted, polling queued'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
 
+    // Unexpected response
+    console.warn('[hmrc-ct-submit] Unexpected response qualifier:', parsed.qualifier);
     return new Response(
-      JSON.stringify(responseData),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: responseStatus 
-      }
+      JSON.stringify({ success: false, error: 'Unexpected HMRC response', qualifier: parsed.qualifier }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
 
   } catch (error) {
