@@ -541,48 +541,186 @@ export function parseGovTalkResponse(responseXml: string): GovTalkResponse {
   }
 }
 
+// ============= NORMALIZED CT COMPUTATION =============
+
+/**
+ * Canonical normalized CT computation interface for CT600 builder
+ * Maps from snake_case CTComputationResult to a validated model
+ */
+export interface NormalizedCTComputation {
+  adjustedTradingProfit: number;
+  taxableTotalProfits: number;
+  corporationTaxDue: number;
+  marginalReliefAmount: number;
+  totalDeductions: number;
+  netCapitalAllowances: number;
+  associatedCompaniesCount: number;
+  poolsSummary: any[];
+  claimsSummary: any[];
+}
+
+/**
+ * Normalize CTComputationResult (snake_case) to canonical model
+ * Validates critical fields and provides safe defaults
+ */
+export function normalizeCTComputation(raw: any): NormalizedCTComputation {
+  // Validate critical fields - throw if missing
+  if (raw.taxable_total_profits === undefined || raw.taxable_total_profits === null) {
+    throw new Error('CT computation missing taxable_total_profits - cannot generate CT600');
+  }
+  if (raw.corporation_tax_due === undefined || raw.corporation_tax_due === null) {
+    throw new Error('CT computation missing corporation_tax_due - cannot generate CT600');
+  }
+  
+  // Calculate adjusted trading profit from available fields
+  const accountingProfit = raw.accounting_profit ?? 0;
+  const totalAddBacks = raw.total_add_backs ?? 0;
+  const totalDeductions = raw.total_deductions ?? 0;
+  const adjustedTradingProfit = accountingProfit + totalAddBacks - totalDeductions;
+  
+  return {
+    adjustedTradingProfit,
+    taxableTotalProfits: raw.taxable_total_profits,
+    corporationTaxDue: raw.corporation_tax_due,
+    marginalReliefAmount: raw.marginal_relief_amount ?? 0,
+    totalDeductions: totalDeductions,
+    netCapitalAllowances: raw.net_capital_allowances ?? 0,
+    associatedCompaniesCount: raw.associated_companies_count ?? 0,
+    poolsSummary: raw.pools_summary ?? [],
+    claimsSummary: raw.claims_summary ?? [],
+  };
+}
+
+/**
+ * Runtime assertion for normalized CT computation
+ */
+export function assertNormalizedCTComputation(ct: NormalizedCTComputation): void {
+  const errors: string[] = [];
+  
+  if (typeof ct.taxableTotalProfits !== 'number' || isNaN(ct.taxableTotalProfits)) {
+    errors.push('taxableTotalProfits must be a valid number');
+  }
+  if (typeof ct.corporationTaxDue !== 'number' || isNaN(ct.corporationTaxDue)) {
+    errors.push('corporationTaxDue must be a valid number');
+  }
+  if (ct.corporationTaxDue < 0) {
+    errors.push('corporationTaxDue cannot be negative');
+  }
+  
+  if (errors.length > 0) {
+    throw new Error(`CT computation validation failed: ${errors.join(', ')}`);
+  }
+}
+
+// ============= MD5 VALIDATION =============
+
+/**
+ * Validate MD5 implementation against known test vectors
+ * Must pass all tests for HMRC gateway auth to work
+ */
+export function validateMD5Implementation(): { valid: boolean; failures: string[] } {
+  const testVectors = [
+    { input: '', expected: 'd41d8cd98f00b204e9800998ecf8427e' },
+    { input: 'a', expected: '0cc175b9c0f1b6a831c399e269772661' },
+    { input: 'abc', expected: '900150983cd24fb0d6963f7d28e17f72' },
+    { input: 'message digest', expected: 'f96b697d7cb7938d525a2f31aaf161d0' },
+  ];
+  
+  const failures: string[] = [];
+  
+  for (const test of testVectors) {
+    const result = md5HashSync(test.input);
+    if (result !== test.expected) {
+      failures.push(`MD5("${test.input}") = "${result}", expected "${test.expected}"`);
+    }
+  }
+  
+  return { valid: failures.length === 0, failures };
+}
+
+// ============= XML VALIDATION =============
+
+/**
+ * Self-check validator for generated XML
+ * Catches common issues before HMRC submission
+ */
+export function validateGeneratedXML(xml: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  // Check for unescaped ampersands (that aren't entities)
+  const unescapedAmpersand = /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;)/;
+  if (unescapedAmpersand.test(xml)) {
+    errors.push('XML contains unescaped ampersand');
+  }
+  
+  // Check for illegal control characters
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(xml)) {
+    errors.push('XML contains illegal control characters');
+  }
+  
+  // Check required CT600 nodes exist
+  const requiredNodes = ['TaxableProfit', 'CorporationTaxDue', 'TotalCorporationTax'];
+  for (const node of requiredNodes) {
+    if (!xml.includes(`<${node}>`)) {
+      errors.push(`Missing required node: ${node}`);
+    }
+  }
+  
+  return { valid: errors.length === 0, errors };
+}
+
 // ============= CT600 CONTENT BUILDERS =============
 
 /**
  * Build CT600 XML content (inner content, not full GovTalk envelope)
+ * Uses normalized CT computation with correct field names
  */
 export function buildCT600XML(input: CT600XMLInput): CT600XMLResult {
   const transactionId = `CT600-${Date.now()}`;
-  const ct = input.ctComputation;
+  
+  // Normalize and validate the CT computation
+  const ct = normalizeCTComputation(input.ctComputation);
+  assertNormalizedCTComputation(ct);
   
   // Build capital allowances section
-  const caXml = ct.net_capital_allowances ? `
+  const caXml = ct.netCapitalAllowances ? `
         <CapitalAllowances>
-          <TotalCapitalAllowances>${formatAmount(ct.net_capital_allowances)}</TotalCapitalAllowances>
+          <TotalCapitalAllowances>${formatAmount(ct.netCapitalAllowances)}</TotalCapitalAllowances>
         </CapitalAllowances>` : '';
 
   const xml = `
         <TradingProfits>
-          <TurnoverPerAccounts>${formatAmount(ct.adjusted_trading_profit || 0)}</TurnoverPerAccounts>
-          <TotalTradingProfits>${formatAmount(ct.adjusted_trading_profit || 0)}</TotalTradingProfits>
+          <TurnoverPerAccounts>${formatAmount(ct.adjustedTradingProfit)}</TurnoverPerAccounts>
+          <TotalTradingProfits>${formatAmount(Math.max(0, ct.adjustedTradingProfit))}</TotalTradingProfits>
         </TradingProfits>
         <TradingLosses>
-          <LossesCurrentPeriod>${formatAmount(Math.abs(Math.min(0, ct.adjusted_trading_profit || 0)))}</LossesCurrentPeriod>
+          <LossesCurrentPeriod>${formatAmount(Math.abs(Math.min(0, ct.adjustedTradingProfit)))}</LossesCurrentPeriod>
         </TradingLosses>
         <PropertyIncome>
           <PropertyIncomeTotal>0</PropertyIncomeTotal>
         </PropertyIncome>
         ${caXml}
         <Deductions>
-          <TotalDeductions>${formatAmount(ct.total_deductions || 0)}</TotalDeductions>
+          <TotalDeductions>${formatAmount(ct.totalDeductions)}</TotalDeductions>
         </Deductions>
         <ProfitsBeforeCharges>
-          <TotalProfits>${formatAmount(ct.taxable_profits)}</TotalProfits>
+          <TotalProfits>${formatAmount(ct.taxableTotalProfits)}</TotalProfits>
         </ProfitsBeforeCharges>
         <TaxCalculation>
-          <TaxableProfit>${formatAmount(ct.taxable_profits)}</TaxableProfit>
-          <CorporationTaxDue>${formatAmount(ct.tax_liability)}</CorporationTaxDue>
-          <MarginalRelief>${formatAmount(ct.marginal_relief)}</MarginalRelief>
-          <TotalCorporationTax>${formatAmount(ct.tax_liability)}</TotalCorporationTax>
+          <TaxableProfit>${formatAmount(ct.taxableTotalProfits)}</TaxableProfit>
+          <CorporationTaxDue>${formatAmount(ct.corporationTaxDue)}</CorporationTaxDue>
+          <MarginalRelief>${formatAmount(ct.marginalReliefAmount)}</MarginalRelief>
+          <TotalCorporationTax>${formatAmount(ct.corporationTaxDue)}</TotalCorporationTax>
         </TaxCalculation>
         <AssociatedCompanies>
-          <NumberOfAssociatedCompanies>${ct.associated_companies_count || 0}</NumberOfAssociatedCompanies>
+          <NumberOfAssociatedCompanies>${ct.associatedCompaniesCount}</NumberOfAssociatedCompanies>
         </AssociatedCompanies>`;
+
+  // Validate generated XML
+  const validation = validateGeneratedXML(xml);
+  if (!validation.valid) {
+    console.warn('CT600 XML validation warnings:', validation.errors);
+  }
 
   return {
     xml,
