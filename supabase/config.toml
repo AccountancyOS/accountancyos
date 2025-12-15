@@ -80,3 +80,30 @@ verify_jwt = true
 
 [functions.hmrc-ct-submit]
 verify_jwt = true
+
+[functions.hmrc-ct-poll]
+verify_jwt = false
+
+[functions.hmrc-ct-delete]
+verify_jwt = false
+
+[functions.hmrc-auth]
+verify_jwt = true
+
+[functions.hmrc-callback]
+verify_jwt = false
+
+[functions.hmrc-vat-obligations]
+verify_jwt = true
+
+[functions.stripe-checkout]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+[functions.fx-rates]
+verify_jwt = true
+
+[functions.check-subscription]
+verify_jwt = true
