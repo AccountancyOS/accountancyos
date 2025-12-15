@@ -3,7 +3,7 @@ import { CTComputationResult } from './ct-computation-engine';
 /**
  * CT600 GovTalk XML Builder for HMRC Transaction Engine submission
  * Generates full GovTalk envelope with inline base64 iXBRL attachments
- * Uses real XML parsing (no regex) and proper UTF-8 encoding
+ * Uses real XML parsing and proper UTF-8 encoding
  */
 
 // ============= INTERFACES =============
@@ -111,28 +111,11 @@ export function decodeBase64Utf8(base64: string): string {
 }
 
 /**
- * Generate MD5 hash for Gateway password authentication
- * Uses Web Crypto API
- */
-export async function md5Hash(str: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  
-  // Use SubtleCrypto for hashing (MD5 not directly supported, use SHA-256 for now)
-  // Note: HMRC actually requires MD5, but browsers don't support it natively
-  // In production edge function, we use a proper MD5 implementation
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Synchronous MD5 hash for Deno edge functions
- * This is a pure JS implementation for environments without crypto.subtle MD5
+ * Synchronous MD5 hash for GovTalk authentication
+ * Pure JS implementation - no fallback to SHA-256
+ * HMRC requires MD5 for Gateway password authentication
  */
 export function md5HashSync(str: string): string {
-  // Simple MD5 implementation for GovTalk authentication
-  // Based on RFC 1321
   function md5cycle(x: number[], k: number[]) {
     let a = x[0], b = x[1], c = x[2], d = x[3];
     
@@ -292,6 +275,16 @@ function getPoolAllowance(pools: any[], poolType: string): number {
 
 function getTotalClaimsByType(claims: any[], claimType: string): number {
   return claims?.filter(c => c.claim_type === claimType)?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0;
+}
+
+// ============= SHA-256 FOR ARTEFACT HASHING =============
+
+export async function sha256Hash(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ============= GOVTALK ENVELOPE BUILDERS =============
@@ -469,17 +462,16 @@ export function buildGovTalkDeleteEnvelope(correlationId: string, gatewayId: str
 </GovTalkMessage>`;
 }
 
-// ============= XML PARSING (Real DOM Parser) =============
+// ============= XML PARSING (Browser DOMParser) =============
 
 /**
- * Parse GovTalk response using real XML DOM parser
- * No regex - uses DOMParser for proper XML handling
+ * Parse GovTalk response using browser DOMParser
+ * For client-side code only - edge functions use fast-xml-parser
  */
 export function parseGovTalkResponse(responseXml: string): GovTalkResponse {
   const timestamp = new Date().toISOString();
   
   try {
-    // Use DOMParser for real XML parsing
     const parser = new DOMParser();
     const doc = parser.parseFromString(responseXml, 'application/xml');
     
@@ -502,7 +494,7 @@ export function parseGovTalkResponse(responseXml: string): GovTalkResponse {
     const correlationEl = doc.getElementsByTagName('CorrelationID')[0];
     const correlationId = correlationEl?.textContent || undefined;
     
-    // Extract poll interval (in seconds)
+    // Extract poll interval
     const pollIntervalEl = doc.getElementsByTagName('PollInterval')[0];
     const pollInterval = pollIntervalEl ? parseInt(pollIntervalEl.textContent || '5', 10) : undefined;
     
@@ -510,9 +502,8 @@ export function parseGovTalkResponse(responseXml: string): GovTalkResponse {
     const transactionIdEl = doc.getElementsByTagName('TransactionID')[0];
     const transactionId = transactionIdEl?.textContent || undefined;
     
-    // Extract receipt reference (in final response)
-    const receiptEl = doc.getElementsByTagName('ReceiptReference')[0] || 
-                      doc.getElementsByTagName('IRmarkReceipt')[0];
+    // Extract receipt reference
+    const receiptEl = doc.getElementsByTagName('ReceiptReference')[0] || doc.getElementsByTagName('IRmarkReceipt')[0];
     const receiptReference = receiptEl?.textContent || undefined;
     
     // Extract errors
@@ -523,29 +514,11 @@ export function parseGovTalkResponse(responseXml: string): GovTalkResponse {
       const codeEl = errorEl.getElementsByTagName('Number')[0] || errorEl.getElementsByTagName('Code')[0];
       const messageEl = errorEl.getElementsByTagName('Text')[0] || errorEl.getElementsByTagName('Message')[0];
       const locationEl = errorEl.getElementsByTagName('Location')[0];
-      
       errors.push({
         code: codeEl?.textContent || 'UNKNOWN',
         message: messageEl?.textContent || 'Unknown error',
         location: locationEl?.textContent || undefined
       });
-    }
-    
-    // Check for GovTalkErrors
-    const govTalkErrors = doc.getElementsByTagName('GovTalkErrors')[0];
-    if (govTalkErrors) {
-      const gtErrorElements = govTalkErrors.getElementsByTagName('Error');
-      for (let i = 0; i < gtErrorElements.length; i++) {
-        const errorEl = gtErrorElements[i];
-        const raisedBy = errorEl.getElementsByTagName('RaisedBy')[0];
-        const number = errorEl.getElementsByTagName('Number')[0];
-        const text = errorEl.getElementsByTagName('Text')[0];
-        
-        errors.push({
-          code: number?.textContent || 'GOVTALK_ERROR',
-          message: `${raisedBy?.textContent || 'System'}: ${text?.textContent || 'Unknown error'}`,
-        });
-      }
     }
     
     return {
@@ -568,113 +541,93 @@ export function parseGovTalkResponse(responseXml: string): GovTalkResponse {
   }
 }
 
-/**
- * Generate SHA256 hash for artefact integrity
- */
-export async function sha256Hash(content: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(content);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 // ============= CT600 CONTENT BUILDERS =============
 
 /**
- * Build CT600 XML payload (inner content, not full envelope)
+ * Build CT600 XML content (inner content, not full GovTalk envelope)
  */
 export function buildCT600XML(input: CT600XMLInput): CT600XMLResult {
-  const transactionId = `CT600-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-  const version = '3.0.0';
-  
+  const transactionId = `CT600-${Date.now()}`;
   const ct = input.ctComputation;
   
-  // Build CT600 content (used inside GovTalk Body)
-  const xml = `<CT600>
-    <Box1>small</Box1>
-    <Box145>${formatAmount(ct.accounting_profit)}</Box145>
-    <Box155>${formatAmount(ct.total_add_backs)}</Box155>
-    <Box160>${formatAmount(ct.total_deductions)}</Box160>
-    <Box165>${formatAmount(ct.taxable_total_profits)}</Box165>
-    <Box235>${formatAmount(ct.net_capital_allowances)}</Box235>
-    <Box275>${formatAmount(ct.taxable_total_profits)}</Box275>
-    <Box430>${formatAmount(ct.corporation_tax_due)}</Box430>
-    ${ct.marginal_relief_amount > 0 ? `<Box435>${formatAmount(ct.marginal_relief_amount)}</Box435>` : ''}
-    <Box440>${formatAmount(ct.corporation_tax_due)}</Box440>
-    <Box475>0</Box475>
-    <Box480>${formatAmount(ct.corporation_tax_due)}</Box480>
-  </CT600>
-  <CapitalAllowances>
-    <MainPoolWDA>${formatAmount(getPoolAllowance(ct.pools_summary, 'MAIN'))}</MainPoolWDA>
-    <SpecialRatePoolWDA>${formatAmount(getPoolAllowance(ct.pools_summary, 'SPECIAL_RATE'))}</SpecialRatePoolWDA>
-    <AIAClaimed>${formatAmount(getTotalClaimsByType(ct.claims_summary, 'AIA'))}</AIAClaimed>
-    <FYAClaimed>${formatAmount(getTotalClaimsByType(ct.claims_summary, 'FYA_50') + getTotalClaimsByType(ct.claims_summary, 'FYA_100'))}</FYAClaimed>
-    <FullExpensingClaimed>${formatAmount(getTotalClaimsByType(ct.claims_summary, 'FULL_EXPENSING'))}</FullExpensingClaimed>
-    <TotalAllowances>${formatAmount(ct.total_capital_allowances)}</TotalAllowances>
-    ${ct.balancing_charges > 0 ? `<BalancingCharge>${formatAmount(ct.balancing_charges)}</BalancingCharge>` : ''}
-  </CapitalAllowances>`;
+  // Build capital allowances section
+  const caXml = ct.net_capital_allowances ? `
+        <CapitalAllowances>
+          <TotalCapitalAllowances>${formatAmount(ct.net_capital_allowances)}</TotalCapitalAllowances>
+        </CapitalAllowances>` : '';
+
+  const xml = `
+        <TradingProfits>
+          <TurnoverPerAccounts>${formatAmount(ct.adjusted_trading_profit || 0)}</TurnoverPerAccounts>
+          <TotalTradingProfits>${formatAmount(ct.adjusted_trading_profit || 0)}</TotalTradingProfits>
+        </TradingProfits>
+        <TradingLosses>
+          <LossesCurrentPeriod>${formatAmount(Math.abs(Math.min(0, ct.adjusted_trading_profit || 0)))}</LossesCurrentPeriod>
+        </TradingLosses>
+        <PropertyIncome>
+          <PropertyIncomeTotal>0</PropertyIncomeTotal>
+        </PropertyIncome>
+        ${caXml}
+        <Deductions>
+          <TotalDeductions>${formatAmount(ct.total_deductions || 0)}</TotalDeductions>
+        </Deductions>
+        <ProfitsBeforeCharges>
+          <TotalProfits>${formatAmount(ct.taxable_profits)}</TotalProfits>
+        </ProfitsBeforeCharges>
+        <TaxCalculation>
+          <TaxableProfit>${formatAmount(ct.taxable_profits)}</TaxableProfit>
+          <CorporationTaxDue>${formatAmount(ct.tax_liability)}</CorporationTaxDue>
+          <MarginalRelief>${formatAmount(ct.marginal_relief)}</MarginalRelief>
+          <TotalCorporationTax>${formatAmount(ct.tax_liability)}</TotalCorporationTax>
+        </TaxCalculation>
+        <AssociatedCompanies>
+          <NumberOfAssociatedCompanies>${ct.associated_companies_count || 0}</NumberOfAssociatedCompanies>
+        </AssociatedCompanies>`;
 
   return {
     xml,
     transactionId,
-    version
+    version: '5.0'
   };
 }
 
 /**
- * Validate CT600 XML input before generation
+ * Validate CT600 input before XML generation
  */
-export function validateCT600Input(
-  input: Partial<CT600XMLInput>
-): { valid: boolean; errors: string[] } {
+export function validateCT600Input(input: Partial<CT600XMLInput>): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-
+  
   if (!input.companyName) errors.push('Company name is required');
   if (!input.companyNumber) errors.push('Company number is required');
   if (!input.utr) errors.push('UTR is required');
-  if (!input.periodStart) errors.push('Period start date is required');
-  if (!input.periodEnd) errors.push('Period end date is required');
+  if (!input.periodStart) errors.push('Period start is required');
+  if (!input.periodEnd) errors.push('Period end is required');
   if (!input.ctComputation) errors.push('CT computation is required');
-  if (!input.registeredOffice?.line1) errors.push('Registered office address is required');
-  if (!input.registeredOffice?.city) errors.push('Registered office city is required');
-  if (!input.registeredOffice?.postcode) errors.push('Registered office postcode is required');
-
-  if (input.periodStart && input.periodEnd) {
-    const start = new Date(input.periodStart);
-    const end = new Date(input.periodEnd);
-    if (end <= start) {
-      errors.push('Period end must be after period start');
-    }
-    const months = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30);
-    if (months > 12) {
-      errors.push('Accounting period cannot exceed 12 months');
-    }
+  
+  if (input.utr && !/^\d{10}$/.test(input.utr)) {
+    errors.push('UTR must be 10 digits');
   }
-
+  
+  if (input.companyNumber && !/^[A-Z0-9]{8}$/.test(input.companyNumber)) {
+    errors.push('Company number must be 8 characters');
+  }
+  
   return { valid: errors.length === 0, errors };
 }
 
-// ============= LEGACY EXPORTS (for compatibility) =============
+// ============= LEGACY EXPORTS FOR COMPATIBILITY =============
 
 export interface CT600ResponseResult {
   success: boolean;
   correlationId?: string;
-  receiptReference?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  timestamp?: string;
+  errors?: Array<{ code: string; message: string }>;
 }
 
 export function parseCT600Response(responseXml: string): CT600ResponseResult {
   const parsed = parseGovTalkResponse(responseXml);
-  
   return {
-    success: parsed.qualifier === 'response' && !parsed.errors?.length,
+    success: parsed.qualifier !== 'error',
     correlationId: parsed.correlationId,
-    receiptReference: parsed.receiptReference,
-    errorCode: parsed.errors?.[0]?.code,
-    errorMessage: parsed.errors?.[0]?.message,
-    timestamp: parsed.timestamp
+    errors: parsed.errors
   };
 }
