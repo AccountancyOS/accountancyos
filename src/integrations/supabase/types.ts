@@ -5568,11 +5568,13 @@ export type Database = {
           filing_reference: string | null
           filing_type: string
           generated_documents: Json | null
+          hmrc_correlation_id: string | null
           id: string
           idempotency_key: string | null
           is_amendment: boolean | null
           is_locked: boolean | null
           job_id: string
+          last_poll_at: string | null
           last_submission_error: string | null
           model_snapshot_id: string | null
           next_retry_at: string | null
@@ -5583,6 +5585,7 @@ export type Database = {
           payment_deadline: string | null
           period_end: string | null
           period_start: string | null
+          poll_count: number | null
           rejection_reason: string | null
           retry_count: number | null
           second_payment_date: string | null
@@ -5625,11 +5628,13 @@ export type Database = {
           filing_reference?: string | null
           filing_type: string
           generated_documents?: Json | null
+          hmrc_correlation_id?: string | null
           id?: string
           idempotency_key?: string | null
           is_amendment?: boolean | null
           is_locked?: boolean | null
           job_id: string
+          last_poll_at?: string | null
           last_submission_error?: string | null
           model_snapshot_id?: string | null
           next_retry_at?: string | null
@@ -5640,6 +5645,7 @@ export type Database = {
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
+          poll_count?: number | null
           rejection_reason?: string | null
           retry_count?: number | null
           second_payment_date?: string | null
@@ -5682,11 +5688,13 @@ export type Database = {
           filing_reference?: string | null
           filing_type?: string
           generated_documents?: Json | null
+          hmrc_correlation_id?: string | null
           id?: string
           idempotency_key?: string | null
           is_amendment?: boolean | null
           is_locked?: boolean | null
           job_id?: string
+          last_poll_at?: string | null
           last_submission_error?: string | null
           model_snapshot_id?: string | null
           next_retry_at?: string | null
@@ -5697,6 +5705,7 @@ export type Database = {
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
+          poll_count?: number | null
           rejection_reason?: string | null
           retry_count?: number | null
           second_payment_date?: string | null
