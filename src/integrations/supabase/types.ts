@@ -2267,6 +2267,7 @@ export type Database = {
           status: string
           tags: Json | null
           updated_at: string
+          utr: string | null
           vat_frequency: string | null
           vat_number: string | null
           vat_scheme: string | null
@@ -2306,6 +2307,7 @@ export type Database = {
           status?: string
           tags?: Json | null
           updated_at?: string
+          utr?: string | null
           vat_frequency?: string | null
           vat_number?: string | null
           vat_scheme?: string | null
@@ -2345,6 +2347,7 @@ export type Database = {
           status?: string
           tags?: Json | null
           updated_at?: string
+          utr?: string | null
           vat_frequency?: string | null
           vat_number?: string | null
           vat_scheme?: string | null
@@ -11412,6 +11415,15 @@ export type Database = {
       create_organization_with_owner: {
         Args: { org_name: string }
         Returns: string
+      }
+      create_test_ct600_filing: {
+        Args: {
+          p_organization_id: string
+          p_period_end: string
+          p_period_start: string
+          p_test_run_key: string
+        }
+        Returns: Json
       }
       emit_automation_event: {
         Args: {
