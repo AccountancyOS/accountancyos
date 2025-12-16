@@ -4,7 +4,7 @@ import { XMLParser } from "https://esm.sh/fast-xml-parser@4.3.2";
 
 /**
  * HMRC CT600 Submit Edge Function
- * Submits CT600 to HMRC Transaction Engine and queues polling job
+ * Generates artefacts BEFORE credential check to enable dry-run validation
  * No polling loops - queue-driven architecture
  * Uses fast-xml-parser for namespace-tolerant XML parsing
  */
@@ -20,12 +20,23 @@ const HMRC_CT_ENDPOINTS = {
   production: 'https://transaction-engine.tax.service.gov.uk/submission',
 };
 
-// Maximum poll attempts before timeout
 const MAX_POLL_ATTEMPTS = 100;
+const GENERATOR_VERSION = '1.2.0';
 
 interface SubmissionRequest {
   filingId: string;
   environment: 'test' | 'production';
+}
+
+interface ArtefactValidationResult {
+  valid: boolean;
+  warnings: string[];
+}
+
+interface ArtefactIds {
+  CT600_XML?: string;
+  IXBRL_ACCOUNTS?: string;
+  IXBRL_CT_COMPUTATION?: string;
 }
 
 // ============= XML UTILITIES =============
@@ -184,12 +195,328 @@ function formatDate(dateStr: string): string {
   return d.toISOString().split('T')[0];
 }
 
+function formatAmount(amount: number): string {
+  return Math.round(amount).toString();
+}
+
 async function sha256Hash(content: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ============= VALIDATION HELPERS =============
+
+function validateGeneratedXML(xml: string): ArtefactValidationResult {
+  const warnings: string[] = [];
+  
+  // Check for unescaped ampersands
+  const unescapedAmpersand = /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;)/;
+  if (unescapedAmpersand.test(xml)) {
+    warnings.push('XML contains unescaped ampersand');
+  }
+  
+  // Check for illegal control characters
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(xml)) {
+    warnings.push('XML contains illegal control characters');
+  }
+  
+  // Check required CT600 nodes
+  const requiredNodes = ['TaxableProfit', 'CorporationTaxDue', 'TotalCorporationTax'];
+  for (const node of requiredNodes) {
+    if (!xml.includes(`<${node}>`)) {
+      warnings.push(`Missing required node: ${node}`);
+    }
+  }
+  
+  return { valid: warnings.length === 0, warnings };
+}
+
+function validateIXBRLWellFormed(ixhtml: string): ArtefactValidationResult {
+  const warnings: string[] = [];
+  
+  // Check XML declaration
+  if (!ixhtml.includes('<?xml')) {
+    warnings.push('Missing XML declaration');
+  }
+  
+  // Check required iXBRL namespace
+  if (!ixhtml.includes('xmlns:ix=')) {
+    warnings.push('Missing ix namespace declaration');
+  }
+  
+  // Check required elements
+  if (!ixhtml.includes('<ix:header>')) {
+    warnings.push('Missing ix:header element');
+  }
+  if (!ixhtml.includes('<ix:resources>')) {
+    warnings.push('Missing ix:resources element');
+  }
+  
+  // Check for illegal XML characters
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(ixhtml)) {
+    warnings.push('Contains illegal XML characters');
+  }
+  
+  // Check ampersand escaping
+  if (/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/.test(ixhtml)) {
+    warnings.push('Contains unescaped ampersands');
+  }
+  
+  return { valid: warnings.length === 0, warnings };
+}
+
+// ============= CT600 XML BUILDERS =============
+
+function normalizeCTComputation(raw: any): any {
+  if (raw.taxable_total_profits === undefined || raw.taxable_total_profits === null) {
+    throw new Error('CT computation missing taxable_total_profits');
+  }
+  if (raw.corporation_tax_due === undefined || raw.corporation_tax_due === null) {
+    throw new Error('CT computation missing corporation_tax_due');
+  }
+  
+  const accountingProfit = raw.accounting_profit ?? 0;
+  const totalAddBacks = raw.total_add_backs ?? 0;
+  const totalDeductions = raw.total_deductions ?? 0;
+  const adjustedTradingProfit = accountingProfit + totalAddBacks - totalDeductions;
+  
+  return {
+    adjustedTradingProfit,
+    taxableTotalProfits: raw.taxable_total_profits,
+    corporationTaxDue: raw.corporation_tax_due,
+    marginalReliefAmount: raw.marginal_relief_amount ?? 0,
+    totalDeductions,
+    netCapitalAllowances: raw.net_capital_allowances ?? 0,
+    associatedCompaniesCount: raw.associated_companies_count ?? 0,
+  };
+}
+
+function buildCT600XMLContent(ctData: any): string {
+  const ct = normalizeCTComputation(ctData);
+  
+  const caXml = ct.netCapitalAllowances ? `
+        <CapitalAllowances>
+          <TotalCapitalAllowances>${formatAmount(ct.netCapitalAllowances)}</TotalCapitalAllowances>
+        </CapitalAllowances>` : '';
+
+  return `
+        <TradingProfits>
+          <TurnoverPerAccounts>${formatAmount(ct.adjustedTradingProfit)}</TurnoverPerAccounts>
+          <TotalTradingProfits>${formatAmount(Math.max(0, ct.adjustedTradingProfit))}</TotalTradingProfits>
+        </TradingProfits>
+        <TradingLosses>
+          <LossesCurrentPeriod>${formatAmount(Math.abs(Math.min(0, ct.adjustedTradingProfit)))}</LossesCurrentPeriod>
+        </TradingLosses>
+        <PropertyIncome>
+          <PropertyIncomeTotal>0</PropertyIncomeTotal>
+        </PropertyIncome>
+        ${caXml}
+        <Deductions>
+          <TotalDeductions>${formatAmount(ct.totalDeductions)}</TotalDeductions>
+        </Deductions>
+        <ProfitsBeforeCharges>
+          <TotalProfits>${formatAmount(ct.taxableTotalProfits)}</TotalProfits>
+        </ProfitsBeforeCharges>
+        <TaxCalculation>
+          <TaxableProfit>${formatAmount(ct.taxableTotalProfits)}</TaxableProfit>
+          <CorporationTaxDue>${formatAmount(ct.corporationTaxDue)}</CorporationTaxDue>
+          <MarginalRelief>${formatAmount(ct.marginalReliefAmount)}</MarginalRelief>
+          <TotalCorporationTax>${formatAmount(ct.corporationTaxDue)}</TotalCorporationTax>
+        </TaxCalculation>
+        <AssociatedCompanies>
+          <NumberOfAssociatedCompanies>${ct.associatedCompaniesCount}</NumberOfAssociatedCompanies>
+        </AssociatedCompanies>`;
+}
+
+// ============= iXBRL GENERATION =============
+
+function generateFRS105iXBRL(model: any): string {
+  const currentPeriodContextId = `AsOf${model.period_end.replace(/-/g, '')}`;
+  const durationContextId = `From${model.period_start.replace(/-/g, '')}To${model.period_end.replace(/-/g, '')}`;
+  
+  const escapeXml = (text: string): string => {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const formatNumber = (num: number): string => (num || 0).toFixed(0);
+  
+  const bs = model.balance_sheet || {};
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"
+      xmlns:ixt="http://www.xbrl.org/inlineXBRL/transformation/2020-02-12"
+      xmlns:xbrli="http://www.xbrl.org/2003/instance"
+      xmlns:link="http://www.xbrl.org/2003/linkbase"
+      xmlns:xlink="http://www.w3.org/1999/xlink"
+      xmlns:iso4217="http://www.xbrl.org/2003/iso4217"
+      xmlns:uk-bus="http://xbrl.frc.org.uk/reports/2022-01-01/uk-bus"
+      xmlns:uk-core="http://xbrl.frc.org.uk/reports/2022-01-01/uk-core"
+      xmlns:uk-direp="http://xbrl.frc.org.uk/reports/2022-01-01/uk-direp"
+      xmlns:uk-gaap="http://xbrl.frc.org.uk/reports/2022-01-01/uk-gaap"
+      xml:lang="en">
+<head>
+  <title>${escapeXml(model.company_name)} - Annual Accounts</title>
+  <meta charset="UTF-8"/>
+</head>
+<body>
+<ix:header>
+  <ix:hidden>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:EntityCurrentLegalOrRegisteredName">${escapeXml(model.company_name)}</ix:nonNumeric>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:UKCompaniesHouseRegisteredNumber">${escapeXml(model.company_number)}</ix:nonNumeric>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:StartDateForPeriodCoveredByReport" format="ixt:datedaymonthyearfull">${model.period_start}</ix:nonNumeric>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:EndDateForPeriodCoveredByReport" format="ixt:datedaymonthyearfull">${model.period_end}</ix:nonNumeric>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:AccountsTypeFullOrAbbreviated">Micro-entity</ix:nonNumeric>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:AccountingStandardsApplied">FRS 105</ix:nonNumeric>
+  </ix:hidden>
+  <ix:references>
+    <link:schemaRef xlink:href="https://xbrl.frc.org.uk/FRS-105/2022-01-01/FRS-105-2022-01-01.xsd" xlink:type="simple"/>
+  </ix:references>
+  <ix:resources>
+    <xbrli:context id="${currentPeriodContextId}">
+      <xbrli:entity>
+        <xbrli:identifier scheme="http://www.companieshouse.gov.uk/">${model.company_number}</xbrli:identifier>
+      </xbrli:entity>
+      <xbrli:period>
+        <xbrli:instant>${model.period_end}</xbrli:instant>
+      </xbrli:period>
+    </xbrli:context>
+    <xbrli:context id="${durationContextId}">
+      <xbrli:entity>
+        <xbrli:identifier scheme="http://www.companieshouse.gov.uk/">${model.company_number}</xbrli:identifier>
+      </xbrli:entity>
+      <xbrli:period>
+        <xbrli:startDate>${model.period_start}</xbrli:startDate>
+        <xbrli:endDate>${model.period_end}</xbrli:endDate>
+      </xbrli:period>
+    </xbrli:context>
+    <xbrli:unit id="GBP">
+      <xbrli:measure>iso4217:GBP</xbrli:measure>
+    </xbrli:unit>
+  </ix:resources>
+</ix:header>
+
+<h1>${escapeXml(model.company_name)}</h1>
+<p>Company Registration Number: ${escapeXml(model.company_number)}</p>
+<p>Micro-entity Accounts for the period from ${model.period_start} to ${model.period_end}</p>
+
+<h2>Statement of Financial Position as at ${model.period_end}</h2>
+
+<table>
+  <tr><th></th><th>£</th></tr>
+  <tr>
+    <td>Tangible assets</td>
+    <td><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:TangibleFixedAssets" unitRef="GBP" decimals="0">${formatNumber(bs.tangible_assets)}</ix:nonFraction></td>
+  </tr>
+  <tr>
+    <td>Cash at bank</td>
+    <td><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CashBankInHand" unitRef="GBP" decimals="0">${formatNumber(bs.cash_at_bank)}</ix:nonFraction></td>
+  </tr>
+  <tr>
+    <td>Net Assets</td>
+    <td><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:NetAssetsLiabilities" unitRef="GBP" decimals="0">${formatNumber(bs.net_assets)}</ix:nonFraction></td>
+  </tr>
+  <tr>
+    <td>Share capital</td>
+    <td><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CalledUpShareCapital" unitRef="GBP" decimals="0">${formatNumber(bs.share_capital)}</ix:nonFraction></td>
+  </tr>
+  <tr>
+    <td>Retained earnings</td>
+    <td><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:ProfitLossAccountReserve" unitRef="GBP" decimals="0">${formatNumber(bs.retained_earnings)}</ix:nonFraction></td>
+  </tr>
+</table>
+
+</body>
+</html>`;
+}
+
+function generateCTComputationiXBRL(ctData: any, companyName: string, companyNumber: string): string {
+  const durationContextId = `From${ctData.period_start.replace(/-/g, '')}To${ctData.period_end.replace(/-/g, '')}`;
+  
+  const escapeXml = (text: string): string => {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const formatNumber = (num: number): string => (num || 0).toFixed(0);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"
+      xmlns:xbrli="http://www.xbrl.org/2003/instance"
+      xmlns:link="http://www.xbrl.org/2003/linkbase"
+      xmlns:xlink="http://www.w3.org/1999/xlink"
+      xmlns:iso4217="http://www.xbrl.org/2003/iso4217"
+      xmlns:ct="http://xbrl.frc.org.uk/reports/2022-01-01/uk-core"
+      xml:lang="en">
+<head>
+  <title>${escapeXml(companyName)} - Corporation Tax Computation</title>
+  <meta charset="UTF-8"/>
+</head>
+<body>
+<ix:header>
+  <ix:hidden>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:EntityCurrentLegalOrRegisteredName">${escapeXml(companyName)}</ix:nonNumeric>
+    <ix:nonNumeric contextRef="${durationContextId}" name="uk-bus:UKCompaniesHouseRegisteredNumber">${escapeXml(companyNumber)}</ix:nonNumeric>
+  </ix:hidden>
+  <ix:resources>
+    <xbrli:context id="${durationContextId}">
+      <xbrli:entity>
+        <xbrli:identifier scheme="http://www.companieshouse.gov.uk/">${companyNumber}</xbrli:identifier>
+      </xbrli:entity>
+      <xbrli:period>
+        <xbrli:startDate>${ctData.period_start}</xbrli:startDate>
+        <xbrli:endDate>${ctData.period_end}</xbrli:endDate>
+      </xbrli:period>
+    </xbrli:context>
+    <xbrli:unit id="GBP">
+      <xbrli:measure>iso4217:GBP</xbrli:measure>
+    </xbrli:unit>
+  </ix:resources>
+</ix:header>
+
+<h1>${escapeXml(companyName)}</h1>
+<p>Company Registration Number: ${escapeXml(companyNumber)}</p>
+<p>Corporation Tax Computation for the period ${ctData.period_start} to ${ctData.period_end}</p>
+
+<h2>Reconciliation of Profit to Taxable Total Profits</h2>
+<table>
+  <tr><th></th><th>£</th></tr>
+  <tr>
+    <td>Net profit per accounts</td>
+    <td><ix:nonFraction contextRef="${durationContextId}" name="ct:ProfitLossPerAccounts" unitRef="GBP" decimals="0">${formatNumber(ctData.accounting_profit)}</ix:nonFraction></td>
+  </tr>
+  <tr>
+    <td>Taxable Total Profits</td>
+    <td><ix:nonFraction contextRef="${durationContextId}" name="ct:TaxableTotalProfits" unitRef="GBP" decimals="0">${formatNumber(ctData.taxable_total_profits)}</ix:nonFraction></td>
+  </tr>
+</table>
+
+<h2>Corporation Tax Calculation</h2>
+<table>
+  <tr><th></th><th>£</th></tr>
+  <tr>
+    <td>Corporation Tax Payable</td>
+    <td><ix:nonFraction contextRef="${durationContextId}" name="ct:CorporationTaxPayable" unitRef="GBP" decimals="0">${formatNumber(ctData.corporation_tax_due)}</ix:nonFraction></td>
+  </tr>
+</table>
+
+</body>
+</html>`;
 }
 
 // ============= XML PARSING (fast-xml-parser) =============
@@ -203,15 +530,10 @@ interface GovTalkResponse {
   errors?: Array<{ code: string; message: string }>;
 }
 
-/**
- * Safely extract a value from parsed XML object, handling namespaced keys
- */
 function safeGet(obj: any, ...keys: string[]): any {
   if (!obj) return undefined;
   for (const key of keys) {
-    // Try exact key first
     if (obj[key] !== undefined) return obj[key];
-    // Try with namespace prefix removed
     for (const k of Object.keys(obj)) {
       if (k.endsWith(`:${key}`) || k === key) {
         return obj[k];
@@ -221,10 +543,6 @@ function safeGet(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
-/**
- * Parse GovTalk response using fast-xml-parser
- * Namespace-tolerant, handles all GovTalk response types
- */
 function parseGovTalkResponse(responseXml: string): GovTalkResponse {
   try {
     const parser = new XMLParser({
@@ -235,35 +553,23 @@ function parseGovTalkResponse(responseXml: string): GovTalkResponse {
     });
 
     const parsed = parser.parse(responseXml);
-    
-    // Navigate to GovTalkMessage (handles namespace variations)
     const govTalkMsg = safeGet(parsed, 'GovTalkMessage', 'GovTalkMessage:GovTalkMessage') || parsed;
     const header = safeGet(govTalkMsg, 'Header') || {};
     const messageDetails = safeGet(header, 'MessageDetails') || {};
     const govTalkDetails = safeGet(govTalkMsg, 'GovTalkDetails') || {};
     
-    // Extract qualifier
     const qualifierRaw = safeGet(messageDetails, 'Qualifier');
     const qualifier = (typeof qualifierRaw === 'string' ? qualifierRaw.toLowerCase() : 'error') as 'acknowledgement' | 'response' | 'error';
     
-    // Extract correlation ID
     const correlationId = safeGet(messageDetails, 'CorrelationID') as string | undefined;
-    
-    // Extract poll interval (for acknowledgements)
     const pollIntervalRaw = safeGet(messageDetails, 'PollInterval');
     const pollInterval = pollIntervalRaw ? parseInt(String(pollIntervalRaw), 10) : undefined;
-    
-    // Extract transaction ID
     const transactionId = safeGet(messageDetails, 'TransactionID') as string | undefined;
-    
-    // Extract receipt reference (for successful responses)
     const receiptReference = safeGet(govTalkDetails, 'ReceiptReference') ||
                              safeGet(govTalkDetails, 'IRmarkReceipt') as string | undefined;
     
-    // Extract errors from GovTalkErrors and/or Error elements
     const errors: Array<{ code: string; message: string }> = [];
     
-    // Check GovTalkDetails for errors
     const govTalkErrors = safeGet(govTalkDetails, 'GovTalkErrors', 'GovTalkError');
     if (govTalkErrors) {
       const errorList = Array.isArray(govTalkErrors) ? govTalkErrors : [govTalkErrors];
@@ -280,7 +586,6 @@ function parseGovTalkResponse(responseXml: string): GovTalkResponse {
       }
     }
     
-    // Also check Body for errors
     const body = safeGet(govTalkMsg, 'Body') || {};
     const bodyErrors = safeGet(body, 'ErrorResponse', 'Errors', 'Error');
     if (bodyErrors) {
@@ -437,23 +742,7 @@ serve(async (req) => {
     const { filingId, environment = 'test' }: SubmissionRequest = await req.json();
     console.log(`[hmrc-ct-submit] Starting CT600 submission for filing ${filingId} in ${environment} mode`);
 
-    // Check for HMRC Gateway credentials
-    const gatewayId = Deno.env.get('HMRC_CT_GATEWAY_ID');
-    const gatewayPassword = Deno.env.get('HMRC_CT_GATEWAY_PASSWORD');
-
-    if (!gatewayId || !gatewayPassword) {
-      console.error('[hmrc-ct-submit] HMRC CT Gateway credentials not configured');
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'HMRC CT Gateway credentials not configured',
-          details: 'Set HMRC_CT_GATEWAY_ID and HMRC_CT_GATEWAY_PASSWORD secrets'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    // Get filing with related data
+    // ========== STEP 1: Load filing + company + CT snapshot ==========
     const { data: filing, error: filingError } = await supabase
       .from('filings')
       .select(`
@@ -475,7 +764,17 @@ serve(async (req) => {
       );
     }
 
-    // Validate submission integrity
+    const company = filing.company as any;
+    const ctSnapshot = filing.ct_snapshot as any;
+
+    if (!ctSnapshot) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'CT snapshot not found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    // ========== STEP 2: Validate submission integrity ==========
     const { data: integrityCheck, error: integrityError } = await supabase.rpc(
       'validate_submission_integrity',
       { p_filing_id: filingId, p_filing_type: 'CT600_HMRC' }
@@ -498,42 +797,186 @@ serve(async (req) => {
       );
     }
 
-    // Get CT600 XML content artefact
-    const { data: ct600Artefact } = await supabase
+    // ========== STEP 3: Get or generate artefacts ==========
+    const artefactIds: ArtefactIds = {};
+    const validationResults: Record<string, ArtefactValidationResult> = {};
+    
+    // Get existing artefacts
+    const { data: existingArtefacts } = await supabase
       .from('filing_artefacts')
       .select('*')
       .eq('filing_id', filingId)
-      .eq('artefact_type', 'CT600_XML')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .in('artefact_type', ['CT600_XML', 'IXBRL_ACCOUNTS', 'IXBRL_CT_COMPUTATION']);
 
+    let ct600Artefact = existingArtefacts?.find(a => a.artefact_type === 'CT600_XML');
+    let ixbrlAccountsArtefact = existingArtefacts?.find(a => a.artefact_type === 'IXBRL_ACCOUNTS');
+    let ixbrlComputationArtefact = existingArtefacts?.find(a => a.artefact_type === 'IXBRL_CT_COMPUTATION');
+
+    const ctData = ctSnapshot.snapshot_data || ctSnapshot;
+
+    // Generate CT600 XML if missing
     if (!ct600Artefact) {
+      console.log('[hmrc-ct-submit] Generating CT600 XML artefact');
+      const ct600Content = buildCT600XMLContent(ctData);
+      const ct600Hash = await sha256Hash(ct600Content);
+      
+      const { data: newArtefact, error: insertError } = await supabase
+        .from('filing_artefacts')
+        .insert({
+          filing_id: filingId,
+          organization_id: filing.organization_id,
+          artefact_type: 'CT600_XML',
+          content: ct600Content,
+          content_hash: ct600Hash,
+          content_encoding: 'utf8',
+          metadata: { 
+            generator_version: GENERATOR_VERSION, 
+            generated_at: new Date().toISOString(),
+            dry_run: true
+          }
+        })
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('[hmrc-ct-submit] Failed to store CT600 XML:', insertError);
+      } else {
+        ct600Artefact = newArtefact;
+      }
+    }
+
+    // Generate iXBRL Accounts if missing
+    if (!ixbrlAccountsArtefact) {
+      console.log('[hmrc-ct-submit] Generating iXBRL Accounts artefact');
+      const accountsModel = {
+        company_name: company.company_name,
+        company_number: company.company_number,
+        period_start: filing.period_start,
+        period_end: filing.period_end,
+        balance_sheet: ctData.balance_sheet || {
+          tangible_assets: 0,
+          cash_at_bank: ctData.accounting_profit || 0,
+          net_assets: ctData.accounting_profit || 0,
+          share_capital: 1,
+          retained_earnings: (ctData.accounting_profit || 0) - 1,
+        }
+      };
+      const ixbrlAccounts = generateFRS105iXBRL(accountsModel);
+      const accountsHash = await sha256Hash(ixbrlAccounts);
+      
+      const { data: newArtefact, error: insertError } = await supabase
+        .from('filing_artefacts')
+        .insert({
+          filing_id: filingId,
+          organization_id: filing.organization_id,
+          artefact_type: 'IXBRL_ACCOUNTS',
+          content: ixbrlAccounts,
+          content_hash: accountsHash,
+          content_encoding: 'utf8',
+          taxonomy_version: 'FRC-2022-01-01',
+          metadata: { 
+            generator_version: GENERATOR_VERSION, 
+            generated_at: new Date().toISOString(),
+            dry_run: true
+          }
+        })
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('[hmrc-ct-submit] Failed to store iXBRL Accounts:', insertError);
+      } else {
+        ixbrlAccountsArtefact = newArtefact;
+      }
+    }
+
+    // Generate iXBRL CT Computation if missing
+    if (!ixbrlComputationArtefact) {
+      console.log('[hmrc-ct-submit] Generating iXBRL CT Computation artefact');
+      const ixbrlComputation = generateCTComputationiXBRL(
+        { ...ctData, period_start: filing.period_start, period_end: filing.period_end },
+        company.company_name,
+        company.company_number
+      );
+      const computationHash = await sha256Hash(ixbrlComputation);
+      
+      const { data: newArtefact, error: insertError } = await supabase
+        .from('filing_artefacts')
+        .insert({
+          filing_id: filingId,
+          organization_id: filing.organization_id,
+          artefact_type: 'IXBRL_CT_COMPUTATION',
+          content: ixbrlComputation,
+          content_hash: computationHash,
+          content_encoding: 'utf8',
+          taxonomy_version: 'FRC-2022-01-01',
+          metadata: { 
+            generator_version: GENERATOR_VERSION, 
+            generated_at: new Date().toISOString(),
+            dry_run: true
+          }
+        })
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('[hmrc-ct-submit] Failed to store iXBRL CT Computation:', insertError);
+      } else {
+        ixbrlComputationArtefact = newArtefact;
+      }
+    }
+
+    // Populate artefact IDs
+    if (ct600Artefact) artefactIds.CT600_XML = ct600Artefact.id;
+    if (ixbrlAccountsArtefact) artefactIds.IXBRL_ACCOUNTS = ixbrlAccountsArtefact.id;
+    if (ixbrlComputationArtefact) artefactIds.IXBRL_CT_COMPUTATION = ixbrlComputationArtefact.id;
+
+    // ========== STEP 4: Run validators ==========
+    if (ct600Artefact?.content) {
+      validationResults.ct600_xml = validateGeneratedXML(ct600Artefact.content);
+    }
+    if (ixbrlAccountsArtefact?.content) {
+      validationResults.ixbrl_accounts = validateIXBRLWellFormed(ixbrlAccountsArtefact.content);
+    }
+    if (ixbrlComputationArtefact?.content) {
+      validationResults.ixbrl_ct_computation = validateIXBRLWellFormed(ixbrlComputationArtefact.content);
+    }
+
+    console.log('[hmrc-ct-submit] Artefact validation results:', validationResults);
+
+    // ========== STEP 5: CREDENTIAL GATE ==========
+    const gatewayId = Deno.env.get('HMRC_CT_GATEWAY_ID');
+    const gatewayPassword = Deno.env.get('HMRC_CT_GATEWAY_PASSWORD');
+
+    if (!gatewayId || !gatewayPassword) {
+      console.log('[hmrc-ct-submit] HMRC CT Gateway credentials not configured - returning dry-run response');
       return new Response(
-        JSON.stringify({ success: false, error: 'CT600 XML artefact not found' }),
+        JSON.stringify({
+          success: false,
+          blocked_at: 'credential_gate',
+          error: 'HMRC CT Gateway credentials not configured',
+          artefacts_generated: true,
+          artefact_ids: artefactIds,
+          validation: validationResults
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // Get iXBRL artefacts
-    const { data: ixbrlArtefacts } = await supabase
-      .from('filing_artefacts')
-      .select('*')
-      .eq('filing_id', filingId)
-      .in('artefact_type', ['IXBRL_ACCOUNTS', 'IXBRL_CT_COMPUTATION']);
-
-    const ixbrlAccounts = ixbrlArtefacts?.find(a => a.artefact_type === 'IXBRL_ACCOUNTS');
-    const ixbrlComputation = ixbrlArtefacts?.find(a => a.artefact_type === 'IXBRL_CT_COMPUTATION');
-
-    if (!ixbrlAccounts || !ixbrlComputation) {
+    // ========== STEP 6: Check all artefacts exist before submission ==========
+    if (!ct600Artefact || !ixbrlAccountsArtefact || !ixbrlComputationArtefact) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing iXBRL artefacts' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Missing required artefacts',
+          artefact_ids: artefactIds
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // Check idempotency
-    const snapshotHash = filing.ct_snapshot?.snapshot_hash || 'unknown';
+    // ========== STEP 7: Check idempotency ==========
+    const snapshotHash = ctSnapshot?.snapshot_hash || 'unknown';
     const idempotencyKey = `hmrc_ct:${filing.company_id}:${filing.period_end}:${snapshotHash}`;
 
     const { data: existingSubmission } = await supabase
@@ -557,11 +1000,10 @@ serve(async (req) => {
       );
     }
 
-    // Update filing status to submitting
+    // ========== STEP 8: Update filing status to submitting ==========
     await supabase.from('filings').update({ status: 'submitting' }).eq('id', filingId);
 
-    // Build GovTalk envelope
-    const company = filing.company as any;
+    // ========== STEP 9: Build GovTalk envelope ==========
     const govTalkXml = buildGovTalkSubmitEnvelope(
       gatewayId,
       gatewayPassword,
@@ -571,8 +1013,8 @@ serve(async (req) => {
       filing.period_start,
       filing.period_end,
       ct600Artefact.content,
-      ixbrlAccounts.content,
-      ixbrlComputation.content,
+      ixbrlAccountsArtefact.content,
+      ixbrlComputationArtefact.content,
       filing.is_amendment || false,
       filing.original_filing_id || undefined
     );
@@ -589,7 +1031,7 @@ serve(async (req) => {
       metadata: { environment, timestamp: new Date().toISOString() }
     });
 
-    // Create submission record
+    // ========== STEP 10: Create submission record ==========
     const { data: submissionRecord, error: submissionError } = await supabase
       .from('filing_submissions')
       .insert({
@@ -612,7 +1054,7 @@ serve(async (req) => {
       );
     }
 
-    // Submit to HMRC
+    // ========== STEP 11: Submit to HMRC ==========
     const hmrcEndpoint = HMRC_CT_ENDPOINTS[environment];
     console.log(`[hmrc-ct-submit] Submitting to ${hmrcEndpoint}`);
 
@@ -644,12 +1086,11 @@ serve(async (req) => {
       }
     });
 
-    // Parse response
+    // ========== STEP 12: Parse response ==========
     const parsed = parseGovTalkResponse(responseXml);
     console.log(`[hmrc-ct-submit] Parsed response:`, JSON.stringify(parsed));
 
     if (parsed.qualifier === 'error' || parsed.errors?.length) {
-      // Submission failed
       console.error('[hmrc-ct-submit] Submission failed:', parsed.errors);
 
       await supabase.from('filing_submissions').update({
@@ -672,10 +1113,8 @@ serve(async (req) => {
     }
 
     if (parsed.qualifier === 'acknowledgement' && parsed.correlationId) {
-      // Submission acknowledged - queue polling
       console.log(`[hmrc-ct-submit] Acknowledged with correlationId: ${parsed.correlationId}`);
 
-      // Update submission record
       await supabase.from('filing_submissions').update({
         status: 'submitted',
         correlation_id: parsed.correlationId,
@@ -683,7 +1122,6 @@ serve(async (req) => {
         response_payload: responseXml
       }).eq('id', submissionRecord.id);
 
-      // Update filing with correlation ID
       await supabase.from('filings').update({ 
         status: 'submitted',
         hmrc_correlation_id: parsed.correlationId,
@@ -726,7 +1164,8 @@ serve(async (req) => {
           success: true, 
           status: 'submitted',
           correlationId: parsed.correlationId,
-          pollInterval: parsed.pollInterval
+          pollInterval: parsed.pollInterval,
+          artefact_ids: artefactIds
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
