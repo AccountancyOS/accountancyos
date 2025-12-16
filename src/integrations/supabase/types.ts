@@ -4076,6 +4076,7 @@ export type Database = {
           merge_data: Json | null
           organization_id: string
           provider: string | null
+          queued_by: string | null
           retry_count: number | null
           scheduled_at: string | null
           sent_at: string | null
@@ -4104,6 +4105,7 @@ export type Database = {
           merge_data?: Json | null
           organization_id: string
           provider?: string | null
+          queued_by?: string | null
           retry_count?: number | null
           scheduled_at?: string | null
           sent_at?: string | null
@@ -4132,6 +4134,7 @@ export type Database = {
           merge_data?: Json | null
           organization_id?: string
           provider?: string | null
+          queued_by?: string | null
           retry_count?: number | null
           scheduled_at?: string | null
           sent_at?: string | null
@@ -6209,8 +6212,11 @@ export type Database = {
           invoice_type: string
           is_posted: boolean | null
           issue_date: string
+          issued_at: string | null
+          issued_by: string | null
           notes: string | null
           organization_id: string
+          override_metadata: Json | null
           pdf_path: string | null
           posted_at: string | null
           posted_by: string | null
@@ -6224,6 +6230,9 @@ export type Database = {
           total_net: number
           total_vat: number
           updated_at: string | null
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           amount_paid?: number
@@ -6243,8 +6252,11 @@ export type Database = {
           invoice_type: string
           is_posted?: boolean | null
           issue_date: string
+          issued_at?: string | null
+          issued_by?: string | null
           notes?: string | null
           organization_id: string
+          override_metadata?: Json | null
           pdf_path?: string | null
           posted_at?: string | null
           posted_by?: string | null
@@ -6258,6 +6270,9 @@ export type Database = {
           total_net?: number
           total_vat?: number
           updated_at?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           amount_paid?: number
@@ -6277,8 +6292,11 @@ export type Database = {
           invoice_type?: string
           is_posted?: boolean | null
           issue_date?: string
+          issued_at?: string | null
+          issued_by?: string | null
           notes?: string | null
           organization_id?: string
+          override_metadata?: Json | null
           pdf_path?: string | null
           posted_at?: string | null
           posted_by?: string | null
@@ -6292,6 +6310,9 @@ export type Database = {
           total_net?: number
           total_vat?: number
           updated_at?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -11347,7 +11368,19 @@ export type Database = {
         }
         Returns: string
       }
+      can_approve_bills: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_approve_filings: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_create_invoices: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_edit_invoices: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
@@ -11363,7 +11396,27 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      can_issue_invoices: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_lock_periods: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_manage_automation_rules: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_bank_reconciliation: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_bills: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_email_queue: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
@@ -11383,7 +11436,27 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      can_override_locked_records: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_post_journals: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_record_payments: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_send_emails: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_submit_filings: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_void_invoices: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
@@ -11396,6 +11469,15 @@ export type Database = {
           check_user_id: string
         }
         Returns: boolean
+      }
+      create_invoice_safe: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_input: Json
+          p_organization_id: string
+        }
+        Returns: Json
       }
       create_job_from_template: {
         Args: {
@@ -11604,6 +11686,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      issue_invoice_safe: { Args: { p_invoice_id: string }; Returns: Json }
       lifecycle_accept_portal_invitation: {
         Args: { p_token: string }
         Returns: Json
@@ -11627,6 +11710,10 @@ export type Database = {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
       }
+      queue_email_safe: {
+        Args: { p_input: Json; p_organization_id: string }
+        Returns: Json
+      }
       queue_filing_for_submission: {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
         Returns: Json
@@ -11643,6 +11730,10 @@ export type Database = {
           p_triggered_by_id: string
         }
         Returns: string
+      }
+      record_invoice_payment_safe: {
+        Args: { p_invoice_id: string; p_payment: Json }
+        Returns: Json
       }
       regress_filing_status: {
         Args: { p_filing_id: string; p_reason: string }
@@ -11690,6 +11781,10 @@ export type Database = {
         Args: { p_deadline_id: string; p_updates: Json }
         Returns: Json
       }
+      update_invoice_draft_safe: {
+        Args: { p_input: Json; p_invoice_id: string }
+        Returns: Json
+      }
       update_job_status_safe: {
         Args: { p_job_id: string; p_new_status: string; p_reason?: string }
         Returns: Json
@@ -11708,6 +11803,10 @@ export type Database = {
       }
       user_has_organization_access: {
         Args: { org_id: string }
+        Returns: boolean
+      }
+      user_has_role_at_least: {
+        Args: { _min_role: string; _org_id: string; _user_id: string }
         Returns: boolean
       }
       user_in_organization: {
@@ -11731,6 +11830,10 @@ export type Database = {
         Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
+      void_invoice_safe: {
+        Args: { p_invoice_id: string; p_reason: string }
+        Returns: Json
+      }
     }
     Enums: {
       accountant_client_link_status:

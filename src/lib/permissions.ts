@@ -17,7 +17,19 @@ export type PermissionName =
   | 'can_view_sensitive_data'
   | 'can_delete_records'
   | 'can_send_emails'
-  | 'can_manage_email_queue';
+  | 'can_manage_email_queue'
+  // Bookkeeping permissions (Phase 11)
+  | 'can_create_invoices'
+  | 'can_edit_invoices'
+  | 'can_issue_invoices'
+  | 'can_void_invoices'
+  | 'can_manage_bills'
+  | 'can_approve_bills'
+  | 'can_post_journals'
+  | 'can_manage_bank_reconciliation'
+  | 'can_lock_periods'
+  | 'can_override_locked_records'
+  | 'can_record_payments';
 
 // Permission to roles mapping
 export const PERMISSIONS: Record<PermissionName, AppRole[]> = {
@@ -36,6 +48,18 @@ export const PERMISSIONS: Record<PermissionName, AppRole[]> = {
   can_delete_records: ['owner', 'admin'],
   can_send_emails: ['owner', 'admin', 'manager', 'staff'],
   can_manage_email_queue: ['owner', 'admin', 'manager'],
+  // Bookkeeping permissions (Phase 11)
+  can_create_invoices: ['owner', 'admin', 'manager', 'staff'],
+  can_edit_invoices: ['owner', 'admin', 'manager', 'staff'],
+  can_issue_invoices: ['owner', 'admin', 'manager'],
+  can_void_invoices: ['owner', 'admin'],
+  can_manage_bills: ['owner', 'admin', 'manager', 'staff'],
+  can_approve_bills: ['owner', 'admin', 'manager'],
+  can_post_journals: ['owner', 'admin', 'manager'],
+  can_manage_bank_reconciliation: ['owner', 'admin', 'manager'],
+  can_lock_periods: ['owner', 'admin'],
+  can_override_locked_records: ['owner', 'admin'],
+  can_record_payments: ['owner', 'admin', 'manager'],
 };
 
 // Role hierarchy (higher index = more permissions)
@@ -85,4 +109,16 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   can_delete_records: 'Permanently delete clients, jobs, and other records',
   can_send_emails: 'Send emails to clients via connected mailboxes',
   can_manage_email_queue: 'View and manage the email sending queue',
+  // Bookkeeping permissions (Phase 11)
+  can_create_invoices: 'Create new sales invoices',
+  can_edit_invoices: 'Edit draft invoices (admin+ can edit issued with override)',
+  can_issue_invoices: 'Issue/post invoices making them immutable',
+  can_void_invoices: 'Void invoices (requires reason)',
+  can_manage_bills: 'Create and edit purchase bills',
+  can_approve_bills: 'Approve bills for payment',
+  can_post_journals: 'Create and post journal entries to ledger',
+  can_manage_bank_reconciliation: 'Perform bank reconciliation',
+  can_lock_periods: 'Lock accounting periods to prevent changes',
+  can_override_locked_records: 'Override locked period restrictions (with audit)',
+  can_record_payments: 'Record payments against invoices and bills',
 };
