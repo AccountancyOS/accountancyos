@@ -35,8 +35,14 @@ export function useRealtimeSubscription({
       return;
     }
 
-    // Create unique channel name to prevent duplicates
-    const channelName = `realtime-${table}-${organizationId}-${Date.now()}`;
+    // Create stable channel name based on subscription parameters (not Date.now())
+    const channelName = `realtime-${table}-${organizationId}-${filter?.value || 'all'}`;
+    
+    // Check if we already have a channel with this identity
+    if (channelRef.current) {
+      console.debug(`[Realtime] Channel already exists for ${channelName}, skipping duplicate`);
+      return;
+    }
 
     // Build filter string for organization scoping
     const filterString = filter 
@@ -70,6 +76,7 @@ export function useRealtimeSubscription({
     // Cleanup on unmount or dependency change
     return () => {
       if (channelRef.current) {
+        console.debug(`[Realtime] Unsubscribing from ${channelName}`);
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
@@ -102,7 +109,7 @@ export function useMultiTableRealtimeSubscription(
     for (const sub of subscriptions) {
       if (!sub.organizationId) continue;
 
-      const channelName = `realtime-multi-${sub.table}-${sub.organizationId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const channelName = `realtime-multi-${sub.table}-${sub.organizationId}-${sub.filter?.value || 'all'}`;
       const filterString = sub.filter
         ? `${sub.filter.column}=eq.${sub.filter.value}`
         : `organization_id=eq.${sub.organizationId}`;
@@ -132,6 +139,7 @@ export function useMultiTableRealtimeSubscription(
 
     return () => {
       for (const channel of channelsRef.current) {
+        console.debug(`[Realtime] Unsubscribing from multi-table channel`);
         supabase.removeChannel(channel);
       }
       channelsRef.current = [];
