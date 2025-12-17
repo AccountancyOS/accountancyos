@@ -11563,20 +11563,17 @@ export type Database = {
     }
     Functions: {
       acknowledge_failed_email_safe: {
-        Args: { p_email_id: string; p_user_id: string }
+        Args: { p_email_id: string }
         Returns: Json
       }
       acknowledge_vat_reconciliation: {
         Args: { p_note?: string; p_reconciliation_id: string }
         Returns: Json
       }
-      approve_bill_safe: {
-        Args: { p_bill_id: string; p_user_id: string }
-        Returns: Json
-      }
+      approve_bill_safe: { Args: { p_bill_id: string }; Returns: Json }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       automation_dry_run: {
-        Args: { p_rule_id: string; p_sample_event?: Json; p_user_id: string }
+        Args: { p_rule_id: string; p_sample_event?: Json }
         Returns: Json
       }
       calculate_cash_vat_proportion: {
@@ -11760,6 +11757,7 @@ export type Database = {
         }
         Returns: Json
       }
+      disconnect_mailbox_safe: { Args: { p_mailbox_id: string }; Returns: Json }
       emit_automation_event: {
         Args: {
           p_entity_id: string
@@ -11852,6 +11850,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "vat_registrations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      get_org_settings_safe: {
+        Args: { p_organization_id: string }
+        Returns: {
+          automation_max_actions_org_day: number | null
+          automation_max_actions_org_hour: number | null
+          automation_max_actions_per_rule_day: number | null
+          automation_max_actions_per_rule_hour: number | null
+          automation_rule_management_mode: string | null
+          bill_number_next: number | null
+          bill_number_padding: number | null
+          bill_number_prefix: string | null
+          created_at: string | null
+          email_default_mode: string | null
+          invoice_number_next: number | null
+          invoice_number_padding: number | null
+          invoice_number_prefix: string | null
+          organization_id: string
+          shared_mailbox_enabled: boolean | null
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "org_settings"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -11997,12 +12022,7 @@ export type Database = {
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
       override_bill_lock_safe: {
-        Args: {
-          p_bill_id: string
-          p_changes: Json
-          p_reason: string
-          p_user_id: string
-        }
+        Args: { p_bill_id: string; p_changes: Json; p_reason: string }
         Returns: Json
       }
       override_invoice_lock_safe: {
@@ -12027,7 +12047,6 @@ export type Database = {
               p_template_id?: string
               p_to_email: string
               p_to_name?: string
-              p_user_id: string
             }
             Returns: Json
           }
@@ -12056,7 +12075,6 @@ export type Database = {
           p_payment_date: string
           p_payment_method?: string
           p_reference?: string
-          p_user_id: string
         }
         Returns: Json
       }
@@ -12077,12 +12095,9 @@ export type Database = {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
       }
-      retry_failed_email_safe: {
-        Args: { p_email_id: string; p_user_id: string }
-        Returns: Json
-      }
+      retry_failed_email_safe: { Args: { p_email_id: string }; Returns: Json }
       reverse_bill_payment_safe: {
-        Args: { p_payment_id: string; p_reason: string; p_user_id: string }
+        Args: { p_payment_id: string; p_reason: string }
         Returns: Json
       }
       reverse_invoice_payment_safe: {
@@ -12150,7 +12165,6 @@ export type Database = {
           p_scheduled_at?: string
           p_subject?: string
           p_to_email?: string
-          p_user_id: string
         }
         Returns: Json
       }
@@ -12196,7 +12210,7 @@ export type Database = {
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
       void_bill_safe: {
-        Args: { p_bill_id: string; p_reason: string; p_user_id: string }
+        Args: { p_bill_id: string; p_reason: string }
         Returns: Json
       }
       void_invoice_safe: {
