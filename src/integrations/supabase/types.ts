@@ -7938,9 +7938,6 @@ export type Database = {
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
-          invoice_padding: number | null
-          invoice_prefix: string | null
-          next_invoice_number: number | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
           updated_at: string | null
@@ -7959,9 +7956,6 @@ export type Database = {
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
-          invoice_padding?: number | null
-          invoice_prefix?: string | null
-          next_invoice_number?: number | null
           organization_id: string
           shared_mailbox_enabled?: boolean | null
           updated_at?: string | null
@@ -7980,9 +7974,6 @@ export type Database = {
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
-          invoice_padding?: number | null
-          invoice_prefix?: string | null
-          next_invoice_number?: number | null
           organization_id?: string
           shared_mailbox_enabled?: boolean | null
           updated_at?: string | null
@@ -11775,25 +11766,44 @@ export type Database = {
         }
         Returns: Json
       }
-      create_invoice_draft_safe: {
-        Args: {
-          p_contact_email?: string
-          p_contact_name?: string
-          p_currency?: string
-          p_customer_id?: string
-          p_due_date?: string
-          p_entity_id: string
-          p_entity_type: string
-          p_invoice_number?: string
-          p_invoice_type?: string
-          p_issue_date?: string
-          p_lines?: Json
-          p_notes?: string
-          p_organization_id: string
-          p_reference?: string
-        }
-        Returns: Json
-      }
+      create_invoice_draft_safe:
+        | {
+            Args: {
+              p_contact_email?: string
+              p_contact_name?: string
+              p_currency?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_entity_id: string
+              p_entity_type: string
+              p_invoice_number?: string
+              p_invoice_type?: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_organization_id: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_contact_name?: string
+              p_currency?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_entity_id: string
+              p_entity_type: string
+              p_invoice_number?: string
+              p_invoice_type?: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_organization_id: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
       create_invoice_safe: {
         Args: {
           p_entity_id: string
@@ -11864,9 +11874,6 @@ export type Database = {
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
-          invoice_padding: number | null
-          invoice_prefix: string | null
-          next_invoice_number: number | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
           updated_at: string | null
@@ -11955,9 +11962,6 @@ export type Database = {
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
-          invoice_padding: number | null
-          invoice_prefix: string | null
-          next_invoice_number: number | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
           updated_at: string | null
@@ -12120,21 +12124,36 @@ export type Database = {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
       }
-      queue_email_safe: {
-        Args: {
-          p_body_html?: string
-          p_entity_id?: string
-          p_entity_type?: string
-          p_merge_data?: Json
-          p_organization_id: string
-          p_scheduled_at?: string
-          p_subject?: string
-          p_template_id?: string
-          p_to_email: string
-          p_to_name?: string
-        }
-        Returns: Json
-      }
+      queue_email_safe:
+        | {
+            Args: {
+              p_body_html: string
+              p_entity_id?: string
+              p_entity_type?: string
+              p_merge_data?: Json
+              p_organization_id: string
+              p_scheduled_at?: string
+              p_subject: string
+              p_template_id?: string
+              p_to_email: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_body_html?: string
+              p_entity_id?: string
+              p_entity_type?: string
+              p_merge_data?: Json
+              p_organization_id: string
+              p_scheduled_at?: string
+              p_subject?: string
+              p_template_id?: string
+              p_to_email: string
+              p_to_name?: string
+            }
+            Returns: Json
+          }
       queue_filing_for_submission: {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
         Returns: Json
@@ -12223,7 +12242,6 @@ export type Database = {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
       }
-      set_rpc_context: { Args: never; Returns: undefined }
       submit_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       toggle_automation_rule_safe: {
         Args: { p_is_active: boolean; p_rule_id: string }
@@ -12260,20 +12278,34 @@ export type Database = {
         Args: { p_deadline_id: string; p_updates: Json }
         Returns: Json
       }
-      update_invoice_draft_safe: {
-        Args: {
-          p_contact_email?: string
-          p_contact_name?: string
-          p_customer_id?: string
-          p_due_date?: string
-          p_invoice_id: string
-          p_issue_date?: string
-          p_lines?: Json
-          p_notes?: string
-          p_reference?: string
-        }
-        Returns: Json
-      }
+      update_invoice_draft_safe:
+        | {
+            Args: {
+              p_contact_email?: string
+              p_contact_name?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_invoice_id: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_contact_name?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_invoice_id: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
       update_issued_invoice_safe: {
         Args: { p_invoice_id: string; p_reason?: string; p_updates: Json }
         Returns: Json

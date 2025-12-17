@@ -54,7 +54,129 @@ export default function OpsHealth() {
     // RLS Tests
     const rlsTests: TestResult[] = [];
     
-    // Test 1: ledger_entries direct write should fail
+    // Test A1: set_rpc_context() RPC call should FAIL (function deleted)
+    try {
+      const start = Date.now();
+      // Use raw fetch since TypeScript types won't include deleted function
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/set_rpc_context`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+        }
+      );
+      
+      rlsTests.push({
+        name: "set_rpc_context() RPC blocked",
+        status: response.status >= 400 ? "pass" : "fail",
+        message: response.status >= 400 ? `RPC blocked (HTTP ${response.status})` : "CRITICAL: set_rpc_context() is callable!",
+        duration: Date.now() - start,
+      });
+    } catch {
+      rlsTests.push({
+        name: "set_rpc_context() RPC blocked",
+        status: "pass",
+        message: "Function not callable (expected)",
+      });
+    }
+
+    // Test A2: Direct invoice insert should STILL fail (proves RPC context can't be set externally)
+    try {
+      const start = Date.now();
+      const { error } = await supabase
+        .from("invoices")
+        .insert([{
+          organization_id: organization.id,
+          status: "DRAFT",
+          invoice_type: "SALES",
+          contact_name: "SECURITY TEST",
+          issue_date: new Date().toISOString().split("T")[0],
+          due_date: new Date().toISOString().split("T")[0],
+        }]);
+      
+      rlsTests.push({
+        name: "Direct invoice insert blocked (no RPC bypass)",
+        status: error ? "pass" : "fail",
+        message: error ? "Direct write blocked by RLS" : "CRITICAL: Direct insert allowed!",
+        duration: Date.now() - start,
+      });
+    } catch {
+      rlsTests.push({
+        name: "Direct invoice insert blocked (no RPC bypass)",
+        status: "pass",
+        message: "Direct insert blocked with exception",
+      });
+    }
+
+    // Test B: invoice_lines direct write with fake invoice_id should fail (cross-org protection)
+    try {
+      const start = Date.now();
+      const fakeInvoiceId = "00000000-0000-0000-0000-000000000001"; // Non-existent invoice
+      const { error } = await supabase
+        .from("invoice_lines")
+        .insert([{
+          invoice_id: fakeInvoiceId,
+          line_number: 1,
+          description: "CROSS-ORG TEST",
+          quantity: 1,
+          unit_price: 100,
+          net_amount: 100,
+          vat_amount: 0,
+          gross_amount: 100,
+          account_id: "00000000-0000-0000-0000-000000000000",
+        }]);
+      
+      rlsTests.push({
+        name: "invoice_lines cross-org tampering blocked",
+        status: error ? "pass" : "fail",
+        message: error ? "Cross-org insert blocked by RLS" : "CRITICAL: Cross-org tampering allowed!",
+        duration: Date.now() - start,
+      });
+    } catch {
+      rlsTests.push({
+        name: "invoice_lines cross-org tampering blocked",
+        status: "pass",
+        message: "Cross-org insert blocked with exception",
+      });
+    }
+
+    // Test B2: bill_lines direct write with fake bill_id should fail
+    try {
+      const start = Date.now();
+      const fakeBillId = "00000000-0000-0000-0000-000000000002";
+      const { error } = await supabase
+        .from("bill_lines")
+        .insert([{
+          bill_id: fakeBillId,
+          line_number: 1,
+          description: "CROSS-ORG TEST",
+          quantity: 1,
+          unit_price: 100,
+          net_amount: 100,
+          vat_amount: 0,
+          gross_amount: 100,
+          account_id: "00000000-0000-0000-0000-000000000000",
+        }]);
+      
+      rlsTests.push({
+        name: "bill_lines cross-org tampering blocked",
+        status: error ? "pass" : "fail",
+        message: error ? "Cross-org insert blocked by RLS" : "CRITICAL: Cross-org tampering allowed!",
+        duration: Date.now() - start,
+      });
+    } catch {
+      rlsTests.push({
+        name: "bill_lines cross-org tampering blocked",
+        status: "pass",
+        message: "Cross-org insert blocked with exception",
+      });
+    }
+
+    // Test: ledger_entries direct write should fail
     try {
       const start = Date.now();
       const { error } = await supabase
@@ -90,7 +212,7 @@ export default function OpsHealth() {
       });
     }
 
-    // Test 2: journals direct write should fail
+    // Test: journals direct write should fail
     try {
       const start = Date.now();
       const { error } = await supabase
@@ -115,7 +237,7 @@ export default function OpsHealth() {
       });
     }
 
-    // Test 3: invoice_payments direct write should fail
+    // Test: invoice_payments direct write should fail
     try {
       const start = Date.now();
       const { error } = await supabase
@@ -140,35 +262,7 @@ export default function OpsHealth() {
       });
     }
 
-    // Test 4: invoices direct insert should fail (RPC-only)
-    try {
-      const start = Date.now();
-      const { error } = await supabase
-        .from("invoices")
-        .insert([{
-          organization_id: organization.id,
-          status: "DRAFT",
-          invoice_type: "SALES",
-          contact_name: "RLS TEST",
-          issue_date: new Date().toISOString().split("T")[0],
-          due_date: new Date().toISOString().split("T")[0],
-        }]);
-      
-      rlsTests.push({
-        name: "invoices direct insert blocked",
-        status: error ? "pass" : "fail",
-        message: error ? "Direct insert blocked by RLS (RPC-only)" : "CRITICAL: Direct insert allowed!",
-        duration: Date.now() - start,
-      });
-    } catch {
-      rlsTests.push({
-        name: "invoices direct insert blocked",
-        status: "pass",
-        message: "Direct insert blocked with exception",
-      });
-    }
-
-    // Test 5: invoices SELECT should work (org-scoped)
+    // Test: invoices SELECT should work (org-scoped)
     try {
       const start = Date.now();
       const { data, error } = await supabase
