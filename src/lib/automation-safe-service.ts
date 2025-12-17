@@ -8,6 +8,16 @@ export interface DryRunResult {
   actions_would_execute?: Array<{ action_type: string; action_config: Record<string, unknown>; email_mode: string; }>;
   rule_name?: string;
   email_mode?: string;
+  rate_limit_check?: {
+    rule_hour_count: number;
+    rule_hour_limit: number;
+    rule_day_count: number;
+    rule_day_limit: number;
+    org_hour_count: number;
+    org_hour_limit: number;
+    org_day_count: number;
+    org_day_limit: number;
+  };
   error?: string;
 }
 
@@ -25,14 +35,10 @@ export interface RateLimitCheckResult {
 
 export async function automationDryRun(
   ruleId: string,
-  sampleEvent?: { event_type: string; entity_type?: string; entity_id?: string; }
+  sampleEvent?: { event_type: string; entity_type?: string; entity_id?: string; old_value?: Record<string, unknown>; new_value?: Record<string, unknown>; }
 ): Promise<DryRunResult> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated" };
-
   const { data, error } = await supabase.rpc('automation_dry_run', {
     p_rule_id: ruleId,
-    p_user_id: user.id,
     p_sample_event: sampleEvent ? (sampleEvent as unknown as Record<string, never>) : null
   });
 
@@ -50,7 +56,8 @@ export async function checkAutomationRateLimit(organizationId: string, ruleId?: 
 }
 
 export async function getAutomationExecutionHistory(organizationId: string, ruleId?: string, limit: number = 50) {
-  let query = supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
     .from('automation_executions')
     .select(`*, automation_rules (name, trigger_type, action_type)`)
     .eq('organization_id', organizationId)
