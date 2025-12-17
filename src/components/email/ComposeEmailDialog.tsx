@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
-import { useAuth } from "@/lib/auth-context";
+import { queueEmailSafe, updateQueuedEmailSafe } from "@/lib/email-safe-service";
 import {
   Dialog,
   DialogContent,
@@ -69,7 +69,6 @@ export function ComposeEmailDialog({
   filingId,
 }: ComposeEmailDialogProps) {
   const { organization } = useOrganization();
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [mailboxId, setMailboxId] = useState<string>("");
@@ -183,33 +182,28 @@ export function ComposeEmailDialog({
       const resolvedSubject = resolvePlaceholders(subject, context);
       const resolvedBody = resolvePlaceholders(body, context);
 
-      const status = mode === "draft" ? "draft" : "queued";
-      const scheduledAt = mode === "schedule" && scheduleDate ? scheduleDate.toISOString() : null;
+      const scheduledAt = mode === "schedule" && scheduleDate ? scheduleDate.toISOString() : undefined;
 
-      const selectedMailbox = mailboxes?.find((m) => m.id === mailboxId);
-
-      const { error } = await supabase.from("email_queue").insert({
-        organization_id: organization.id,
-        to_email: toEmail,
-        to_name: toName || null,
+      // Use safe RPC to queue email
+      const result = await queueEmailSafe(organization.id, {
+        toEmail,
+        toName: toName || undefined,
         subject: resolvedSubject,
-        body_html: resolvedBody,
-        body_text: resolvedBody.replace(/<[^>]*>/g, ""),
-        mailbox_id: mailboxId || null,
-        provider: selectedMailbox?.provider || null,
-        status,
-        scheduled_at: scheduledAt,
-        client_id: clientId || null,
-        company_id: companyId || null,
-        job_id: jobId || null,
-        filing_id: filingId || null,
-        cc_emails: ccEmails ? ccEmails.split(",").map((e) => e.trim()) : null,
-        bcc_emails: bccEmails ? bccEmails.split(",").map((e) => e.trim()) : null,
-        retry_count: 0,
-        merge_data: {},
+        bodyHtml: resolvedBody,
+        entityType: clientId ? 'client' : companyId ? 'company' : jobId ? 'job' : undefined,
+        entityId: clientId || companyId || jobId || undefined,
+        scheduledAt,
       });
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to queue email');
+      }
+
+      // If draft, update status to draft
+      if (mode === "draft" && result.email_id) {
+        await updateQueuedEmailSafe(result.email_id, { scheduledAt: undefined });
+      }
+
       return mode;
     },
     onSuccess: (mode) => {

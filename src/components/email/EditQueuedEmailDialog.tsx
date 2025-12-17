@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { updateQueuedEmailSafe } from "@/lib/email-safe-service";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, Save, Eye, Code } from "lucide-react";
+import { Loader2, Send, Save, Eye, Code, AlertTriangle } from "lucide-react";
 
 interface QueuedEmail {
   id: string;
@@ -60,8 +60,10 @@ export function EditQueuedEmailDialog({
   });
   const [viewMode, setViewMode] = useState<"preview" | "html">("preview");
 
-  const isReadOnly = false; // All items in queue are editable
-  const canEdit = email?.status === "draft" || email?.status === "queued" || email?.status === "failed";
+  // Determine if email can be edited based on status
+  const canEdit = email?.status === "draft" || email?.status === "queued" || email?.status === "pending";
+  const isFailed = email?.status === "failed";
+  const isReadOnly = !canEdit && !isFailed;
 
   useEffect(() => {
     if (email) {
@@ -77,24 +79,19 @@ export function EditQueuedEmailDialog({
   }, [email]);
 
   const updateMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: typeof formData & { newStatus?: string }) => {
       if (!email) throw new Error("No email selected");
       
-      const { error } = await supabase
-        .from("email_queue")
-        .update({
-          to_email: data.to_email,
-          to_name: data.to_name || null,
-          subject: data.subject,
-          body_html: data.body_html || null,
-          body_text: data.body_text || null,
-          status: data.status,
-          error_message: null, // Clear error on update
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", email.id);
+      // Use safe RPC
+      const result = await updateQueuedEmailSafe(email.id, {
+        toEmail: data.to_email,
+        subject: data.subject,
+        bodyHtml: data.body_html || undefined,
+      });
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update email");
+      }
     },
     onSuccess: () => {
       toast({ title: "Email updated successfully" });
@@ -112,7 +109,7 @@ export function EditQueuedEmailDialog({
   const handleSave = (newStatus?: string) => {
     updateMutation.mutate({
       ...formData,
-      status: newStatus || formData.status,
+      newStatus,
     });
   };
 
@@ -131,7 +128,15 @@ export function EditQueuedEmailDialog({
             </Badge>
           </div>
           {email.error_message && (
-            <p className="text-sm text-destructive mt-2">{email.error_message}</p>
+            <div className="flex items-center gap-2 text-sm text-destructive mt-2">
+              <AlertTriangle className="h-4 w-4" />
+              {email.error_message}
+            </div>
+          )}
+          {isFailed && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Failed emails can be viewed but not edited. Use retry to re-queue.
+            </p>
           )}
         </DialogHeader>
 
@@ -145,7 +150,7 @@ export function EditQueuedEmailDialog({
                 type="email"
                 value={formData.to_email}
                 onChange={(e) => setFormData({ ...formData, to_email: e.target.value })}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isFailed}
               />
             </div>
             <div className="space-y-2">
@@ -154,7 +159,7 @@ export function EditQueuedEmailDialog({
                 id="to_name"
                 value={formData.to_name}
                 onChange={(e) => setFormData({ ...formData, to_name: e.target.value })}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isFailed}
                 placeholder="Optional"
               />
             </div>
@@ -167,7 +172,7 @@ export function EditQueuedEmailDialog({
               id="subject"
               value={formData.subject}
               onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-              disabled={isReadOnly}
+              disabled={isReadOnly || isFailed}
             />
           </div>
 
@@ -198,7 +203,7 @@ export function EditQueuedEmailDialog({
               <Textarea
                 value={formData.body_html || formData.body_text}
                 onChange={(e) => setFormData({ ...formData, body_html: e.target.value })}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isFailed}
                 className="min-h-[200px] font-mono text-sm"
                 placeholder="Email HTML content..."
               />
@@ -228,7 +233,7 @@ export function EditQueuedEmailDialog({
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {isReadOnly ? "Close" : "Cancel"}
+            {isReadOnly || isFailed ? "Close" : "Cancel"}
           </Button>
           {canEdit && (
             <>

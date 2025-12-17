@@ -11720,6 +11720,71 @@ export type Database = {
         }
         Returns: boolean
       }
+      create_automation_rule_safe: {
+        Args: {
+          p_action_config: Json
+          p_action_type: string
+          p_email_mode?: string
+          p_is_active?: boolean
+          p_name: string
+          p_organization_id: string
+          p_trigger_config: Json
+          p_trigger_type: string
+        }
+        Returns: Json
+      }
+      create_bill_draft_safe: {
+        Args: {
+          p_bill_number?: string
+          p_currency?: string
+          p_due_date?: string
+          p_entity_id: string
+          p_entity_type: string
+          p_issue_date?: string
+          p_lines?: Json
+          p_notes?: string
+          p_organization_id: string
+          p_reference?: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      create_customer_safe: {
+        Args: {
+          p_billing_address?: Json
+          p_company_name?: string
+          p_default_currency?: string
+          p_email?: string
+          p_entity_id: string
+          p_entity_type: string
+          p_internal_notes?: string
+          p_name: string
+          p_organization_id: string
+          p_payment_terms_days?: number
+          p_phone?: string
+          p_vat_number?: string
+        }
+        Returns: Json
+      }
+      create_invoice_draft_safe: {
+        Args: {
+          p_contact_email?: string
+          p_contact_name: string
+          p_currency?: string
+          p_customer_id?: string
+          p_due_date?: string
+          p_entity_id: string
+          p_entity_type: string
+          p_invoice_number?: string
+          p_invoice_type: string
+          p_issue_date?: string
+          p_lines?: Json
+          p_notes?: string
+          p_organization_id: string
+          p_reference?: string
+        }
+        Returns: Json
+      }
       create_invoice_safe: {
         Args: {
           p_entity_id: string
@@ -11755,6 +11820,10 @@ export type Database = {
           p_period_start: string
           p_test_run_key: string
         }
+        Returns: Json
+      }
+      delete_automation_rule_safe: {
+        Args: { p_rule_id: string }
         Returns: Json
       }
       disconnect_mailbox_safe: { Args: { p_mailbox_id: string }; Returns: Json }
@@ -12141,15 +12210,57 @@ export type Database = {
         Returns: Json
       }
       submit_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
+      toggle_automation_rule_safe: {
+        Args: { p_is_active: boolean; p_rule_id: string }
+        Returns: Json
+      }
       trigger_records_request: { Args: { p_job_id: string }; Returns: Json }
+      update_automation_rule_safe: {
+        Args: {
+          p_action_config?: Json
+          p_action_type?: string
+          p_email_mode?: string
+          p_is_active?: boolean
+          p_name?: string
+          p_rule_id: string
+          p_trigger_config?: Json
+          p_trigger_type?: string
+        }
+        Returns: Json
+      }
+      update_bill_draft_safe: {
+        Args: {
+          p_bill_id: string
+          p_bill_number?: string
+          p_due_date?: string
+          p_issue_date?: string
+          p_lines?: Json
+          p_notes?: string
+          p_reference?: string
+          p_supplier_id?: string
+        }
+        Returns: Json
+      }
       update_deadline_safe: {
         Args: { p_deadline_id: string; p_updates: Json }
         Returns: Json
       }
-      update_invoice_draft_safe: {
-        Args: { p_input: Json; p_invoice_id: string }
-        Returns: Json
-      }
+      update_invoice_draft_safe:
+        | {
+            Args: {
+              p_contact_email?: string
+              p_contact_name?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_invoice_id: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
+        | { Args: { p_input: Json; p_invoice_id: string }; Returns: Json }
       update_issued_invoice_safe: {
         Args: { p_invoice_id: string; p_reason?: string; p_updates: Json }
         Returns: Json

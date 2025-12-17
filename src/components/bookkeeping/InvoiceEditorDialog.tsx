@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useAuth } from "@/lib/auth-context";
 import type { BookkeepingEntity } from "./EntitySelector";
+import { createInvoiceDraftSafe, updateInvoiceDraftSafe, type InvoiceLineInput } from "@/lib/invoice-draft-service";
+import { issueInvoiceSafe } from "@/lib/invoice-safe-service";
 import {
   Dialog,
   DialogContent,
@@ -32,9 +34,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, FileCheck } from "lucide-react";
+import { Plus, Trash2, FileCheck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
+import { CustomerSelector } from "./CustomerSelector";
+import { CreateCustomerDialog } from "./CreateCustomerDialog";
+import { useInvoiceDraft } from "@/hooks/useInvoiceDraft";
 
 interface InvoiceEditorDialogProps {
   open: boolean;
@@ -89,9 +94,14 @@ export function InvoiceEditorDialog({
       gross_amount: 0,
     },
   ]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
+  
   const { organization } = useOrganization();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { draft, saveDraft, clearDraft, isLoaded } = useInvoiceDraft(organization?.id, user?.id);
+  
   const { register, handleSubmit, watch, setValue, reset } = useForm<InvoiceFormData>({
     defaultValues: invoice || {
       contact_name: "",
@@ -104,11 +114,14 @@ export function InvoiceEditorDialog({
     },
   });
 
+  // Check if invoice is editable (only DRAFT status)
+  const isDraft = !invoice || invoice.status === 'DRAFT';
+  const isLocked = invoice && invoice.status !== 'DRAFT';
+
   const { data: accounts } = useQuery({
     queryKey: ["bookkeeping-accounts-invoice", organization?.id, entity.type, entity.id],
     queryFn: async () => {
       if (!organization?.id) return [];
-
       const query = supabase
         .from("bookkeeping_accounts")
         .select("*")
@@ -133,7 +146,6 @@ export function InvoiceEditorDialog({
     queryKey: ["vat-codes", organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
-
       const { data, error } = await supabase
         .from("vat_codes")
         .select("*")
@@ -146,6 +158,23 @@ export function InvoiceEditorDialog({
     },
     enabled: !!organization?.id && open,
   });
+
+  // Restore draft on open
+  useEffect(() => {
+    if (open && !invoice && isLoaded && draft) {
+      reset({
+        contact_name: draft.contact_name,
+        contact_email: draft.contact_email,
+        invoice_number: draft.invoice_number,
+        reference: draft.reference,
+        issue_date: draft.issue_date,
+        due_date: draft.due_date,
+        notes: draft.notes,
+      });
+      setLines(draft.lines);
+      setSelectedCustomerId(draft.customer_id || null);
+    }
+  }, [open, invoice, isLoaded, draft, reset]);
 
   // Load existing invoice lines if editing
   useEffect(() => {
@@ -160,7 +189,8 @@ export function InvoiceEditorDialog({
             setLines(data);
           }
         });
-    } else if (open) {
+      setSelectedCustomerId(invoice.customer_id || null);
+    } else if (open && !invoice && !draft) {
       setLines([
         {
           line_number: 1,
@@ -176,9 +206,28 @@ export function InvoiceEditorDialog({
         },
       ]);
     }
-  }, [invoice, open]);
+  }, [invoice, open, draft]);
+
+  // Save draft when form changes (for new invoices only)
+  const formValues = watch();
+  useEffect(() => {
+    if (open && !invoice && isDraft) {
+      saveDraft({
+        contact_name: formValues.contact_name,
+        contact_email: formValues.contact_email,
+        invoice_number: formValues.invoice_number,
+        reference: formValues.reference,
+        issue_date: formValues.issue_date,
+        due_date: formValues.due_date,
+        notes: formValues.notes,
+        customer_id: selectedCustomerId || undefined,
+        lines,
+      });
+    }
+  }, [formValues, lines, selectedCustomerId, open, invoice, isDraft, saveDraft]);
 
   const updateLine = (index: number, field: keyof InvoiceLine, value: any) => {
+    if (isLocked) return;
     const newLines = [...lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
@@ -199,6 +248,7 @@ export function InvoiceEditorDialog({
   };
 
   const addLine = () => {
+    if (isLocked) return;
     setLines([
       ...lines,
       {
@@ -217,6 +267,7 @@ export function InvoiceEditorDialog({
   };
 
   const removeLine = (index: number) => {
+    if (isLocked) return;
     setLines(lines.filter((_, i) => i !== index));
   };
 
@@ -233,60 +284,60 @@ export function InvoiceEditorDialog({
     mutationFn: async (data: InvoiceFormData) => {
       if (!organization?.id) throw new Error("No organization");
 
-      const invoiceData: any = {
-        organization_id: organization.id,
-        client_id: entity.type === "client" ? entity.id : null,
-        company_id: entity.type === "company" ? entity.id : null,
-        invoice_type: invoiceType,
-        ...data,
-      };
-
-      let invoiceId = invoice?.id;
-
-      if (invoice?.id) {
-        const { error } = await supabase
-          .from("invoices")
-          .update(invoiceData)
-          .eq("id", invoice.id);
-        if (error) throw error;
-      } else {
-        const { data: newInvoice, error } = await supabase
-          .from("invoices")
-          .insert(invoiceData)
-          .select()
-          .single();
-        if (error) throw error;
-        invoiceId = newInvoice.id;
-      }
-
-      // Delete existing lines and insert new ones
-      if (invoice?.id) {
-        await supabase.from("invoice_lines").delete().eq("invoice_id", invoiceId);
-      }
-
-      const linesData = lines.map((line, idx) => ({
-        invoice_id: invoiceId,
-        line_number: idx + 1,
+      const lineInputs: InvoiceLineInput[] = lines.map((line) => ({
         description: line.description,
         quantity: line.quantity,
         unit_price: line.unit_price,
-        account_id: line.account_id,
-        vat_code_id: line.vat_code_id || null,
+        account_id: line.account_id || undefined,
+        vat_code_id: line.vat_code_id || undefined,
         vat_rate: line.vat_rate,
         net_amount: line.net_amount,
         vat_amount: line.vat_amount,
         gross_amount: line.gross_amount,
       }));
 
-      const { error: linesError } = await supabase
-        .from("invoice_lines")
-        .insert(linesData);
-
-      if (linesError) throw linesError;
+      if (invoice?.id) {
+        // Update existing draft
+        const result = await updateInvoiceDraftSafe(invoice.id, {
+          contactName: data.contact_name,
+          contactEmail: data.contact_email,
+          reference: data.reference,
+          issueDate: data.issue_date,
+          dueDate: data.due_date,
+          notes: data.notes,
+          customerId: selectedCustomerId || undefined,
+          lines: lineInputs,
+        });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to update invoice');
+        }
+      } else {
+        // Create new draft
+        const result = await createInvoiceDraftSafe(organization.id, {
+          entityType: entity.type,
+          entityId: entity.id,
+          invoiceType,
+          contactName: data.contact_name,
+          contactEmail: data.contact_email,
+          invoiceNumber: data.invoice_number || undefined,
+          reference: data.reference || undefined,
+          issueDate: data.issue_date,
+          dueDate: data.due_date,
+          notes: data.notes || undefined,
+          customerId: selectedCustomerId || undefined,
+          lines: lineInputs,
+        });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to create invoice');
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       toast.success(invoice ? "Invoice updated" : "Invoice created");
+      clearDraft();
       reset();
       onOpenChange(false);
     },
@@ -297,315 +348,295 @@ export function InvoiceEditorDialog({
     },
   });
 
-  const postMutation = useMutation({
+  const issueMutation = useMutation({
     mutationFn: async () => {
-      if (!invoice?.id || !organization?.id) throw new Error("No invoice");
-
-      // Create ledger entries for each line
-      const ledgerEntries = lines.map((line) => {
-        const isIncome = invoiceType === "SALES";
-        return {
-          organization_id: organization.id,
-          client_id: entity.type === "client" ? entity.id : null,
-          company_id: entity.type === "company" ? entity.id : null,
-          transaction_date: watch("issue_date"),
-          account_id: line.account_id,
-          debit: isIncome ? null : line.net_amount,
-          credit: isIncome ? line.net_amount : null,
-          vat_code_id: line.vat_code_id || null,
-          description: `${invoiceType} Invoice ${watch("invoice_number")}: ${line.description}`,
-          source_type: "INVOICE",
-          source_id: invoice.id,
-          created_by: user?.id,
-        };
-      });
-
-      // Add VAT entries if applicable
-      const vatEntry = {
-        organization_id: organization.id,
-        client_id: entity.type === "client" ? entity.id : null,
-        company_id: entity.type === "company" ? entity.id : null,
-        transaction_date: watch("issue_date"),
-        account_id: accounts?.find((a) => a.is_control_account && a.name.includes("VAT"))?.id,
-        debit: invoiceType === "SALES" ? null : totals.vat,
-        credit: invoiceType === "SALES" ? totals.vat : null,
-        vat_code_id: null,
-        description: `${invoiceType} Invoice ${watch("invoice_number")} - VAT`,
-        source_type: "INVOICE",
-        source_id: invoice.id,
-        created_by: user?.id,
-      };
-
-      if (totals.vat > 0 && vatEntry.account_id) {
-        ledgerEntries.push(vatEntry);
+      if (!invoice?.id) throw new Error("No invoice to issue");
+      const result = await issueInvoiceSafe(invoice.id);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to issue invoice');
       }
-
-      // Add AR/AP entry
-      const controlAccountType = invoiceType === "SALES" ? "Trade Debtors" : "Trade Creditors";
-      const controlAccount = accounts?.find(
-        (a) => a.is_control_account && a.name.includes(controlAccountType)
-      );
-
-      if (controlAccount) {
-        ledgerEntries.push({
-          organization_id: organization.id,
-          client_id: entity.type === "client" ? entity.id : null,
-          company_id: entity.type === "company" ? entity.id : null,
-          transaction_date: watch("issue_date"),
-          account_id: controlAccount.id,
-          debit: invoiceType === "SALES" ? totals.gross : null,
-          credit: invoiceType === "PURCHASE" ? totals.gross : null,
-          vat_code_id: null,
-          description: `${invoiceType} Invoice ${watch("invoice_number")}: ${watch("contact_name")}`,
-          source_type: "INVOICE",
-          source_id: invoice.id,
-          created_by: user?.id,
-        });
-      }
-
-      const { error: ledgerError } = await supabase
-        .from("ledger_entries")
-        .insert(ledgerEntries);
-
-      if (ledgerError) throw ledgerError;
-
-      // Mark invoice as posted
-      const { error: updateError } = await supabase
-        .from("invoices")
-        .update({
-          is_posted: true,
-          posted_at: new Date().toISOString(),
-          posted_by: user?.id,
-          status: "AWAITING_PAYMENT",
-        })
-        .eq("id", invoice.id);
-
-      if (updateError) throw updateError;
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["ledger-entries"] });
-      toast.success("Invoice posted to ledger");
+      toast.success("Invoice issued and posted to ledger");
       onOpenChange(false);
     },
     onError: (error) => {
-      toast.error("Failed to post invoice", {
+      toast.error("Failed to issue invoice", {
         description: error.message,
       });
     },
   });
 
+  const handleCustomerCreated = (customer: { id: string; name: string }) => {
+    setSelectedCustomerId(customer.id);
+    setValue("contact_name", customer.name);
+    setCreateCustomerOpen(false);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {invoice ? "Edit" : "New"} {invoiceType === "SALES" ? "Sales" : "Purchase"} Invoice
-          </DialogTitle>
-          <DialogDescription>
-            {invoice?.invoice_number || "Create a new invoice"}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {invoice ? (isLocked ? "View" : "Edit") : "New"} {invoiceType === "SALES" ? "Sales" : "Purchase"} Invoice
+            </DialogTitle>
+            <DialogDescription>
+              {invoice?.invoice_number || "Create a new invoice"}
+              {isLocked && <span className="ml-2 text-amber-600">(Locked - {invoice.status})</span>}
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit((data) => saveMutation.mutate(data))} className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="contact_name">
-                {invoiceType === "SALES" ? "Customer" : "Supplier"} Name
-              </Label>
-              <Input
-                id="contact_name"
-                {...register("contact_name", { required: true })}
-              />
+          <form onSubmit={handleSubmit((data) => saveMutation.mutate(data))} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="customer">
+                  {invoiceType === "SALES" ? "Customer" : "Supplier"}
+                </Label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <CustomerSelector
+                      entity={entity}
+                      value={selectedCustomerId}
+                      onSelect={(customer) => {
+                        setSelectedCustomerId(customer?.id || null);
+                        if (customer) {
+                          setValue("contact_name", customer.name);
+                          if (customer.email) setValue("contact_email", customer.email);
+                        }
+                      }}
+                      onCreateNew={() => setCreateCustomerOpen(true)}
+                      disabled={isLocked}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setCreateCustomerOpen(true)}
+                    disabled={isLocked}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="contact_email">Email</Label>
+                <Input id="contact_email" type="email" {...register("contact_email")} disabled={isLocked} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invoice_number">Invoice Number</Label>
+                <Input id="invoice_number" {...register("invoice_number")} disabled={isLocked} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reference">Reference</Label>
+                <Input id="reference" {...register("reference")} disabled={isLocked} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="issue_date">Issue Date</Label>
+                <Input
+                  id="issue_date"
+                  type="date"
+                  {...register("issue_date", { required: true })}
+                  disabled={isLocked}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="due_date">Due Date</Label>
+                <Input
+                  id="due_date"
+                  type="date"
+                  {...register("due_date", { required: true })}
+                  disabled={isLocked}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="contact_email">Email</Label>
-              <Input id="contact_email" type="email" {...register("contact_email")} />
-            </div>
+              <div className="flex justify-between items-center">
+                <Label>Invoice Lines</Label>
+                {isDraft && (
+                  <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Line
+                  </Button>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="invoice_number">Invoice Number</Label>
-              <Input id="invoice_number" {...register("invoice_number")} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reference">Reference</Label>
-              <Input id="reference" {...register("reference")} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="issue_date">Issue Date</Label>
-              <Input
-                id="issue_date"
-                type="date"
-                {...register("issue_date", { required: true })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="due_date">Due Date</Label>
-              <Input
-                id="due_date"
-                type="date"
-                {...register("due_date", { required: true })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label>Invoice Lines</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Line
-              </Button>
-            </div>
-
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="w-20">Qty</TableHead>
-                    <TableHead className="w-24">Price</TableHead>
-                    <TableHead className="w-32">Account</TableHead>
-                    <TableHead className="w-24">VAT</TableHead>
-                    <TableHead className="w-24 text-right">Total</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((line, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <Input
-                          value={line.description}
-                          onChange={(e) => updateLine(idx, "description", e.target.value)}
-                          placeholder="Item description"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={line.quantity}
-                          onChange={(e) =>
-                            updateLine(idx, "quantity", parseFloat(e.target.value) || 0)
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={line.unit_price}
-                          onChange={(e) =>
-                            updateLine(idx, "unit_price", parseFloat(e.target.value) || 0)
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={line.account_id}
-                          onValueChange={(value) => updateLine(idx, "account_id", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Account" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts?.map((account) => (
-                              <SelectItem key={account.id} value={account.id}>
-                                {account.code}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={line.vat_code_id}
-                          onValueChange={(value) => {
-                            const vatCode = vatCodes?.find((v) => v.id === value);
-                            updateLine(idx, "vat_code_id", value);
-                            updateLine(idx, "vat_rate", vatCode?.rate || 0);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="VAT" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {vatCodes?.map((code) => (
-                              <SelectItem key={code.id} value={code.id}>
-                                {code.code}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatCurrency(line.gross_amount)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeLine(idx)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-20">Qty</TableHead>
+                      <TableHead className="w-24">Price</TableHead>
+                      <TableHead className="w-32">Account</TableHead>
+                      <TableHead className="w-24">VAT</TableHead>
+                      <TableHead className="w-24 text-right">Total</TableHead>
+                      {isDraft && <TableHead className="w-12"></TableHead>}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {lines.map((line, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>
+                          <Input
+                            value={line.description}
+                            onChange={(e) => updateLine(idx, "description", e.target.value)}
+                            placeholder="Item description"
+                            disabled={isLocked}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={line.quantity}
+                            onChange={(e) =>
+                              updateLine(idx, "quantity", parseFloat(e.target.value) || 0)
+                            }
+                            disabled={isLocked}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={line.unit_price}
+                            onChange={(e) =>
+                              updateLine(idx, "unit_price", parseFloat(e.target.value) || 0)
+                            }
+                            disabled={isLocked}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={line.account_id}
+                            onValueChange={(value) => updateLine(idx, "account_id", value)}
+                            disabled={isLocked}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {accounts?.map((account) => (
+                                <SelectItem key={account.id} value={account.id}>
+                                  {account.code}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={line.vat_code_id}
+                            onValueChange={(value) => {
+                              const vatCode = vatCodes?.find((v) => v.id === value);
+                              updateLine(idx, "vat_code_id", value);
+                              if (vatCode) {
+                                updateLine(idx, "vat_rate", vatCode.rate);
+                              }
+                            }}
+                            disabled={isLocked}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="VAT" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vatCodes?.map((vat) => (
+                                <SelectItem key={vat.id} value={vat.id}>
+                                  {vat.code}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(line.gross_amount)}
+                        </TableCell>
+                        {isDraft && (
+                          <TableCell>
+                            {lines.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeLine(idx)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
 
             <div className="flex justify-end">
-              <div className="w-64 space-y-2 text-sm">
+              <div className="w-48 space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>Net Total:</span>
-                  <span className="font-mono">{formatCurrency(totals.net)}</span>
+                  <span>Net:</span>
+                  <span>{formatCurrency(totals.net)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>VAT:</span>
-                  <span className="font-mono">{formatCurrency(totals.vat)}</span>
+                  <span>{formatCurrency(totals.vat)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-base border-t pt-2">
-                  <span>Gross Total:</span>
-                  <span className="font-mono">{formatCurrency(totals.gross)}</span>
+                <div className="flex justify-between font-medium border-t pt-1">
+                  <span>Total:</span>
+                  <span>{formatCurrency(totals.gross)}</span>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea id="notes" {...register("notes")} rows={3} />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea id="notes" {...register("notes")} rows={3} disabled={isLocked} />
+            </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            {invoice?.id && !invoice.is_posted && (
-              <Button
-                type="button"
-                variant="default"
-                onClick={() => postMutation.mutate()}
-                disabled={postMutation.isPending}
-              >
-                <FileCheck className="h-4 w-4 mr-2" />
-                Post to Ledger
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                {isLocked ? "Close" : "Cancel"}
               </Button>
-            )}
-            <Button type="submit" disabled={saveMutation.isPending || invoice?.is_posted}>
-              {saveMutation.isPending ? "Saving..." : "Save Invoice"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {isDraft && (
+                <>
+                  <Button type="submit" disabled={saveMutation.isPending}>
+                    {saveMutation.isPending ? "Saving..." : "Save Draft"}
+                  </Button>
+                  {invoice?.id && (
+                    <Button
+                      type="button"
+                      onClick={() => issueMutation.mutate()}
+                      disabled={issueMutation.isPending}
+                    >
+                      <FileCheck className="h-4 w-4 mr-2" />
+                      {issueMutation.isPending ? "Issuing..." : "Issue Invoice"}
+                    </Button>
+                  )}
+                </>
+              )}
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <CreateCustomerDialog
+        open={createCustomerOpen}
+        onOpenChange={setCreateCustomerOpen}
+        entity={entity}
+        onCreated={handleCustomerCreated}
+      />
+    </>
   );
 }
