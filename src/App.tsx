@@ -46,6 +46,7 @@ import CIS from "./pages/CIS";
 import CISReturnDetail from "./pages/CISReturnDetail";
 import JobTemplates from "./pages/JobTemplates";
 import Automations from "./pages/Automations";
+import OpsHealth from "./pages/OpsHealth";
 import BrandingSettings from "./pages/settings/BrandingSettings";
 import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
@@ -426,6 +427,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <PermissionsSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ops/health"
+              element={
+                <ProtectedRoute>
+                  <OpsHealth />
                 </ProtectedRoute>
               }
             />

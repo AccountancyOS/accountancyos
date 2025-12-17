@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
+import { useAuth } from "@/lib/auth-context";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Briefcase } from "lucide-react";
+import { Plus, Search, Filter, Briefcase, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -27,18 +28,34 @@ import { format, differenceInDays } from "date-fns";
 import CreateJobDialog from "@/components/jobs/CreateJobDialog";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { JobsQuickFilters } from "@/components/jobs/JobsQuickFilters";
+import { SavedViewsDropdown } from "@/components/jobs/SavedViewsDropdown";
+import { useJobFilters } from "@/hooks/useJobFilters";
 
 export default function Jobs() {
   const navigate = useNavigate();
   const { organization } = useOrganization();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [serviceFilter, setServiceFilter] = useState("all");
-  const [assigneeFilter, setAssigneeFilter] = useState("all");
+  const { user } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  
+  const {
+    filters,
+    setFilters,
+    clearFilters,
+    hasActiveFilters,
+    applyQuickFilter,
+    savedViews,
+    isLoadingViews,
+    applySavedView,
+    saveCurrentView,
+    removeSavedView,
+  } = useJobFilters();
+
+  const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
+  const [currentViewId, setCurrentViewId] = useState<string | undefined>();
 
   const { data: jobs, isLoading } = useQuery({
-    queryKey: ["jobs", organization?.id, statusFilter, serviceFilter, assigneeFilter],
+    queryKey: ["jobs", organization?.id, filters],
     queryFn: async () => {
       if (!organization?.id) return [];
       
@@ -49,31 +66,98 @@ export default function Jobs() {
           clients (first_name, last_name),
           companies (company_name)
         `)
-        .eq("organization_id", organization.id)
-        .order("filing_deadline", { ascending: true, nullsFirst: false });
+        .eq("organization_id", organization.id);
 
-      if (statusFilter !== "all") {
-        query = query.eq("status", statusFilter);
+      // Apply status filter
+      if (filters.status?.length) {
+        query = query.in("status", filters.status);
       }
-      if (serviceFilter !== "all") {
-        query = query.eq("service_type", serviceFilter);
-      }
-      if (assigneeFilter !== "all") {
-        query = query.eq("assigned_to", assigneeFilter);
+      
+      // Apply service type filter
+      if (filters.serviceType?.length) {
+        query = query.in("service_type", filters.serviceType);
       }
 
-      const { data, error } = await query;
+      // Apply assignee filter
+      if (filters.assignee) {
+        if (filters.assignee === "me" && user?.id) {
+          query = query.eq("assigned_to", user.id);
+        } else if (filters.assignee === "unassigned") {
+          query = query.is("assigned_to", null);
+        } else {
+          query = query.eq("assigned_to", filters.assignee);
+        }
+      }
+
+      // Apply due date filter
+      if (filters.due) {
+        const today = new Date().toISOString().split("T")[0];
+        const now = new Date();
+        
+        if (filters.due === "today") {
+          query = query.eq("filing_deadline", today);
+        } else if (filters.due === "this_week") {
+          const weekEnd = new Date(now);
+          weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
+          query = query.gte("filing_deadline", today).lte("filing_deadline", weekEnd.toISOString().split("T")[0]);
+        } else if (filters.due === "this_month") {
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          query = query.gte("filing_deadline", today).lte("filing_deadline", monthEnd.toISOString().split("T")[0]);
+        } else if (filters.due === "overdue") {
+          query = query.lt("filing_deadline", today).not("status", "eq", "completed");
+        }
+      }
+
+      // Apply search filter
+      if (filters.search?.trim()) {
+        query = query.ilike("job_name", `%${filters.search.trim()}%`);
+      }
+
+      const { data, error } = await query.order("filing_deadline", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return data;
     },
     enabled: !!organization?.id,
   });
 
-  const filteredJobs = jobs?.filter(job =>
-    job.job_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (job.clients && `${job.clients.first_name} ${job.clients.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (job.companies && job.companies.company_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Calculate job counts for quick filters
+  const jobCounts = useMemo(() => {
+    if (!jobs || !user?.id) return {};
+    const today = new Date().toISOString().split("T")[0];
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    
+    return {
+      my_jobs: jobs.filter(j => j.assigned_to === user.id).length,
+      overdue: jobs.filter(j => j.filing_deadline && j.filing_deadline < today && j.status !== "completed").length,
+      due_this_week: jobs.filter(j => j.filing_deadline && j.filing_deadline >= today && j.filing_deadline <= weekEnd.toISOString().split("T")[0]).length,
+      unassigned: jobs.filter(j => !j.assigned_to).length,
+      waiting_on_client: jobs.filter(j => j.status === "waiting_on_client").length,
+      with_reviewer: jobs.filter(j => j.status === "with_reviewer").length,
+    };
+  }, [jobs, user?.id]);
+
+  const handleQuickFilter = (filterId: string | null) => {
+    setActiveQuickFilter(filterId);
+    setCurrentViewId(undefined);
+    if (filterId) {
+      applyQuickFilter(filterId);
+    } else {
+      clearFilters();
+    }
+  };
+
+  const handleApplySavedView = (view: any) => {
+    setActiveQuickFilter(null);
+    setCurrentViewId(view.id);
+    applySavedView(view);
+  };
+
+  const handleClearFilters = () => {
+    setActiveQuickFilter(null);
+    setCurrentViewId(undefined);
+    clearFilters();
+  };
 
   const getStatusColor = (status: string): "default" | "destructive" | "outline" | "secondary" => {
     const colors: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
@@ -101,8 +185,7 @@ export default function Jobs() {
 
   const getDaysRemaining = (deadline: string | null) => {
     if (!deadline) return null;
-    const days = differenceInDays(new Date(deadline), new Date());
-    return days;
+    return differenceInDays(new Date(deadline), new Date());
   };
 
   const formatDeadline = (deadline: string | null, days: number | null) => {
@@ -133,37 +216,49 @@ export default function Jobs() {
         </div>
 
         {/* Quick Filters */}
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm">
-            My Jobs
-          </Button>
-          <Button variant="outline" size="sm">
-            Overdue
-          </Button>
-          <Button variant="outline" size="sm">
-            Due This Week
-          </Button>
-          <Button variant="outline" size="sm">
-            Unassigned
-          </Button>
-          <Button variant="outline" size="sm">
-            Waiting on Client
-          </Button>
+        <div className="flex flex-wrap items-center gap-4">
+          <JobsQuickFilters
+            activeFilter={activeQuickFilter}
+            onFilterChange={handleQuickFilter}
+            jobCounts={jobCounts}
+          />
+          
+          <div className="flex items-center gap-2 ml-auto">
+            <SavedViewsDropdown
+              savedViews={savedViews}
+              currentViewId={currentViewId}
+              hasActiveFilters={hasActiveFilters}
+              onApplyView={handleApplySavedView}
+              onSaveView={saveCurrentView}
+              onDeleteView={removeSavedView}
+              isLoading={isLoadingViews}
+            />
+            
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                <X className="mr-1 h-4 w-4" />
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Search and Advanced Filters */}
         <div className="flex flex-wrap gap-4">
           <div className="relative flex-1 min-w-[300px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search jobs, clients..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={filters.search || ""}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               className="pl-9"
             />
           </div>
           
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select 
+            value={filters.status?.[0] || "all"} 
+            onValueChange={(val) => setFilters({ ...filters, status: val === "all" ? undefined : [val] })}
+          >
             <SelectTrigger className="w-[180px]">
               <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Status" />
@@ -180,7 +275,10 @@ export default function Jobs() {
             </SelectContent>
           </Select>
 
-          <Select value={serviceFilter} onValueChange={setServiceFilter}>
+          <Select 
+            value={filters.serviceType?.[0] || "all"} 
+            onValueChange={(val) => setFilters({ ...filters, serviceType: val === "all" ? undefined : [val] })}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Service" />
             </SelectTrigger>
@@ -196,12 +294,28 @@ export default function Jobs() {
               <SelectItem value="Company Sec">Company Sec</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select 
+            value={filters.due || "all"} 
+            onValueChange={(val) => setFilters({ ...filters, due: val === "all" ? undefined : val as any })}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Due Date" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Dates</SelectItem>
+              <SelectItem value="today">Due Today</SelectItem>
+              <SelectItem value="this_week">Due This Week</SelectItem>
+              <SelectItem value="this_month">Due This Month</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Jobs Table */}
         {isLoading ? (
           <TableSkeleton columns={8} rows={6} />
-        ) : filteredJobs && filteredJobs.length > 0 ? (
+        ) : jobs && jobs.length > 0 ? (
           <div className="border rounded-lg animate-fade-in">
             <Table>
               <TableHeader>
@@ -217,7 +331,7 @@ export default function Jobs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredJobs.map((job) => {
+                {jobs.map((job) => {
                   const daysRemaining = getDaysRemaining(job.filing_deadline);
                   return (
                     <TableRow
@@ -270,8 +384,11 @@ export default function Jobs() {
         ) : (
           <EmptyState
             icon={Briefcase}
-            title="No jobs yet"
-            description="Create your first job to start tracking client work, deadlines, and workflows."
+            title="No jobs found"
+            description={hasActiveFilters 
+              ? "No jobs match your current filters. Try adjusting your filters or create a new job."
+              : "Create your first job to start tracking client work, deadlines, and workflows."
+            }
             actionLabel="Create Job"
             onAction={() => setShowCreateDialog(true)}
           />
