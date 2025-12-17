@@ -507,10 +507,12 @@ export type Database = {
           action_config: Json
           action_type: string
           created_at: string
+          email_mode: string | null
           id: string
           is_active: boolean | null
           name: string
           organization_id: string
+          send_immediately_override: boolean | null
           template_id: string | null
           trigger_config: Json | null
           trigger_type: string
@@ -520,10 +522,12 @@ export type Database = {
           action_config?: Json
           action_type: string
           created_at?: string
+          email_mode?: string | null
           id?: string
           is_active?: boolean | null
           name: string
           organization_id: string
+          send_immediately_override?: boolean | null
           template_id?: string | null
           trigger_config?: Json | null
           trigger_type: string
@@ -533,10 +537,12 @@ export type Database = {
           action_config?: Json
           action_type?: string
           created_at?: string
+          email_mode?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
           organization_id?: string
+          send_immediately_override?: boolean | null
           template_id?: string | null
           trigger_config?: Json | null
           trigger_type?: string
@@ -3068,6 +3074,7 @@ export type Database = {
           error_message: string | null
           id: string
           last_sync_at: string | null
+          mailbox_type: string | null
           organization_id: string
           provider: Database["public"]["Enums"]["mailbox_provider"]
           refresh_token: string | null
@@ -3086,6 +3093,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           last_sync_at?: string | null
+          mailbox_type?: string | null
           organization_id: string
           provider?: Database["public"]["Enums"]["mailbox_provider"]
           refresh_token?: string | null
@@ -3104,6 +3112,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           last_sync_at?: string | null
+          mailbox_type?: string | null
           organization_id?: string
           provider?: Database["public"]["Enums"]["mailbox_provider"]
           refresh_token?: string | null
@@ -4141,6 +4150,8 @@ export type Database = {
       }
       email_queue: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
           body_html: string | null
           body_text: string | null
           client_id: string | null
@@ -4153,6 +4164,8 @@ export type Database = {
           error_message: string | null
           id: string
           job_id: string | null
+          last_error_code: string | null
+          last_error_message: string | null
           mailbox_id: string | null
           merge_data: Json | null
           organization_id: string
@@ -4170,6 +4183,8 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           body_html?: string | null
           body_text?: string | null
           client_id?: string | null
@@ -4182,6 +4197,8 @@ export type Database = {
           error_message?: string | null
           id?: string
           job_id?: string | null
+          last_error_code?: string | null
+          last_error_message?: string | null
           mailbox_id?: string | null
           merge_data?: Json | null
           organization_id: string
@@ -4199,6 +4216,8 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           body_html?: string | null
           body_text?: string | null
           client_id?: string | null
@@ -4211,6 +4230,8 @@ export type Database = {
           error_message?: string | null
           id?: string
           job_id?: string | null
+          last_error_code?: string | null
+          last_error_message?: string | null
           mailbox_id?: string | null
           merge_data?: Json | null
           organization_id?: string
@@ -11541,11 +11562,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acknowledge_failed_email_safe: {
+        Args: { p_email_id: string; p_user_id: string }
+        Returns: Json
+      }
       acknowledge_vat_reconciliation: {
         Args: { p_note?: string; p_reconciliation_id: string }
         Returns: Json
       }
+      approve_bill_safe: {
+        Args: { p_bill_id: string; p_user_id: string }
+        Returns: Json
+      }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
+      automation_dry_run: {
+        Args: { p_rule_id: string; p_sample_event?: Json; p_user_id: string }
+        Returns: Json
+      }
       calculate_cash_vat_proportion: {
         Args: {
           p_gross_amount: number
@@ -11675,6 +11708,10 @@ export type Database = {
       can_void_unpaid_invoices: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
+      }
+      check_automation_rate_limit: {
+        Args: { p_organization_id: string; p_rule_id?: string }
+        Returns: Json
       }
       cleanup_expired_gmail_auth_states: { Args: never; Returns: undefined }
       cleanup_expired_outlook_auth_states: { Args: never; Returns: undefined }
@@ -11920,6 +11957,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_automation_rate_limit: {
+        Args: {
+          p_increment?: number
+          p_organization_id: string
+          p_rule_id: string
+        }
+        Returns: undefined
+      }
       is_period_locked: {
         Args: {
           p_client_id: string
@@ -11951,6 +11996,15 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      override_bill_lock_safe: {
+        Args: {
+          p_bill_id: string
+          p_changes: Json
+          p_reason: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       override_invoice_lock_safe: {
         Args: { p_changes: Json; p_invoice_id: string; p_reason: string }
         Returns: Json
@@ -11959,10 +12013,24 @@ export type Database = {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
       }
-      queue_email_safe: {
-        Args: { p_input: Json; p_organization_id: string }
-        Returns: Json
-      }
+      queue_email_safe:
+        | { Args: { p_input: Json; p_organization_id: string }; Returns: Json }
+        | {
+            Args: {
+              p_body_html?: string
+              p_entity_id?: string
+              p_entity_type?: string
+              p_merge_data?: Json
+              p_organization_id: string
+              p_scheduled_at?: string
+              p_subject?: string
+              p_template_id?: string
+              p_to_email: string
+              p_to_name?: string
+              p_user_id: string
+            }
+            Returns: Json
+          }
       queue_filing_for_submission: {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
         Returns: Json
@@ -11980,6 +12048,18 @@ export type Database = {
         }
         Returns: string
       }
+      record_bill_payment_safe: {
+        Args: {
+          p_amount: number
+          p_bank_account_id?: string
+          p_bill_id: string
+          p_payment_date: string
+          p_payment_method?: string
+          p_reference?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       record_invoice_payment_safe:
         | {
             Args: {
@@ -11996,6 +12076,14 @@ export type Database = {
       regress_filing_status: {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
+      }
+      retry_failed_email_safe: {
+        Args: { p_email_id: string; p_user_id: string }
+        Returns: Json
+      }
+      reverse_bill_payment_safe: {
+        Args: { p_payment_id: string; p_reason: string; p_user_id: string }
+        Returns: Json
       }
       reverse_invoice_payment_safe: {
         Args: { p_payment_id: string; p_reason: string }
@@ -12055,6 +12143,17 @@ export type Database = {
         Args: { p_job_id: string; p_new_status: string; p_reason?: string }
         Returns: Json
       }
+      update_queued_email_safe: {
+        Args: {
+          p_body_html?: string
+          p_email_id: string
+          p_scheduled_at?: string
+          p_subject?: string
+          p_to_email?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       update_user_role_safe: {
         Args: { p_new_role: string; p_org_id: string; p_target_user_id: string }
         Returns: Json
@@ -12096,6 +12195,10 @@ export type Database = {
         Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
+      void_bill_safe: {
+        Args: { p_bill_id: string; p_reason: string; p_user_id: string }
+        Returns: Json
+      }
       void_invoice_safe: {
         Args: { p_invoice_id: string; p_reason: string }
         Returns: Json
