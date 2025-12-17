@@ -17,7 +17,6 @@ interface InvoiceLine {
 
 interface InvoiceDraft {
   contact_name: string;
-  contact_email: string;
   customer_id: string;
   invoice_number: string;
   reference: string;
@@ -31,7 +30,6 @@ interface InvoiceDraft {
 
 const DEFAULT_DRAFT: InvoiceDraft = {
   contact_name: "",
-  contact_email: "",
   customer_id: "",
   invoice_number: "",
   reference: "",

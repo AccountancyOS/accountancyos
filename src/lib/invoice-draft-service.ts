@@ -13,16 +13,15 @@ export interface InvoiceLineInput {
 export interface CreateInvoiceDraftInput {
   entityType: 'client' | 'company';
   entityId: string;
-  invoiceType: 'SALES' | 'PURCHASE';
-  contactName: string;
-  contactEmail?: string;
+  invoiceType?: 'SALES' | 'PURCHASE';
+  customerId?: string;
+  contactName?: string;
   invoiceNumber?: string;
   reference?: string;
   issueDate?: string;
   dueDate?: string;
   notes?: string;
   currency?: string;
-  customerId?: string;
   lines: InvoiceLineInput[];
 }
 
@@ -56,16 +55,15 @@ export async function createInvoiceDraftSafe(
     p_organization_id: organizationId,
     p_entity_type: input.entityType,
     p_entity_id: input.entityId,
-    p_invoice_type: input.invoiceType,
-    p_contact_name: input.contactName,
-    p_contact_email: input.contactEmail || null,
+    p_invoice_type: input.invoiceType || 'SALES',
+    p_customer_id: input.customerId || null,
+    p_contact_name: input.contactName || null,
     p_invoice_number: input.invoiceNumber || null,
     p_reference: input.reference || null,
     p_issue_date: input.issueDate || null,
     p_due_date: input.dueDate || null,
     p_notes: input.notes || null,
     p_currency: input.currency || 'GBP',
-    p_customer_id: input.customerId || null,
     p_lines: lines as unknown as Record<string, never>
   });
 
@@ -89,13 +87,12 @@ export async function updateInvoiceDraftSafe(
 
   const { data, error } = await supabase.rpc('update_invoice_draft_safe', {
     p_invoice_id: invoiceId,
+    p_customer_id: input.customerId || null,
     p_contact_name: input.contactName || null,
-    p_contact_email: input.contactEmail || null,
     p_reference: input.reference || null,
     p_issue_date: input.issueDate || null,
     p_due_date: input.dueDate || null,
     p_notes: input.notes || null,
-    p_customer_id: input.customerId || null,
     p_lines: lines as unknown as Record<string, never> | null
   });
 
