@@ -16,6 +16,7 @@ export interface CreateInvoiceDraftInput {
   invoiceType?: 'SALES' | 'PURCHASE';
   customerId?: string;
   contactName?: string;
+  contactEmail?: string;
   invoiceNumber?: string;
   reference?: string;
   issueDate?: string;
@@ -58,6 +59,7 @@ export async function createInvoiceDraftSafe(
     p_invoice_type: input.invoiceType || 'SALES',
     p_customer_id: input.customerId || null,
     p_contact_name: input.contactName || null,
+    p_contact_email: input.contactEmail || null,
     p_invoice_number: input.invoiceNumber || null,
     p_reference: input.reference || null,
     p_issue_date: input.issueDate || null,
@@ -89,6 +91,7 @@ export async function updateInvoiceDraftSafe(
     p_invoice_id: invoiceId,
     p_customer_id: input.customerId || null,
     p_contact_name: input.contactName || null,
+    p_contact_email: input.contactEmail || null,
     p_reference: input.reference || null,
     p_issue_date: input.issueDate || null,
     p_due_date: input.dueDate || null,

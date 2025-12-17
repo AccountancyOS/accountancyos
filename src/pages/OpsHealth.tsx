@@ -317,30 +317,63 @@ export default function OpsHealth() {
       });
     }
 
-    // Test: queue_email_safe
+    // Test: queue_email_safe (draft - no scheduled_at)
     try {
       const start = Date.now();
       const { data, error } = await supabase.rpc("queue_email_safe", {
         p_organization_id: organization.id,
-        p_to_email: "test@test.com",
-        p_subject: "RPC Test",
+        p_to_email: "test-draft@test.com",
+        p_to_name: "Test User",
+        p_subject: "RPC Test Draft",
         p_body_html: "<p>Test</p>",
         p_template_id: null,
         p_merge_data: {},
         p_scheduled_at: null,
-        p_job_id: null,
+        p_entity_type: null,
+        p_entity_id: null,
       });
       
       rpcTests.push({
-        name: "queue_email_safe RPC callable",
-        status: data || error ? "pass" : "warning",
-        message: error ? `Error: ${error.message}` : "RPC executed successfully",
+        name: "queue_email_safe draft (scheduled_at=null)",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : "RPC executed - should create draft",
         duration: Date.now() - start,
       });
     } catch (e: any) {
       rpcTests.push({
-        name: "queue_email_safe RPC callable",
-        status: "warning",
+        name: "queue_email_safe draft",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
+    // Test: queue_email_safe (queued - with scheduled_at)
+    try {
+      const start = Date.now();
+      const futureDate = new Date(Date.now() + 60000).toISOString();
+      const { data, error } = await supabase.rpc("queue_email_safe", {
+        p_organization_id: organization.id,
+        p_to_email: "test-queued@test.com",
+        p_to_name: "Test User",
+        p_subject: "RPC Test Queued",
+        p_body_html: "<p>Test</p>",
+        p_template_id: null,
+        p_merge_data: {},
+        p_scheduled_at: futureDate,
+        p_entity_type: null,
+        p_entity_id: null,
+      });
+      
+      rpcTests.push({
+        name: "queue_email_safe queued (scheduled_at set)",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : "RPC executed - should create queued",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      rpcTests.push({
+        name: "queue_email_safe queued",
+        status: "fail",
         message: `Exception: ${e.message}`,
       });
     }
