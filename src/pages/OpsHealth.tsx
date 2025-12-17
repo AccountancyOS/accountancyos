@@ -591,6 +591,100 @@ export default function OpsHealth() {
       });
     }
 
+    // Test: Update invoice with invalid payload does NOT destroy existing lines (two-phase validation)
+    try {
+      const start = Date.now();
+      
+      // First get a real client or company
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const { data: companies } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const entityType = clients?.[0]?.id ? 'client' : 'company';
+      const entityId = clients?.[0]?.id || companies?.[0]?.id;
+      
+      if (!entityId) {
+        rpcTests.push({
+          name: "Update invalid payload preserves lines",
+          status: "warning",
+          message: "No client/company found to test with",
+          duration: Date.now() - start,
+        });
+      } else {
+        // Step 1: Create a valid invoice with one line
+        const { data: createData, error: createError } = await supabase.rpc("create_invoice_draft_safe", {
+          p_organization_id: organization.id,
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_lines: [{ description: "Original Line - DO NOT DELETE", quantity: 1, unit_price: 100, vat_rate: 20 }],
+        });
+        
+        if (createError) {
+          rpcTests.push({
+            name: "Update invalid payload preserves lines",
+            status: "fail",
+            message: `Setup failed: ${createError.message}`,
+            duration: Date.now() - start,
+          });
+        } else {
+          const createResult = typeof createData === 'string' ? JSON.parse(createData) : createData;
+          const invoiceId = createResult?.invoice_id;
+          
+          // Step 2: Count lines BEFORE update attempt
+          const { data: linesBefore } = await supabase
+            .from("invoice_lines")
+            .select("id, description")
+            .eq("invoice_id", invoiceId);
+          
+          const lineCountBefore = linesBefore?.length || 0;
+          
+          // Step 3: Try to update with INVALID lines (quantity="abc")
+          const { error: updateError } = await supabase.rpc("update_invoice_draft_safe", {
+            p_invoice_id: invoiceId,
+            p_lines: [{ description: "Bad Line", quantity: "abc", unit_price: 100, vat_rate: 20 }],
+          });
+          
+          // Step 4: Count lines AFTER update attempt
+          const { data: linesAfter } = await supabase
+            .from("invoice_lines")
+            .select("id, description")
+            .eq("invoice_id", invoiceId);
+          
+          const lineCountAfter = linesAfter?.length || 0;
+          const originalLinePreserved = linesAfter?.some(l => l.description === "Original Line - DO NOT DELETE");
+          
+          // PASS only if: error thrown AND original lines preserved
+          const errorThrown = !!updateError;
+          const linesPreserved = lineCountBefore === lineCountAfter && originalLinePreserved;
+          
+          rpcTests.push({
+            name: "Update invalid payload preserves lines",
+            status: errorThrown && linesPreserved ? "pass" : "fail",
+            message: errorThrown && linesPreserved
+              ? `✓ Invalid update rejected AND original ${lineCountBefore} line(s) preserved`
+              : !errorThrown
+                ? `FAIL: Invalid payload was accepted!`
+                : `FAIL: Lines not preserved! Before=${lineCountBefore}, After=${lineCountAfter}`,
+            duration: Date.now() - start,
+          });
+        }
+      }
+    } catch (e: any) {
+      rpcTests.push({
+        name: "Update invalid payload preserves lines",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
     results.push({
       name: "Safe RPC Functions",
       icon: <Database className="h-5 w-5" />,

@@ -12254,7 +12254,6 @@ export type Database = {
           p_invoice_id: string
           p_issue_date?: string
           p_lines?: Json
-          p_notes?: string
           p_reference?: string
         }
         Returns: Json
