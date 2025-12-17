@@ -51,7 +51,6 @@ interface InvoiceEditorDialogProps {
 
 interface InvoiceFormData {
   contact_name: string;
-  contact_email: string;
   invoice_number: string;
   reference: string;
   issue_date: string;
@@ -105,7 +104,6 @@ export function InvoiceEditorDialog({
   const { register, handleSubmit, watch, setValue, reset } = useForm<InvoiceFormData>({
     defaultValues: invoice || {
       contact_name: "",
-      contact_email: "",
       invoice_number: "",
       reference: "",
       issue_date: new Date().toISOString().split("T")[0],
@@ -164,7 +162,6 @@ export function InvoiceEditorDialog({
     if (open && !invoice && isLoaded && draft) {
       reset({
         contact_name: draft.contact_name,
-        contact_email: draft.contact_email,
         invoice_number: draft.invoice_number,
         reference: draft.reference,
         issue_date: draft.issue_date,
@@ -214,7 +211,6 @@ export function InvoiceEditorDialog({
     if (open && !invoice && isDraft) {
       saveDraft({
         contact_name: formValues.contact_name,
-        contact_email: formValues.contact_email,
         invoice_number: formValues.invoice_number,
         reference: formValues.reference,
         issue_date: formValues.issue_date,
@@ -302,7 +298,6 @@ export function InvoiceEditorDialog({
         // Update existing draft
         const result = await updateInvoiceDraftSafe(invoice.id, {
           contactName: data.contact_name,
-          contactEmail: data.contact_email,
           reference: data.reference,
           issueDate: data.issue_date,
           dueDate: data.due_date,
@@ -321,7 +316,6 @@ export function InvoiceEditorDialog({
           entityId: entity.id,
           invoiceType,
           contactName: data.contact_name,
-          contactEmail: data.contact_email,
           invoiceNumber: data.invoice_number || undefined,
           reference: data.reference || undefined,
           issueDate: data.issue_date,
@@ -407,7 +401,6 @@ export function InvoiceEditorDialog({
                         setSelectedCustomerId(customer?.id || null);
                         if (customer) {
                           setValue("contact_name", customer.name);
-                          if (customer.email) setValue("contact_email", customer.email);
                         }
                       }}
                       onCreateNew={() => setCreateCustomerOpen(true)}
@@ -424,11 +417,6 @@ export function InvoiceEditorDialog({
                     <UserPlus className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="contact_email">Email</Label>
-                <Input id="contact_email" type="email" {...register("contact_email")} disabled={isLocked} />
               </div>
 
               <div className="space-y-2">
