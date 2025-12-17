@@ -7,9 +7,7 @@ export interface InvoiceLineInput {
   account_id?: string;
   vat_code_id?: string;
   vat_rate: number;
-  net_amount: number;
-  vat_amount: number;
-  gross_amount: number;
+  // Server calculates these - we don't send them
 }
 
 export interface CreateInvoiceDraftInput {
@@ -44,16 +42,14 @@ export async function createInvoiceDraftSafe(
   organizationId: string,
   input: CreateInvoiceDraftInput
 ): Promise<CreateInvoiceDraftResult> {
+  // Send only what server needs - server calculates amounts
   const lines = input.lines.map(line => ({
     description: line.description,
     quantity: line.quantity,
     unit_price: line.unit_price,
     account_id: line.account_id || '',
     vat_code_id: line.vat_code_id || '',
-    vat_rate: line.vat_rate,
-    net_amount: line.net_amount,
-    vat_amount: line.vat_amount,
-    gross_amount: line.gross_amount
+    vat_rate: line.vat_rate
   }));
 
   const { data, error } = await supabase.rpc('create_invoice_draft_safe', {
@@ -81,16 +77,14 @@ export async function updateInvoiceDraftSafe(
   invoiceId: string,
   input: Partial<Omit<CreateInvoiceDraftInput, 'entityType' | 'entityId' | 'invoiceType'>>
 ): Promise<UpdateInvoiceDraftResult> {
+  // Send only what server needs - server calculates amounts
   const lines = input.lines ? input.lines.map(line => ({
     description: line.description,
     quantity: line.quantity,
     unit_price: line.unit_price,
     account_id: line.account_id || '',
     vat_code_id: line.vat_code_id || '',
-    vat_rate: line.vat_rate,
-    net_amount: line.net_amount,
-    vat_amount: line.vat_amount,
-    gross_amount: line.gross_amount
+    vat_rate: line.vat_rate
   })) : null;
 
   const { data, error } = await supabase.rpc('update_invoice_draft_safe', {
@@ -107,4 +101,57 @@ export async function updateInvoiceDraftSafe(
 
   if (error) return { success: false, error: error.message };
   return data as unknown as UpdateInvoiceDraftResult;
+}
+
+export interface GetInvoiceWithLinesResult {
+  success: boolean;
+  invoice?: {
+    id: string;
+    organization_id: string;
+    client_id?: string;
+    company_id?: string;
+    customer_id?: string;
+    invoice_type: string;
+    status: string;
+    invoice_number?: string;
+    contact_name?: string;
+    contact_email?: string;
+    reference?: string;
+    issue_date: string;
+    due_date: string;
+    notes?: string;
+    currency: string;
+    total_net: number;
+    total_vat: number;
+    total_gross: number;
+    amount_paid: number;
+    remaining_balance: number;
+    created_at: string;
+    updated_at: string;
+  };
+  lines?: Array<{
+    id: string;
+    line_number: number;
+    description: string;
+    quantity: number;
+    unit_price: number;
+    vat_rate: number;
+    vat_code_id?: string;
+    account_id?: string;
+    net_amount: number;
+    vat_amount: number;
+    gross_amount: number;
+  }>;
+  error?: string;
+}
+
+export async function getInvoiceWithLinesSafe(
+  invoiceId: string
+): Promise<GetInvoiceWithLinesResult> {
+  const { data, error } = await supabase.rpc('get_invoice_with_lines_safe', {
+    p_invoice_id: invoiceId
+  });
+
+  if (error) return { success: false, error: error.message };
+  return data as unknown as GetInvoiceWithLinesResult;
 }
