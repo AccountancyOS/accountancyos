@@ -222,41 +222,56 @@ export type Database = {
       audit_log: {
         Row: {
           action: string
+          actor_role: string | null
+          after_state: Json | null
+          before_state: Json | null
           created_at: string
           entity_id: string
           entity_type: string
           field_name: string | null
           id: string
+          ip_address: string | null
           metadata: Json | null
           new_value: string | null
           old_value: string | null
           organization_id: string
+          user_agent: string | null
           user_id: string | null
         }
         Insert: {
           action: string
+          actor_role?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
           created_at?: string
           entity_id: string
           entity_type: string
           field_name?: string | null
           id?: string
+          ip_address?: string | null
           metadata?: Json | null
           new_value?: string | null
           old_value?: string | null
           organization_id: string
+          user_agent?: string | null
           user_id?: string | null
         }
         Update: {
           action?: string
+          actor_role?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
           created_at?: string
           entity_id?: string
           entity_type?: string
           field_name?: string | null
           id?: string
+          ip_address?: string | null
           metadata?: Json | null
           new_value?: string | null
           old_value?: string | null
           organization_id?: string
+          user_agent?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -376,6 +391,51 @@ export type Database = {
           },
           {
             foreignKeyName: "automation_executions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_rate_limits: {
+        Row: {
+          action_count: number | null
+          automation_rule_id: string | null
+          created_at: string | null
+          id: string
+          organization_id: string
+          window_start: string
+          window_type: string
+        }
+        Insert: {
+          action_count?: number | null
+          automation_rule_id?: string | null
+          created_at?: string | null
+          id?: string
+          organization_id: string
+          window_start: string
+          window_type: string
+        }
+        Update: {
+          action_count?: number | null
+          automation_rule_id?: string | null
+          created_at?: string | null
+          id?: string
+          organization_id?: string
+          window_start?: string
+          window_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_rate_limits_automation_rule_id_fkey"
+            columns: ["automation_rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_rate_limits_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1067,6 +1127,8 @@ export type Database = {
       bills: {
         Row: {
           amount_paid: number | null
+          approved_at: string | null
+          approved_by: string | null
           bill_number: string | null
           client_id: string | null
           company_id: string | null
@@ -1077,8 +1139,10 @@ export type Database = {
           id: string
           is_posted: boolean | null
           issue_date: string
+          locked_fields: Json | null
           notes: string | null
           organization_id: string
+          override_history: Json | null
           posted_at: string | null
           posted_by: string | null
           receipt_path: string | null
@@ -1090,9 +1154,14 @@ export type Database = {
           total_net: number | null
           total_vat: number | null
           updated_at: string | null
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           amount_paid?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
           bill_number?: string | null
           client_id?: string | null
           company_id?: string | null
@@ -1103,8 +1172,10 @@ export type Database = {
           id?: string
           is_posted?: boolean | null
           issue_date: string
+          locked_fields?: Json | null
           notes?: string | null
           organization_id: string
+          override_history?: Json | null
           posted_at?: string | null
           posted_by?: string | null
           receipt_path?: string | null
@@ -1116,9 +1187,14 @@ export type Database = {
           total_net?: number | null
           total_vat?: number | null
           updated_at?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           amount_paid?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
           bill_number?: string | null
           client_id?: string | null
           company_id?: string | null
@@ -1129,8 +1205,10 @@ export type Database = {
           id?: string
           is_posted?: boolean | null
           issue_date?: string
+          locked_fields?: Json | null
           notes?: string | null
           organization_id?: string
+          override_history?: Json | null
           posted_at?: string | null
           posted_by?: string | null
           receipt_path?: string | null
@@ -1142,6 +1220,9 @@ export type Database = {
           total_net?: number | null
           total_vat?: number | null
           updated_at?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -6214,8 +6295,10 @@ export type Database = {
           issue_date: string
           issued_at: string | null
           issued_by: string | null
+          locked_fields: Json | null
           notes: string | null
           organization_id: string
+          override_history: Json | null
           override_metadata: Json | null
           pdf_path: string | null
           posted_at: string | null
@@ -6254,8 +6337,10 @@ export type Database = {
           issue_date: string
           issued_at?: string | null
           issued_by?: string | null
+          locked_fields?: Json | null
           notes?: string | null
           organization_id: string
+          override_history?: Json | null
           override_metadata?: Json | null
           pdf_path?: string | null
           posted_at?: string | null
@@ -6294,8 +6379,10 @@ export type Database = {
           issue_date?: string
           issued_at?: string | null
           issued_by?: string | null
+          locked_fields?: Json | null
           notes?: string | null
           organization_id?: string
+          override_history?: Json | null
           override_metadata?: Json | null
           pdf_path?: string | null
           posted_at?: string | null
@@ -7810,6 +7897,71 @@ export type Database = {
             foreignKeyName: "onboarding_documents_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_settings: {
+        Row: {
+          automation_max_actions_org_day: number | null
+          automation_max_actions_org_hour: number | null
+          automation_max_actions_per_rule_day: number | null
+          automation_max_actions_per_rule_hour: number | null
+          automation_rule_management_mode: string | null
+          bill_number_next: number | null
+          bill_number_padding: number | null
+          bill_number_prefix: string | null
+          created_at: string | null
+          email_default_mode: string | null
+          invoice_number_next: number | null
+          invoice_number_padding: number | null
+          invoice_number_prefix: string | null
+          organization_id: string
+          shared_mailbox_enabled: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          automation_max_actions_org_day?: number | null
+          automation_max_actions_org_hour?: number | null
+          automation_max_actions_per_rule_day?: number | null
+          automation_max_actions_per_rule_hour?: number | null
+          automation_rule_management_mode?: string | null
+          bill_number_next?: number | null
+          bill_number_padding?: number | null
+          bill_number_prefix?: string | null
+          created_at?: string | null
+          email_default_mode?: string | null
+          invoice_number_next?: number | null
+          invoice_number_padding?: number | null
+          invoice_number_prefix?: string | null
+          organization_id: string
+          shared_mailbox_enabled?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          automation_max_actions_org_day?: number | null
+          automation_max_actions_org_hour?: number | null
+          automation_max_actions_per_rule_day?: number | null
+          automation_max_actions_per_rule_hour?: number | null
+          automation_rule_management_mode?: string | null
+          bill_number_next?: number | null
+          bill_number_padding?: number | null
+          bill_number_prefix?: string | null
+          created_at?: string | null
+          email_default_mode?: string | null
+          invoice_number_next?: number | null
+          invoice_number_padding?: number | null
+          invoice_number_prefix?: string | null
+          organization_id?: string
+          shared_mailbox_enabled?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -10297,6 +10449,50 @@ export type Database = {
           },
         ]
       }
+      user_saved_views: {
+        Row: {
+          created_at: string | null
+          entity_type: string
+          filters: Json
+          id: string
+          is_default: boolean | null
+          organization_id: string
+          updated_at: string | null
+          user_id: string
+          view_name: string
+        }
+        Insert: {
+          created_at?: string | null
+          entity_type: string
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          organization_id: string
+          updated_at?: string | null
+          user_id: string
+          view_name: string
+        }
+        Update: {
+          created_at?: string | null
+          entity_type?: string
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          organization_id?: string
+          updated_at?: string | null
+          user_id?: string
+          view_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_saved_views_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vat_adjustments: {
         Row: {
           adjustment_type: string
@@ -11368,6 +11564,10 @@ export type Database = {
         }
         Returns: string
       }
+      can_access_shared_mailbox: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_approve_bills: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
@@ -11408,6 +11608,10 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      can_manage_automation_rules_check: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_manage_bank_reconciliation: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
@@ -11436,6 +11640,10 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      can_override_invoice_lock: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_override_locked_records: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
@@ -11457,6 +11665,14 @@ export type Database = {
         Returns: boolean
       }
       can_void_invoices: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_void_paid_invoices: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_void_unpaid_invoices: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
@@ -11518,6 +11734,33 @@ export type Database = {
           p_organization_id: string
         }
         Returns: string
+      }
+      ensure_org_settings: {
+        Args: { _org_id: string }
+        Returns: {
+          automation_max_actions_org_day: number | null
+          automation_max_actions_org_hour: number | null
+          automation_max_actions_per_rule_day: number | null
+          automation_max_actions_per_rule_hour: number | null
+          automation_rule_management_mode: string | null
+          bill_number_next: number | null
+          bill_number_padding: number | null
+          bill_number_prefix: string | null
+          created_at: string | null
+          email_default_mode: string | null
+          invoice_number_next: number | null
+          invoice_number_padding: number | null
+          invoice_number_prefix: string | null
+          organization_id: string
+          shared_mailbox_enabled: boolean | null
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "org_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       finalize_workpaper_safe: {
         Args: { p_workpaper_id: string }
@@ -11686,7 +11929,9 @@ export type Database = {
         }
         Returns: boolean
       }
-      issue_invoice_safe: { Args: { p_invoice_id: string }; Returns: Json }
+      issue_invoice_safe:
+        | { Args: { p_invoice_id: string }; Returns: Json }
+        | { Args: { p_invoice_id: string; p_notes?: string }; Returns: Json }
       lifecycle_accept_portal_invitation: {
         Args: { p_token: string }
         Returns: Json
@@ -11706,6 +11951,10 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      override_invoice_lock_safe: {
+        Args: { p_changes: Json; p_invoice_id: string; p_reason: string }
+        Returns: Json
+      }
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
@@ -11731,13 +11980,26 @@ export type Database = {
         }
         Returns: string
       }
-      record_invoice_payment_safe: {
-        Args: { p_invoice_id: string; p_payment: Json }
-        Returns: Json
-      }
+      record_invoice_payment_safe:
+        | {
+            Args: {
+              p_amount: number
+              p_bank_account_id?: string
+              p_invoice_id: string
+              p_payment_date: string
+              p_payment_method?: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
+        | { Args: { p_invoice_id: string; p_payment: Json }; Returns: Json }
       regress_filing_status: {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
+      }
+      reverse_invoice_payment_safe: {
+        Args: { p_payment_id: string; p_reason: string }
+        Returns: Json
       }
       reverse_journal: {
         Args: {
@@ -11783,6 +12045,10 @@ export type Database = {
       }
       update_invoice_draft_safe: {
         Args: { p_input: Json; p_invoice_id: string }
+        Returns: Json
+      }
+      update_issued_invoice_safe: {
+        Args: { p_invoice_id: string; p_reason?: string; p_updates: Json }
         Returns: Json
       }
       update_job_status_safe: {
@@ -11833,6 +12099,21 @@ export type Database = {
       void_invoice_safe: {
         Args: { p_invoice_id: string; p_reason: string }
         Returns: Json
+      }
+      write_audit_log: {
+        Args: {
+          p_action: string
+          p_after_state?: Json
+          p_before_state?: Json
+          p_entity_id: string
+          p_entity_type: string
+          p_field_name?: string
+          p_metadata?: Json
+          p_new_value?: string
+          p_old_value?: string
+          p_org_id: string
+        }
+        Returns: string
       }
     }
     Enums: {
