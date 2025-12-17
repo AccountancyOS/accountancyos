@@ -31,13 +31,17 @@ interface CustomerSelectorProps {
   value: string;
   onSelect: (customer: Customer | null) => void;
   onCreateNew: () => void;
+  disabled?: boolean;
 }
+
+export type { Customer };
 
 export function CustomerSelector({ 
   entity, 
   value, 
   onSelect, 
-  onCreateNew 
+  onCreateNew,
+  disabled = false
 }: CustomerSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -82,6 +86,7 @@ export function CustomerSelector({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
+          disabled={disabled}
           role="combobox"
           aria-expanded={open}
           className="w-full justify-between"

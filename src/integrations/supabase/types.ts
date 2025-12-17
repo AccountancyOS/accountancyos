@@ -11766,25 +11766,40 @@ export type Database = {
         }
         Returns: Json
       }
-      create_invoice_draft_safe: {
-        Args: {
-          p_contact_email?: string
-          p_contact_name: string
-          p_currency?: string
-          p_customer_id?: string
-          p_due_date?: string
-          p_entity_id: string
-          p_entity_type: string
-          p_invoice_number?: string
-          p_invoice_type: string
-          p_issue_date?: string
-          p_lines?: Json
-          p_notes?: string
-          p_organization_id: string
-          p_reference?: string
-        }
-        Returns: Json
-      }
+      create_invoice_draft_safe:
+        | {
+            Args: {
+              p_customer_id?: string
+              p_due_date?: string
+              p_entity_id: string
+              p_entity_type: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_organization_id: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_contact_email?: string
+              p_contact_name: string
+              p_currency?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_entity_id: string
+              p_entity_type: string
+              p_invoice_number?: string
+              p_invoice_type: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_organization_id: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
       create_invoice_safe: {
         Args: {
           p_entity_id: string
@@ -11922,6 +11937,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_invoice_with_lines_safe: {
+        Args: { p_invoice_id: string }
+        Returns: Json
       }
       get_org_settings_safe: {
         Args: { p_organization_id: string }
@@ -12068,6 +12087,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_rpc_context: { Args: never; Returns: boolean }
       issue_invoice_safe:
         | { Args: { p_invoice_id: string }; Returns: Json }
         | { Args: { p_invoice_id: string; p_notes?: string }; Returns: Json }
@@ -12209,6 +12229,7 @@ export type Database = {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
       }
+      set_rpc_context: { Args: never; Returns: undefined }
       submit_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       toggle_automation_rule_safe: {
         Args: { p_is_active: boolean; p_rule_id: string }
@@ -12250,6 +12271,18 @@ export type Database = {
             Args: {
               p_contact_email?: string
               p_contact_name?: string
+              p_customer_id?: string
+              p_due_date?: string
+              p_invoice_id: string
+              p_issue_date?: string
+              p_lines?: Json
+              p_notes?: string
+              p_reference?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
               p_customer_id?: string
               p_due_date?: string
               p_invoice_id: string
