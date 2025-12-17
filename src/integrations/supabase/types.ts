@@ -8197,6 +8197,47 @@ export type Database = {
           },
         ]
       }
+      organization_subscription_cache: {
+        Row: {
+          checked_at: string
+          organization_id: string
+          plan_name: string | null
+          subscribed: boolean
+          subscription_end: string | null
+          subscription_id: string | null
+          subscription_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string
+          organization_id: string
+          plan_name?: string | null
+          subscribed?: boolean
+          subscription_end?: string | null
+          subscription_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string
+          organization_id?: string
+          plan_name?: string | null
+          subscribed?: boolean
+          subscription_end?: string | null
+          subscription_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_subscription_cache_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_users: {
         Row: {
           created_at: string
