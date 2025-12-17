@@ -100,7 +100,7 @@ export function InvoiceEditorDialog({
   const { organization } = useOrganization();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { draft, saveDraft, clearDraft, isLoaded } = useInvoiceDraft(organization?.id, user?.id);
+  const { draft, saveDraft, clearDraft, isLoaded } = useInvoiceDraft();
   
   const { register, handleSubmit, watch, setValue, reset } = useForm<InvoiceFormData>({
     defaultValues: invoice || {
@@ -220,8 +220,10 @@ export function InvoiceEditorDialog({
         issue_date: formValues.issue_date,
         due_date: formValues.due_date,
         notes: formValues.notes,
-        customer_id: selectedCustomerId || undefined,
+        customer_id: selectedCustomerId || "",
         lines,
+        entity: entity ? { type: entity.type, id: entity.id } : null,
+        invoiceType: "SALES",
       });
     }
   }, [formValues, lines, selectedCustomerId, open, invoice, isDraft, saveDraft]);
