@@ -317,7 +317,7 @@ export default function OpsHealth() {
       });
     }
 
-    // Test: queue_email_safe (draft - no scheduled_at)
+    // Test: queue_email_safe (draft - no scheduled_at) - ASSERT STATUS
     try {
       const start = Date.now();
       const { data, error } = await supabase.rpc("queue_email_safe", {
@@ -333,10 +333,17 @@ export default function OpsHealth() {
         p_entity_id: null,
       });
       
+      // Parse response and assert status === 'draft'
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+      const actualStatus = result?.status;
+      
       rpcTests.push({
         name: "queue_email_safe draft (scheduled_at=null)",
-        status: error ? "fail" : "pass",
-        message: error ? `Error: ${error.message}` : "RPC executed - should create draft",
+        status: error ? "fail" : (actualStatus === 'draft' ? "pass" : "fail"),
+        message: error ? `Error: ${error.message}` 
+          : actualStatus === 'draft' 
+            ? `✓ Status correctly set to 'draft'` 
+            : `FAIL: Expected status='draft', got '${actualStatus}'`,
         duration: Date.now() - start,
       });
     } catch (e: any) {
@@ -347,7 +354,7 @@ export default function OpsHealth() {
       });
     }
 
-    // Test: queue_email_safe (queued - with scheduled_at)
+    // Test: queue_email_safe (queued - with scheduled_at) - ASSERT STATUS
     try {
       const start = Date.now();
       const futureDate = new Date(Date.now() + 60000).toISOString();
@@ -364,15 +371,221 @@ export default function OpsHealth() {
         p_entity_id: null,
       });
       
+      // Parse response and assert status === 'queued'
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+      const actualStatus = result?.status;
+      
       rpcTests.push({
         name: "queue_email_safe queued (scheduled_at set)",
-        status: error ? "fail" : "pass",
-        message: error ? `Error: ${error.message}` : "RPC executed - should create queued",
+        status: error ? "fail" : (actualStatus === 'queued' ? "pass" : "fail"),
+        message: error ? `Error: ${error.message}` 
+          : actualStatus === 'queued' 
+            ? `✓ Status correctly set to 'queued'` 
+            : `FAIL: Expected status='queued', got '${actualStatus}'`,
         duration: Date.now() - start,
       });
     } catch (e: any) {
       rpcTests.push({
         name: "queue_email_safe queued",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+    
+    // Test: Invoice rejects invalid numeric payload (quantity="abc")
+    try {
+      const start = Date.now();
+      // First get a real client or company
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const { data: companies } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const entityType = clients?.[0]?.id ? 'client' : 'company';
+      const entityId = clients?.[0]?.id || companies?.[0]?.id;
+      
+      if (!entityId) {
+        rpcTests.push({
+          name: "Invoice rejects invalid numeric",
+          status: "warning",
+          message: "No client/company found to test with",
+          duration: Date.now() - start,
+        });
+      } else {
+        const { error } = await supabase.rpc("create_invoice_draft_safe", {
+          p_organization_id: organization.id,
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_lines: [{ description: "Test", quantity: "abc", unit_price: 100, vat_rate: 20 }],
+        });
+        
+        // MUST error - invalid numeric should RAISE EXCEPTION
+        rpcTests.push({
+          name: "Invoice rejects invalid numeric",
+          status: error ? "pass" : "fail",
+          message: error 
+            ? `✓ Invalid payload correctly rejected: ${error.message}` 
+            : "FAIL: Invalid payload was accepted!",
+          duration: Date.now() - start,
+        });
+      }
+    } catch (e: any) {
+      rpcTests.push({
+        name: "Invoice rejects invalid numeric",
+        status: "pass",
+        message: `✓ Invalid payload rejected with exception: ${e.message}`,
+      });
+    }
+    
+    // Test: Invoice rounding correctness (quantity=1, unit_price=0.3333, vat_rate=20)
+    // Expected: net=0.33, vat=0.07 (0.33*0.2=0.066→0.07), gross=0.40
+    try {
+      const start = Date.now();
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const { data: companies } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const entityType = clients?.[0]?.id ? 'client' : 'company';
+      const entityId = clients?.[0]?.id || companies?.[0]?.id;
+      
+      if (!entityId) {
+        rpcTests.push({
+          name: "Invoice rounding correctness",
+          status: "warning",
+          message: "No client/company found to test with",
+          duration: Date.now() - start,
+        });
+      } else {
+        const { data, error } = await supabase.rpc("create_invoice_draft_safe", {
+          p_organization_id: organization.id,
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_lines: [{ description: "Rounding Test", quantity: 1, unit_price: 0.3333, vat_rate: 20 }],
+        });
+        
+        if (error) {
+          rpcTests.push({
+            name: "Invoice rounding correctness",
+            status: "fail",
+            message: `Error: ${error.message}`,
+            duration: Date.now() - start,
+          });
+        } else {
+          const result = typeof data === 'string' ? JSON.parse(data) : data;
+          const invoiceId = result?.invoice_id;
+          
+          // Query invoice_lines to verify rounding
+          const { data: lines } = await supabase
+            .from("invoice_lines")
+            .select("net_amount, vat_amount, gross_amount")
+            .eq("invoice_id", invoiceId);
+          
+          const line = lines?.[0];
+          const netOk = Number(line?.net_amount) === 0.33;
+          const vatOk = Number(line?.vat_amount) === 0.07;
+          const grossOk = Number(line?.gross_amount) === 0.40;
+          
+          rpcTests.push({
+            name: "Invoice rounding correctness",
+            status: netOk && vatOk && grossOk ? "pass" : "fail",
+            message: netOk && vatOk && grossOk
+              ? `✓ Rounding correct: net=${line?.net_amount}, vat=${line?.vat_amount}, gross=${line?.gross_amount}`
+              : `FAIL: Expected net=0.33, vat=0.07, gross=0.40. Got net=${line?.net_amount}, vat=${line?.vat_amount}, gross=${line?.gross_amount}`,
+            duration: Date.now() - start,
+          });
+        }
+      }
+    } catch (e: any) {
+      rpcTests.push({
+        name: "Invoice rounding correctness",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+    
+    // Test: Invoice contact_email persistence
+    try {
+      const start = Date.now();
+      const testEmail = `test-${Date.now()}@opshealth.test`;
+      
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const { data: companies } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      const entityType = clients?.[0]?.id ? 'client' : 'company';
+      const entityId = clients?.[0]?.id || companies?.[0]?.id;
+      
+      if (!entityId) {
+        rpcTests.push({
+          name: "Invoice contact_email persisted",
+          status: "warning",
+          message: "No client/company found to test with",
+          duration: Date.now() - start,
+        });
+      } else {
+        const { data, error } = await supabase.rpc("create_invoice_draft_safe", {
+          p_organization_id: organization.id,
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_contact_name: "Contact Email Test",
+          p_contact_email: testEmail,
+          p_lines: [{ description: "Test", quantity: 1, unit_price: 100, vat_rate: 0 }],
+        });
+        
+        if (error) {
+          rpcTests.push({
+            name: "Invoice contact_email persisted",
+            status: "fail",
+            message: `Create failed: ${error.message}`,
+            duration: Date.now() - start,
+          });
+        } else {
+          const result = typeof data === 'string' ? JSON.parse(data) : data;
+          const invoiceId = result?.invoice_id;
+          
+          // Query to verify contact_email was persisted
+          const { data: invoice } = await supabase
+            .from("invoices")
+            .select("contact_email")
+            .eq("id", invoiceId)
+            .single();
+          
+          rpcTests.push({
+            name: "Invoice contact_email persisted",
+            status: invoice?.contact_email === testEmail ? "pass" : "fail",
+            message: invoice?.contact_email === testEmail 
+              ? `✓ contact_email correctly persisted: ${testEmail}`
+              : `FAIL: Expected '${testEmail}', got '${invoice?.contact_email}'`,
+            duration: Date.now() - start,
+          });
+        }
+      }
+    } catch (e: any) {
+      rpcTests.push({
+        name: "Invoice contact_email persisted",
         status: "fail",
         message: `Exception: ${e.message}`,
       });
