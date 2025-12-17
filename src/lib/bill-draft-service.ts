@@ -1,18 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export interface BillLineInput {
-  description?: string;
+  description: string;
   quantity: number;
-  unitPrice: number;
-  accountId?: string;
-  vatCodeId?: string;
-  vatRate: number;
+  unit_price: number;
+  account_id?: string;
+  vat_code_id?: string;
+  vat_rate: number;
+  // Server calculates amounts
 }
 
 export interface CreateBillDraftInput {
   entityType: 'client' | 'company';
   entityId: string;
-  supplierId: string;
+  supplierId?: string;
   billNumber?: string;
   reference?: string;
   issueDate?: string;
@@ -38,27 +39,21 @@ export async function createBillDraftSafe(
   organizationId: string,
   input: CreateBillDraftInput
 ): Promise<CreateBillDraftResult> {
-  const lines = input.lines.map(line => {
-    const net = line.quantity * line.unitPrice;
-    const vat = net * (line.vatRate / 100);
-    return {
-      description: line.description || '',
-      quantity: line.quantity,
-      unit_price: line.unitPrice,
-      account_id: line.accountId || '',
-      vat_code_id: line.vatCodeId || '',
-      vat_rate: line.vatRate,
-      net_amount: net,
-      vat_amount: vat,
-      gross_amount: net + vat
-    };
-  });
+  // Send only what server needs - server calculates amounts
+  const lines = input.lines.map(line => ({
+    description: line.description,
+    quantity: line.quantity,
+    unit_price: line.unit_price,
+    account_id: line.account_id || '',
+    vat_code_id: line.vat_code_id || '',
+    vat_rate: line.vat_rate
+  }));
 
   const { data, error } = await supabase.rpc('create_bill_draft_safe', {
     p_organization_id: organizationId,
     p_entity_type: input.entityType,
     p_entity_id: input.entityId,
-    p_supplier_id: input.supplierId,
+    p_supplier_id: input.supplierId || null,
     p_bill_number: input.billNumber || null,
     p_reference: input.reference || null,
     p_issue_date: input.issueDate || null,
@@ -76,21 +71,15 @@ export async function updateBillDraftSafe(
   billId: string,
   input: Partial<Omit<CreateBillDraftInput, 'entityType' | 'entityId'>>
 ): Promise<UpdateBillDraftResult> {
-  const lines = input.lines ? input.lines.map(line => {
-    const net = line.quantity * line.unitPrice;
-    const vat = net * (line.vatRate / 100);
-    return {
-      description: line.description || '',
-      quantity: line.quantity,
-      unit_price: line.unitPrice,
-      account_id: line.accountId || '',
-      vat_code_id: line.vatCodeId || '',
-      vat_rate: line.vatRate,
-      net_amount: net,
-      vat_amount: vat,
-      gross_amount: net + vat
-    };
-  }) : null;
+  // Send only what server needs - server calculates amounts
+  const lines = input.lines ? input.lines.map(line => ({
+    description: line.description,
+    quantity: line.quantity,
+    unit_price: line.unit_price,
+    account_id: line.account_id || '',
+    vat_code_id: line.vat_code_id || '',
+    vat_rate: line.vat_rate
+  })) : null;
 
   const { data, error } = await supabase.rpc('update_bill_draft_safe', {
     p_bill_id: billId,

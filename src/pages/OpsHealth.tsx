@@ -140,6 +140,57 @@ export default function OpsHealth() {
       });
     }
 
+    // Test 4: invoices direct insert should fail (RPC-only)
+    try {
+      const start = Date.now();
+      const { error } = await supabase
+        .from("invoices")
+        .insert([{
+          organization_id: organization.id,
+          status: "DRAFT",
+          invoice_type: "SALES",
+          contact_name: "RLS TEST",
+          issue_date: new Date().toISOString().split("T")[0],
+          due_date: new Date().toISOString().split("T")[0],
+        }]);
+      
+      rlsTests.push({
+        name: "invoices direct insert blocked",
+        status: error ? "pass" : "fail",
+        message: error ? "Direct insert blocked by RLS (RPC-only)" : "CRITICAL: Direct insert allowed!",
+        duration: Date.now() - start,
+      });
+    } catch {
+      rlsTests.push({
+        name: "invoices direct insert blocked",
+        status: "pass",
+        message: "Direct insert blocked with exception",
+      });
+    }
+
+    // Test 5: invoices SELECT should work (org-scoped)
+    try {
+      const start = Date.now();
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .limit(1);
+      
+      rlsTests.push({
+        name: "invoices SELECT allowed (org-scoped)",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : `Read ${data?.length || 0} invoice(s) - SELECT works`,
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      rlsTests.push({
+        name: "invoices SELECT allowed",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
     results.push({
       name: "RLS Enforcement",
       icon: <Shield className="h-5 w-5" />,
