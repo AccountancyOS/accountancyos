@@ -54,7 +54,21 @@ import PermissionsSettings from "./pages/settings/PermissionsSettings";
 import EmailTemplates from "./pages/settings/EmailTemplates";
 import { Loader2 } from "lucide-react";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // Data considered fresh for 5 minutes
+      gcTime: 1000 * 60 * 30, // Cache kept for 30 minutes
+      refetchOnWindowFocus: false, // Don't refetch when user switches tabs
+      refetchOnReconnect: true, // Do refetch when connection restored
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    },
+    mutations: {
+      retry: 1,
+    },
+  },
+});
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
