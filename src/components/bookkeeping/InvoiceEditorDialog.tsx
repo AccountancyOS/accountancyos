@@ -157,6 +157,9 @@ export function InvoiceEditorDialog({
     enabled: !!organization?.id && open,
   });
 
+  // Track contact_email separately since form doesn't include it
+  const [contactEmail, setContactEmail] = useState<string>("");
+
   // Restore draft on open
   useEffect(() => {
     if (open && !invoice && isLoaded && draft) {
@@ -170,6 +173,7 @@ export function InvoiceEditorDialog({
       });
       setLines(draft.lines);
       setSelectedCustomerId(draft.customer_id || null);
+      setContactEmail(draft.contact_email || "");
     }
   }, [open, invoice, isLoaded, draft, reset]);
 
@@ -187,6 +191,7 @@ export function InvoiceEditorDialog({
           }
         });
       setSelectedCustomerId(invoice.customer_id || null);
+      setContactEmail(invoice.contact_email || "");
     } else if (open && !invoice && !draft) {
       setLines([
         {
@@ -202,6 +207,7 @@ export function InvoiceEditorDialog({
           gross_amount: 0,
         },
       ]);
+      setContactEmail("");
     }
   }, [invoice, open, draft]);
 
@@ -211,6 +217,7 @@ export function InvoiceEditorDialog({
     if (open && !invoice && isDraft) {
       saveDraft({
         contact_name: formValues.contact_name,
+        contact_email: contactEmail,
         invoice_number: formValues.invoice_number,
         reference: formValues.reference,
         issue_date: formValues.issue_date,
@@ -222,7 +229,7 @@ export function InvoiceEditorDialog({
         invoiceType: "SALES",
       });
     }
-  }, [formValues, lines, selectedCustomerId, open, invoice, isDraft, saveDraft]);
+  }, [formValues, lines, selectedCustomerId, contactEmail, open, invoice, isDraft, saveDraft]);
 
   const updateLine = (index: number, field: keyof InvoiceLine, value: any) => {
     if (isLocked) return;
@@ -298,6 +305,7 @@ export function InvoiceEditorDialog({
         // Update existing draft
         const result = await updateInvoiceDraftSafe(invoice.id, {
           contactName: data.contact_name,
+          contactEmail: contactEmail || undefined,
           reference: data.reference,
           issueDate: data.issue_date,
           dueDate: data.due_date,
@@ -316,6 +324,7 @@ export function InvoiceEditorDialog({
           entityId: entity.id,
           invoiceType,
           contactName: data.contact_name,
+          contactEmail: contactEmail || undefined,
           invoiceNumber: data.invoice_number || undefined,
           reference: data.reference || undefined,
           issueDate: data.issue_date,
@@ -366,9 +375,10 @@ export function InvoiceEditorDialog({
     },
   });
 
-  const handleCustomerCreated = (customer: { id: string; name: string }) => {
+  const handleCustomerCreated = (customer: { id: string; name: string; email?: string }) => {
     setSelectedCustomerId(customer.id);
     setValue("contact_name", customer.name);
+    setContactEmail(customer.email || "");
     setCreateCustomerOpen(false);
   };
 
@@ -401,6 +411,9 @@ export function InvoiceEditorDialog({
                         setSelectedCustomerId(customer?.id || null);
                         if (customer) {
                           setValue("contact_name", customer.name);
+                          setContactEmail(customer.email || "");
+                        } else {
+                          setContactEmail("");
                         }
                       }}
                       onCreateNew={() => setCreateCustomerOpen(true)}

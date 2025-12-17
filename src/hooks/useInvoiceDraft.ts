@@ -17,6 +17,7 @@ interface InvoiceLine {
 
 interface InvoiceDraft {
   contact_name: string;
+  contact_email: string;
   customer_id: string;
   invoice_number: string;
   reference: string;
@@ -30,6 +31,7 @@ interface InvoiceDraft {
 
 const DEFAULT_DRAFT: InvoiceDraft = {
   contact_name: "",
+  contact_email: "",
   customer_id: "",
   invoice_number: "",
   reference: "",
@@ -109,6 +111,7 @@ export function useInvoiceDraft() {
   // Check if there's a pending draft
   const hasDraft = draft !== null && (
     draft.contact_name || 
+    draft.contact_email ||
     draft.customer_id || 
     draft.lines.some(l => l.description || l.unit_price > 0)
   );

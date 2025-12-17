@@ -11768,6 +11768,7 @@ export type Database = {
       }
       create_invoice_draft_safe: {
         Args: {
+          p_contact_email?: string
           p_contact_name?: string
           p_currency?: string
           p_customer_id?: string
@@ -12246,6 +12247,7 @@ export type Database = {
       }
       update_invoice_draft_safe: {
         Args: {
+          p_contact_email?: string
           p_contact_name?: string
           p_customer_id?: string
           p_due_date?: string
