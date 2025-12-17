@@ -13,12 +13,13 @@ export async function queueEmailSafe(
     subject?: string; 
     bodyHtml?: string; 
     templateId?: string; 
-    entityType?: string; 
-    entityId?: string; 
     mergeData?: Record<string, unknown>; 
     scheduledAt?: string; 
+    entityType?: string; 
+    entityId?: string; 
   }
 ): Promise<QueueEmailResult> {
+  // Canonical signature order: org, to_email, to_name, subject, body_html, template_id, merge_data, scheduled_at, entity_type, entity_id
   const { data, error } = await supabase.rpc('queue_email_safe', {
     p_organization_id: organizationId,
     p_to_email: email.toEmail,
@@ -26,10 +27,10 @@ export async function queueEmailSafe(
     p_subject: email.subject || null,
     p_body_html: email.bodyHtml || null,
     p_template_id: email.templateId || null,
-    p_entity_type: email.entityType || null,
-    p_entity_id: email.entityId || null,
     p_merge_data: (email.mergeData || {}) as unknown as Record<string, never>,
-    p_scheduled_at: email.scheduledAt || null
+    p_scheduled_at: email.scheduledAt || null,
+    p_entity_type: email.entityType || null,
+    p_entity_id: email.entityId || null
   });
 
   if (error) return { success: false, error: error.message };

@@ -7938,6 +7938,9 @@ export type Database = {
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
+          invoice_padding: number | null
+          invoice_prefix: string | null
+          next_invoice_number: number | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
           updated_at: string | null
@@ -7956,6 +7959,9 @@ export type Database = {
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
+          invoice_padding?: number | null
+          invoice_prefix?: string | null
+          next_invoice_number?: number | null
           organization_id: string
           shared_mailbox_enabled?: boolean | null
           updated_at?: string | null
@@ -7974,6 +7980,9 @@ export type Database = {
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
+          invoice_padding?: number | null
+          invoice_prefix?: string | null
+          next_invoice_number?: number | null
           organization_id?: string
           shared_mailbox_enabled?: boolean | null
           updated_at?: string | null
@@ -11855,6 +11864,9 @@ export type Database = {
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
+          invoice_padding: number | null
+          invoice_prefix: string | null
+          next_invoice_number: number | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
           updated_at: string | null
@@ -11943,6 +11955,9 @@ export type Database = {
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
+          invoice_padding: number | null
+          invoice_prefix: string | null
+          next_invoice_number: number | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
           updated_at: string | null
