@@ -6,7 +6,54 @@ import { useOrganization } from "@/lib/organization-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings } from "lucide-react";
+import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings, LogOut } from "lucide-react";
+
+type PaymentMode = 'new_trial' | 'reactivate' | 'past_due' | 'canceled' | 'unknown';
+type PrimaryAction = 'checkout' | 'billing_portal';
+
+interface UIConfig {
+  icon: React.ReactNode;
+  iconBg: string;
+  title: string;
+  description: string;
+  primaryText: string;
+  primaryAction: PrimaryAction;
+}
+
+const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown'>, UIConfig> = {
+  new_trial: {
+    icon: <CreditCard className="h-12 w-12 text-primary" />,
+    iconBg: "bg-primary/10",
+    title: "Start your free trial",
+    description: "Complete setup to start your 14-day free trial and unlock your AccountancyOS workspace.",
+    primaryText: "Continue to payment",
+    primaryAction: "checkout",
+  },
+  reactivate: {
+    icon: <RefreshCw className="h-12 w-12 text-blue-500" />,
+    iconBg: "bg-blue-100",
+    title: "Reactivate your subscription",
+    description: "This workspace previously had an active subscription. Resubscribe to regain access.",
+    primaryText: "Resubscribe",
+    primaryAction: "checkout",
+  },
+  past_due: {
+    icon: <AlertCircle className="h-12 w-12 text-amber-500" />,
+    iconBg: "bg-amber-100",
+    title: "Payment failed",
+    description: "Your last payment didn't go through. Update your payment method to continue using AccountancyOS.",
+    primaryText: "Update payment method",
+    primaryAction: "billing_portal",
+  },
+  canceled: {
+    icon: <AlertCircle className="h-12 w-12 text-muted-foreground" />,
+    iconBg: "bg-muted",
+    title: "Subscription canceled",
+    description: "Your subscription has ended. Resubscribe to regain access to AccountancyOS.",
+    primaryText: "Resubscribe",
+    primaryAction: "checkout",
+  },
+};
 
 const CompletePayment = () => {
   const navigate = useNavigate();
@@ -16,12 +63,78 @@ const CompletePayment = () => {
   
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [billingStatus, setBillingStatus] = useState<string | null>(null);
+  const [subscriptionCache, setSubscriptionCache] = useState<{
+    subscription_id: string | null;
+    subscription_status: string | null;
+  } | null>(null);
+  const [cacheLoading, setCacheLoading] = useState(true);
+
+  // Fetch subscription cache to determine if org ever had a subscription
+  useEffect(() => {
+    const fetchSubscriptionHistory = async () => {
+      if (!organization?.id) {
+        setCacheLoading(false);
+        return;
+      }
+      
+      try {
+        const { data } = await supabase
+          .from('organization_subscription_cache')
+          .select('subscription_id, subscription_status')
+          .eq('organization_id', organization.id)
+          .maybeSingle();
+        
+        setSubscriptionCache(data);
+      } catch (error) {
+        console.error('Error fetching subscription cache:', error);
+      } finally {
+        setCacheLoading(false);
+      }
+    };
+    
+    fetchSubscriptionHistory();
+  }, [organization?.id]);
+
+  // Redirect if billing becomes active
+  useEffect(() => {
+    if (organization) {
+      const status = (organization as any).billing_status as string;
+      
+      if (status === 'active') {
+        localStorage.removeItem("pending_org_id");
+        
+        if (organization.onboarding_completed) {
+          navigate('/welcome');
+        } else {
+          navigate('/onboarding-wizard');
+        }
+      }
+    }
+  }, [organization, navigate]);
+
+  // Compute billing status and payment mode
+  const billingStatus = (organization as any)?.billing_status as string | undefined;
+  
+  const hasSubscriptionHistory = Boolean(
+    subscriptionCache?.subscription_id || 
+    (organization as any)?.stripe_subscription_id
+  );
+
+  const mode: PaymentMode = (() => {
+    if (billingStatus === 'past_due') return 'past_due';
+    if (billingStatus === 'canceled') return 'canceled';
+    
+    // Anything not active (null/undefined/pending_payment)
+    if (billingStatus !== 'active') {
+      return hasSubscriptionHistory ? 'reactivate' : 'new_trial';
+    }
+    
+    return 'unknown';
+  })();
 
   // Get org ID from context or localStorage fallback
   const getOrganizationId = (): string | null => {
     if (organization?.id) return organization.id;
-    // Fallback to localStorage if org context hasn't loaded yet
     return localStorage.getItem("pending_org_id");
   };
 
@@ -30,27 +143,7 @@ const CompletePayment = () => {
     return "My Practice";
   };
 
-  useEffect(() => {
-    if (organization) {
-      // Type assertion since billing_status is new
-      const status = (organization as any).billing_status as string;
-      setBillingStatus(status);
-      
-      // If already active, redirect to appropriate page
-      if (status === 'active') {
-        // Clear localStorage pending_org_id since we're done
-        localStorage.removeItem("pending_org_id");
-        
-        if (organization.onboarding_completed) {
-          navigate('/welcome');
-        } else {
-          navigate('/');
-        }
-      }
-    }
-  }, [organization, navigate]);
-
-  const handleContinueToPayment = async () => {
+  const handleCheckout = async () => {
     const orgId = getOrganizationId();
     const orgName = getOrganizationName();
 
@@ -66,11 +159,11 @@ const CompletePayment = () => {
     setLoading(true);
 
     try {
-      // Edge function sets pending_checkout_session_id server-side
       const { data, error } = await supabase.functions.invoke('stripe-checkout', {
         body: {
           organizationId: orgId,
           organizationName: orgName,
+          intent: mode === 'new_trial' ? 'trial' : 'reactivate',
         },
       });
 
@@ -92,8 +185,7 @@ const CompletePayment = () => {
     }
   };
 
-  // Use billing portal for past_due status to update payment method
-  const handleManageSubscription = async () => {
+  const handleBillingPortal = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('customer-portal');
@@ -116,10 +208,20 @@ const CompletePayment = () => {
     }
   };
 
+  const handlePrimaryAction = () => {
+    if (mode === 'unknown') return;
+    
+    const config = UI_BY_MODE[mode];
+    if (config.primaryAction === 'billing_portal') {
+      handleBillingPortal();
+    } else {
+      handleCheckout();
+    }
+  };
+
   const handleRefreshStatus = async () => {
     setRefreshing(true);
     try {
-      // Call check-subscription to force refresh from Stripe
       const { error } = await supabase.functions.invoke('check-subscription', {
         body: { forceRefresh: true },
       });
@@ -128,7 +230,6 @@ const CompletePayment = () => {
         console.error('Refresh error:', error);
       }
 
-      // Refresh local org data
       await refreshOrganization();
 
       toast({
@@ -146,7 +247,13 @@ const CompletePayment = () => {
     }
   };
 
-  if (orgLoading) {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem("pending_org_id");
+    navigate("/auth");
+  };
+
+  if (orgLoading || cacheLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -154,42 +261,12 @@ const CompletePayment = () => {
     );
   }
 
-  const getStatusInfo = () => {
-    switch (billingStatus) {
-      case 'past_due':
-        return {
-          icon: <AlertCircle className="h-12 w-12 text-amber-500" />,
-          iconBg: "bg-amber-100",
-          title: "Payment Past Due",
-          description: "Your last payment didn't go through. Please update your payment method to continue using AccountancyOS.",
-          primaryAction: handleManageSubscription,
-          primaryButtonText: "Update Payment Method",
-          primaryButtonIcon: <Settings className="mr-2 h-4 w-4" />,
-        };
-      case 'canceled':
-        return {
-          icon: <AlertCircle className="h-12 w-12 text-muted-foreground" />,
-          iconBg: "bg-muted",
-          title: "Subscription Canceled",
-          description: "Your subscription has been canceled. Resubscribe to regain access to AccountancyOS.",
-          primaryAction: handleContinueToPayment,
-          primaryButtonText: "Resubscribe",
-          primaryButtonIcon: <CreditCard className="mr-2 h-4 w-4" />,
-        };
-      default:
-        return {
-          icon: <CreditCard className="h-12 w-12 text-primary" />,
-          iconBg: "bg-primary/10",
-          title: "Complete Your Subscription",
-          description: "You're almost there! Complete your payment to start your 14-day free trial of AccountancyOS.",
-          primaryAction: handleContinueToPayment,
-          primaryButtonText: "Continue to Payment",
-          primaryButtonIcon: <CreditCard className="mr-2 h-4 w-4" />,
-        };
-    }
-  };
+  // Defensive: shouldn't render for unknown mode
+  if (mode === 'unknown') {
+    return null;
+  }
 
-  const statusInfo = getStatusInfo();
+  const uiConfig = UI_BY_MODE[mode];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
@@ -200,18 +277,18 @@ const CompletePayment = () => {
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
           </div>
-          <div className={`flex justify-center p-3 rounded-full mx-auto w-fit ${statusInfo.iconBg}`}>
-            {statusInfo.icon}
+          <div className={`flex justify-center p-3 rounded-full mx-auto w-fit ${uiConfig.iconBg}`}>
+            {uiConfig.icon}
           </div>
-          <CardTitle className="text-2xl">{statusInfo.title}</CardTitle>
+          <CardTitle className="text-2xl">{uiConfig.title}</CardTitle>
           <CardDescription className="text-base">
-            {statusInfo.description}
+            {uiConfig.description}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
           <Button 
-            onClick={statusInfo.primaryAction} 
+            onClick={handlePrimaryAction} 
             className="w-full" 
             size="lg"
             disabled={loading}
@@ -223,8 +300,12 @@ const CompletePayment = () => {
               </>
             ) : (
               <>
-                {statusInfo.primaryButtonIcon}
-                {statusInfo.primaryButtonText}
+                {uiConfig.primaryAction === 'billing_portal' ? (
+                  <Settings className="mr-2 h-4 w-4" />
+                ) : (
+                  <CreditCard className="mr-2 h-4 w-4" />
+                )}
+                {uiConfig.primaryText}
               </>
             )}
           </Button>
@@ -266,6 +347,16 @@ const CompletePayment = () => {
               <p>Status: {billingStatus || 'pending_payment'}</p>
             </div>
           )}
+
+          <Button
+            onClick={handleSignOut}
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out or switch account
+          </Button>
         </CardContent>
       </Card>
     </div>

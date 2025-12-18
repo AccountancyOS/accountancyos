@@ -49,9 +49,11 @@ serve(async (req) => {
     logStep("Found Stripe customer", { customerId });
 
     const origin = req.headers.get("origin") || "http://localhost:8080";
+    
+    // Return to complete-payment page so status can be re-evaluated
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${origin}/subscription`,
+      return_url: `${origin}/complete-payment`,
     });
     logStep("Customer portal session created", { sessionId: portalSession.id, url: portalSession.url });
 

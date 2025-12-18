@@ -26,15 +26,32 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { organizationId, organizationName } = await req.json();
+    const { organizationId, organizationName, intent } = await req.json();
 
     if (!organizationId || !organizationName) {
       throw new Error('Missing required parameters: organizationId and organizationName are required');
     }
 
-    logStep('Creating checkout session for organization', { organizationId, organizationName });
+    logStep('Creating checkout session for organization', { organizationId, organizationName, intent });
 
-    // Create a checkout session with 14-day trial
+    // Only apply trial for new signups (intent === 'trial')
+    // Returning users (intent === 'reactivate') should not get a trial
+    const subscriptionData = intent === 'reactivate' 
+      ? {
+          metadata: {
+            organization_id: organizationId,
+          },
+        }
+      : {
+          trial_period_days: 14,
+          metadata: {
+            organization_id: organizationId,
+          },
+        };
+
+    logStep('Subscription data configured', { hasTrial: intent !== 'reactivate' });
+
+    // Create a checkout session
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -54,23 +71,19 @@ serve(async (req) => {
           quantity: 1,
         },
       ],
-      subscription_data: {
-        trial_period_days: 14,
-        metadata: {
-          organization_id: organizationId,
-        },
-      },
+      subscription_data: subscriptionData,
       customer_email: null,
       client_reference_id: organizationId,
       success_url: `${req.headers.get('origin')}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/auth?canceled=true`,
+      cancel_url: `${req.headers.get('origin')}/complete-payment?canceled=true`,
       metadata: {
         organization_id: organizationId,
         organization_name: organizationName,
+        intent: intent || 'trial',
       },
     });
 
-    logStep('Checkout session created', { sessionId: session.id });
+    logStep('Checkout session created', { sessionId: session.id, hasTrial: intent !== 'reactivate' });
 
     // Store pending_checkout_session_id server-side (not from frontend)
     const { error: updateError } = await supabase
