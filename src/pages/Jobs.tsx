@@ -63,8 +63,8 @@ export default function Jobs() {
         .from("jobs")
         .select(`
           *,
-          clients (first_name, last_name),
-          companies (company_name)
+          clients!fk_jobs_client (first_name, last_name),
+          companies!fk_jobs_company (company_name)
         `)
         .eq("organization_id", organization.id);
 

@@ -3951,6 +3951,13 @@ export type Database = {
             referencedRelation: "deadlines"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_deadlines_job"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
         ]
       }
       email_attachments: {
@@ -7063,6 +7070,20 @@ export type Database = {
           workpaper_instance_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_jobs_client"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_jobs_company"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "jobs_client_id_fkey"
             columns: ["client_id"]
