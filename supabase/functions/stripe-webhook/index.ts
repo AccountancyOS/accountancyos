@@ -14,17 +14,40 @@ const logStep = (step: string, details?: any) => {
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 
-// Helper to update subscription cache
-async function updateSubscriptionCache(
+// Map Stripe subscription status to billing_status enum
+function mapToBillingStatus(subscriptionStatus: string | null, isDeleted: boolean = false): 'pending_payment' | 'active' | 'past_due' | 'canceled' {
+  if (isDeleted) return 'canceled';
+  switch (subscriptionStatus) {
+    case 'active':
+    case 'trialing':
+      return 'active';
+    case 'past_due':
+    case 'unpaid':
+      return 'past_due';
+    case 'canceled':
+    case 'incomplete_expired':
+      return 'canceled';
+    default:
+      return 'pending_payment';
+  }
+}
+
+// Helper to update subscription cache AND billing_status atomically
+async function updateSubscriptionState(
   supabase: any,
   organizationId: string,
   subscribed: boolean,
   subscriptionId: string | null,
   subscriptionStatus: string | null,
   subscriptionEnd: string | null,
-  planName: string | null = null
+  planName: string | null = null,
+  stripeCustomerId: string | null = null,
+  clearPendingCheckout: boolean = false
 ) {
-  const { error } = await supabase
+  const billingStatus = mapToBillingStatus(subscriptionStatus);
+  
+  // Update cache
+  const { error: cacheError } = await supabase
     .from('organization_subscription_cache')
     .upsert({
       organization_id: organizationId,
@@ -33,44 +56,58 @@ async function updateSubscriptionCache(
       subscription_status: subscriptionStatus,
       subscription_end: subscriptionEnd,
       plan_name: planName,
+      stripe_customer_id: stripeCustomerId,
       checked_at: new Date().toISOString(),
     }, { onConflict: 'organization_id' });
 
-  if (error) {
-    logStep('Error updating subscription cache', { error: error.message });
+  if (cacheError) {
+    logStep('Error updating subscription cache', { error: cacheError.message });
+  }
+
+  // Update organization billing_status
+  const orgUpdate: Record<string, any> = { billing_status: billingStatus };
+  if (clearPendingCheckout) {
+    orgUpdate.pending_checkout_session_id = null;
+  }
+  if (stripeCustomerId) {
+    orgUpdate.stripe_customer_id = stripeCustomerId;
+  }
+  if (subscriptionId) {
+    orgUpdate.stripe_subscription_id = subscriptionId;
+  }
+
+  const { error: orgError } = await supabase
+    .from('organizations')
+    .update(orgUpdate)
+    .eq('id', organizationId);
+
+  if (orgError) {
+    logStep('Error updating organization billing_status', { error: orgError.message });
   } else {
-    logStep('Subscription cache updated', { organizationId, subscribed, subscriptionStatus });
+    logStep('Subscription state updated', { organizationId, subscribed, billingStatus, subscriptionStatus });
   }
 }
 
-// Helper to find organization by customer email
-async function findOrganizationByCustomerEmail(supabase: any, customerEmail: string): Promise<string | null> {
-  // Find user by email
-  const { data: users, error: userError } = await supabase.auth.admin.listUsers();
-  if (userError) {
-    logStep('Error listing users', { error: userError.message });
-    return null;
+// Check idempotency - returns true if event already processed
+async function checkIdempotency(supabase: any, eventId: string, eventType: string, eventCreated: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('stripe_webhook_events')
+    .insert({
+      id: eventId,
+      type: eventType,
+      created_at: new Date(eventCreated * 1000).toISOString(),
+    });
+
+  if (error) {
+    // Check if it's a unique constraint violation (duplicate)
+    if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      logStep('Event already processed (idempotent skip)', { eventId });
+      return true;
+    }
+    // Other errors - log but continue (fail open for webhook reliability)
+    logStep('Idempotency check error (continuing)', { error: error.message });
   }
-
-  const user = users.users?.find((u: any) => u.email === customerEmail);
-  if (!user) {
-    logStep('No user found for email', { email: customerEmail });
-    return null;
-  }
-
-  // Find organization for user
-  const { data: orgUser, error: orgError } = await supabase
-    .from('organization_users')
-    .select('organization_id')
-    .eq('user_id', user.id)
-    .single();
-
-  if (orgError || !orgUser) {
-    logStep('No organization found for user', { userId: user.id });
-    return null;
-  }
-
-  return orgUser.organization_id;
+  return false;
 }
 
 serve(async (req) => {
@@ -86,50 +123,58 @@ serve(async (req) => {
     const body = await req.text();
     const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
 
-    logStep('Received webhook event', { type: event.type });
+    logStep('Received webhook event', { type: event.type, id: event.id });
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Idempotency check - skip if already processed
+    const isDuplicate = await checkIdempotency(supabase, event.id, event.type, event.created);
+    if (isDuplicate) {
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
 
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         logStep('Checkout session completed', { sessionId: session.id });
 
+        // ONLY use metadata for org mapping - no email guessing
         const organizationId = session.metadata?.organization_id;
         if (!organizationId) {
-          logStep('No organization_id in session metadata');
+          logStep('No organization_id in session metadata - cannot process', { sessionId: session.id });
           break;
         }
 
-        // Update organization with Stripe customer and subscription IDs
-        const { error } = await supabase
+        // Update organization with Stripe customer ID
+        await supabase
           .from('organizations')
           .update({
             stripe_customer_id: session.customer as string,
             stripe_subscription_id: session.subscription as string,
+            pending_checkout_session_id: null, // Clear pending session
           })
           .eq('id', organizationId);
 
-        if (error) {
-          logStep('Error updating organization', { error: error.message });
-        } else {
-          logStep('Updated organization with Stripe IDs', { organizationId });
-        }
-
-        // If this is a subscription checkout, update the cache
+        // If this is a subscription checkout, update the full state
         if (session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
           const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-          const planName = subscription.items.data[0]?.price?.nickname || null;
-          
-          await updateSubscriptionCache(
+          const planName = subscription.items.data[0]?.price?.nickname || 'AccountancyOS Pro';
+          const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+
+          await updateSubscriptionState(
             supabase,
             organizationId,
-            subscription.status === 'active' || subscription.status === 'trialing',
+            isActive,
             subscription.id,
             subscription.status,
             subscriptionEnd,
-            planName
+            planName,
+            session.customer as string,
+            true // clear pending checkout
           );
         }
         break;
@@ -140,7 +185,7 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         logStep('Subscription event', { subscriptionId: subscription.id, status: subscription.status });
 
-        // Find organization by matching stripe_subscription_id or customer email
+        // Find organization by subscription ID or customer ID only - NO email fallback
         let organizationId: string | null = null;
 
         // First try by subscription ID
@@ -162,37 +207,30 @@ serve(async (req) => {
 
           if (orgByCustomerId) {
             organizationId = orgByCustomerId.id;
-          } else {
-            // Fallback: find by customer email
-            const customer = await stripe.customers.retrieve(subscription.customer as string);
-            if (customer && !customer.deleted && customer.email) {
-              organizationId = await findOrganizationByCustomerEmail(supabase, customer.email);
-            }
           }
         }
 
         if (organizationId) {
           const isActive = subscription.status === 'active' || subscription.status === 'trialing';
           const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-          const planName = subscription.items.data[0]?.price?.nickname || null;
+          const planName = subscription.items.data[0]?.price?.nickname || 'AccountancyOS Pro';
 
-          await updateSubscriptionCache(
+          await updateSubscriptionState(
             supabase,
             organizationId,
             isActive,
             subscription.id,
             subscription.status,
             subscriptionEnd,
-            planName
+            planName,
+            subscription.customer as string,
+            isActive // clear pending checkout only if active
           );
-
-          // Also update organization's stripe_subscription_id if needed
-          await supabase
-            .from('organizations')
-            .update({ stripe_subscription_id: subscription.id })
-            .eq('id', organizationId);
         } else {
-          logStep('Could not find organization for subscription', { subscriptionId: subscription.id });
+          logStep('Could not find organization for subscription (no email fallback)', { 
+            subscriptionId: subscription.id,
+            customerId: subscription.customer 
+          });
         }
         break;
       }
@@ -201,7 +239,7 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         logStep('Subscription deleted', { subscriptionId: subscription.id });
 
-        // Find and update organization
+        // Find organization
         const { data: org } = await supabase
           .from('organizations')
           .select('id')
@@ -209,22 +247,23 @@ serve(async (req) => {
           .single();
 
         if (org) {
-          // Update organization to remove subscription
-          await supabase
-            .from('organizations')
-            .update({ stripe_subscription_id: null })
-            .eq('id', org.id);
-
-          // Update cache to show unsubscribed
-          await updateSubscriptionCache(
+          await updateSubscriptionState(
             supabase,
             org.id,
             false,
             null,
             'canceled',
             null,
-            null
+            null,
+            null,
+            false
           );
+
+          // Also clear subscription ID from org
+          await supabase
+            .from('organizations')
+            .update({ stripe_subscription_id: null })
+            .eq('id', org.id);
         }
         break;
       }
@@ -233,7 +272,6 @@ serve(async (req) => {
         const invoice = event.data.object as Stripe.Invoice;
         logStep('Invoice payment succeeded', { invoiceId: invoice.id });
 
-        // Update cache if this is a subscription invoice
         if (invoice.subscription) {
           const { data: org } = await supabase
             .from('organizations')
@@ -244,15 +282,18 @@ serve(async (req) => {
           if (org) {
             const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string);
             const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-            
-            await updateSubscriptionCache(
+            const planName = subscription.items.data[0]?.price?.nickname || 'AccountancyOS Pro';
+
+            await updateSubscriptionState(
               supabase,
               org.id,
               true,
               subscription.id,
               subscription.status,
               subscriptionEnd,
-              subscription.items.data[0]?.price?.nickname || null
+              planName,
+              null,
+              true // clear pending checkout
             );
           }
         }
@@ -271,15 +312,16 @@ serve(async (req) => {
             .single();
 
           if (org) {
-            // Update cache to show past_due status
-            await updateSubscriptionCache(
+            await updateSubscriptionState(
               supabase,
               org.id,
               false,
               invoice.subscription as string,
               'past_due',
               null,
-              null
+              null,
+              null,
+              false
             );
           }
         }

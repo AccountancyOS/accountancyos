@@ -52,6 +52,8 @@ import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
 import PermissionsSettings from "./pages/settings/PermissionsSettings";
 import EmailTemplates from "./pages/settings/EmailTemplates";
+import CompletePayment from "./pages/CompletePayment";
+import ConfirmEmail from "./pages/ConfirmEmail";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -124,6 +126,10 @@ const App = () => (
               }
             />
             <Route
+              path="/confirm-email"
+              element={<ConfirmEmail />}
+            />
+            <Route
               path="/color-comparison"
               element={<ColorComparison />}
             />
@@ -132,6 +138,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/complete-payment"
+              element={
+                <ProtectedRoute>
+                  <CompletePayment />
                 </ProtectedRoute>
               }
             />

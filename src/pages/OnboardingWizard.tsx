@@ -4,7 +4,7 @@ import { useOrganization } from "@/lib/organization-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, RefreshCw, ArrowLeft, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { PracticeProfileStep } from "@/components/onboarding-wizard/PracticeProfileStep";
@@ -13,6 +13,7 @@ import { ComplianceSetupStep } from "@/components/onboarding-wizard/ComplianceSe
 import { TeamSetupStep } from "@/components/onboarding-wizard/TeamSetupStep";
 import { CRMSetupStep } from "@/components/onboarding-wizard/CRMSetupStep";
 import { DataImportStep } from "@/components/onboarding-wizard/DataImportStep";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const STEPS = [
   { id: 1, name: "Practice Profile", description: "Logo, branding, and contact details" },
@@ -23,6 +24,8 @@ const STEPS = [
   { id: 6, name: "Data Import", description: "Import existing data (optional)" },
 ];
 
+const LOAD_TIMEOUT_MS = 15000; // 15 seconds
+
 const OnboardingWizard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -32,32 +35,70 @@ const OnboardingWizard = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [verifyingPayment, setVerifyingPayment] = useState(true);
+  const [loadTimeout, setLoadTimeout] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+
+  // Timeout detection
+  useEffect(() => {
+    if (!verifyingPayment && !orgLoading) return;
+
+    const timer = setTimeout(() => {
+      if (verifyingPayment || orgLoading) {
+        setLoadTimeout(true);
+      }
+    }, LOAD_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [verifyingPayment, orgLoading]);
 
   useEffect(() => {
     const verifySession = async () => {
-      const sessionId = searchParams.get("session_id");
-      const testMode = searchParams.get("test");
-      
-      // Allow test mode or no session (for testing purposes)
-      if (testMode === "true" || !sessionId) {
-        console.log("Test/development mode - bypassing payment verification");
-        setVerifyingPayment(false);
-        return;
-      }
+      try {
+        const sessionId = searchParams.get("session_id");
+        const testMode = searchParams.get("test");
+        
+        // Allow test mode or no session (for testing purposes)
+        if (testMode === "true" || !sessionId) {
+          console.log("Test/development mode - bypassing payment verification");
+          setVerifyingPayment(false);
+          return;
+        }
 
-      // In a real implementation, you'd verify the Stripe session here
-      // For now, we'll just proceed
-      setVerifyingPayment(false);
+        // Refresh organization to get latest billing status
+        await refreshOrganization();
+        setVerifyingPayment(false);
+      } catch (error: any) {
+        console.error("Payment verification error:", error);
+        setLoadError(error.message || "Failed to verify payment");
+        setVerifyingPayment(false);
+      }
     };
 
     verifySession();
-  }, [searchParams, navigate, toast]);
+  }, [searchParams, refreshOrganization]);
 
   useEffect(() => {
     if (!orgLoading && organization?.onboarding_completed) {
       navigate("/");
     }
   }, [organization, orgLoading, navigate]);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    setLoadTimeout(false);
+    setLoadError(null);
+    
+    try {
+      await refreshOrganization();
+      setVerifyingPayment(false);
+    } catch (error: any) {
+      setLoadError(error.message || "Failed to load organization");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const handleStepComplete = (stepId: number) => {
     if (!completedSteps.includes(stepId)) {
@@ -103,12 +144,111 @@ const OnboardingWizard = () => {
     }
   };
 
+  // Show error/timeout state
+  if (loadTimeout || loadError) {
+    const billingStatus = (organization as any)?.billing_status;
+    const needsPayment = !billingStatus || billingStatus !== 'active';
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <div className="bg-destructive/10 p-4 rounded-full">
+                <AlertCircle className="h-12 w-12 text-destructive" />
+              </div>
+            </div>
+            <CardTitle className="text-xl">
+              {loadError ? "Something went wrong" : "Loading taking too long"}
+            </CardTitle>
+            <CardDescription>
+              {loadError || "We're having trouble loading your account. This might be a temporary issue."}
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <Button
+              onClick={handleRetry}
+              className="w-full"
+              disabled={retrying}
+            >
+              {retrying ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Try Again
+                </>
+              )}
+            </Button>
+
+            {needsPayment && (
+              <Button
+                onClick={() => navigate('/complete-payment')}
+                variant="outline"
+                className="w-full"
+              >
+                <CreditCard className="mr-2 h-4 w-4" />
+                Go to Complete Payment
+              </Button>
+            )}
+
+            <Button
+              onClick={() => navigate('/auth')}
+              variant="ghost"
+              className="w-full"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Sign In
+            </Button>
+
+            {/* Diagnostics panel */}
+            <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full text-muted-foreground">
+                  {showDiagnostics ? (
+                    <>
+                      <ChevronUp className="mr-2 h-4 w-4" />
+                      Hide Diagnostics
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="mr-2 h-4 w-4" />
+                      Show Diagnostics
+                    </>
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 p-3 bg-muted rounded-lg text-xs font-mono space-y-1">
+                  <p>Organization ID: {organization?.id || 'Not loaded'}</p>
+                  <p>Organization: {organization?.name || 'Not loaded'}</p>
+                  <p>Billing Status: {billingStatus || 'Not set'}</p>
+                  <p>Onboarding: {organization?.onboarding_completed ? 'Complete' : 'Incomplete'}</p>
+                  <p>Org Loading: {orgLoading ? 'Yes' : 'No'}</p>
+                  <p>Payment Verifying: {verifyingPayment ? 'Yes' : 'No'}</p>
+                  {loadError && <p className="text-destructive">Error: {loadError}</p>}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Loading state
   if (verifyingPayment || orgLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">Verifying your payment...</p>
+          <p className="text-muted-foreground">
+            {verifyingPayment ? "Verifying your payment..." : "Loading your account..."}
+          </p>
         </div>
       </div>
     );
