@@ -81,7 +81,9 @@ export function useRealtimeSubscription({
         channelRef.current = null;
       }
     };
-  }, [table, schema, organizationId, queryClient, enabled, JSON.stringify(queryKeys), filter?.column, filter?.value]);
+    // Use stable dependencies - queryKeys array identity should be stable from queryKeys registry
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, schema, organizationId, queryClient, enabled, filter?.column, filter?.value]);
 }
 
 /**
@@ -144,5 +146,7 @@ export function useMultiTableRealtimeSubscription(
       }
       channelsRef.current = [];
     };
-  }, [enabled, queryClient, JSON.stringify(subscriptions)]);
+    // Subscriptions should use stable objects from queryKeys registry
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, queryClient]);
 }
