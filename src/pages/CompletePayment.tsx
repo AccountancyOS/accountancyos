@@ -341,13 +341,6 @@ const CompletePayment = () => {
             </a>
           </div>
 
-          {organization && (
-            <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-              <p>Organization: {organization.name}</p>
-              <p>Status: {billingStatus || 'pending_payment'}</p>
-            </div>
-          )}
-
           <Button
             onClick={handleSignOut}
             variant="ghost"
