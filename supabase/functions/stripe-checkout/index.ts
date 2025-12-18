@@ -1,9 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.21.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[STRIPE-CHECKOUT] ${step}${detailsStr}`);
 };
 
 serve(async (req) => {
@@ -16,13 +22,17 @@ serve(async (req) => {
       apiVersion: '2023-10-16',
     });
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     const { organizationId, organizationName } = await req.json();
 
     if (!organizationId || !organizationName) {
-      throw new Error('Missing required parameters');
+      throw new Error('Missing required parameters: organizationId and organizationName are required');
     }
 
-    console.log('Creating checkout session for organization:', organizationId);
+    logStep('Creating checkout session for organization', { organizationId, organizationName });
 
     // Create a checkout session with 14-day trial
     const session = await stripe.checkout.sessions.create({
@@ -60,7 +70,20 @@ serve(async (req) => {
       },
     });
 
-    console.log('Checkout session created:', session.id);
+    logStep('Checkout session created', { sessionId: session.id });
+
+    // Store pending_checkout_session_id server-side (not from frontend)
+    const { error: updateError } = await supabase
+      .from('organizations')
+      .update({ pending_checkout_session_id: session.id })
+      .eq('id', organizationId);
+
+    if (updateError) {
+      logStep('Warning: Failed to store pending_checkout_session_id', { error: updateError.message });
+      // Don't fail the checkout - this is non-critical
+    } else {
+      logStep('Stored pending_checkout_session_id on organization');
+    }
 
     return new Response(
       JSON.stringify({ sessionId: session.id, url: session.url }),
