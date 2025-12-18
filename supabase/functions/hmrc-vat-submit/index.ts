@@ -169,6 +169,42 @@ serve(async (req: Request) => {
       );
     }
 
+    // Rate limiting: max 5 submissions per org per minute
+    const rateLimitKey = `hmrc-vat:${organizationId}`;
+    const windowMs = 60000;
+    const maxRequests = 5;
+
+    const { data: rateLimit } = await supabase
+      .from('api_rate_limits')
+      .select('count, window_start')
+      .eq('key', rateLimitKey)
+      .single();
+
+    const now = new Date();
+    const windowStart = rateLimit?.window_start ? new Date(rateLimit.window_start) : null;
+    const isInWindow = windowStart && (now.getTime() - windowStart.getTime() < windowMs);
+
+    if (isInWindow && rateLimit && rateLimit.count >= maxRequests) {
+      console.log(`[hmrc-vat-submit] Rate limit exceeded for org ${organizationId}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Rate limit exceeded. Please wait 1 minute before retrying.',
+          error_code: 'RATE_LIMITED'
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Update rate limit counter
+    await supabase
+      .from('api_rate_limits')
+      .upsert({
+        key: rateLimitKey,
+        count: isInWindow ? (rateLimit?.count || 0) + 1 : 1,
+        window_start: isInWindow ? rateLimit?.window_start : now.toISOString(),
+      }, { onConflict: 'key' });
+
     // Get company VAT number
     let vatNumber = vrn;
     if (!vatNumber && companyId) {
