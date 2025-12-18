@@ -92,18 +92,18 @@ serve(async (req) => {
       const planPricing: Record<string, { name: string; amount: number; description: string }> = {
         solo: {
           name: 'AccountancyOS Solo',
-          amount: 4900, // £49/month
-          description: 'For solo practitioners - up to 50 clients',
+          amount: 19900, // £199/month + VAT
+          description: '1 user - Full access to all features',
         },
         team: {
           name: 'AccountancyOS Team',
-          amount: 9900, // £99/month
-          description: 'For small teams - up to 200 clients, 5 team members',
+          amount: 29900, // £299/month + VAT
+          description: '2-4 users - Full access to all features',
         },
         scale: {
           name: 'AccountancyOS Scale',
-          amount: 19900, // £199/month
-          description: 'For growing practices - unlimited clients & team members',
+          amount: 59900, // £599/month + VAT
+          description: '5-10 users - Full access to all features',
         },
       };
 
