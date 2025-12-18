@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Building2, Loader2, ArrowLeft } from "lucide-react";
 
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
@@ -18,6 +19,20 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+
+  // Handle ?canceled=true from Stripe
+  useEffect(() => {
+    const canceled = searchParams.get("canceled");
+    if (canceled === "true") {
+      toast({
+        title: "Payment not completed",
+        description: "Your payment wasn't completed. You can try again when you're ready.",
+        variant: "default",
+      });
+      // Clear the param from URL
+      window.history.replaceState({}, '', '/auth');
+    }
+  }, [searchParams, toast]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,24 +85,20 @@ const Auth = () => {
       }
       if (!authData.user) throw new Error("No user returned");
 
-      // CRITICAL FIX: Explicitly set the session before making any other Supabase calls
-      // This ensures auth.uid() works correctly in the RPC function
-      if (authData.session) {
-        await supabase.auth.setSession({
-          access_token: authData.session.access_token,
-          refresh_token: authData.session.refresh_token,
-        });
-      } else {
-        // If no session returned, email confirmation might be required
-        toast({
-          title: "Check your email",
-          description: "Please check your email to confirm your account before continuing.",
-        });
-        setLoading(false);
+      // Check if email confirmation is required (no session returned)
+      if (!authData.session) {
+        // Redirect to confirm email page
+        navigate(`/confirm-email?email=${encodeURIComponent(email)}`);
         return;
       }
 
-      // Now the RPC call will have proper authentication
+      // Session exists - set it and continue with org creation
+      await supabase.auth.setSession({
+        access_token: authData.session.access_token,
+        refresh_token: authData.session.refresh_token,
+      });
+
+      // Create organization
       const { data: orgId, error: orgError } = await supabase
         .rpc('create_organization_with_owner', { org_name: organizationName });
 

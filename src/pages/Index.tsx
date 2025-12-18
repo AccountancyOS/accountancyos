@@ -12,24 +12,33 @@ const Index = () => {
   useEffect(() => {
     if (authLoading || orgLoading) return;
 
+    // Priority 1: Not logged in → auth
     if (!user) {
       navigate("/auth");
       return;
     }
 
+    // Priority 2: No organization → onboarding wizard (will handle org creation)
     if (!organization) {
-      // CRITICAL FIX: User exists but has no organization - redirect to onboarding wizard
-      // NOT back to /auth which would cause an infinite redirect loop
       navigate("/onboarding-wizard");
       return;
     }
 
+    // Priority 3: Check billing status - must be active to proceed
+    // Type assertion since billing_status is a new column
+    const billingStatus = (organization as any).billing_status as string | undefined;
+    if (billingStatus && billingStatus !== 'active') {
+      navigate("/complete-payment");
+      return;
+    }
+
+    // Priority 4: Onboarding not completed → wizard
     if (!organization.onboarding_completed) {
       navigate("/onboarding-wizard");
       return;
     }
 
-    // Onboarding complete - show welcome dashboard
+    // Priority 5: All good → welcome dashboard
     navigate("/welcome");
   }, [user, organization, authLoading, orgLoading, navigate]);
 

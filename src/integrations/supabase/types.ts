@@ -8298,6 +8298,7 @@ export type Database = {
         Row: {
           address_line_1: string | null
           address_line_2: string | null
+          billing_status: Database["public"]["Enums"]["billing_status_enum"]
           city: string | null
           country: string | null
           created_at: string
@@ -8309,6 +8310,7 @@ export type Database = {
           name: string
           onboarding_completed: boolean | null
           payment_required_before_onboarding: boolean
+          pending_checkout_session_id: string | null
           postcode: string | null
           practice_description: string | null
           stripe_connect_account_id: string | null
@@ -8321,6 +8323,7 @@ export type Database = {
         Insert: {
           address_line_1?: string | null
           address_line_2?: string | null
+          billing_status?: Database["public"]["Enums"]["billing_status_enum"]
           city?: string | null
           country?: string | null
           created_at?: string
@@ -8332,6 +8335,7 @@ export type Database = {
           name: string
           onboarding_completed?: boolean | null
           payment_required_before_onboarding?: boolean
+          pending_checkout_session_id?: string | null
           postcode?: string | null
           practice_description?: string | null
           stripe_connect_account_id?: string | null
@@ -8344,6 +8348,7 @@ export type Database = {
         Update: {
           address_line_1?: string | null
           address_line_2?: string | null
+          billing_status?: Database["public"]["Enums"]["billing_status_enum"]
           city?: string | null
           country?: string | null
           created_at?: string
@@ -8355,6 +8360,7 @@ export type Database = {
           name?: string
           onboarding_completed?: boolean | null
           payment_required_before_onboarding?: boolean
+          pending_checkout_session_id?: string | null
           postcode?: string | null
           practice_description?: string | null
           stripe_connect_account_id?: string | null
@@ -9975,6 +9981,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      stripe_webhook_events: {
+        Row: {
+          created_at: string
+          id: string
+          processed_at: string
+          type: string
+        }
+        Insert: {
+          created_at: string
+          id: string
+          processed_at?: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          processed_at?: string
+          type?: string
+        }
+        Relationships: []
       }
       suppliers: {
         Row: {
@@ -12417,6 +12444,11 @@ export type Database = {
         | "revoked_by_practice"
         | "switched_out"
       app_role: "owner" | "admin" | "manager" | "staff" | "viewer"
+      billing_status_enum:
+        | "pending_payment"
+        | "active"
+        | "past_due"
+        | "canceled"
       email_direction: "inbound" | "outbound"
       email_match_type: "auto" | "manual"
       link_initiator: "client" | "practice"
@@ -12560,6 +12592,12 @@ export const Constants = {
         "switched_out",
       ],
       app_role: ["owner", "admin", "manager", "staff", "viewer"],
+      billing_status_enum: [
+        "pending_payment",
+        "active",
+        "past_due",
+        "canceled",
+      ],
       email_direction: ["inbound", "outbound"],
       email_match_type: ["auto", "manual"],
       link_initiator: ["client", "practice"],
