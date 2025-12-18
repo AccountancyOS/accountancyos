@@ -17,7 +17,7 @@ interface PlanOption {
   id: Plan;
   name: string;
   price: number;
-  description: string;
+  userLimit: string;
   features: string[];
   icon: React.ReactNode;
   popular?: boolean;
@@ -27,26 +27,26 @@ const PLANS: PlanOption[] = [
   {
     id: 'solo',
     name: 'Solo',
-    price: 49,
-    description: 'For solo practitioners',
-    features: ['Up to 50 clients', '1 user', 'Core features', 'Email support'],
+    price: 199,
+    userLimit: '1 user',
+    features: ['All features included', 'Unlimited clients', 'Email & chat support'],
     icon: <CreditCard className="h-5 w-5" />,
   },
   {
     id: 'team',
     name: 'Team',
-    price: 99,
-    description: 'For small teams',
-    features: ['Up to 200 clients', '5 team members', 'All features', 'Priority support'],
+    price: 299,
+    userLimit: '2-4 users',
+    features: ['All features included', 'Unlimited clients', 'Priority support'],
     icon: <Users className="h-5 w-5" />,
     popular: true,
   },
   {
     id: 'scale',
     name: 'Scale',
-    price: 199,
-    description: 'For growing practices',
-    features: ['Unlimited clients', 'Unlimited team', 'Advanced analytics', 'Dedicated support'],
+    price: 599,
+    userLimit: '5-10 users',
+    features: ['All features included', 'Unlimited clients', 'Dedicated support'],
     icon: <Rocket className="h-5 w-5" />,
   },
 ];
@@ -363,12 +363,18 @@ const CompletePayment = () => {
                     )}
                   </div>
                   <CardTitle className="text-xl">{plan.name}</CardTitle>
-                  <CardDescription>{plan.description}</CardDescription>
+                  <CardDescription>{plan.userLimit}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold">£{plan.price}</span>
-                    <span className="text-muted-foreground">/month</span>
+                  <div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-bold">£{plan.price}</span>
+                      <span className="text-muted-foreground">/month</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">+ VAT</p>
+                  </div>
+                  <div className="font-medium text-sm bg-muted px-3 py-2 rounded-md">
+                    {plan.userLimit}
                   </div>
                   <ul className="space-y-2">
                     {plan.features.map((feature, idx) => (
