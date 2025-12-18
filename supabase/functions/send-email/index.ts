@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { newTraceId, logInfo, logError } from "../_shared/logging.ts";
+import { ok, fail, ErrorCodes } from "../_shared/responses.ts";
+import { getAdminClient } from "../_shared/supabase.ts";
+import { beginIdempotent, finishIdempotentSuccess, finishIdempotentFailure } from "../_shared/idempotency.ts";
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from "../_shared/rateLimit.ts";
 
 interface SendEmailRequest {
   mode: "direct" | "queue" | "process_queue";
@@ -18,7 +18,10 @@ interface SendEmailRequest {
   from_name?: string;
   // Queue mode fields
   queue_id?: string;
-  // Process queue - no additional fields needed
+  // Idempotency
+  idempotency_key?: string;
+  // Org context (for queue processing)
+  organization_id?: string;
 }
 
 interface MergeData {
@@ -31,7 +34,6 @@ function processMergeFields(template: string, mergeData: MergeData): string {
   
   let result = template;
   
-  // Replace {{field}} patterns
   const fieldPattern = /\{\{([^}]+)\}\}/g;
   result = result.replace(fieldPattern, (match, fieldPath) => {
     const keys = fieldPath.trim().split(".");
@@ -41,7 +43,7 @@ function processMergeFields(template: string, mergeData: MergeData): string {
       if (value && typeof value === "object" && key in value) {
         value = (value as Record<string, unknown>)[key];
       } else {
-        return match; // Keep original if path not found
+        return match;
       }
     }
     
@@ -59,12 +61,13 @@ async function sendViaPostmark(
   htmlBody: string | null,
   textBody: string | null,
   from: string = "notifications@accountancyos.com",
-  fromName: string = "AccountancyOS"
+  fromName: string = "AccountancyOS",
+  traceId: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const postmarkApiKey = Deno.env.get("POSTMARK_API_KEY");
   
   if (!postmarkApiKey) {
-    console.error("POSTMARK_API_KEY not configured");
+    logError(traceId, new Error("POSTMARK_API_KEY not configured"), { scope: "send-email" });
     return { success: false, error: "Email service not configured" };
   }
 
@@ -89,42 +92,73 @@ async function sendViaPostmark(
     const data = await response.json();
     
     if (!response.ok) {
-      console.error("Postmark error:", data);
+      logError(traceId, new Error(data.Message || "Postmark error"), { status: response.status });
       return { success: false, error: data.Message || "Failed to send email" };
     }
 
-    console.log("Email sent successfully:", data.MessageID);
+    logInfo(traceId, "Email sent successfully", { messageId: data.MessageID, to });
     return { success: true, messageId: data.MessageID };
   } catch (error: unknown) {
-    console.error("Error sending email:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    logError(traceId, error instanceof Error ? error : new Error(errorMessage), { to });
     return { success: false, error: errorMessage };
   }
 }
 
 serve(async (req: Request): Promise<Response> => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  // Handle CORS
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
+  
+  const traceId = newTraceId();
+  const corsHeaders = getCorsHeaders(req);
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    const adminClient = getAdminClient();
     const body: SendEmailRequest = await req.json();
-    const { mode } = body;
+    const { mode, idempotency_key, organization_id } = body;
+
+    logInfo(traceId, "Email request received", { mode, hasIdempotencyKey: !!idempotency_key });
 
     // Mode: Direct send
     if (mode === "direct") {
       const { to, to_name, subject, body_html, body_text, from, from_name } = body;
       
       if (!to || !subject) {
-        return new Response(
-          JSON.stringify({ error: "Missing required fields: to, subject" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return fail(req, {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: "Missing required fields: to, subject",
+        }, traceId, 400);
+      }
+
+      // Apply rate limiting if org context provided
+      if (organization_id) {
+        const rateLimitResult = await checkRateLimit(adminClient, {
+          orgId: organization_id,
+          userId: 'system',
+          scope: 'email_send',
+          traceId,
+          config: RATE_LIMITS.email_send,
+        });
+        
+        if (!rateLimitResult.allowed) {
+          return rateLimitResponse(req, rateLimitResult, traceId);
+        }
+      }
+
+      // Idempotency check for direct sends
+      if (idempotency_key && organization_id) {
+        const idempotencyResult = await beginIdempotent(adminClient, {
+          orgId: organization_id,
+          scope: 'email_send',
+          key: idempotency_key,
+          traceId,
+        });
+
+        if (idempotencyResult.replay && idempotencyResult.responseJson) {
+          logInfo(traceId, "Returning cached email result", { key: idempotency_key });
+          return ok(req, idempotencyResult.responseJson, traceId);
+        }
       }
 
       const result = await sendViaPostmark(
@@ -134,28 +168,55 @@ serve(async (req: Request): Promise<Response> => {
         body_html || null,
         body_text || null,
         from,
-        from_name
+        from_name,
+        traceId
       );
 
-      return new Response(JSON.stringify(result), {
-        status: result.success ? 200 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // Complete idempotency
+      if (idempotency_key && organization_id) {
+        if (result.success) {
+          await finishIdempotentSuccess(adminClient, {
+            orgId: organization_id,
+            scope: 'email_send',
+            key: idempotency_key,
+            responseJson: result,
+            traceId,
+          });
+        } else {
+          await finishIdempotentFailure(adminClient, {
+            orgId: organization_id,
+            scope: 'email_send',
+            key: idempotency_key,
+            errorJson: { error: result.error },
+            traceId,
+          });
+        }
+      }
+
+      if (result.success) {
+        return ok(req, result, traceId);
+      } else {
+        return fail(req, {
+          code: ErrorCodes.EXTERNAL_SERVICE_ERROR,
+          message: result.error || "Failed to send email",
+          retryable: true,
+        }, traceId, 500);
+      }
     }
 
     // Mode: Send specific queued email
     if (mode === "queue" && body.queue_id) {
-      const { data: email, error: fetchError } = await supabase
+      const { data: email, error: fetchError } = await adminClient
         .from("email_queue")
         .select("*")
         .eq("id", body.queue_id)
         .maybeSingle();
 
       if (fetchError || !email) {
-        return new Response(
-          JSON.stringify({ error: "Email not found in queue" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return fail(req, {
+          code: ErrorCodes.NOT_FOUND,
+          message: "Email not found in queue",
+        }, traceId, 404);
       }
 
       // Process merge fields
@@ -169,11 +230,14 @@ serve(async (req: Request): Promise<Response> => {
         email.to_name,
         processedSubject,
         processedHtml,
-        processedText
+        processedText,
+        undefined,
+        undefined,
+        traceId
       );
 
       // Update queue status
-      await supabase
+      await adminClient
         .from("email_queue")
         .update({
           status: result.success ? "sent" : "failed",
@@ -183,15 +247,20 @@ serve(async (req: Request): Promise<Response> => {
         })
         .eq("id", body.queue_id);
 
-      return new Response(JSON.stringify(result), {
-        status: result.success ? 200 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (result.success) {
+        return ok(req, result, traceId);
+      } else {
+        return fail(req, {
+          code: ErrorCodes.EXTERNAL_SERVICE_ERROR,
+          message: result.error || "Failed to send email",
+          retryable: true,
+        }, traceId, 500);
+      }
     }
 
     // Mode: Process all pending emails in queue
     if (mode === "process_queue") {
-      const { data: pendingEmails, error: fetchError } = await supabase
+      const { data: pendingEmails, error: fetchError } = await adminClient
         .from("email_queue")
         .select("*")
         .eq("status", "pending")
@@ -200,11 +269,11 @@ serve(async (req: Request): Promise<Response> => {
         .limit(50);
 
       if (fetchError) {
-        console.error("Error fetching queue:", fetchError);
-        return new Response(
-          JSON.stringify({ error: "Failed to fetch email queue" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        logError(traceId, new Error(fetchError.message), { action: "fetch_queue" });
+        return fail(req, {
+          code: ErrorCodes.DATABASE_ERROR,
+          message: "Failed to fetch email queue",
+        }, traceId, 500);
       }
 
       const results = {
@@ -215,7 +284,6 @@ serve(async (req: Request): Promise<Response> => {
       };
 
       for (const email of pendingEmails || []) {
-        // Process merge fields
         const mergeData = (email.merge_data as MergeData) || {};
         const processedSubject = processMergeFields(email.subject, mergeData);
         const processedHtml = email.body_html ? processMergeFields(email.body_html, mergeData) : null;
@@ -226,11 +294,13 @@ serve(async (req: Request): Promise<Response> => {
           email.to_name,
           processedSubject,
           processedHtml,
-          processedText
+          processedText,
+          undefined,
+          undefined,
+          traceId
         );
 
-        // Update queue status
-        await supabase
+        await adminClient
           .from("email_queue")
           .update({
             status: result.success ? "sent" : "failed",
@@ -251,23 +321,21 @@ serve(async (req: Request): Promise<Response> => {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      console.log("Queue processing complete:", results);
-      return new Response(JSON.stringify(results), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      logInfo(traceId, "Queue processing complete", results);
+      return ok(req, results, traceId);
     }
 
-    return new Response(
-      JSON.stringify({ error: "Invalid mode. Use 'direct', 'queue', or 'process_queue'" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return fail(req, {
+      code: ErrorCodes.VALIDATION_ERROR,
+      message: "Invalid mode. Use 'direct', 'queue', or 'process_queue'",
+    }, traceId, 400);
+
   } catch (error: unknown) {
-    console.error("Error in send-email function:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    logError(traceId, error instanceof Error ? error : new Error(errorMessage), { function: "send-email" });
+    return fail(req, {
+      code: ErrorCodes.INTERNAL_ERROR,
+      message: errorMessage,
+    }, traceId, 500);
   }
 });
