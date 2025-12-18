@@ -162,6 +162,9 @@ export type Database = {
           created_at: string
           id: string
           key: string
+          organization_id: string | null
+          scope: string | null
+          user_id: string | null
           window_start: string
         }
         Insert: {
@@ -169,6 +172,9 @@ export type Database = {
           created_at?: string
           id?: string
           key: string
+          organization_id?: string | null
+          scope?: string | null
+          user_id?: string | null
           window_start?: string
         }
         Update: {
@@ -176,9 +182,20 @@ export type Database = {
           created_at?: string
           id?: string
           key?: string
+          organization_id?: string | null
+          scope?: string | null
+          user_id?: string | null
           window_start?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "api_rate_limits_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       approval_revocation_log: {
         Row: {
@@ -6163,6 +6180,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "hmrc_auth_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      idempotency_keys: {
+        Row: {
+          created_at: string
+          error_json: Json | null
+          id: string
+          key: string
+          organization_id: string
+          response_json: Json | null
+          scope: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_json?: Json | null
+          id?: string
+          key: string
+          organization_id: string
+          response_json?: Json | null
+          scope: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_json?: Json | null
+          id?: string
+          key?: string
+          organization_id?: string
+          response_json?: Json | null
+          scope?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idempotency_keys_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
