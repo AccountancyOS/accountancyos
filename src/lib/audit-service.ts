@@ -1,7 +1,69 @@
+/**
+ * Audit Service
+ * Frontend audit logging utilities with structured event tracking
+ */
 import { supabase } from "@/integrations/supabase/client";
 
-export type AuditEntityType = "trial_balance_snapshot" | "workpaper_instance" | "filing" | "pay_run" | "payslip" | "cis_return" | "cis_payment" | "employee" | "job" | "deadline" | "job_template";
-export type AuditAction = "create" | "update" | "finalise" | "reopen" | "approve" | "reject" | "file" | "override" | "send_for_approval" | "client_approve" | "client_reject" | "api_submit" | "calculate" | "status_change" | "submit_rti" | "submit" | "rollback" | "close" | "generate";
+// Extended entity types for comprehensive audit coverage
+export type AuditEntityType = 
+  | "trial_balance_snapshot" 
+  | "workpaper_instance" 
+  | "filing" 
+  | "pay_run" 
+  | "payslip" 
+  | "cis_return" 
+  | "cis_payment" 
+  | "employee" 
+  | "job" 
+  | "deadline" 
+  | "job_template"
+  | "invoice"
+  | "bill"
+  | "payment"
+  | "journal"
+  | "client"
+  | "company"
+  | "customer"
+  | "supplier"
+  | "bank_transaction"
+  | "vat_return"
+  | "automation_rule"
+  | "template"
+  | "document"
+  | "user"
+  | "organization";
+
+// Extended action types
+export type AuditAction = 
+  | "create" 
+  | "update" 
+  | "delete"
+  | "view"
+  | "finalise" 
+  | "reopen" 
+  | "approve" 
+  | "reject" 
+  | "file" 
+  | "override" 
+  | "send_for_approval" 
+  | "client_approve" 
+  | "client_reject" 
+  | "api_submit" 
+  | "calculate" 
+  | "status_change" 
+  | "submit_rti" 
+  | "submit" 
+  | "rollback" 
+  | "close" 
+  | "generate"
+  | "void"
+  | "reverse"
+  | "lock"
+  | "unlock"
+  | "login"
+  | "logout"
+  | "export"
+  | "import";
 
 export interface AuditLogEntry {
   id: string;
@@ -159,4 +221,107 @@ export async function checkCanFinalise(organizationId: string): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+// ============ Convenience Wrappers ============
+
+export const auditJobAction = (
+  organizationId: string,
+  entityId: string,
+  action: AuditAction,
+  metadata?: Record<string, unknown>
+) => logAudit({ organizationId, entityType: 'job', entityId, action, metadata });
+
+export const auditFilingAction = (
+  organizationId: string,
+  entityId: string,
+  action: AuditAction,
+  metadata?: Record<string, unknown>
+) => logAudit({ organizationId, entityType: 'filing', entityId, action, metadata });
+
+export const auditInvoiceAction = (
+  organizationId: string,
+  entityId: string,
+  action: AuditAction,
+  metadata?: Record<string, unknown>
+) => logAudit({ organizationId, entityType: 'invoice', entityId, action, metadata });
+
+export const auditBillAction = (
+  organizationId: string,
+  entityId: string,
+  action: AuditAction,
+  metadata?: Record<string, unknown>
+) => logAudit({ organizationId, entityType: 'bill', entityId, action, metadata });
+
+export const auditPaymentAction = (
+  organizationId: string,
+  entityId: string,
+  action: AuditAction,
+  metadata?: Record<string, unknown>
+) => logAudit({ organizationId, entityType: 'payment', entityId, action, metadata });
+
+export const auditJournalAction = (
+  organizationId: string,
+  entityId: string,
+  action: AuditAction,
+  metadata?: Record<string, unknown>
+) => logAudit({ organizationId, entityType: 'journal', entityId, action, metadata });
+
+/**
+ * Log a state transition with before/after values
+ */
+export async function logStateTransition(params: {
+  organizationId: string;
+  entityType: AuditEntityType;
+  entityId: string;
+  fromState: string;
+  toState: string;
+  reason?: string;
+}): Promise<{ success: boolean; auditId?: string; error?: string }> {
+  return logAudit({
+    organizationId: params.organizationId,
+    entityType: params.entityType,
+    entityId: params.entityId,
+    action: 'status_change',
+    fieldName: 'status',
+    oldValue: params.fromState,
+    newValue: params.toState,
+    metadata: params.reason ? { reason: params.reason } : undefined,
+  });
+}
+
+/**
+ * Query recent activity for an organization
+ */
+export async function getRecentActivity(params: {
+  organizationId: string;
+  limit?: number;
+  entityTypes?: AuditEntityType[];
+  actions?: AuditAction[];
+}): Promise<AuditLogEntry[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+  let query = client
+    .from("audit_log")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .order("created_at", { ascending: false })
+    .limit(params.limit || 100);
+
+  if (params.entityTypes?.length) {
+    query = query.in("entity_type", params.entityTypes);
+  }
+
+  if (params.actions?.length) {
+    query = query.in("action", params.actions);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Failed to fetch recent activity:", error);
+    return [];
+  }
+
+  return (data || []) as AuditLogEntry[];
 }
