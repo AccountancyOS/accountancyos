@@ -72,7 +72,6 @@ serve(async (req) => {
         },
       ],
       subscription_data: subscriptionData,
-      customer_email: null,
       client_reference_id: organizationId,
       success_url: `${req.headers.get('origin')}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get('origin')}/complete-payment?canceled=true`,
