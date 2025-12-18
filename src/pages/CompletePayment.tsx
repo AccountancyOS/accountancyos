@@ -6,10 +6,50 @@ import { useOrganization } from "@/lib/organization-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings, LogOut } from "lucide-react";
+import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings, LogOut, Check, Users, Rocket } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type PaymentMode = 'new_trial' | 'reactivate' | 'past_due' | 'canceled' | 'unknown';
 type PrimaryAction = 'checkout' | 'billing_portal';
+type Plan = 'solo' | 'team' | 'scale';
+
+interface PlanOption {
+  id: Plan;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+  icon: React.ReactNode;
+  popular?: boolean;
+}
+
+const PLANS: PlanOption[] = [
+  {
+    id: 'solo',
+    name: 'Solo',
+    price: 49,
+    description: 'For solo practitioners',
+    features: ['Up to 50 clients', '1 user', 'Core features', 'Email support'],
+    icon: <CreditCard className="h-5 w-5" />,
+  },
+  {
+    id: 'team',
+    name: 'Team',
+    price: 99,
+    description: 'For small teams',
+    features: ['Up to 200 clients', '5 team members', 'All features', 'Priority support'],
+    icon: <Users className="h-5 w-5" />,
+    popular: true,
+  },
+  {
+    id: 'scale',
+    name: 'Scale',
+    price: 199,
+    description: 'For growing practices',
+    features: ['Unlimited clients', 'Unlimited team', 'Advanced analytics', 'Dedicated support'],
+    icon: <Rocket className="h-5 w-5" />,
+  },
+];
 
 interface UIConfig {
   icon: React.ReactNode;
@@ -24,16 +64,16 @@ const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown'>, UIConfig> = {
   new_trial: {
     icon: <CreditCard className="h-12 w-12 text-primary" />,
     iconBg: "bg-primary/10",
-    title: "Start your free trial",
-    description: "Complete setup to start your 14-day free trial and unlock your AccountancyOS workspace.",
-    primaryText: "Continue to payment",
+    title: "Choose your plan",
+    description: "Start your 14-day free trial. No charge until your trial ends.",
+    primaryText: "Start free trial",
     primaryAction: "checkout",
   },
   reactivate: {
     icon: <RefreshCw className="h-12 w-12 text-blue-500" />,
     iconBg: "bg-blue-100",
-    title: "Reactivate your subscription",
-    description: "This workspace previously had an active subscription. Resubscribe to regain access.",
+    title: "Choose a plan to reactivate",
+    description: "Select a plan to regain access to your AccountancyOS workspace.",
     primaryText: "Resubscribe",
     primaryAction: "checkout",
   },
@@ -48,8 +88,8 @@ const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown'>, UIConfig> = {
   canceled: {
     icon: <AlertCircle className="h-12 w-12 text-muted-foreground" />,
     iconBg: "bg-muted",
-    title: "Subscription canceled",
-    description: "Your subscription has ended. Resubscribe to regain access to AccountancyOS.",
+    title: "Choose a plan to resubscribe",
+    description: "Your subscription has ended. Select a plan to regain access to AccountancyOS.",
     primaryText: "Resubscribe",
     primaryAction: "checkout",
   },
@@ -63,6 +103,7 @@ const CompletePayment = () => {
   
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<Plan>('team');
   const [subscriptionCache, setSubscriptionCache] = useState<{
     subscription_id: string | null;
     subscription_status: string | null;
@@ -132,6 +173,8 @@ const CompletePayment = () => {
     return 'unknown';
   })();
 
+  const showPlanSelection = mode !== 'past_due' && mode !== 'unknown';
+
   // Get org ID from context or localStorage fallback
   const getOrganizationId = (): string | null => {
     if (organization?.id) return organization.id;
@@ -164,6 +207,7 @@ const CompletePayment = () => {
           organizationId: orgId,
           organizationName: orgName,
           intent: mode === 'new_trial' ? 'trial' : 'reactivate',
+          plan: selectedPlan,
         },
       });
 
@@ -267,91 +311,157 @@ const CompletePayment = () => {
   }
 
   const uiConfig = UI_BY_MODE[mode];
+  const selectedPlanDetails = PLANS.find(p => p.id === selectedPlan);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-4 pb-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
+      <div className="w-full max-w-4xl space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2 mb-4">
             <div className="bg-primary p-2 rounded-lg">
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
           </div>
-          <div className={`flex justify-center p-3 rounded-full mx-auto w-fit ${uiConfig.iconBg}`}>
-            {uiConfig.icon}
-          </div>
-          <CardTitle className="text-2xl">{uiConfig.title}</CardTitle>
-          <CardDescription className="text-base">
-            {uiConfig.description}
-          </CardDescription>
-        </CardHeader>
+          <h1 className="text-3xl font-bold">{uiConfig.title}</h1>
+          <p className="text-muted-foreground text-lg">{uiConfig.description}</p>
+        </div>
 
-        <CardContent className="space-y-4">
-          <Button 
-            onClick={handlePrimaryAction} 
-            className="w-full" 
-            size="lg"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                {uiConfig.primaryAction === 'billing_portal' ? (
-                  <Settings className="mr-2 h-4 w-4" />
-                ) : (
-                  <CreditCard className="mr-2 h-4 w-4" />
+        {/* Plan Selection */}
+        {showPlanSelection && (
+          <div className="grid md:grid-cols-3 gap-4">
+            {PLANS.map((plan) => (
+              <Card 
+                key={plan.id}
+                className={cn(
+                  "relative cursor-pointer transition-all hover:shadow-md",
+                  selectedPlan === plan.id 
+                    ? "border-primary ring-2 ring-primary/20" 
+                    : "border-border hover:border-primary/50"
                 )}
-                {uiConfig.primaryText}
-              </>
-            )}
-          </Button>
-
-          <Button
-            onClick={handleRefreshStatus}
-            variant="outline"
-            className="w-full"
-            disabled={refreshing}
-          >
-            {refreshing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Checking...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Already paid? Refresh status
-              </>
-            )}
-          </Button>
-
-          <div className="text-center pt-4 border-t">
-            <p className="text-sm text-muted-foreground mb-2">
-              Need help? Contact us at
-            </p>
-            <a 
-              href="mailto:support@accountancyos.com" 
-              className="text-sm text-primary hover:underline"
-            >
-              support@accountancyos.com
-            </a>
+                onClick={() => setSelectedPlan(plan.id)}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-full">
+                      Most Popular
+                    </span>
+                  </div>
+                )}
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className={cn(
+                      "p-2 rounded-lg",
+                      selectedPlan === plan.id ? "bg-primary/10" : "bg-muted"
+                    )}>
+                      {plan.icon}
+                    </div>
+                    {selectedPlan === plan.id && (
+                      <div className="bg-primary rounded-full p-1">
+                        <Check className="h-4 w-4 text-primary-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <CardTitle className="text-xl">{plan.name}</CardTitle>
+                  <CardDescription>{plan.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold">£{plan.price}</span>
+                    <span className="text-muted-foreground">/month</span>
+                  </div>
+                  <ul className="space-y-2">
+                    {plan.features.map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm">
+                        <Check className="h-4 w-4 text-primary shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+        )}
 
-          <Button
-            onClick={handleSignOut}
-            variant="ghost"
-            size="sm"
-            className="w-full text-muted-foreground"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out or switch account
-          </Button>
-        </CardContent>
-      </Card>
+        {/* Action Card */}
+        <Card className="shadow-lg">
+          <CardContent className="pt-6 space-y-4">
+            {!showPlanSelection && (
+              <div className={`flex justify-center p-3 rounded-full mx-auto w-fit ${uiConfig.iconBg}`}>
+                {uiConfig.icon}
+              </div>
+            )}
+
+            <Button 
+              onClick={handlePrimaryAction} 
+              className="w-full" 
+              size="lg"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  {uiConfig.primaryAction === 'billing_portal' ? (
+                    <Settings className="mr-2 h-4 w-4" />
+                  ) : (
+                    <CreditCard className="mr-2 h-4 w-4" />
+                  )}
+                  {showPlanSelection && selectedPlanDetails
+                    ? `${uiConfig.primaryText} - ${selectedPlanDetails.name} (£${selectedPlanDetails.price}/mo)`
+                    : uiConfig.primaryText
+                  }
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={handleRefreshStatus}
+              variant="outline"
+              className="w-full"
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Already paid? Refresh status
+                </>
+              )}
+            </Button>
+
+            <div className="text-center pt-4 border-t">
+              <p className="text-sm text-muted-foreground mb-2">
+                Need help? Contact us at
+              </p>
+              <a 
+                href="mailto:support@accountancyos.com" 
+                className="text-sm text-primary hover:underline"
+              >
+                support@accountancyos.com
+              </a>
+            </div>
+
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              size="sm"
+              className="w-full text-muted-foreground"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out or switch account
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
