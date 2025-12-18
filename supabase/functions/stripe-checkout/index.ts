@@ -26,13 +26,37 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { organizationId, organizationName, intent } = await req.json();
+    const { organizationId, organizationName, intent, plan } = await req.json();
 
     if (!organizationId || !organizationName) {
       throw new Error('Missing required parameters: organizationId and organizationName are required');
     }
 
-    logStep('Creating checkout session for organization', { organizationId, organizationName, intent });
+    // Determine which price ID to use based on plan selection
+    const selectedPlan = plan || 'team'; // Default to team if not specified
+    let priceId: string | null = null;
+
+    switch (selectedPlan) {
+      case 'solo':
+        priceId = Deno.env.get('STRIPE_PRICE_SOLO') || null;
+        break;
+      case 'team':
+        priceId = Deno.env.get('STRIPE_PRICE_TEAM') || null;
+        break;
+      case 'scale':
+        priceId = Deno.env.get('STRIPE_PRICE_SCALE') || null;
+        break;
+      default:
+        priceId = Deno.env.get('STRIPE_PRICE_TEAM') || null;
+    }
+
+    logStep('Creating checkout session for organization', { 
+      organizationId, 
+      organizationName, 
+      intent, 
+      plan: selectedPlan,
+      hasPriceId: !!priceId 
+    });
 
     // Only apply trial for new signups (intent === 'trial')
     // Returning users (intent === 'reactivate') should not get a trial
@@ -40,37 +64,75 @@ serve(async (req) => {
       ? {
           metadata: {
             organization_id: organizationId,
+            plan: selectedPlan,
           },
         }
       : {
           trial_period_days: 14,
           metadata: {
             organization_id: organizationId,
+            plan: selectedPlan,
           },
         };
 
-    logStep('Subscription data configured', { hasTrial: intent !== 'reactivate' });
+    logStep('Subscription data configured', { hasTrial: intent !== 'reactivate', plan: selectedPlan });
+
+    // Build line items - use price ID if available, otherwise fall back to price_data
+    let lineItems;
+    if (priceId) {
+      lineItems = [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ];
+      logStep('Using Stripe Price ID', { priceId });
+    } else {
+      // Fallback to price_data if no price ID configured (for backwards compatibility)
+      const planPricing: Record<string, { name: string; amount: number; description: string }> = {
+        solo: {
+          name: 'AccountancyOS Solo',
+          amount: 4900, // £49/month
+          description: 'For solo practitioners - up to 50 clients',
+        },
+        team: {
+          name: 'AccountancyOS Team',
+          amount: 9900, // £99/month
+          description: 'For small teams - up to 200 clients, 5 team members',
+        },
+        scale: {
+          name: 'AccountancyOS Scale',
+          amount: 19900, // £199/month
+          description: 'For growing practices - unlimited clients & team members',
+        },
+      };
+
+      const pricing = planPricing[selectedPlan] || planPricing.team;
+      
+      lineItems = [
+        {
+          price_data: {
+            currency: 'gbp',
+            product_data: {
+              name: pricing.name,
+              description: pricing.description,
+            },
+            unit_amount: pricing.amount,
+            recurring: {
+              interval: 'month' as const,
+            },
+          },
+          quantity: 1,
+        },
+      ];
+      logStep('Using price_data fallback', { plan: selectedPlan, amount: pricing.amount });
+    }
 
     // Create a checkout session
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'gbp',
-            product_data: {
-              name: 'AccountancyOS Pro',
-              description: 'Full access to AccountancyOS practice management',
-            },
-            unit_amount: 9900, // £99/month
-            recurring: {
-              interval: 'month',
-            },
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: lineItems,
       subscription_data: subscriptionData,
       client_reference_id: organizationId,
       success_url: `${req.headers.get('origin')}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`,
@@ -79,10 +141,11 @@ serve(async (req) => {
         organization_id: organizationId,
         organization_name: organizationName,
         intent: intent || 'trial',
+        plan: selectedPlan,
       },
     });
 
-    logStep('Checkout session created', { sessionId: session.id, hasTrial: intent !== 'reactivate' });
+    logStep('Checkout session created', { sessionId: session.id, hasTrial: intent !== 'reactivate', plan: selectedPlan });
 
     // Store pending_checkout_session_id server-side (not from frontend)
     const { error: updateError } = await supabase
