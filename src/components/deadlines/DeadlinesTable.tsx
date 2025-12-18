@@ -38,7 +38,7 @@ export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
           *,
           clients (first_name, last_name),
           companies (id, company_name),
-          jobs (job_name, status)
+          jobs!fk_deadlines_job (job_name, status)
         `)
         .eq("organization_id", organization.id)
         .order("due_date", { ascending: true });

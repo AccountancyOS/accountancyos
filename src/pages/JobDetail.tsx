@@ -52,8 +52,8 @@ export default function JobDetail() {
         .from("jobs")
         .select(`
           *,
-          clients (id, first_name, last_name, email),
-          companies (id, company_name, email)
+          clients!fk_jobs_client (id, first_name, last_name, email),
+          companies!fk_jobs_company (id, company_name, email)
         `)
         .eq("id", jobId)
         .single();
