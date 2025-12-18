@@ -124,6 +124,42 @@ serve(async (req: Request) => {
       );
     }
 
+    // Rate limiting: max 5 submissions per org per minute
+    const rateLimitKey = `ch-submit:${filing.organization_id}`;
+    const windowMs = 60000;
+    const maxRequests = 5;
+
+    const { data: rateLimit } = await supabase
+      .from('api_rate_limits')
+      .select('count, window_start')
+      .eq('key', rateLimitKey)
+      .single();
+
+    const now = new Date();
+    const windowStart = rateLimit?.window_start ? new Date(rateLimit.window_start) : null;
+    const isInWindow = windowStart && (now.getTime() - windowStart.getTime() < windowMs);
+
+    if (isInWindow && rateLimit && rateLimit.count >= maxRequests) {
+      console.log(`[ch-submit] Rate limit exceeded for org ${filing.organization_id}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Rate limit exceeded. Please wait 1 minute before retrying.',
+          error_code: 'RATE_LIMITED'
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Update rate limit counter
+    await supabase
+      .from('api_rate_limits')
+      .upsert({
+        key: rateLimitKey,
+        count: isInWindow ? (rateLimit?.count || 0) + 1 : 1,
+        window_start: isInWindow ? rateLimit?.window_start : now.toISOString(),
+      }, { onConflict: 'key' });
+
     // === SERVER-SIDE SUBMISSION GUARD ===
     // Validate submission integrity for ACCOUNTS filings
     const filingTypeForValidation = filing.filing_type === 'AA' || 

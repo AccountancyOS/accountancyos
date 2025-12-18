@@ -156,6 +156,30 @@ export type Database = {
           },
         ]
       }
+      api_rate_limits: {
+        Row: {
+          count: number
+          created_at: string
+          id: string
+          key: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string
+          id?: string
+          key: string
+          window_start?: string
+        }
+        Update: {
+          count?: number
+          created_at?: string
+          id?: string
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       approval_revocation_log: {
         Row: {
           approval_id: string
@@ -11753,6 +11777,7 @@ export type Database = {
       }
       cleanup_expired_gmail_auth_states: { Args: never; Returns: undefined }
       cleanup_expired_outlook_auth_states: { Args: never; Returns: undefined }
+      cleanup_old_rate_limits: { Args: never; Returns: undefined }
       client_has_portal_access: {
         Args: {
           check_client_id?: string
