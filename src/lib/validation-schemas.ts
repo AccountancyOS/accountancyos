@@ -288,6 +288,32 @@ export const customerSchema = z.object({
     .or(z.literal("")),
 });
 
+// UK-specific validators
+export const ukPostcodeSchema = z.string().regex(
+  /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i,
+  'Invalid UK postcode'
+);
+
+export const ukCompanyNumberSchema = z.string().regex(
+  /^(?:OC|SC|NI|R|IP|SP|IC|SI|NP|NO|NC|CS|RS|AC|FC|GE|GS|GN|LP|SL|SO|NL|SF)?[0-9]{6,8}$/i,
+  'Invalid company registration number'
+);
+
+export const ukUtrSchema = z.string().regex(
+  /^\d{10}$/,
+  'UTR must be exactly 10 digits'
+);
+
+export const ukVatNumberSchema = z.string().regex(
+  /^GB\d{9}(?:\d{3})?$/i,
+  'Invalid UK VAT number (format: GB123456789)'
+);
+
+export const ukNiNumberSchema = z.string().regex(
+  /^[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$/i,
+  'Invalid National Insurance number'
+);
+
 // Utility function to safely validate and get errors
 export function validateForm<T>(schema: z.ZodSchema<T>, data: unknown): {
   success: boolean;
@@ -309,6 +335,21 @@ export function validateForm<T>(schema: z.ZodSchema<T>, data: unknown): {
   });
   
   return { success: false, errors };
+}
+
+export function validateOrThrow<T>(schema: z.ZodSchema<T>, data: unknown): T {
+  return schema.parse(data);
+}
+
+export function getValidationErrors(error: z.ZodError): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const path = issue.path.join('.');
+    if (!errors[path]) {
+      errors[path] = issue.message;
+    }
+  }
+  return errors;
 }
 
 // Type exports

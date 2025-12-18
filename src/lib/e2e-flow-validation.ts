@@ -1,9 +1,210 @@
 /**
  * End-to-End Flow Validation Service
  * Validates critical workflows: Lead→Client, Job→Filing, Automation Engine
+ * Includes state machine definitions for business entities
  */
 
 import { supabase } from "@/integrations/supabase/client";
+
+// ============ State Machine Definitions ============
+
+export interface StateTransition {
+  from: string;
+  to: string;
+  requires?: string[]; // Required conditions
+  blockedBy?: string[]; // Blocking conditions
+}
+
+export interface StateMachine {
+  name: string;
+  states: string[];
+  initial: string;
+  terminal: string[];
+  transitions: StateTransition[];
+}
+
+// Job State Machine
+export const JOB_STATE_MACHINE: StateMachine = {
+  name: 'job',
+  states: ['not_started', 'in_progress', 'waiting_on_client', 'with_reviewer', 'complete', 'blocked'],
+  initial: 'not_started',
+  terminal: ['complete'],
+  transitions: [
+    { from: 'not_started', to: 'in_progress' },
+    { from: 'in_progress', to: 'waiting_on_client' },
+    { from: 'in_progress', to: 'with_reviewer' },
+    { from: 'in_progress', to: 'blocked' },
+    { from: 'waiting_on_client', to: 'in_progress' },
+    { from: 'waiting_on_client', to: 'blocked' },
+    { from: 'with_reviewer', to: 'in_progress' },
+    { from: 'with_reviewer', to: 'complete' },
+    { from: 'blocked', to: 'in_progress' },
+  ],
+};
+
+// Filing State Machine
+export const FILING_STATE_MACHINE: StateMachine = {
+  name: 'filing',
+  states: ['draft', 'pending_review', 'approved', 'submitted', 'accepted', 'rejected', 'cancelled'],
+  initial: 'draft',
+  terminal: ['accepted', 'rejected', 'cancelled'],
+  transitions: [
+    { from: 'draft', to: 'pending_review', requires: ['has_workpaper', 'workpaper_finalized'] },
+    { from: 'draft', to: 'cancelled' },
+    { from: 'pending_review', to: 'approved', requires: ['manager_approval'] },
+    { from: 'pending_review', to: 'draft' },
+    { from: 'pending_review', to: 'cancelled' },
+    { from: 'approved', to: 'submitted', requires: ['hmrc_credentials', 'client_authorization'] },
+    { from: 'approved', to: 'pending_review' },
+    { from: 'approved', to: 'cancelled' },
+    { from: 'submitted', to: 'accepted' },
+    { from: 'submitted', to: 'rejected' },
+    { from: 'rejected', to: 'draft' },
+  ],
+};
+
+// Invoice State Machine
+export const INVOICE_STATE_MACHINE: StateMachine = {
+  name: 'invoice',
+  states: ['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'voided', 'written_off'],
+  initial: 'draft',
+  terminal: ['paid', 'voided', 'written_off'],
+  transitions: [
+    { from: 'draft', to: 'issued' },
+    { from: 'draft', to: 'voided' },
+    { from: 'issued', to: 'partially_paid' },
+    { from: 'issued', to: 'paid' },
+    { from: 'issued', to: 'overdue' },
+    { from: 'issued', to: 'voided', requires: ['not_paid'] },
+    { from: 'partially_paid', to: 'paid' },
+    { from: 'partially_paid', to: 'overdue' },
+    { from: 'overdue', to: 'partially_paid' },
+    { from: 'overdue', to: 'paid' },
+    { from: 'overdue', to: 'written_off' },
+  ],
+};
+
+// Bill State Machine
+export const BILL_STATE_MACHINE: StateMachine = {
+  name: 'bill',
+  states: ['draft', 'pending_approval', 'approved', 'partially_paid', 'paid', 'overdue', 'voided'],
+  initial: 'draft',
+  terminal: ['paid', 'voided'],
+  transitions: [
+    { from: 'draft', to: 'pending_approval' },
+    { from: 'draft', to: 'approved' },
+    { from: 'draft', to: 'voided' },
+    { from: 'pending_approval', to: 'approved' },
+    { from: 'pending_approval', to: 'draft' },
+    { from: 'approved', to: 'partially_paid' },
+    { from: 'approved', to: 'paid' },
+    { from: 'approved', to: 'overdue' },
+    { from: 'approved', to: 'voided', requires: ['not_paid'] },
+    { from: 'partially_paid', to: 'paid' },
+    { from: 'partially_paid', to: 'overdue' },
+    { from: 'overdue', to: 'partially_paid' },
+    { from: 'overdue', to: 'paid' },
+  ],
+};
+
+// Workpaper State Machine
+export const WORKPAPER_STATE_MACHINE: StateMachine = {
+  name: 'workpaper',
+  states: ['draft', 'in_progress', 'review', 'finalized', 'superseded'],
+  initial: 'draft',
+  terminal: ['finalized', 'superseded'],
+  transitions: [
+    { from: 'draft', to: 'in_progress' },
+    { from: 'in_progress', to: 'review' },
+    { from: 'in_progress', to: 'draft' },
+    { from: 'review', to: 'in_progress' },
+    { from: 'review', to: 'finalized', requires: ['balanced', 'no_warnings'] },
+    { from: 'finalized', to: 'superseded' },
+  ],
+};
+
+// ============ State Machine Helpers ============
+
+export function validateTransition(
+  machine: StateMachine,
+  fromState: string,
+  toState: string,
+  conditions?: Record<string, boolean>
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!machine.states.includes(fromState)) {
+    errors.push(`Invalid current state: ${fromState}`);
+  }
+  if (!machine.states.includes(toState)) {
+    errors.push(`Invalid target state: ${toState}`);
+  }
+  if (errors.length > 0) return { valid: false, errors };
+
+  const transition = machine.transitions.find(t => t.from === fromState && t.to === toState);
+  if (!transition) {
+    errors.push(`Transition from "${fromState}" to "${toState}" is not allowed`);
+    return { valid: false, errors };
+  }
+
+  if (transition.requires) {
+    for (const condition of transition.requires) {
+      if (!conditions?.[condition]) {
+        errors.push(`Required condition not met: ${condition}`);
+      }
+    }
+  }
+
+  if (transition.blockedBy) {
+    for (const blocker of transition.blockedBy) {
+      if (conditions?.[blocker]) {
+        errors.push(`Transition blocked by: ${blocker}`);
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function getValidNextStates(
+  machine: StateMachine,
+  currentState: string,
+  conditions?: Record<string, boolean>
+): string[] {
+  return machine.transitions
+    .filter(t => t.from === currentState)
+    .filter(t => {
+      if (t.requires) {
+        for (const condition of t.requires) {
+          if (!conditions?.[condition]) return false;
+        }
+      }
+      if (t.blockedBy) {
+        for (const blocker of t.blockedBy) {
+          if (conditions?.[blocker]) return false;
+        }
+      }
+      return true;
+    })
+    .map(t => t.to);
+}
+
+export function isTerminalState(machine: StateMachine, state: string): boolean {
+  return machine.terminal.includes(state);
+}
+
+export function getStateMachine(entityType: string): StateMachine | null {
+  switch (entityType) {
+    case 'job': return JOB_STATE_MACHINE;
+    case 'filing': return FILING_STATE_MACHINE;
+    case 'invoice': return INVOICE_STATE_MACHINE;
+    case 'bill': return BILL_STATE_MACHINE;
+    case 'workpaper': return WORKPAPER_STATE_MACHINE;
+    default: return null;
+  }
+}
+
+// ============ Flow Validation Types ============
 
 export interface FlowValidationResult {
   flowName: string;
