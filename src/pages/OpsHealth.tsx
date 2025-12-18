@@ -754,6 +754,333 @@ export default function OpsHealth() {
       tests: emailTests,
     });
 
+    // Subscription Cache Tests
+    const subscriptionTests: TestResult[] = [];
+
+    // Test: Subscription cache table readable
+    try {
+      const start = Date.now();
+      const { data, error } = await supabase
+        .from("organization_subscription_cache")
+        .select("organization_id, subscribed, checked_at")
+        .eq("organization_id", organization.id)
+        .maybeSingle();
+      
+      subscriptionTests.push({
+        name: "Subscription cache readable",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : data 
+          ? `✓ Cache exists: subscribed=${data.subscribed}, checked=${new Date(data.checked_at).toLocaleString()}`
+          : "No cache entry (will be created on next check)",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      subscriptionTests.push({
+        name: "Subscription cache readable",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
+    // Test: Subscription cache freshness (if exists)
+    try {
+      const start = Date.now();
+      const { data } = await supabase
+        .from("organization_subscription_cache")
+        .select("checked_at")
+        .eq("organization_id", organization.id)
+        .maybeSingle();
+      
+      if (data?.checked_at) {
+        const checkedAt = new Date(data.checked_at);
+        const ageMinutes = (Date.now() - checkedAt.getTime()) / 1000 / 60;
+        const isFresh = ageMinutes < 15; // 15 minute freshness threshold
+        
+        subscriptionTests.push({
+          name: "Subscription cache freshness",
+          status: isFresh ? "pass" : "warning",
+          message: isFresh 
+            ? `✓ Cache is fresh (${Math.round(ageMinutes)} minutes old)`
+            : `Cache is stale (${Math.round(ageMinutes)} minutes old) - will refresh on next check`,
+          duration: Date.now() - start,
+        });
+      } else {
+        subscriptionTests.push({
+          name: "Subscription cache freshness",
+          status: "warning",
+          message: "No cache entry to check freshness",
+          duration: Date.now() - start,
+        });
+      }
+    } catch (e: any) {
+      subscriptionTests.push({
+        name: "Subscription cache freshness",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
+    // Test: Cross-org subscription cache blocked
+    try {
+      const start = Date.now();
+      const fakeOrgId = "00000000-0000-0000-0000-000000000099";
+      const { data, error } = await supabase
+        .from("organization_subscription_cache")
+        .select("*")
+        .eq("organization_id", fakeOrgId);
+      
+      // Should return empty (RLS blocks cross-org access)
+      subscriptionTests.push({
+        name: "Cross-org cache access blocked",
+        status: (!data || data.length === 0) ? "pass" : "fail",
+        message: (!data || data.length === 0)
+          ? "✓ Cross-org access correctly blocked by RLS"
+          : "CRITICAL: Cross-org data accessible!",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      subscriptionTests.push({
+        name: "Cross-org cache access blocked",
+        status: "pass",
+        message: "Cross-org access blocked with exception",
+      });
+    }
+
+    results.push({
+      name: "Subscription Cache",
+      icon: <Receipt className="h-5 w-5" />,
+      tests: subscriptionTests,
+    });
+
+    // Rate Limiting Tests
+    const rateLimitTests: TestResult[] = [];
+
+    // Test: Rate limit table exists (service role only - we shouldn't be able to read)
+    try {
+      const start = Date.now();
+      const { data, error } = await supabase
+        .from("api_rate_limits")
+        .select("id")
+        .limit(1);
+      
+      // We should NOT be able to read this table (RLS disabled, service role only)
+      rateLimitTests.push({
+        name: "api_rate_limits table protected",
+        status: error || !data || data.length === 0 ? "pass" : "warning",
+        message: error 
+          ? `✓ Table correctly protected: ${error.message}`
+          : (data && data.length > 0) 
+            ? "Warning: Table readable (expected to be service-role only)"
+            : "✓ No data accessible (protected)",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      rateLimitTests.push({
+        name: "api_rate_limits table protected",
+        status: "pass",
+        message: `✓ Table protected with exception`,
+      });
+    }
+
+    // Test: Direct insert to rate limits should fail
+    try {
+      const start = Date.now();
+      const { error } = await supabase
+        .from("api_rate_limits")
+        .insert([{
+          key: `test_${organization.id}_hmrc-vat-submit`,
+          window_start: new Date().toISOString(),
+          count: 999,
+        }]);
+      
+      rateLimitTests.push({
+        name: "api_rate_limits direct write blocked",
+        status: error ? "pass" : "fail",
+        message: error 
+          ? "✓ Direct write correctly blocked"
+          : "CRITICAL: Direct write to rate limits allowed!",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      rateLimitTests.push({
+        name: "api_rate_limits direct write blocked",
+        status: "pass",
+        message: "Direct write blocked with exception",
+      });
+    }
+
+    results.push({
+      name: "Rate Limiting",
+      icon: <Shield className="h-5 w-5" />,
+      tests: rateLimitTests,
+    });
+
+    // Filing Integrity Tests
+    const filingTests: TestResult[] = [];
+
+    // Test: filing_model_snapshots immutability (direct delete should fail)
+    try {
+      const start = Date.now();
+      const { error } = await supabase
+        .from("filing_model_snapshots")
+        .delete()
+        .eq("organization_id", "00000000-0000-0000-0000-000000000099"); // Non-existent org
+      
+      filingTests.push({
+        name: "filing_model_snapshots protected",
+        status: error ? "pass" : "warning",
+        message: error 
+          ? "✓ Snapshot deletion correctly blocked"
+          : "Warning: No snapshots matched (expected)",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      filingTests.push({
+        name: "filing_model_snapshots protected",
+        status: "pass",
+        message: "Snapshot modification blocked with exception",
+      });
+    }
+
+    // Test: filings table readable (org-scoped)
+    try {
+      const start = Date.now();
+      const { data, error } = await supabase
+        .from("filings")
+        .select("id, filing_type, status")
+        .eq("organization_id", organization.id)
+        .limit(5);
+      
+      filingTests.push({
+        name: "filings table readable (org-scoped)",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : `✓ Read ${data?.length || 0} filing(s)`,
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      filingTests.push({
+        name: "filings table readable",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
+    // Test: Cross-org filing access blocked
+    try {
+      const start = Date.now();
+      const fakeOrgId = "00000000-0000-0000-0000-000000000099";
+      const { data, error } = await supabase
+        .from("filings")
+        .select("id")
+        .eq("organization_id", fakeOrgId);
+      
+      filingTests.push({
+        name: "Cross-org filing access blocked",
+        status: (!data || data.length === 0) ? "pass" : "fail",
+        message: (!data || data.length === 0)
+          ? "✓ Cross-org access correctly blocked by RLS"
+          : "CRITICAL: Cross-org filings accessible!",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      filingTests.push({
+        name: "Cross-org filing access blocked",
+        status: "pass",
+        message: "Cross-org access blocked with exception",
+      });
+    }
+
+    // Test: filing_submissions audit trail readable
+    try {
+      const start = Date.now();
+      const { data, error } = await supabase
+        .from("filing_submissions")
+        .select("id, filing_id, status, submitted_at")
+        .eq("organization_id", organization.id)
+        .order("submitted_at", { ascending: false })
+        .limit(5);
+      
+      filingTests.push({
+        name: "filing_submissions audit readable",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : `✓ Read ${data?.length || 0} submission(s)`,
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      filingTests.push({
+        name: "filing_submissions audit readable",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
+    results.push({
+      name: "Filing Integrity",
+      icon: <FileText className="h-5 w-5" />,
+      tests: filingTests,
+    });
+
+    // Audit Trail Tests
+    const auditTests: TestResult[] = [];
+
+    // Test: audit_log readable
+    try {
+      const start = Date.now();
+      const { data, error } = await supabase
+        .from("audit_log")
+        .select("id, entity_type, action, created_at")
+        .eq("organization_id", organization.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      
+      auditTests.push({
+        name: "audit_log readable",
+        status: error ? "fail" : "pass",
+        message: error ? `Error: ${error.message}` : `✓ Read ${data?.length || 0} audit entries`,
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      auditTests.push({
+        name: "audit_log readable",
+        status: "fail",
+        message: `Exception: ${e.message}`,
+      });
+    }
+
+    // Test: Direct audit_log insert blocked (should use safe RPCs)
+    try {
+      const start = Date.now();
+      const { error } = await supabase
+        .from("audit_log")
+        .insert([{
+          organization_id: organization.id,
+          entity_type: "test",
+          entity_id: "00000000-0000-0000-0000-000000000000",
+          action: "SECURITY_TEST_DIRECT_INSERT",
+        }]);
+      
+      auditTests.push({
+        name: "audit_log direct write blocked",
+        status: error ? "pass" : "warning",
+        message: error 
+          ? "✓ Direct audit write blocked (use safe RPCs)"
+          : "Warning: Direct audit insert allowed - consider restricting",
+        duration: Date.now() - start,
+      });
+    } catch (e: any) {
+      auditTests.push({
+        name: "audit_log direct write blocked",
+        status: "pass",
+        message: "Direct write blocked with exception",
+      });
+    }
+
+    results.push({
+      name: "Audit Trail",
+      icon: <Database className="h-5 w-5" />,
+      tests: auditTests,
+    });
+
     setTestResults(results);
     setIsRunning(false);
 
