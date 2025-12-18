@@ -6,7 +6,7 @@ import { useOrganization } from "@/lib/organization-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings } from "lucide-react";
 
 const CompletePayment = () => {
   const navigate = useNavigate();
@@ -18,6 +18,18 @@ const CompletePayment = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [billingStatus, setBillingStatus] = useState<string | null>(null);
 
+  // Get org ID from context or localStorage fallback
+  const getOrganizationId = (): string | null => {
+    if (organization?.id) return organization.id;
+    // Fallback to localStorage if org context hasn't loaded yet
+    return localStorage.getItem("pending_org_id");
+  };
+
+  const getOrganizationName = (): string => {
+    if (organization?.name) return organization.name;
+    return "My Practice";
+  };
+
   useEffect(() => {
     if (organization) {
       // Type assertion since billing_status is new
@@ -26,36 +38,45 @@ const CompletePayment = () => {
       
       // If already active, redirect to appropriate page
       if (status === 'active') {
+        // Clear localStorage pending_org_id since we're done
+        localStorage.removeItem("pending_org_id");
+        
         if (organization.onboarding_completed) {
           navigate('/welcome');
         } else {
-          navigate('/onboarding-wizard');
+          navigate('/');
         }
       }
     }
   }, [organization, navigate]);
 
   const handleContinueToPayment = async () => {
-    if (!organization) return;
+    const orgId = getOrganizationId();
+    const orgName = getOrganizationName();
+
+    if (!orgId) {
+      toast({
+        title: "Error",
+        description: "Organization not found. Please sign out and sign up again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Edge function sets pending_checkout_session_id server-side
       const { data, error } = await supabase.functions.invoke('stripe-checkout', {
         body: {
-          organizationId: organization.id,
-          organizationName: organization.name,
+          organizationId: orgId,
+          organizationName: orgName,
         },
       });
 
       if (error) throw error;
 
       if (data?.url) {
-        // Store pending session ID
-        await supabase
-          .from('organizations')
-          .update({ pending_checkout_session_id: data.sessionId })
-          .eq('id', organization.id);
-
         window.location.href = data.url;
       } else {
         throw new Error('No checkout URL returned');
@@ -63,6 +84,30 @@ const CompletePayment = () => {
     } catch (error: any) {
       toast({
         title: "Error starting checkout",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Use billing portal for past_due status to update payment method
+  const handleManageSubscription = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('customer-portal');
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No portal URL returned');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error opening billing portal",
         description: error.message,
         variant: "destructive",
       });
@@ -113,24 +158,33 @@ const CompletePayment = () => {
     switch (billingStatus) {
       case 'past_due':
         return {
-          icon: <AlertCircle className="h-12 w-12 text-destructive" />,
-          title: "Payment Failed",
+          icon: <AlertCircle className="h-12 w-12 text-amber-500" />,
+          iconBg: "bg-amber-100",
+          title: "Payment Past Due",
           description: "Your last payment didn't go through. Please update your payment method to continue using AccountancyOS.",
-          buttonText: "Update Payment Method",
+          primaryAction: handleManageSubscription,
+          primaryButtonText: "Update Payment Method",
+          primaryButtonIcon: <Settings className="mr-2 h-4 w-4" />,
         };
       case 'canceled':
         return {
           icon: <AlertCircle className="h-12 w-12 text-muted-foreground" />,
+          iconBg: "bg-muted",
           title: "Subscription Canceled",
           description: "Your subscription has been canceled. Resubscribe to regain access to AccountancyOS.",
-          buttonText: "Resubscribe",
+          primaryAction: handleContinueToPayment,
+          primaryButtonText: "Resubscribe",
+          primaryButtonIcon: <CreditCard className="mr-2 h-4 w-4" />,
         };
       default:
         return {
           icon: <CreditCard className="h-12 w-12 text-primary" />,
+          iconBg: "bg-primary/10",
           title: "Complete Your Subscription",
-          description: "You're almost there! Complete your payment to start using AccountancyOS.",
-          buttonText: "Continue to Payment",
+          description: "You're almost there! Complete your payment to start your 14-day free trial of AccountancyOS.",
+          primaryAction: handleContinueToPayment,
+          primaryButtonText: "Continue to Payment",
+          primaryButtonIcon: <CreditCard className="mr-2 h-4 w-4" />,
         };
     }
   };
@@ -146,7 +200,7 @@ const CompletePayment = () => {
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
           </div>
-          <div className="flex justify-center">
+          <div className={`flex justify-center p-3 rounded-full mx-auto w-fit ${statusInfo.iconBg}`}>
             {statusInfo.icon}
           </div>
           <CardTitle className="text-2xl">{statusInfo.title}</CardTitle>
@@ -157,7 +211,7 @@ const CompletePayment = () => {
 
         <CardContent className="space-y-4">
           <Button 
-            onClick={handleContinueToPayment} 
+            onClick={statusInfo.primaryAction} 
             className="w-full" 
             size="lg"
             disabled={loading}
@@ -165,12 +219,12 @@ const CompletePayment = () => {
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Redirecting...
+                Processing...
               </>
             ) : (
               <>
-                <CreditCard className="mr-2 h-4 w-4" />
-                {statusInfo.buttonText}
+                {statusInfo.primaryButtonIcon}
+                {statusInfo.primaryButtonText}
               </>
             )}
           </Button>

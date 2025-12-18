@@ -57,11 +57,12 @@ const OnboardingWizard = () => {
     const verifySession = async () => {
       try {
         const sessionId = searchParams.get("session_id");
-        const testMode = searchParams.get("test");
         
-        // Allow test mode or no session (for testing purposes)
-        if (testMode === "true" || !sessionId) {
-          console.log("Test/development mode - bypassing payment verification");
+        // No session_id means user arrived without completing Stripe checkout
+        // They should go to /complete-payment instead
+        if (!sessionId) {
+          console.log("No session_id - redirecting to complete payment");
+          setLoadError("Payment verification required. Please complete payment to continue.");
           setVerifyingPayment(false);
           return;
         }

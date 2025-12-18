@@ -25,9 +25,9 @@ const Index = () => {
     }
 
     // Priority 3: Check billing status - must be active to proceed
-    // Type assertion since billing_status is a new column
+    // Treat null/undefined/any non-active status as needing payment
     const billingStatus = (organization as any).billing_status as string | undefined;
-    if (billingStatus && billingStatus !== 'active') {
+    if (billingStatus !== 'active') {
       navigate("/complete-payment");
       return;
     }

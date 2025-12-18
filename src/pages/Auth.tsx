@@ -116,7 +116,10 @@ const Auth = () => {
         description: "Redirecting you to complete payment setup...",
       });
 
-      // Redirect to Stripe checkout
+      // Store org ID in localStorage for recovery if Stripe is cancelled/fails
+      localStorage.setItem("pending_org_id", orgId);
+
+      // Redirect to Stripe checkout (edge function sets pending_checkout_session_id server-side)
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
         "stripe-checkout",
         {

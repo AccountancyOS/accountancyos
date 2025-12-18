@@ -88,8 +88,8 @@ async function updateSubscriptionState(
   }
 }
 
-// Check idempotency - returns true if event already processed
-async function checkIdempotency(supabase: any, eventId: string, eventType: string, eventCreated: number): Promise<boolean> {
+// Check idempotency - returns 'processed' if duplicate, 'new' if new, 'error' if failed
+async function checkIdempotency(supabase: any, eventId: string, eventType: string, eventCreated: number): Promise<'processed' | 'new' | 'error'> {
   const { error } = await supabase
     .from('stripe_webhook_events')
     .insert({
@@ -102,12 +102,13 @@ async function checkIdempotency(supabase: any, eventId: string, eventType: strin
     // Check if it's a unique constraint violation (duplicate)
     if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
       logStep('Event already processed (idempotent skip)', { eventId });
-      return true;
+      return 'processed';
     }
-    // Other errors - log but continue (fail open for webhook reliability)
-    logStep('Idempotency check error (continuing)', { error: error.message });
+    // Other errors - fail closed, return error so Stripe retries
+    logStep('Idempotency check failed - will return 500 for retry', { error: error.message });
+    return 'error';
   }
-  return false;
+  return 'new';
 }
 
 serve(async (req) => {
@@ -127,12 +128,21 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Idempotency check - skip if already processed
-    const isDuplicate = await checkIdempotency(supabase, event.id, event.type, event.created);
-    if (isDuplicate) {
+    // Idempotency check - fail closed on errors
+    const idempotencyResult = await checkIdempotency(supabase, event.id, event.type, event.created);
+    
+    if (idempotencyResult === 'processed') {
       return new Response(JSON.stringify({ received: true, duplicate: true }), {
         headers: { 'Content-Type': 'application/json' },
         status: 200,
+      });
+    }
+    
+    if (idempotencyResult === 'error') {
+      // Return 500 so Stripe will retry
+      return new Response(JSON.stringify({ error: 'Idempotency check failed' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 500,
       });
     }
 
@@ -188,22 +198,30 @@ serve(async (req) => {
         // Find organization by subscription ID or customer ID only - NO email fallback
         let organizationId: string | null = null;
 
-        // First try by subscription ID
-        const { data: orgBySubId } = await supabase
+        // First try by subscription ID - use maybeSingle to avoid errors on no match
+        const { data: orgBySubId, error: subIdError } = await supabase
           .from('organizations')
           .select('id')
           .eq('stripe_subscription_id', subscription.id)
-          .single();
+          .maybeSingle();
+
+        if (subIdError) {
+          logStep('Error looking up org by subscription ID', { error: subIdError.message });
+        }
 
         if (orgBySubId) {
           organizationId = orgBySubId.id;
         } else {
-          // Try by customer ID
-          const { data: orgByCustomerId } = await supabase
+          // Try by customer ID - use maybeSingle to avoid errors on no match
+          const { data: orgByCustomerId, error: customerIdError } = await supabase
             .from('organizations')
             .select('id')
             .eq('stripe_customer_id', subscription.customer as string)
-            .single();
+            .maybeSingle();
+
+          if (customerIdError) {
+            logStep('Error looking up org by customer ID', { error: customerIdError.message });
+          }
 
           if (orgByCustomerId) {
             organizationId = orgByCustomerId.id;
@@ -239,12 +257,16 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         logStep('Subscription deleted', { subscriptionId: subscription.id });
 
-        // Find organization
-        const { data: org } = await supabase
+        // Find organization - use maybeSingle to avoid errors
+        const { data: org, error: orgError } = await supabase
           .from('organizations')
           .select('id')
           .eq('stripe_subscription_id', subscription.id)
-          .single();
+          .maybeSingle();
+
+        if (orgError) {
+          logStep('Error looking up org for deleted subscription', { error: orgError.message });
+        }
 
         if (org) {
           await updateSubscriptionState(
@@ -273,11 +295,15 @@ serve(async (req) => {
         logStep('Invoice payment succeeded', { invoiceId: invoice.id });
 
         if (invoice.subscription) {
-          const { data: org } = await supabase
+          const { data: org, error: orgError } = await supabase
             .from('organizations')
             .select('id')
             .eq('stripe_subscription_id', invoice.subscription as string)
-            .single();
+            .maybeSingle();
+
+          if (orgError) {
+            logStep('Error looking up org for invoice', { error: orgError.message });
+          }
 
           if (org) {
             const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string);
@@ -305,11 +331,15 @@ serve(async (req) => {
         logStep('Invoice payment failed', { invoiceId: invoice.id });
 
         if (invoice.subscription) {
-          const { data: org } = await supabase
+          const { data: org, error: orgError } = await supabase
             .from('organizations')
             .select('id')
             .eq('stripe_subscription_id', invoice.subscription as string)
-            .single();
+            .maybeSingle();
+
+          if (orgError) {
+            logStep('Error looking up org for failed invoice', { error: orgError.message });
+          }
 
           if (org) {
             await updateSubscriptionState(
