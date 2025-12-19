@@ -1,16 +1,14 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useOrganization } from "@/lib/organization-context";
-import { useAuth } from "@/lib/auth-context";
+import { useApp } from "@/lib/app-context";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
-  const { organization, loading: orgLoading } = useOrganization();
+  const { user, organization, loading, organizationLoading } = useApp();
 
   useEffect(() => {
-    if (authLoading || orgLoading) return;
+    if (loading || organizationLoading) return;
 
     // Priority 1: Not logged in → auth
     if (!user) {
@@ -26,7 +24,7 @@ const Index = () => {
 
     // Priority 3: Check billing status - must be active to proceed
     // Treat null/undefined/any non-active status as needing payment
-    const billingStatus = (organization as any).billing_status as string | undefined;
+    const billingStatus = organization.billing_status;
     if (billingStatus !== 'active') {
       navigate("/complete-payment");
       return;
@@ -40,7 +38,7 @@ const Index = () => {
 
     // Priority 5: All good → welcome dashboard
     navigate("/welcome");
-  }, [user, organization, authLoading, orgLoading, navigate]);
+  }, [user, organization, loading, organizationLoading, navigate]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
