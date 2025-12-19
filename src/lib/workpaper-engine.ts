@@ -2,6 +2,8 @@
  * Workpaper Engine - Handles data mapping, calculations, and integrations
  */
 
+import { evaluateFormula } from './formula-evaluator';
+
 export interface MappingRule {
   source: "questionnaire" | "bookkeeping" | "payroll" | "calculation" | "static";
   field_path?: string; // For questionnaire/bookkeeping
@@ -199,19 +201,23 @@ export function calculateFields(
 
   for (const calc of template.calculations) {
     try {
-      // Simple formula evaluation (replace with proper formula parser in production)
-      const formula = calc.formula;
-      let result = formula;
-
-      // Replace field names with values
+      // Build scope from field values (safe primitives only)
+      const scope: Record<string, number> = {};
       for (const [fieldName, value] of Object.entries(fieldValues)) {
-        const regex = new RegExp(`\\\\b${fieldName}\\\\b`, "g");
-        result = result.replace(regex, String(value || 0));
+        if (typeof value === 'number') {
+          scope[fieldName] = value;
+        } else if (typeof value === 'string') {
+          const parsed = parseFloat(value);
+          scope[fieldName] = isNaN(parsed) ? 0 : parsed;
+        } else if (typeof value === 'boolean') {
+          scope[fieldName] = value ? 1 : 0;
+        } else {
+          scope[fieldName] = 0;
+        }
       }
 
-      // Evaluate simple arithmetic (using Function constructor for safety)
-      // In production, use a proper expression parser
-      computed[calc.name] = eval(result);
+      // Use safe formula evaluator (math.js) instead of eval()
+      computed[calc.name] = evaluateFormula(calc.formula, scope);
     } catch (error) {
       console.error(`Error calculating ${calc.name}:`, error);
       computed[calc.name] = null;
