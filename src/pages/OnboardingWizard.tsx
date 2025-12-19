@@ -147,7 +147,7 @@ const OnboardingWizard = () => {
 
   // Show error/timeout state
   if (loadTimeout || loadError) {
-    const billingStatus = (organization as any)?.billing_status;
+    const billingStatus = organization?.billing_status;
     const needsPayment = !billingStatus || billingStatus !== 'active';
 
     return (
