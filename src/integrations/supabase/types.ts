@@ -8094,6 +8094,47 @@ export type Database = {
           },
         ]
       }
+      organization_billing: {
+        Row: {
+          billing_status: string | null
+          created_at: string | null
+          organization_id: string
+          pending_checkout_session_id: string | null
+          stripe_connect_account_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          billing_status?: string | null
+          created_at?: string | null
+          organization_id: string
+          pending_checkout_session_id?: string | null
+          stripe_connect_account_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          billing_status?: string | null
+          created_at?: string | null
+          organization_id?: string
+          pending_checkout_session_id?: string | null
+          stripe_connect_account_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_billing_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_branding: {
         Row: {
           accent_color: string | null
