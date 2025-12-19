@@ -18,14 +18,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { Send, Loader2, Copy, Check } from "lucide-react";
+
+// ============================================
+// Types
+// ============================================
 
 interface Template {
   id: string;
   name: string;
   description: string | null;
-  content: any;
+  content: Json;
 }
 
 interface SendOnboardingQuestionnaireDialogProps {
@@ -37,6 +42,16 @@ interface SendOnboardingQuestionnaireDialogProps {
   recipientName: string;
   onSuccess: () => void;
 }
+
+interface PublicLinkResponse {
+  instance_id: string;
+  token: string;
+  expires_at: string;
+}
+
+// ============================================
+// Component
+// ============================================
 
 export function SendOnboardingQuestionnaireDialog({
   open,
@@ -95,16 +110,18 @@ export function SendOnboardingQuestionnaireDialog({
       if (!template) throw new Error("Template not found");
 
       // Create the questionnaire instance
+      // Note: access_token is deprecated but required by schema - RPC creates secure link
       const { data: instanceData, error: instanceError } = await supabase
         .from("questionnaire_instances")
-        .insert({
+        .insert([{
           organization_id: organizationId,
           template_id: selectedTemplateId,
           name: template.name,
           questions: template.content,
           sent_at: new Date().toISOString(),
-          status: "draft", // Will be set to 'sent' by the RPC
-        })
+          status: "draft",
+          access_token: "deprecated-use-public-links", // Deprecated: secure tokens now in questionnaire_public_links
+        }])
         .select("id")
         .single();
 
@@ -112,7 +129,7 @@ export function SendOnboardingQuestionnaireDialog({
 
       // Create a secure public link via RPC
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
+      expiresAt.setDate(expiresAt.getDate() + 30);
 
       const { data: linkData, error: linkError } = await supabase.rpc(
         "create_questionnaire_public_link",
@@ -125,15 +142,15 @@ export function SendOnboardingQuestionnaireDialog({
       if (linkError) throw linkError;
 
       // Build the public URL
-      const baseUrl = window.location.origin;
-      const tokenData = linkData as unknown as { token: string };
-      const publicUrl = `${baseUrl}/questionnaire/${instanceData.id}?token=${tokenData.token}`;
+      const link = linkData as unknown as PublicLinkResponse;
+      const publicUrl = `${window.location.origin}/questionnaire/${instanceData.id}?token=${link.token}`;
       setGeneratedLink(publicUrl);
 
       toast.success("Questionnaire created - copy the link to send to client");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create questionnaire";
       console.error("Error creating questionnaire:", error);
-      toast.error(error.message || "Failed to create questionnaire");
+      toast.error(message);
     } finally {
       setSending(false);
     }
@@ -188,7 +205,7 @@ export function SendOnboardingQuestionnaireDialog({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This link expires in 30 days. Send this link to {recipientName} ({recipientEmail}).
+                Links are single-use after submission and expire in 30 days. Send to {recipientName} ({recipientEmail}).
               </p>
             </div>
             <DialogFooter>
