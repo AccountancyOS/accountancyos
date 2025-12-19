@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
-import { OrganizationProvider } from "@/lib/organization-context";
+import { AppProvider } from "@/lib/app-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import Auth from "./pages/Auth";
 import Overview from "./pages/Overview";
@@ -87,7 +87,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/auth" replace />;
   }
 
-  return <OrganizationProvider>{children}</OrganizationProvider>;
+  return <AppProvider>{children}</AppProvider>;
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {

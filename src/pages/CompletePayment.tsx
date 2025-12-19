@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
-import { useOrganization } from "@/lib/organization-context";
+import { useApp } from "@/lib/app-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -98,8 +97,7 @@ const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown'>, UIConfig> = {
 const CompletePayment = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
-  const { organization, loading: orgLoading, refreshOrganization } = useOrganization();
+  const { user, organization, organizationLoading: orgLoading, refreshOrganization } = useApp();
   
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -139,7 +137,7 @@ const CompletePayment = () => {
   // Redirect if billing becomes active
   useEffect(() => {
     if (organization) {
-      const status = (organization as any).billing_status as string;
+      const status = organization.billing_status;
       
       if (status === 'active') {
         localStorage.removeItem("pending_org_id");
@@ -154,11 +152,11 @@ const CompletePayment = () => {
   }, [organization, navigate]);
 
   // Compute billing status and payment mode
-  const billingStatus = (organization as any)?.billing_status as string | undefined;
+  const billingStatus = organization?.billing_status;
   
   const hasSubscriptionHistory = Boolean(
     subscriptionCache?.subscription_id || 
-    (organization as any)?.stripe_subscription_id
+    organization?.stripe_subscription_id
   );
 
   const mode: PaymentMode = (() => {
