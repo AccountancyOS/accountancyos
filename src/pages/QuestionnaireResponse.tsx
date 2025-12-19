@@ -7,42 +7,56 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { ChevronLeft, ChevronRight, Check, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 
-interface QuestionnaireData {
+// ============================================
+// Types
+// ============================================
+
+type QuestionType = "text" | "longtext" | "number" | "date" | "yesno" | "select" | "multiselect" | "file";
+
+interface QuestionnaireQuestion {
+  id: string;
+  type: QuestionType | string;
+  label: string;
+  required?: boolean;
+  placeholder?: string;
+  helpText?: string;
+  options?: string[];
+  branchLogic?: {
+    yesTarget?: string;
+    noTarget?: string;
+    optionTargets?: Record<string, string>;
+  };
+}
+
+interface QuestionnaireSettings {
+  showProgressBar?: boolean;
+  allowSaveAndResume?: boolean;
+  thankYouText?: string;
+}
+
+interface QuestionnaireQuestionsPayload {
+  questions: QuestionnaireQuestion[];
+  settings?: QuestionnaireSettings;
+}
+
+type QuestionnaireStatus = "draft" | "sent" | "in_progress" | "submitted";
+
+interface QuestionnaireInstanceRPC {
   id: string;
   name: string | null;
-  questions: {
-    questions: Array<{
-      id: string;
-      type: string;
-      label: string;
-      required?: boolean;
-      helpText?: string;
-      placeholder?: string;
-      options?: string[];
-      branchLogic?: {
-        yesTarget?: string;
-        noTarget?: string;
-        optionTargets?: Record<string, string>;
-      };
-    }>;
-    settings?: {
-      showProgressBar?: boolean;
-      allowSaveAndResume?: boolean;
-      thankYouText?: string;
-    };
-  };
-  status: string;
+  questions: QuestionnaireQuestionsPayload;
+  status: QuestionnaireStatus | string;
   period_label: string | null;
   submitted_at: string | null;
 }
 
-interface ResponseData {
+interface QuestionnaireResponseRPC {
   id: string;
   question_id: string;
   answer_text: string | null;
@@ -52,22 +66,44 @@ interface ResponseData {
   answer_array: string[] | null;
 }
 
+type AnswerValue = string | number | boolean | string[] | null;
+type AnswersState = Record<string, AnswerValue>;
+
+// ============================================
+// Helpers
+// ============================================
+
+function mapPublicLinkError(message: string): string {
+  const msg = message.toLowerCase();
+  if (msg.includes("expired")) return "This link has expired. Please contact your accountant for a new link.";
+  if (msg.includes("revoked")) return "This link is no longer valid. Please contact your accountant for a new link.";
+  if (msg.includes("invalid")) return "Invalid link. Please check the URL or contact your accountant.";
+  if (msg.includes("rate limit")) return "Too many attempts. Please try again in a few minutes.";
+  return "Unable to load questionnaire. Please contact your accountant.";
+}
+
+// ============================================
+// Component
+// ============================================
+
 export default function QuestionnaireResponse() {
   const { instanceId } = useParams();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Use truncated token for cache keys (avoid leaking full token in devtools)
+  const tokenKey = token ? token.slice(0, 8) : "no-token";
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<AnswersState>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
 
   // Fetch questionnaire via secure RPC
-  const { data: instance, isLoading, error: fetchError } = useQuery({
-    queryKey: ["questionnaire-instance", instanceId, token],
-    queryFn: async (): Promise<QuestionnaireData> => {
+  const { data: instance, isLoading, error: fetchError } = useQuery<QuestionnaireInstanceRPC>({
+    queryKey: ["questionnaire-instance", instanceId, tokenKey],
+    queryFn: async () => {
       if (!instanceId || !token) throw new Error("Missing instance or token");
       
       const { data, error } = await supabase.rpc("get_questionnaire_by_token", {
@@ -75,33 +111,17 @@ export default function QuestionnaireResponse() {
         p_token: token,
       });
 
-      if (error) {
-        // Handle specific error messages
-        if (error.message.includes("expired")) {
-          throw new Error("This link has expired. Please contact your accountant for a new link.");
-        }
-        if (error.message.includes("revoked")) {
-          throw new Error("This link is no longer valid. Please contact your accountant for a new link.");
-        }
-        if (error.message.includes("Invalid")) {
-          throw new Error("Invalid link. Please check the URL or contact your accountant.");
-        }
-        if (error.message.includes("Rate limit")) {
-          throw new Error("Too many attempts. Please try again in a few minutes.");
-        }
-        throw error;
-      }
-      
-      return data as QuestionnaireData;
+      if (error) throw new Error(mapPublicLinkError(error.message));
+      return data as unknown as QuestionnaireInstanceRPC;
     },
-    enabled: !!instanceId && !!token,
+    enabled: Boolean(instanceId && token),
     retry: false,
   });
 
   // Fetch existing responses via secure RPC
-  const { data: existingResponses } = useQuery({
-    queryKey: ["questionnaire-responses", instanceId, token],
-    queryFn: async (): Promise<ResponseData[]> => {
+  const { data: existingResponses } = useQuery<QuestionnaireResponseRPC[]>({
+    queryKey: ["questionnaire-responses", instanceId, tokenKey],
+    queryFn: async () => {
       if (!instanceId || !token) return [];
       
       const { data, error } = await supabase.rpc("get_questionnaire_responses_by_token", {
@@ -109,14 +129,10 @@ export default function QuestionnaireResponse() {
         p_token: token,
       });
 
-      if (error) {
-        console.error("Error fetching responses:", error);
-        return [];
-      }
-      
-      return (data as unknown as ResponseData[]) || [];
+      if (error) return [];
+      return (Array.isArray(data) ? (data as unknown as QuestionnaireResponseRPC[]) : []) ?? [];
     },
-    enabled: !!instanceId && !!token && !!instance,
+    enabled: Boolean(instanceId && token && instance),
   });
 
   useEffect(() => {
@@ -126,55 +142,54 @@ export default function QuestionnaireResponse() {
   }, [fetchError]);
 
   useEffect(() => {
-    if (existingResponses && existingResponses.length > 0) {
-      const loadedAnswers: Record<string, any> = {};
-      existingResponses.forEach((response) => {
-        if (response.answer_text) loadedAnswers[response.question_id] = response.answer_text;
-        if (response.answer_number !== null) loadedAnswers[response.question_id] = response.answer_number;
-        if (response.answer_boolean !== null) loadedAnswers[response.question_id] = response.answer_boolean;
-        if (response.answer_date) loadedAnswers[response.question_id] = response.answer_date;
-        if (response.answer_array) loadedAnswers[response.question_id] = response.answer_array;
-      });
-      setAnswers(loadedAnswers);
+    if (!existingResponses?.length) return;
+    const loaded: AnswersState = {};
+
+    for (const r of existingResponses) {
+      if (r.answer_text !== null) loaded[r.question_id] = r.answer_text;
+      else if (r.answer_number !== null) loaded[r.question_id] = r.answer_number;
+      else if (r.answer_boolean !== null) loaded[r.question_id] = r.answer_boolean;
+      else if (r.answer_date !== null) loaded[r.question_id] = r.answer_date;
+      else if (r.answer_array !== null) loaded[r.question_id] = r.answer_array;
     }
+
+    setAnswers(loaded);
   }, [existingResponses]);
 
   // Save answer via secure RPC
   const saveAnswerMutation = useMutation({
-    mutationFn: async ({ questionId, answer }: { questionId: string; answer: any }) => {
+    mutationFn: async ({ questionId, answer }: { questionId: string; answer: AnswerValue }) => {
       if (!instanceId || !token) throw new Error("Missing instance or token");
 
-      const params: {
-        p_instance_id: string;
-        p_token: string;
-        p_question_id: string;
-        p_answer_text?: string;
-        p_answer_number?: number;
-        p_answer_boolean?: boolean;
-        p_answer_date?: string;
-        p_answer_array?: string[];
-      } = {
+      // Build params with correct types
+      let p_answer_text: string | undefined;
+      let p_answer_number: number | undefined;
+      let p_answer_boolean: boolean | undefined;
+      let p_answer_array: string[] | undefined;
+
+      if (typeof answer === "string") p_answer_text = answer;
+      else if (typeof answer === "number" && Number.isFinite(answer)) p_answer_number = answer;
+      else if (typeof answer === "boolean") p_answer_boolean = answer;
+      else if (Array.isArray(answer)) p_answer_array = answer;
+
+      const { error } = await supabase.rpc("save_questionnaire_answer_by_token", {
         p_instance_id: instanceId,
         p_token: token,
         p_question_id: questionId,
-      };
-
-      if (typeof answer === "string") params.p_answer_text = answer;
-      else if (typeof answer === "number") params.p_answer_number = answer;
-      else if (typeof answer === "boolean") params.p_answer_boolean = answer;
-      else if (answer instanceof Date) params.p_answer_date = answer.toISOString().split("T")[0];
-      else if (Array.isArray(answer)) params.p_answer_array = answer;
-
-      const { error } = await supabase.rpc("save_questionnaire_answer_by_token", params);
-
-      if (error) throw error;
+        p_answer_text,
+        p_answer_number,
+        p_answer_boolean,
+        p_answer_array,
+      });
+      if (error) throw new Error(mapPublicLinkError(error.message));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["questionnaire-responses", instanceId, token] });
+      queryClient.invalidateQueries({ queryKey: ["questionnaire-responses", instanceId, tokenKey] });
     },
-    onError: (error: Error) => {
-      if (error.message.includes("expired") || error.message.includes("revoked") || error.message.includes("Invalid")) {
-        setLinkError(error.message);
+    onError: (err: Error) => {
+      const msg = err.message.toLowerCase();
+      if (msg.includes("expired") || msg.includes("revoked") || msg.includes("invalid")) {
+        setLinkError(err.message);
       }
     },
   });
@@ -189,24 +204,18 @@ export default function QuestionnaireResponse() {
         p_token: token,
       });
 
-      if (error) throw error;
+      if (error) throw new Error(mapPublicLinkError(error.message));
     },
     onSuccess: () => {
       setIsSubmitted(true);
-      toast({
-        title: "Success!",
-        description: "Your responses have been submitted",
-      });
+      toast.success("Your responses have been submitted");
     },
-    onError: (error: Error) => {
-      if (error.message.includes("expired") || error.message.includes("revoked") || error.message.includes("Invalid")) {
-        setLinkError(error.message);
+    onError: (err: Error) => {
+      const msg = err.message.toLowerCase();
+      if (msg.includes("expired") || msg.includes("revoked") || msg.includes("invalid")) {
+        setLinkError(err.message);
       } else {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
+        toast.error(err.message);
       }
     },
   });
@@ -273,10 +282,10 @@ export default function QuestionnaireResponse() {
   const questions = questionsData?.questions || [];
   const settings = questionsData?.settings || {};
   const currentQuestion = questions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
-  const currentAnswer = answers[currentQuestion?.id];
+  const progress = questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0;
+  const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
 
-  const isCurrentQuestionAnswered = () => {
+  const isCurrentQuestionAnswered = (): boolean => {
     if (!currentQuestion) return false;
     if (!currentQuestion.required) return true;
     
@@ -300,11 +309,11 @@ export default function QuestionnaireResponse() {
       const answer = answers[currentQuestion.id];
       let targetQuestionId: string | undefined;
 
-      // Handle Yes/No branching
+      // Handle Yes/No branching (using boolean values)
       if (currentQuestion.type === "yesno") {
-        if (answer === "true" && currentQuestion.branchLogic.yesTarget) {
+        if (answer === true && currentQuestion.branchLogic.yesTarget) {
           targetQuestionId = currentQuestion.branchLogic.yesTarget;
-        } else if (answer === "false" && currentQuestion.branchLogic.noTarget) {
+        } else if (answer === false && currentQuestion.branchLogic.noTarget) {
           targetQuestionId = currentQuestion.branchLogic.noTarget;
         }
       }
@@ -338,7 +347,7 @@ export default function QuestionnaireResponse() {
     }
   };
 
-  const updateAnswer = (questionId: string, value: any) => {
+  const updateAnswer = (questionId: string, value: AnswerValue) => {
     setAnswers({ ...answers, [questionId]: value });
   };
 
@@ -376,7 +385,7 @@ export default function QuestionnaireResponse() {
                 {/* Text Input */}
                 {currentQuestion.type === "text" && (
                   <Input
-                    value={currentAnswer || ""}
+                    value={typeof currentAnswer === "string" ? currentAnswer : ""}
                     onChange={(e) => updateAnswer(currentQuestion.id, e.target.value)}
                     placeholder={currentQuestion.placeholder}
                     className="text-lg h-14"
@@ -386,7 +395,7 @@ export default function QuestionnaireResponse() {
                 {/* Long Text */}
                 {currentQuestion.type === "longtext" && (
                   <Textarea
-                    value={currentAnswer || ""}
+                    value={typeof currentAnswer === "string" ? currentAnswer : ""}
                     onChange={(e) => updateAnswer(currentQuestion.id, e.target.value)}
                     placeholder={currentQuestion.placeholder}
                     rows={6}
@@ -398,8 +407,11 @@ export default function QuestionnaireResponse() {
                 {currentQuestion.type === "number" && (
                   <Input
                     type="number"
-                    value={currentAnswer || ""}
-                    onChange={(e) => updateAnswer(currentQuestion.id, parseFloat(e.target.value))}
+                    value={typeof currentAnswer === "number" ? currentAnswer : ""}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      updateAnswer(currentQuestion.id, v === "" ? null : Number(v));
+                    }}
                     placeholder={currentQuestion.placeholder}
                     className="text-lg h-14"
                   />
@@ -409,27 +421,27 @@ export default function QuestionnaireResponse() {
                 {currentQuestion.type === "date" && (
                   <Input
                     type="date"
-                    value={currentAnswer || ""}
+                    value={typeof currentAnswer === "string" ? currentAnswer : ""}
                     onChange={(e) => updateAnswer(currentQuestion.id, e.target.value)}
                     className="text-lg h-14"
                   />
                 )}
 
-                {/* Yes/No */}
+                {/* Yes/No - stores boolean values */}
                 {currentQuestion.type === "yesno" && (
                   <div className="grid grid-cols-2 gap-4">
                     <Button
-                      variant={currentAnswer === "true" ? "default" : "outline"}
+                      variant={currentAnswer === true ? "default" : "outline"}
                       size="lg"
-                      onClick={() => updateAnswer(currentQuestion.id, "true")}
+                      onClick={() => updateAnswer(currentQuestion.id, true)}
                       className="h-16 text-lg"
                     >
                       Yes
                     </Button>
                     <Button
-                      variant={currentAnswer === "false" ? "default" : "outline"}
+                      variant={currentAnswer === false ? "default" : "outline"}
                       size="lg"
-                      onClick={() => updateAnswer(currentQuestion.id, "false")}
+                      onClick={() => updateAnswer(currentQuestion.id, false)}
                       className="h-16 text-lg"
                     >
                       No
@@ -440,7 +452,7 @@ export default function QuestionnaireResponse() {
                 {/* Select */}
                 {currentQuestion.type === "select" && (
                   <Select
-                    value={currentAnswer || ""}
+                    value={typeof currentAnswer === "string" ? currentAnswer : ""}
                     onValueChange={(value) => updateAnswer(currentQuestion.id, value)}
                   >
                     <SelectTrigger className="h-14 text-lg">
@@ -460,17 +472,17 @@ export default function QuestionnaireResponse() {
                 {currentQuestion.type === "multiselect" && (
                   <div className="space-y-3">
                     {currentQuestion.options?.map((option, i) => {
-                      const isChecked = Array.isArray(currentAnswer) && currentAnswer.includes(option);
+                      const arrayAnswer = Array.isArray(currentAnswer) ? currentAnswer : [];
+                      const isChecked = arrayAnswer.includes(option);
                       return (
                         <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50">
                           <Checkbox
                             checked={isChecked}
                             onCheckedChange={(checked) => {
-                              const current = Array.isArray(currentAnswer) ? currentAnswer : [];
                               if (checked) {
-                                updateAnswer(currentQuestion.id, [...current, option]);
+                                updateAnswer(currentQuestion.id, [...arrayAnswer, option]);
                               } else {
-                                updateAnswer(currentQuestion.id, current.filter((v: string) => v !== option));
+                                updateAnswer(currentQuestion.id, arrayAnswer.filter((v) => v !== option));
                               }
                             }}
                           />

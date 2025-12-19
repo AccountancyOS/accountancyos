@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -23,15 +24,35 @@ import {
 } from "@/components/ui/select";
 import { Plus, Copy, Check } from "lucide-react";
 
+// ============================================
+// Types
+// ============================================
+
+interface Template {
+  id: string;
+  name: string;
+  content: Json;
+  service?: string | null;
+}
+
 interface SendQuestionnaireDialogProps {
   clientId: string;
   jobId?: string;
   onClose?: () => void;
 }
 
+interface PublicLinkResponse {
+  instance_id: string;
+  token: string;
+  expires_at: string;
+}
+
+// ============================================
+// Component
+// ============================================
+
 export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuestionnaireDialogProps) {
   const { organization } = useOrganization();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -43,20 +64,20 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
     period_label: "",
   });
 
-  const { data: templates } = useQuery({
+  const { data: templates } = useQuery<Template[]>({
     queryKey: ["questionnaire-templates", organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
       const { data, error } = await supabase
         .from("templates")
-        .select("*")
+        .select("id, name, content, service")
         .eq("organization_id", organization.id)
         .eq("type", "questionnaire")
         .eq("status", "active")
         .order("name");
 
       if (error) throw error;
-      return data;
+      return (data as Template[]) ?? [];
     },
     enabled: !!organization?.id && open,
   });
@@ -70,10 +91,11 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
       const template = templates?.find(t => t.id === form.template_id);
       if (!template) throw new Error("Template not found");
 
-      // First, create the questionnaire instance
+      // Create the questionnaire instance
+      // Note: access_token is deprecated but required by schema - RPC creates secure link
       const { data: instanceData, error: instanceError } = await supabase
         .from("questionnaire_instances")
-        .insert({
+        .insert([{
           organization_id: organization.id,
           client_id: clientId,
           job_id: jobId || null,
@@ -82,16 +104,17 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
           period_label: form.period_label || null,
           questions: template.content,
           sent_at: new Date().toISOString(),
-          status: "draft", // Will be set to 'sent' by the RPC
-        })
+          status: "draft",
+          access_token: "deprecated-use-public-links", // Deprecated: secure tokens now in questionnaire_public_links
+        }])
         .select("id")
         .single();
 
       if (instanceError) throw instanceError;
 
-      // Now create a secure public link via RPC
+      // Create a secure public link via RPC
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
+      expiresAt.setDate(expiresAt.getDate() + 30);
 
       const { data: linkData, error: linkError } = await supabase.rpc(
         "create_questionnaire_public_link",
@@ -104,24 +127,17 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
       if (linkError) throw linkError;
 
       // Build the public URL
-      const baseUrl = window.location.origin;
-      const tokenData = linkData as unknown as { token: string };
-      const publicUrl = `${baseUrl}/questionnaire/${instanceData.id}?token=${tokenData.token}`;
+      const link = linkData as unknown as PublicLinkResponse;
+      const publicUrl = `${window.location.origin}/questionnaire/${instanceData.id}?token=${link.token}`;
       setGeneratedLink(publicUrl);
 
-      toast({
-        title: "Questionnaire created",
-        description: "Copy the link below to send to your client",
-      });
+      toast.success("Questionnaire created - copy the link below");
 
       queryClient.invalidateQueries({ queryKey: ["questionnaire-instances", clientId] });
       queryClient.invalidateQueries({ queryKey: ["job-questionnaires", jobId] });
-    } catch (error: any) {
-      toast({
-        title: "Error creating questionnaire",
-        description: error.message,
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create questionnaire";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -131,10 +147,7 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
     if (!generatedLink) return;
     await navigator.clipboard.writeText(generatedLink);
     setCopied(true);
-    toast({
-      title: "Link copied",
-      description: "The questionnaire link has been copied to your clipboard",
-    });
+    toast.success("Link copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -191,7 +204,7 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This link expires in 30 days. The client can save their progress and return anytime.
+                Links are single-use after submission and expire in 30 days.
               </p>
             </div>
             <div className="flex justify-end">
