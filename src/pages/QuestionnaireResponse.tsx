@@ -9,9 +9,48 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+
+interface QuestionnaireData {
+  id: string;
+  name: string | null;
+  questions: {
+    questions: Array<{
+      id: string;
+      type: string;
+      label: string;
+      required?: boolean;
+      helpText?: string;
+      placeholder?: string;
+      options?: string[];
+      branchLogic?: {
+        yesTarget?: string;
+        noTarget?: string;
+        optionTargets?: Record<string, string>;
+      };
+    }>;
+    settings?: {
+      showProgressBar?: boolean;
+      allowSaveAndResume?: boolean;
+      thankYouText?: string;
+    };
+  };
+  status: string;
+  period_label: string | null;
+  submitted_at: string | null;
+}
+
+interface ResponseData {
+  id: string;
+  question_id: string;
+  answer_text: string | null;
+  answer_number: number | null;
+  answer_boolean: boolean | null;
+  answer_date: string | null;
+  answer_array: string[] | null;
+}
 
 export default function QuestionnaireResponse() {
   const { instanceId } = useParams();
@@ -23,52 +62,75 @@ export default function QuestionnaireResponse() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
-  const { data: instance, isLoading } = useQuery({
+  // Fetch questionnaire via secure RPC
+  const { data: instance, isLoading, error: fetchError } = useQuery({
     queryKey: ["questionnaire-instance", instanceId, token],
-    queryFn: async () => {
+    queryFn: async (): Promise<QuestionnaireData> => {
       if (!instanceId || !token) throw new Error("Missing instance or token");
       
-      const { data, error } = await supabase
-        .from("questionnaire_instances")
-        .select("*")
-        .eq("id", instanceId)
-        .eq("access_token", token)
-        .single();
+      const { data, error } = await supabase.rpc("get_questionnaire_by_token", {
+        p_instance_id: instanceId,
+        p_token: token,
+      });
 
-      if (error) throw error;
-      
-      // Check token expiry
-      if (new Date(data.token_expires_at) < new Date()) {
-        throw new Error("This link has expired");
+      if (error) {
+        // Handle specific error messages
+        if (error.message.includes("expired")) {
+          throw new Error("This link has expired. Please contact your accountant for a new link.");
+        }
+        if (error.message.includes("revoked")) {
+          throw new Error("This link is no longer valid. Please contact your accountant for a new link.");
+        }
+        if (error.message.includes("Invalid")) {
+          throw new Error("Invalid link. Please check the URL or contact your accountant.");
+        }
+        if (error.message.includes("Rate limit")) {
+          throw new Error("Too many attempts. Please try again in a few minutes.");
+        }
+        throw error;
       }
-
-      return data;
+      
+      return data as QuestionnaireData;
     },
     enabled: !!instanceId && !!token,
+    retry: false,
   });
 
+  // Fetch existing responses via secure RPC
   const { data: existingResponses } = useQuery({
-    queryKey: ["questionnaire-responses", instanceId],
-    queryFn: async () => {
-      if (!instanceId) return [];
-      const { data, error } = await supabase
-        .from("questionnaire_responses")
-        .select("*")
-        .eq("questionnaire_instance_id", instanceId);
+    queryKey: ["questionnaire-responses", instanceId, token],
+    queryFn: async (): Promise<ResponseData[]> => {
+      if (!instanceId || !token) return [];
+      
+      const { data, error } = await supabase.rpc("get_questionnaire_responses_by_token", {
+        p_instance_id: instanceId,
+        p_token: token,
+      });
 
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.error("Error fetching responses:", error);
+        return [];
+      }
+      
+      return (data as unknown as ResponseData[]) || [];
     },
-    enabled: !!instanceId && !!instance,
+    enabled: !!instanceId && !!token && !!instance,
   });
 
   useEffect(() => {
-    if (existingResponses) {
+    if (fetchError) {
+      setLinkError((fetchError as Error).message);
+    }
+  }, [fetchError]);
+
+  useEffect(() => {
+    if (existingResponses && existingResponses.length > 0) {
       const loadedAnswers: Record<string, any> = {};
       existingResponses.forEach((response) => {
         if (response.answer_text) loadedAnswers[response.question_id] = response.answer_text;
-        if (response.answer_number) loadedAnswers[response.question_id] = response.answer_number;
+        if (response.answer_number !== null) loadedAnswers[response.question_id] = response.answer_number;
         if (response.answer_boolean !== null) loadedAnswers[response.question_id] = response.answer_boolean;
         if (response.answer_date) loadedAnswers[response.question_id] = response.answer_date;
         if (response.answer_array) loadedAnswers[response.question_id] = response.answer_array;
@@ -77,66 +139,57 @@ export default function QuestionnaireResponse() {
     }
   }, [existingResponses]);
 
+  // Save answer via secure RPC
   const saveAnswerMutation = useMutation({
     mutationFn: async ({ questionId, answer }: { questionId: string; answer: any }) => {
-      if (!instanceId) throw new Error("Missing instance");
+      if (!instanceId || !token) throw new Error("Missing instance or token");
 
-      const answerData: any = {
-        questionnaire_instance_id: instanceId,
-        question_id: questionId,
+      const params: {
+        p_instance_id: string;
+        p_token: string;
+        p_question_id: string;
+        p_answer_text?: string;
+        p_answer_number?: number;
+        p_answer_boolean?: boolean;
+        p_answer_date?: string;
+        p_answer_array?: string[];
+      } = {
+        p_instance_id: instanceId,
+        p_token: token,
+        p_question_id: questionId,
       };
 
-      if (typeof answer === "string") answerData.answer_text = answer;
-      else if (typeof answer === "number") answerData.answer_number = answer;
-      else if (typeof answer === "boolean") answerData.answer_boolean = answer;
-      else if (answer instanceof Date) answerData.answer_date = answer.toISOString().split("T")[0];
-      else if (Array.isArray(answer)) answerData.answer_array = answer;
+      if (typeof answer === "string") params.p_answer_text = answer;
+      else if (typeof answer === "number") params.p_answer_number = answer;
+      else if (typeof answer === "boolean") params.p_answer_boolean = answer;
+      else if (answer instanceof Date) params.p_answer_date = answer.toISOString().split("T")[0];
+      else if (Array.isArray(answer)) params.p_answer_array = answer;
 
-      const { error } = await supabase
-        .from("questionnaire_responses")
-        .upsert(answerData, {
-          onConflict: "questionnaire_instance_id,question_id",
-        });
+      const { error } = await supabase.rpc("save_questionnaire_answer_by_token", params);
 
       if (error) throw error;
-
-      // Update instance status to in_progress if not already
-      if (instance?.status === "sent") {
-        await supabase
-          .from("questionnaire_instances")
-          .update({ status: "in_progress", started_at: new Date().toISOString() })
-          .eq("id", instanceId);
-      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["questionnaire-responses", instanceId] });
+      queryClient.invalidateQueries({ queryKey: ["questionnaire-responses", instanceId, token] });
+    },
+    onError: (error: Error) => {
+      if (error.message.includes("expired") || error.message.includes("revoked") || error.message.includes("Invalid")) {
+        setLinkError(error.message);
+      }
     },
   });
 
+  // Submit questionnaire via secure RPC
   const submitQuestionnaireMutation = useMutation({
     mutationFn: async () => {
-      if (!instanceId) throw new Error("Missing instance");
+      if (!instanceId || !token) throw new Error("Missing instance or token");
 
-      const { error } = await supabase
-        .from("questionnaire_instances")
-        .update({
-          status: "submitted",
-          submitted_at: new Date().toISOString(),
-        })
-        .eq("id", instanceId);
+      const { error } = await supabase.rpc("submit_questionnaire_by_token", {
+        p_instance_id: instanceId,
+        p_token: token,
+      });
 
       if (error) throw error;
-
-      // Auto-complete linked task if exists
-      if (instance?.task_id) {
-        await supabase
-          .from("client_tasks")
-          .update({
-            status: "complete",
-            completed_at: new Date().toISOString(),
-          })
-          .eq("id", instance.task_id);
-      }
     },
     onSuccess: () => {
       setIsSubmitted(true);
@@ -145,12 +198,16 @@ export default function QuestionnaireResponse() {
         description: "Your responses have been submitted",
       });
     },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      if (error.message.includes("expired") || error.message.includes("revoked") || error.message.includes("Invalid")) {
+        setLinkError(error.message);
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -162,12 +219,26 @@ export default function QuestionnaireResponse() {
     );
   }
 
-  if (!instance) {
+  // Error state - link expired/revoked/invalid
+  if (linkError || !instance) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="pt-6">
-            <p className="text-center">Questionnaire not found or link has expired</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-8 pb-8 text-center space-y-4">
+            <div className="flex justify-center">
+              <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold">Link Unavailable</h2>
+              <p className="text-muted-foreground">
+                {linkError || "Questionnaire not found or link has expired"}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Please contact your accountant if you need a new link.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -175,7 +246,7 @@ export default function QuestionnaireResponse() {
   }
 
   if (isSubmitted || instance.status === "submitted") {
-    const questionsData = instance.questions as any;
+    const questionsData = instance.questions;
     const settings = questionsData?.settings || {};
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
@@ -198,7 +269,7 @@ export default function QuestionnaireResponse() {
     );
   }
 
-  const questionsData = instance.questions as any;
+  const questionsData = instance.questions;
   const questions = questionsData?.questions || [];
   const settings = questionsData?.settings || {};
   const currentQuestion = questions[currentQuestionIndex];
@@ -245,7 +316,7 @@ export default function QuestionnaireResponse() {
 
       // If we have a target, jump to it
       if (targetQuestionId) {
-        const targetIndex = questions.findIndex((q: any) => q.id === targetQuestionId);
+        const targetIndex = questions.findIndex((q) => q.id === targetQuestionId);
         if (targetIndex !== -1) {
           setCurrentQuestionIndex(targetIndex);
           return;
