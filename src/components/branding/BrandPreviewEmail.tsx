@@ -1,4 +1,5 @@
 import { Mail } from "lucide-react";
+import { sanitizeFooterHtml } from "@/lib/sanitizeHtml";
 
 interface BrandPreviewEmailProps {
   logoUrl?: string;
@@ -59,7 +60,7 @@ export const BrandPreviewEmail = ({
           {footerHtml ? (
             <div 
               className="text-xs text-gray-500"
-              dangerouslySetInnerHTML={{ __html: footerHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizeFooterHtml(footerHtml) }}
             />
           ) : (
             <p className="text-xs text-gray-500">

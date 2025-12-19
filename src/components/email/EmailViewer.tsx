@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { EmailJobTagger } from "./EmailJobTagger";
+import { SafeEmailHtml } from "./SafeEmailHtml";
 import { Mail, ArrowRight, ArrowLeft, Paperclip, User, Building2 } from "lucide-react";
 
 interface EmailViewerProps {
@@ -128,9 +129,9 @@ export function EmailViewer({ email, clientName, companyName, onUpdated }: Email
       {/* Body */}
       <CardContent className="pt-4">
         {email.body_html ? (
-          <div
+          <SafeEmailHtml
+            html={email.body_html}
             className="prose prose-sm max-w-none dark:prose-invert"
-            dangerouslySetInnerHTML={{ __html: email.body_html }}
           />
         ) : (
           <pre className="whitespace-pre-wrap text-sm font-sans">
