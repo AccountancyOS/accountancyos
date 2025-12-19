@@ -1,4 +1,4 @@
-import { createContext, ReactNode } from "react";
+import { createContext, useContext, ReactNode } from "react";
 import { useApp, AppProvider } from "./app-context";
 
 // Mirror the shape of the organization object for backward compatibility
