@@ -9240,6 +9240,36 @@ export type Database = {
           },
         ]
       }
+      questionnaire_access_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          ip: string | null
+          questionnaire_instance_id: string
+          token_hash: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          ip?: string | null
+          questionnaire_instance_id: string
+          token_hash?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          ip?: string | null
+          questionnaire_instance_id?: string
+          token_hash?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       questionnaire_files: {
         Row: {
           document_folder: string | null
@@ -9417,6 +9447,41 @@ export type Database = {
           },
         ]
       }
+      questionnaire_public_links: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          id: string
+          questionnaire_instance_id: string
+          revoked_at: string | null
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          questionnaire_instance_id: string
+          revoked_at?: string | null
+          token_hash: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          questionnaire_instance_id?: string
+          revoked_at?: string | null
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questionnaire_public_links_questionnaire_instance_id_fkey"
+            columns: ["questionnaire_instance_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       questionnaire_responses: {
         Row: {
           answer_array: Json | null
@@ -9463,6 +9528,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      questionnaire_token_attempts: {
+        Row: {
+          count: number
+          created_at: string | null
+          id: string
+          token_hash: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          created_at?: string | null
+          id?: string
+          token_hash: string
+          window_start: string
+        }
+        Update: {
+          count?: number
+          created_at?: string | null
+          id?: string
+          token_hash?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       quote_lines: {
         Row: {
@@ -11736,6 +11825,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _check_questionnaire_token_rate_limit: {
+        Args: { p_token_hash: string }
+        Returns: undefined
+      }
+      _hash_token: { Args: { p_token: string }; Returns: string }
+      _require_valid_questionnaire_link: {
+        Args: { p_instance_id: string; p_token: string }
+        Returns: {
+          created_at: string | null
+          expires_at: string
+          id: string
+          questionnaire_instance_id: string
+          revoked_at: string | null
+          token_hash: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "questionnaire_public_links"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       acknowledge_failed_email_safe: {
         Args: { p_email_id: string }
         Returns: Json
@@ -11988,6 +12099,10 @@ export type Database = {
         Args: { org_name: string }
         Returns: string
       }
+      create_questionnaire_public_link: {
+        Args: { p_expires_at: string; p_instance_id: string }
+        Returns: Json
+      }
       create_test_ct600_filing: {
         Args: {
           p_organization_id: string
@@ -12198,6 +12313,14 @@ export type Database = {
           show_vat_position: boolean
         }[]
       }
+      get_questionnaire_by_token: {
+        Args: { p_instance_id: string; p_token: string }
+        Returns: Json
+      }
+      get_questionnaire_responses_by_token: {
+        Args: { p_instance_id: string; p_token: string }
+        Returns: Json
+      }
       get_user_organization_id:
         | { Args: never; Returns: string }
         | { Args: { check_user_id: string }; Returns: string }
@@ -12367,6 +12490,19 @@ export type Database = {
         }
         Returns: undefined
       }
+      save_questionnaire_answer_by_token: {
+        Args: {
+          p_answer_array?: string[]
+          p_answer_boolean?: boolean
+          p_answer_date?: string
+          p_answer_number?: number
+          p_answer_text?: string
+          p_instance_id: string
+          p_question_id: string
+          p_token: string
+        }
+        Returns: Json
+      }
       seed_default_chart_of_accounts: {
         Args: {
           p_client_id?: string
@@ -12384,6 +12520,10 @@ export type Database = {
         Returns: Json
       }
       submit_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
+      submit_questionnaire_by_token: {
+        Args: { p_instance_id: string; p_token: string }
+        Returns: Json
+      }
       toggle_automation_rule_safe: {
         Args: { p_is_active: boolean; p_rule_id: string }
         Returns: Json

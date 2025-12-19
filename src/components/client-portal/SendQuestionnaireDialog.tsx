@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, Copy, Check } from "lucide-react";
 
 interface SendQuestionnaireDialogProps {
   clientId: string;
@@ -35,6 +35,8 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({
     template_id: "",
     name: "",
@@ -68,12 +70,8 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
       const template = templates?.find(t => t.id === form.template_id);
       if (!template) throw new Error("Template not found");
 
-      // Generate secure access token
-      const accessToken = crypto.randomUUID();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
-
-      const { error } = await supabase
+      // First, create the questionnaire instance
+      const { data: instanceData, error: instanceError } = await supabase
         .from("questionnaire_instances")
         .insert({
           organization_id: organization.id,
@@ -83,27 +81,44 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
           name: form.name || template.name,
           period_label: form.period_label || null,
           questions: template.content,
-          access_token: accessToken,
-          token_expires_at: expiresAt.toISOString(),
           sent_at: new Date().toISOString(),
-          status: "sent",
-        });
+          status: "draft", // Will be set to 'sent' by the RPC
+        })
+        .select("id")
+        .single();
 
-      if (error) throw error;
+      if (instanceError) throw instanceError;
+
+      // Now create a secure public link via RPC
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
+
+      const { data: linkData, error: linkError } = await supabase.rpc(
+        "create_questionnaire_public_link",
+        {
+          p_instance_id: instanceData.id,
+          p_expires_at: expiresAt.toISOString(),
+        }
+      );
+
+      if (linkError) throw linkError;
+
+      // Build the public URL
+      const baseUrl = window.location.origin;
+      const tokenData = linkData as unknown as { token: string };
+      const publicUrl = `${baseUrl}/questionnaire/${instanceData.id}?token=${tokenData.token}`;
+      setGeneratedLink(publicUrl);
 
       toast({
-        title: "Questionnaire sent",
-        description: "The questionnaire has been sent to the client",
+        title: "Questionnaire created",
+        description: "Copy the link below to send to your client",
       });
 
       queryClient.invalidateQueries({ queryKey: ["questionnaire-instances", clientId] });
       queryClient.invalidateQueries({ queryKey: ["job-questionnaires", jobId] });
-      setOpen(false);
-      setForm({ template_id: "", name: "", period_label: "" });
-      if (onClose) onClose();
     } catch (error: any) {
       toast({
-        title: "Error sending questionnaire",
+        title: "Error creating questionnaire",
         description: error.message,
         variant: "destructive",
       });
@@ -112,8 +127,30 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
     }
   };
 
+  const handleCopyLink = async () => {
+    if (!generatedLink) return;
+    await navigator.clipboard.writeText(generatedLink);
+    setCopied(true);
+    toast({
+      title: "Link copied",
+      description: "The questionnaire link has been copied to your clipboard",
+    });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    setGeneratedLink(null);
+    setCopied(false);
+    setForm({ template_id: "", name: "", period_label: "" });
+    if (onClose) onClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) handleClose();
+      else setOpen(true);
+    }}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -124,60 +161,96 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
         <DialogHeader>
           <DialogTitle>Send Questionnaire</DialogTitle>
           <DialogDescription>
-            Send a records request questionnaire to the client
+            {generatedLink 
+              ? "Copy the secure link below to send to your client"
+              : "Send a records request questionnaire to the client"
+            }
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="template">Questionnaire Template *</Label>
-            <Select
-              value={form.template_id}
-              onValueChange={(value) => setForm({ ...form, template_id: value })}
-              required
-            >
-              <SelectTrigger id="template">
-                <SelectValue placeholder="Select a template..." />
-              </SelectTrigger>
-              <SelectContent>
-                {templates?.map((template) => (
-                  <SelectItem key={template.id} value={template.id}>
-                    {template.name}
-                    {template.service && ` (${template.service})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="name">Custom Name (optional)</Label>
-            <Input
-              id="name"
-              placeholder="e.g. 2024 Accounts Records"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+        {generatedLink ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Questionnaire Link</Label>
+              <div className="flex gap-2">
+                <Input 
+                  readOnly 
+                  value={generatedLink} 
+                  className="text-sm"
+                />
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={handleCopyLink}
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This link expires in 30 days. The client can save their progress and return anytime.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleClose}>Done</Button>
+            </div>
           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="template">Questionnaire Template *</Label>
+              <Select
+                value={form.template_id}
+                onValueChange={(value) => setForm({ ...form, template_id: value })}
+                required
+              >
+                <SelectTrigger id="template">
+                  <SelectValue placeholder="Select a template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates?.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                      {template.service && ` (${template.service})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="period">Period Label (optional)</Label>
-            <Input
-              id="period"
-              placeholder="e.g. 2024/25 Tax Year"
-              value={form.period_label}
-              onChange={(e) => setForm({ ...form, period_label: e.target.value })}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="name">Custom Name (optional)</Label>
+              <Input
+                id="name"
+                placeholder="e.g. 2024 Accounts Records"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading || !form.template_id}>
-              {loading ? "Sending..." : "Send Questionnaire"}
-            </Button>
-          </div>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="period">Period Label (optional)</Label>
+              <Input
+                id="period"
+                placeholder="e.g. 2024/25 Tax Year"
+                value={form.period_label}
+                onChange={(e) => setForm({ ...form, period_label: e.target.value })}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading || !form.template_id}>
+                {loading ? "Creating..." : "Create Questionnaire"}
+              </Button>
+            </div>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
