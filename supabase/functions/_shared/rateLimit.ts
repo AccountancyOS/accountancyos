@@ -3,7 +3,7 @@
  * Prevents abuse of external API calls
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
+import { SupabaseClient } from '@supabase/supabase-js-257';
 import { logInfo, logWarn } from './logging.ts';
 import { fail, ErrorCodes } from './responses.ts';
 
