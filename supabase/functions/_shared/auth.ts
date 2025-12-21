@@ -3,7 +3,7 @@
  * Provides user validation and org context enforcement
  */
 
-import { User } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
+import { User } from '@supabase/supabase-js-257';
 import { getAnonClient, getAdminClient } from './supabase.ts';
 import { logError, logInfo } from './logging.ts';
 import { fail, ErrorCodes, ErrorDetails } from './responses.ts';

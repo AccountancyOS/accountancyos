@@ -3,7 +3,7 @@
  * Provides admin and anon client factories
  */
 
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
+import { createClient, SupabaseClient } from '@supabase/supabase-js-257';
 
 let adminClient: SupabaseClient | null = null;
 let anonClient: SupabaseClient | null = null;

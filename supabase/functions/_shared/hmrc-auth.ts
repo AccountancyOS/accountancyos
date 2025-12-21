@@ -3,7 +3,7 @@
  * Handles OAuth token refresh and validation
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
+import { SupabaseClient } from '@supabase/supabase-js-257';
 import { logInfo, logError, logWarn } from './logging.ts';
 
 const HMRC_AUTH_URL = Deno.env.get('HMRC_AUTH_URL') || 'https://test-api.service.hmrc.gov.uk';

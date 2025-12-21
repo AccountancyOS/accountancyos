@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "@std/http-190";
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { newTraceId, logInfo, logError } from "../_shared/logging.ts";
 import { ok, fail, ErrorCodes } from "../_shared/responses.ts";
