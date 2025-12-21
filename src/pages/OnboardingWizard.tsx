@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useOrganization } from "@/lib/organization-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,11 @@ const STEPS = [
   { id: 6, name: "Data Import", description: "Import existing data (optional)" },
 ];
 
-const LOAD_TIMEOUT_MS = 15000; // 15 seconds
+const POLLING_MAX_ATTEMPTS = 10;
+const POLLING_INTERVAL_MS = 1000;
+const STRIPE_RETURN_GUARD_TTL = 2 * 60 * 1000; // 2 minutes
+
+type VerificationStatus = 'idle' | 'polling' | 'success' | 'timeout' | 'error';
 
 const OnboardingWizard = () => {
   const navigate = useNavigate();
@@ -34,70 +38,140 @@ const OnboardingWizard = () => {
   
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-  const [verifyingPayment, setVerifyingPayment] = useState(true);
-  const [loadTimeout, setLoadTimeout] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>('idle');
+  const [pollAttempts, setPollAttempts] = useState(0);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
-  // Timeout detection
-  useEffect(() => {
-    if (!verifyingPayment && !orgLoading) return;
+  // Check if billing status is valid (active or trialing treated as active by webhook)
+  const isBillingActive = useCallback(() => {
+    return organization?.billing_status === 'active';
+  }, [organization?.billing_status]);
 
-    const timer = setTimeout(() => {
-      if (verifyingPayment || orgLoading) {
-        setLoadTimeout(true);
+  // Option A+ polling: poll for billing status to become active
+  const pollForBillingStatus = useCallback(async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < POLLING_MAX_ATTEMPTS; attempt++) {
+      setPollAttempts(attempt + 1);
+      
+      await refreshOrganization();
+      
+      // Check if billing is now active
+      // Note: We need to check the fresh data, so we'll return and let the effect re-run
+      // Actually, we need to get fresh org data after refresh
+      const { data: freshOrg } = await supabase
+        .from('organizations')
+        .select('billing_status')
+        .eq('id', organization?.id || '')
+        .maybeSingle();
+      
+      if (freshOrg?.billing_status === 'active') {
+        return true;
       }
-    }, LOAD_TIMEOUT_MS);
+      
+      // Wait before next attempt
+      if (attempt < POLLING_MAX_ATTEMPTS - 1) {
+        await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL_MS));
+      }
+    }
+    return false;
+  }, [refreshOrganization, organization?.id]);
 
-    return () => clearTimeout(timer);
-  }, [verifyingPayment, orgLoading]);
-
+  // Main verification effect - runs on mount
   useEffect(() => {
     const verifySession = async () => {
-      try {
-        const sessionId = searchParams.get("session_id");
+      const sessionId = searchParams.get("session_id");
+      
+      // Set localStorage guard if returning from Stripe
+      if (sessionId) {
+        localStorage.setItem("stripe_return_ts", Date.now().toString());
+        localStorage.setItem("stripe_return_session_id", sessionId);
+        console.log("[OnboardingWizard] Set Stripe return guard", { sessionId });
+      }
+      
+      // Refresh org to get latest status
+      await refreshOrganization();
+      
+      // Check if already active
+      if (isBillingActive()) {
+        setVerificationStatus('success');
+        return;
+      }
+      
+      // Case A: Returning from Stripe with session_id - poll for webhook to complete
+      if (sessionId) {
+        console.log("[OnboardingWizard] Returning from Stripe, starting Option A+ polling");
+        setVerificationStatus('polling');
         
-        // No session_id means user arrived without completing Stripe checkout
-        // They should go to /complete-payment instead
-        if (!sessionId) {
-          console.log("No session_id - redirecting to complete payment");
-          setLoadError("Payment verification required. Please complete payment to continue.");
-          setVerifyingPayment(false);
+        const success = await pollForBillingStatus();
+        
+        if (success) {
+          setVerificationStatus('success');
+          // Clear localStorage guard on success
+          localStorage.removeItem("stripe_return_ts");
+          localStorage.removeItem("stripe_return_session_id");
+        } else {
+          // Polling exhausted - redirect to complete-payment with friendly message
+          setVerificationStatus('timeout');
+          console.log("[OnboardingWizard] Polling timed out, redirecting to complete-payment");
+          navigate('/complete-payment?reason=verification_pending');
+        }
+        return;
+      }
+      
+      // Case B: No session_id - check if we have a recent Stripe return guard
+      const stripeReturnTs = localStorage.getItem("stripe_return_ts");
+      if (stripeReturnTs) {
+        const returnAge = Date.now() - parseInt(stripeReturnTs, 10);
+        if (returnAge < STRIPE_RETURN_GUARD_TTL) {
+          // Recent Stripe return - poll for status
+          console.log("[OnboardingWizard] Recent Stripe return detected, polling");
+          setVerificationStatus('polling');
+          
+          const success = await pollForBillingStatus();
+          
+          if (success) {
+            setVerificationStatus('success');
+            localStorage.removeItem("stripe_return_ts");
+            localStorage.removeItem("stripe_return_session_id");
+          } else {
+            setVerificationStatus('timeout');
+            navigate('/complete-payment?reason=verification_pending');
+          }
           return;
         }
-
-        // Refresh organization to get latest billing status
-        await refreshOrganization();
-        setVerifyingPayment(false);
-      } catch (error: any) {
-        console.error("Payment verification error:", error);
-        setLoadError(error.message || "Failed to verify payment");
-        setVerifyingPayment(false);
       }
+      
+      // Case C: No session_id and no recent return - if not active, redirect silently
+      if (!isBillingActive()) {
+        console.log("[OnboardingWizard] No session and billing not active, redirecting to complete-payment");
+        navigate('/complete-payment');
+        return;
+      }
+      
+      setVerificationStatus('success');
     };
 
     verifySession();
-  }, [searchParams, refreshOrganization]);
+  }, [searchParams, refreshOrganization, isBillingActive, pollForBillingStatus, navigate]);
 
+  // Redirect if onboarding already completed
   useEffect(() => {
-    if (!orgLoading && organization?.onboarding_completed) {
+    if (!orgLoading && organization?.onboarding_completed && verificationStatus === 'success') {
       navigate("/");
     }
-  }, [organization, orgLoading, navigate]);
+  }, [organization, orgLoading, navigate, verificationStatus]);
 
   const handleRetry = async () => {
-    setRetrying(true);
-    setLoadTimeout(false);
-    setLoadError(null);
+    setVerificationStatus('polling');
+    setPollAttempts(0);
     
-    try {
-      await refreshOrganization();
-      setVerifyingPayment(false);
-    } catch (error: any) {
-      setLoadError(error.message || "Failed to load organization");
-    } finally {
-      setRetrying(false);
+    const success = await pollForBillingStatus();
+    
+    if (success) {
+      setVerificationStatus('success');
+      localStorage.removeItem("stripe_return_ts");
+      localStorage.removeItem("stripe_return_session_id");
+    } else {
+      setVerificationStatus('timeout');
     }
   };
 
@@ -145,25 +219,37 @@ const OnboardingWizard = () => {
     }
   };
 
-  // Show error/timeout state
-  if (loadTimeout || loadError) {
-    const billingStatus = organization?.billing_status;
-    const needsPayment = !billingStatus || billingStatus !== 'active';
+  // Polling/Verifying state - show friendly waiting UI
+  if (verificationStatus === 'polling' || verificationStatus === 'idle') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <p className="text-lg font-medium">Confirming your subscription...</p>
+          {pollAttempts > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Checking... ({pollAttempts}/{POLLING_MAX_ATTEMPTS})
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
+  // Timeout state - show friendly message with retry option
+  if (verificationStatus === 'timeout') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <div className="bg-destructive/10 p-4 rounded-full">
-                <AlertCircle className="h-12 w-12 text-destructive" />
+              <div className="bg-amber-100 p-4 rounded-full">
+                <AlertCircle className="h-12 w-12 text-amber-500" />
               </div>
             </div>
-            <CardTitle className="text-xl">
-              {loadError ? "Something went wrong" : "Loading taking too long"}
-            </CardTitle>
+            <CardTitle className="text-xl">Payment still processing</CardTitle>
             <CardDescription>
-              {loadError || "We're having trouble loading your account. This might be a temporary issue."}
+              Your payment is being processed. This usually takes a few seconds, but occasionally takes longer.
             </CardDescription>
           </CardHeader>
 
@@ -171,31 +257,19 @@ const OnboardingWizard = () => {
             <Button
               onClick={handleRetry}
               className="w-full"
-              disabled={retrying}
             >
-              {retrying ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Retrying...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Try Again
-                </>
-              )}
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Check again
             </Button>
 
-            {needsPayment && (
-              <Button
-                onClick={() => navigate('/complete-payment')}
-                variant="outline"
-                className="w-full"
-              >
-                <CreditCard className="mr-2 h-4 w-4" />
-                Go to Complete Payment
-              </Button>
-            )}
+            <Button
+              onClick={() => navigate('/complete-payment')}
+              variant="outline"
+              className="w-full"
+            >
+              <CreditCard className="mr-2 h-4 w-4" />
+              Return to payment
+            </Button>
 
             <Button
               onClick={() => navigate('/auth')}
@@ -227,11 +301,9 @@ const OnboardingWizard = () => {
                 <div className="mt-2 p-3 bg-muted rounded-lg text-xs font-mono space-y-1">
                   <p>Organization ID: {organization?.id || 'Not loaded'}</p>
                   <p>Organization: {organization?.name || 'Not loaded'}</p>
-                  <p>Billing Status: {billingStatus || 'Not set'}</p>
-                  <p>Onboarding: {organization?.onboarding_completed ? 'Complete' : 'Incomplete'}</p>
-                  <p>Org Loading: {orgLoading ? 'Yes' : 'No'}</p>
-                  <p>Payment Verifying: {verifyingPayment ? 'Yes' : 'No'}</p>
-                  {loadError && <p className="text-destructive">Error: {loadError}</p>}
+                  <p>Billing Status: {organization?.billing_status || 'Not set'}</p>
+                  <p>Poll Attempts: {pollAttempts}</p>
+                  <p>Session ID: {searchParams.get("session_id") || 'None'}</p>
                 </div>
               </CollapsibleContent>
             </Collapsible>
@@ -241,15 +313,13 @@ const OnboardingWizard = () => {
     );
   }
 
-  // Loading state
-  if (verifyingPayment || orgLoading) {
+  // Loading state (org still loading after verification success)
+  if (orgLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">
-            {verifyingPayment ? "Verifying your payment..." : "Loading your account..."}
-          </p>
+          <p className="text-muted-foreground">Loading your account...</p>
         </div>
       </div>
     );

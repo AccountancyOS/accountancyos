@@ -122,7 +122,15 @@ serve(async (req) => {
 
   try {
     const body = await req.text();
-    const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    
+    // CRITICAL: Use constructEventAsync for Supabase Edge Functions (SubtleCrypto requirement)
+    let event;
+    try {
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+    } catch (verifyError) {
+      console.error("[STRIPE-WEBHOOK] Signature verification failed:", verifyError);
+      return new Response("Invalid signature", { status: 400 });
+    }
 
     logStep('Received webhook event', { type: event.type, id: event.id });
 
