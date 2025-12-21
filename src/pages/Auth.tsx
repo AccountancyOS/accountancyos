@@ -15,6 +15,7 @@ const Auth = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  const [isRedirectingToStripe, setIsRedirectingToStripe] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -136,7 +137,12 @@ const Auth = () => {
       }
 
       if (checkoutData?.url) {
+        // CRITICAL: Set redirect state BEFORE navigation to prevent any routing
+        setIsRedirectingToStripe(true);
+        // Use window.location.href for full page navigation (no React routing)
         window.location.href = checkoutData.url;
+        // Return immediately - don't let any more code execute
+        return;
       } else {
         throw new Error("No checkout URL returned");
       }
@@ -147,9 +153,9 @@ const Auth = () => {
         description: error.message,
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
+    // Note: Don't setLoading(false) after successful checkout redirect - we want to stay in loading state
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -179,6 +185,25 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  // Show redirect overlay when going to Stripe
+  if (isRedirectingToStripe) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+              <p className="text-lg font-medium">Redirecting to secure checkout...</p>
+              <p className="text-sm text-muted-foreground">
+                You'll be taken to Stripe to complete your payment setup.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">

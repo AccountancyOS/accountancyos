@@ -70,6 +70,13 @@ const AppContext = createContext<AppContextType>(defaultContext);
 
 export const useApp = () => useContext(AppContext);
 
+// ==================== SINGLE-FLIGHT SUBSCRIPTION CHECK ====================
+
+// Module-level deduplication for subscription checks
+let inFlightSubscriptionCheck: Promise<{ subscribed: boolean; subscriptionEnd: string | null }> | null = null;
+let subscriptionResultCache: { value: { subscribed: boolean; subscriptionEnd: string | null }; ts: number } | null = null;
+const SUBSCRIPTION_CACHE_TTL = 15000; // 15 seconds
+
 // ==================== PROVIDER ====================
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
@@ -150,7 +157,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // ==================== SUBSCRIPTION CHECK ====================
+  // ==================== SUBSCRIPTION CHECK (SINGLE-FLIGHT) ====================
   
   const readSubscriptionFromCache = useCallback(async (orgId: string): Promise<boolean> => {
     try {
@@ -186,26 +193,50 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const checkSubscriptionFromStripe = useCallback(async (sessionToCheck: Session) => {
-    setCheckingSubscription(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('check-subscription', {
-        headers: {
-          Authorization: `Bearer ${sessionToCheck.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      setSubscribed(data.subscribed || false);
-      setSubscriptionEnd(data.subscription_end || null);
-    } catch (error) {
-      console.error('[App] Error checking subscription:', error);
-      setSubscribed(false);
-      setSubscriptionEnd(null);
-    } finally {
-      setCheckingSubscription(false);
+  // Single-flight Stripe subscription check
+  const checkSubscriptionFromStripe = useCallback(async (sessionToCheck: Session): Promise<{ subscribed: boolean; subscriptionEnd: string | null }> => {
+    // Check in-memory cache first
+    if (subscriptionResultCache && Date.now() - subscriptionResultCache.ts < SUBSCRIPTION_CACHE_TTL) {
+      console.log("[App] Using cached subscription result");
+      return subscriptionResultCache.value;
     }
+    
+    // If there's already an in-flight request, await it
+    if (inFlightSubscriptionCheck) {
+      console.log("[App] Awaiting in-flight subscription check");
+      return inFlightSubscriptionCheck;
+    }
+    
+    // Create new in-flight request
+    console.log("[App] Starting new subscription check");
+    inFlightSubscriptionCheck = (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('check-subscription', {
+          headers: {
+            Authorization: `Bearer ${sessionToCheck.access_token}`,
+          },
+        });
+
+        if (error) throw error;
+
+        const result = {
+          subscribed: data.subscribed || false,
+          subscriptionEnd: data.subscription_end || null,
+        };
+        
+        // Cache the result
+        subscriptionResultCache = { value: result, ts: Date.now() };
+        
+        return result;
+      } catch (error) {
+        console.error('[App] Error checking subscription:', error);
+        return { subscribed: false, subscriptionEnd: null };
+      } finally {
+        inFlightSubscriptionCheck = null;
+      }
+    })();
+    
+    return inFlightSubscriptionCheck;
   }, []);
 
   const checkSubscription = useCallback(async () => {
@@ -215,12 +246,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Try cache first
-    const usedCache = await readSubscriptionFromCache(organization.id);
-    if (usedCache) return;
+    setCheckingSubscription(true);
+    
+    try {
+      // Try cache first
+      const usedCache = await readSubscriptionFromCache(organization.id);
+      if (usedCache) {
+        return;
+      }
 
-    // Fallback to Stripe check
-    await checkSubscriptionFromStripe(session);
+      // Fallback to Stripe check (single-flight)
+      const result = await checkSubscriptionFromStripe(session);
+      setSubscribed(result.subscribed);
+      setSubscriptionEnd(result.subscriptionEnd);
+    } finally {
+      setCheckingSubscription(false);
+    }
   }, [session, organization, readSubscriptionFromCache, checkSubscriptionFromStripe]);
 
   // ==================== REALTIME SUBSCRIPTION ====================
@@ -251,6 +292,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           if (newData) {
             setSubscribed(newData.subscribed ?? false);
             setSubscriptionEnd(newData.subscription_end ?? null);
+            // Invalidate in-memory cache on realtime update
+            subscriptionResultCache = null;
           }
         }
       )
@@ -283,7 +326,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if (orgId) {
               const usedCache = await readSubscriptionFromCache(orgId);
               if (!usedCache) {
-                await checkSubscriptionFromStripe(newSession);
+                const result = await checkSubscriptionFromStripe(newSession);
+                setSubscribed(result.subscribed);
+                setSubscriptionEnd(result.subscriptionEnd);
               }
             }
           }, 0);
@@ -309,7 +354,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           if (orgId) {
             const usedCache = await readSubscriptionFromCache(orgId);
             if (!usedCache) {
-              await checkSubscriptionFromStripe(existingSession);
+              const result = await checkSubscriptionFromStripe(existingSession);
+              setSubscribed(result.subscribed);
+              setSubscriptionEnd(result.subscriptionEnd);
             }
           }
         }, 0);
@@ -346,6 +393,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // ==================== ACTIONS ====================
   
   const signOut = useCallback(async () => {
+    // Clear caches on sign out
+    subscriptionResultCache = null;
+    inFlightSubscriptionCheck = null;
     await supabase.auth.signOut();
     navigate("/auth");
   }, [navigate]);

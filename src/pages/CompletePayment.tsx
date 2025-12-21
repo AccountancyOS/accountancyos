@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useApp } from "@/lib/app-context";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings, LogOut, Check, Users, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type PaymentMode = 'new_trial' | 'reactivate' | 'past_due' | 'canceled' | 'unknown';
+type PaymentMode = 'new_trial' | 'reactivate' | 'past_due' | 'canceled' | 'verifying' | 'unknown';
 type PrimaryAction = 'checkout' | 'billing_portal';
 type Plan = 'solo' | 'team' | 'scale';
 
@@ -59,7 +59,7 @@ interface UIConfig {
   primaryAction: PrimaryAction;
 }
 
-const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown'>, UIConfig> = {
+const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown' | 'verifying'>, UIConfig> = {
   new_trial: {
     icon: <CreditCard className="h-12 w-12 text-primary" />,
     iconBg: "bg-primary/10",
@@ -94,8 +94,13 @@ const UI_BY_MODE: Record<Exclude<PaymentMode, 'unknown'>, UIConfig> = {
   },
 };
 
+const STRIPE_RETURN_GUARD_TTL = 2 * 60 * 1000; // 2 minutes
+const POLLING_MAX_ATTEMPTS = 10;
+const POLLING_INTERVAL_MS = 1000;
+
 const CompletePayment = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { user, organization, organizationLoading: orgLoading, refreshOrganization } = useApp();
   
@@ -107,6 +112,86 @@ const CompletePayment = () => {
     subscription_status: string | null;
   } | null>(null);
   const [cacheLoading, setCacheLoading] = useState(true);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [pollAttempts, setPollAttempts] = useState(0);
+
+  // Check for recent Stripe return and verify if needed
+  useEffect(() => {
+    const checkStripeReturn = async () => {
+      const stripeReturnTs = localStorage.getItem("stripe_return_ts");
+      const reason = searchParams.get("reason");
+      
+      // If redirected here with verification_pending reason, show verifying state
+      if (reason === "verification_pending") {
+        console.log("[CompletePayment] Verification pending, showing verifying UI");
+        setIsVerifying(true);
+        
+        // Poll for a bit more
+        for (let i = 0; i < 5; i++) {
+          setPollAttempts(i + 1);
+          await refreshOrganization();
+          
+          if (organization?.billing_status === 'active') {
+            setIsVerifying(false);
+            localStorage.removeItem("stripe_return_ts");
+            localStorage.removeItem("stripe_return_session_id");
+            navigate('/onboarding-wizard');
+            return;
+          }
+          
+          await new Promise(r => setTimeout(r, POLLING_INTERVAL_MS));
+        }
+        
+        setIsVerifying(false);
+        return;
+      }
+      
+      // Check for recent Stripe return guard
+      if (stripeReturnTs) {
+        const returnAge = Date.now() - parseInt(stripeReturnTs, 10);
+        if (returnAge < STRIPE_RETURN_GUARD_TTL) {
+          console.log("[CompletePayment] Recent Stripe return detected, verifying");
+          setIsVerifying(true);
+          
+          // Poll for billing status
+          for (let i = 0; i < POLLING_MAX_ATTEMPTS; i++) {
+            setPollAttempts(i + 1);
+            await refreshOrganization();
+            
+            // Need to fetch fresh data
+            const { data: freshOrg } = await supabase
+              .from('organizations')
+              .select('billing_status')
+              .eq('id', organization?.id || '')
+              .maybeSingle();
+            
+            if (freshOrg?.billing_status === 'active') {
+              setIsVerifying(false);
+              localStorage.removeItem("stripe_return_ts");
+              localStorage.removeItem("stripe_return_session_id");
+              navigate('/onboarding-wizard');
+              return;
+            }
+            
+            await new Promise(r => setTimeout(r, POLLING_INTERVAL_MS));
+          }
+          
+          // Polling exhausted - clear guard and show normal UI
+          localStorage.removeItem("stripe_return_ts");
+          localStorage.removeItem("stripe_return_session_id");
+          setIsVerifying(false);
+        } else {
+          // Stale guard - clean up
+          localStorage.removeItem("stripe_return_ts");
+          localStorage.removeItem("stripe_return_session_id");
+        }
+      }
+    };
+    
+    if (!orgLoading && organization) {
+      checkStripeReturn();
+    }
+  }, [orgLoading, organization, refreshOrganization, navigate, searchParams]);
 
   // Fetch subscription cache to determine if org ever had a subscription
   useEffect(() => {
@@ -136,11 +221,13 @@ const CompletePayment = () => {
 
   // Redirect if billing becomes active
   useEffect(() => {
-    if (organization) {
+    if (organization && !isVerifying) {
       const status = organization.billing_status;
       
       if (status === 'active') {
         localStorage.removeItem("pending_org_id");
+        localStorage.removeItem("stripe_return_ts");
+        localStorage.removeItem("stripe_return_session_id");
         
         if (organization.onboarding_completed) {
           navigate('/welcome');
@@ -149,7 +236,7 @@ const CompletePayment = () => {
         }
       }
     }
-  }, [organization, navigate]);
+  }, [organization, navigate, isVerifying]);
 
   // Compute billing status and payment mode
   const billingStatus = organization?.billing_status;
@@ -160,6 +247,7 @@ const CompletePayment = () => {
   );
 
   const mode: PaymentMode = (() => {
+    if (isVerifying) return 'verifying';
     if (billingStatus === 'past_due') return 'past_due';
     if (billingStatus === 'canceled') return 'canceled';
     
@@ -171,7 +259,7 @@ const CompletePayment = () => {
     return 'unknown';
   })();
 
-  const showPlanSelection = mode !== 'past_due' && mode !== 'unknown';
+  const showPlanSelection = mode !== 'past_due' && mode !== 'unknown' && mode !== 'verifying';
 
   // Get org ID from context or localStorage fallback
   const getOrganizationId = (): string | null => {
@@ -200,6 +288,9 @@ const CompletePayment = () => {
     setLoading(true);
 
     try {
+      // Set localStorage guard before redirecting to Stripe
+      localStorage.setItem("stripe_return_ts", Date.now().toString());
+      
       const { data, error } = await supabase.functions.invoke('stripe-checkout', {
         body: {
           organizationId: orgId,
@@ -217,14 +308,16 @@ const CompletePayment = () => {
         throw new Error('No checkout URL returned');
       }
     } catch (error: any) {
+      // Clear guard on error
+      localStorage.removeItem("stripe_return_ts");
       toast({
         title: "Error starting checkout",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
+    // Don't setLoading(false) on success - we're redirecting
   };
 
   const handleBillingPortal = async () => {
@@ -251,7 +344,7 @@ const CompletePayment = () => {
   };
 
   const handlePrimaryAction = () => {
-    if (mode === 'unknown') return;
+    if (mode === 'unknown' || mode === 'verifying') return;
     
     const config = UI_BY_MODE[mode];
     if (config.primaryAction === 'billing_portal') {
@@ -292,8 +385,34 @@ const CompletePayment = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem("pending_org_id");
+    localStorage.removeItem("stripe_return_ts");
+    localStorage.removeItem("stripe_return_session_id");
     navigate("/auth");
   };
+
+  // Verifying state - show friendly waiting UI
+  if (mode === 'verifying' || isVerifying) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+              <p className="text-lg font-medium">Verifying your payment...</p>
+              {pollAttempts > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Checking... ({pollAttempts}/{POLLING_MAX_ATTEMPTS})
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                This usually takes just a few seconds.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (orgLoading || cacheLoading) {
     return (
