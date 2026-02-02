@@ -110,7 +110,7 @@ export default function WelcomeDashboard() {
       <div className="space-y-8">
         {/* Welcome Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold">Welcome to AccountancyOS! 🎉</h1>
+          <h1 className="text-4xl font-bold">Welcome to AccountancyOS</h1>
           <p className="text-xl text-muted-foreground">
             Let's finish setting up your practice
           </p>
@@ -225,49 +225,6 @@ export default function WelcomeDashboard() {
             </Card>
           </div>
         </div>
-
-        {/* Getting Started Tips */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Next Steps</CardTitle>
-            <CardDescription>Recommended actions to get the most out of AccountancyOS</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-3 p-3 rounded-lg bg-muted/50">
-              <div className="flex-1">
-                <p className="font-medium">Set up your CRM funnels</p>
-                <p className="text-sm text-muted-foreground">
-                  Configure automated follow-up sequences for your leads
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => navigate("/crm")}>
-                Setup
-              </Button>
-            </div>
-            <div className="flex gap-3 p-3 rounded-lg bg-muted/50">
-              <div className="flex-1">
-                <p className="font-medium">Import your existing clients</p>
-                <p className="text-sm text-muted-foreground">
-                  Upload CSV files to quickly migrate your data
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => navigate("/clients")}>
-                Import
-              </Button>
-            </div>
-            <div className="flex gap-3 p-3 rounded-lg bg-muted/50">
-              <div className="flex-1">
-                <p className="font-medium">Customize your service catalogue</p>
-                <p className="text-sm text-muted-foreground">
-                  Review and adjust the standard UK accounting services
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => navigate("/services")}>
-                Customize
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   );
