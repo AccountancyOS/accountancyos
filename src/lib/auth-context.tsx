@@ -3,6 +3,8 @@ import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
+type AuthFlow = "normal" | "recovery";
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -10,6 +12,8 @@ interface AuthContextType {
   subscribed: boolean;
   subscriptionEnd: string | null;
   checkingSubscription: boolean;
+  authFlow: AuthFlow;
+  setAuthFlow: (flow: AuthFlow) => void;
   checkSubscription: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -21,6 +25,8 @@ const AuthContext = createContext<AuthContextType>({
   subscribed: false,
   subscriptionEnd: null,
   checkingSubscription: false,
+  authFlow: "normal",
+  setAuthFlow: () => {},
   checkSubscription: async () => {},
   signOut: async () => {},
 });
@@ -35,6 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [checkingSubscription, setCheckingSubscription] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [authFlow, setAuthFlow] = useState<AuthFlow>("normal");
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const navigate = useNavigate();
 
@@ -254,6 +261,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [session]);
 
   const signOut = async () => {
+    // Reset auth flow when signing out
+    setAuthFlow("normal");
     await supabase.auth.signOut();
     navigate("/auth");
   };
@@ -266,6 +275,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       subscribed, 
       subscriptionEnd, 
       checkingSubscription,
+      authFlow,
+      setAuthFlow,
       checkSubscription: () => checkSubscription(session),
       signOut 
     }}>
