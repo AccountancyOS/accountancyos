@@ -8007,6 +8007,8 @@ export type Database = {
       notifications: {
         Row: {
           created_at: string | null
+          dismissed: boolean | null
+          dismissed_at: string | null
           entity_id: string | null
           entity_type: string | null
           id: string
@@ -8021,6 +8023,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          dismissed?: boolean | null
+          dismissed_at?: string | null
           entity_id?: string | null
           entity_type?: string | null
           id?: string
@@ -8035,6 +8039,8 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          dismissed?: boolean | null
+          dismissed_at?: string | null
           entity_id?: string | null
           entity_type?: string | null
           id?: string
@@ -8320,13 +8326,24 @@ export type Database = {
           bill_number_next: number | null
           bill_number_padding: number | null
           bill_number_prefix: string | null
+          business_days: string[] | null
+          business_hours_end: string | null
+          business_hours_start: string | null
           created_at: string | null
+          deadline_buffer_days_ct: number | null
+          deadline_buffer_days_sa: number | null
+          deadline_buffer_days_vat: number | null
           email_default_mode: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
+          sla_email_response_hours: number | null
+          sla_internal_message_hours: number | null
+          sla_portal_message_hours: number | null
+          sla_task_default_hours: number | null
+          sla_task_urgent_hours: number | null
           updated_at: string | null
         }
         Insert: {
@@ -8338,13 +8355,24 @@ export type Database = {
           bill_number_next?: number | null
           bill_number_padding?: number | null
           bill_number_prefix?: string | null
+          business_days?: string[] | null
+          business_hours_end?: string | null
+          business_hours_start?: string | null
           created_at?: string | null
+          deadline_buffer_days_ct?: number | null
+          deadline_buffer_days_sa?: number | null
+          deadline_buffer_days_vat?: number | null
           email_default_mode?: string | null
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
           organization_id: string
           shared_mailbox_enabled?: boolean | null
+          sla_email_response_hours?: number | null
+          sla_internal_message_hours?: number | null
+          sla_portal_message_hours?: number | null
+          sla_task_default_hours?: number | null
+          sla_task_urgent_hours?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -8356,13 +8384,24 @@ export type Database = {
           bill_number_next?: number | null
           bill_number_padding?: number | null
           bill_number_prefix?: string | null
+          business_days?: string[] | null
+          business_hours_end?: string | null
+          business_hours_start?: string | null
           created_at?: string | null
+          deadline_buffer_days_ct?: number | null
+          deadline_buffer_days_sa?: number | null
+          deadline_buffer_days_vat?: number | null
           email_default_mode?: string | null
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
           organization_id?: string
           shared_mailbox_enabled?: boolean | null
+          sla_email_response_hours?: number | null
+          sla_internal_message_hours?: number | null
+          sla_portal_message_hours?: number | null
+          sla_task_default_hours?: number | null
+          sla_task_urgent_hours?: number | null
           updated_at?: string | null
         }
         Relationships: [
@@ -10475,6 +10514,146 @@ export type Database = {
           },
         ]
       }
+      sla_definitions: {
+        Row: {
+          created_at: string
+          default_duration_hours: number
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_system: boolean | null
+          job_type: string | null
+          name: string
+          organization_id: string
+          pause_conditions: Json | null
+          service_code: string | null
+          sla_type: string
+          stop_conditions: Json | null
+          trigger_event: string
+          trigger_status: string | null
+          updated_at: string
+          urgent_duration_hours: number | null
+        }
+        Insert: {
+          created_at?: string
+          default_duration_hours: number
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_system?: boolean | null
+          job_type?: string | null
+          name: string
+          organization_id: string
+          pause_conditions?: Json | null
+          service_code?: string | null
+          sla_type: string
+          stop_conditions?: Json | null
+          trigger_event: string
+          trigger_status?: string | null
+          updated_at?: string
+          urgent_duration_hours?: number | null
+        }
+        Update: {
+          created_at?: string
+          default_duration_hours?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_system?: boolean | null
+          job_type?: string | null
+          name?: string
+          organization_id?: string
+          pause_conditions?: Json | null
+          service_code?: string | null
+          sla_type?: string
+          stop_conditions?: Json | null
+          trigger_event?: string
+          trigger_status?: string | null
+          updated_at?: string
+          urgent_duration_hours?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sla_definitions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sla_instances: {
+        Row: {
+          breached: boolean | null
+          breached_at: string | null
+          completed_at: string | null
+          compressed: boolean | null
+          created_at: string
+          due_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json | null
+          organization_id: string
+          paused_at: string | null
+          paused_total_seconds: number | null
+          sla_definition_id: string | null
+          started_at: string
+          status: string | null
+        }
+        Insert: {
+          breached?: boolean | null
+          breached_at?: string | null
+          completed_at?: string | null
+          compressed?: boolean | null
+          created_at?: string
+          due_at: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          organization_id: string
+          paused_at?: string | null
+          paused_total_seconds?: number | null
+          sla_definition_id?: string | null
+          started_at: string
+          status?: string | null
+        }
+        Update: {
+          breached?: boolean | null
+          breached_at?: string | null
+          completed_at?: string | null
+          compressed?: boolean | null
+          created_at?: string
+          due_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          organization_id?: string
+          paused_at?: string | null
+          paused_total_seconds?: number | null
+          sla_definition_id?: string | null
+          started_at?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sla_instances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sla_instances_sla_definition_id_fkey"
+            columns: ["sla_definition_id"]
+            isOneToOne: false
+            referencedRelation: "sla_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stripe_webhook_events: {
         Row: {
           created_at: string
@@ -12462,13 +12641,24 @@ export type Database = {
           bill_number_next: number | null
           bill_number_padding: number | null
           bill_number_prefix: string | null
+          business_days: string[] | null
+          business_hours_end: string | null
+          business_hours_start: string | null
           created_at: string | null
+          deadline_buffer_days_ct: number | null
+          deadline_buffer_days_sa: number | null
+          deadline_buffer_days_vat: number | null
           email_default_mode: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
+          sla_email_response_hours: number | null
+          sla_internal_message_hours: number | null
+          sla_portal_message_hours: number | null
+          sla_task_default_hours: number | null
+          sla_task_urgent_hours: number | null
           updated_at: string | null
         }
         SetofOptions: {
@@ -12550,13 +12740,24 @@ export type Database = {
           bill_number_next: number | null
           bill_number_padding: number | null
           bill_number_prefix: string | null
+          business_days: string[] | null
+          business_hours_end: string | null
+          business_hours_start: string | null
           created_at: string | null
+          deadline_buffer_days_ct: number | null
+          deadline_buffer_days_sa: number | null
+          deadline_buffer_days_vat: number | null
           email_default_mode: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
           organization_id: string
           shared_mailbox_enabled: boolean | null
+          sla_email_response_hours: number | null
+          sla_internal_message_hours: number | null
+          sla_portal_message_hours: number | null
+          sla_task_default_hours: number | null
+          sla_task_urgent_hours: number | null
           updated_at: string | null
         }
         SetofOptions: {

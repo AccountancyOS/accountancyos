@@ -6,11 +6,11 @@
 | Phase | Status | Completed Items |
 |-------|--------|-----------------|
 | Phase 1 | ✅ COMPLETE | Client type schema, detail tables, lead_type alignment, UI components |
-| Phase 2 | 🔄 IN PROGRESS | CRM 5-stage pipeline (done), stage timestamps (done), Quotes integration (pending) |
-| Phase 3 | ⬜ PENDING | SLA engine, practice settings |
-| Phase 4 | 🔄 IN PROGRESS | Welcome Dashboard cleanup (done), Overview redesign (pending) |
+| Phase 2 | ✅ COMPLETE | CRM 5-stage pipeline, stage timestamps, Lead Detail Panel with Quotes tab |
+| Phase 3 | ✅ COMPLETE | SLA engine tables, sla-engine.ts service, practice settings expansion |
+| Phase 4 | ✅ COMPLETE | Welcome Dashboard cleanup, Overview redesign with Overdue Actions + Staff Variance |
 | Phase 5 | ⬜ PENDING | Documents, contacts |
-| Phase 6 | ⬜ PENDING | Polish, notifications, session management |
+| Phase 6 | 🔄 IN PROGRESS | Notifications clearable (done), session management (pending), text cleanup (pending) |
 
 ---
 
