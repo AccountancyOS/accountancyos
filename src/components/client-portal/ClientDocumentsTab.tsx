@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -36,10 +36,12 @@ import {
   Download,
   CheckCircle,
   Clock,
-  Filter
+  Filter,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { DocumentSignatureFlow } from "@/components/documents/DocumentSignatureFlow";
+import { downloadDocument, uploadJobDocument } from "@/lib/document-service";
 
 interface ClientDocumentsTabProps {
   clientId: string;
@@ -71,6 +73,9 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [signatureDoc, setSignatureDoc] = useState<JobDocument | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["client-documents", clientId, organization?.id],
@@ -207,8 +212,73 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleDownload = async (doc: JobDocument) => {
+    setDownloading(doc.id);
+    const { success, error } = await downloadDocument(doc.file_path, doc.file_name);
+    if (!success) {
+      toast({ title: "Download failed", description: error, variant: "destructive" });
+    }
+    setDownloading(null);
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !organization?.id) return;
+
+    // Get first job for this client to attach document to
+    const { data: jobs } = await supabase
+      .from("jobs")
+      .select("id")
+      .eq("organization_id", organization.id)
+      .eq("client_id", clientId)
+      .limit(1);
+
+    if (!jobs || jobs.length === 0) {
+      toast({
+        title: "No job found",
+        description: "Create a job for this client first to upload documents.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploading(true);
+    const file = files[0];
+    
+    const { success, error } = await uploadJobDocument(file, {
+      jobId: jobs[0].id,
+      organizationId: organization.id,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type || "application/octet-stream",
+      clientVisible: true,
+    });
+
+    if (success) {
+      toast({ title: "Document uploaded" });
+      queryClient.invalidateQueries({ queryKey: ["client-documents"] });
+    } else {
+      toast({ title: "Upload failed", description: error, variant: "destructive" });
+    }
+
+    setUploading(false);
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <>
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png"
+      />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -232,8 +302,12 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                 <DropdownMenuItem onClick={() => setFilter("signed")}>Signed</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button>
-              <Upload className="mr-2 h-4 w-4" />
+            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              {uploading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
               Upload Document
             </Button>
           </div>
@@ -362,8 +436,15 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Download className="h-4 w-4 mr-2" />
+                      <DropdownMenuItem 
+                        onClick={() => handleDownload(doc)}
+                        disabled={downloading === doc.id}
+                      >
+                        {downloading === doc.id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4 mr-2" />
+                        )}
                         Download
                       </DropdownMenuItem>
                       <DropdownMenuItem 

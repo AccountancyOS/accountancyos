@@ -45,6 +45,8 @@ import {
   type ClientType,
 } from "@/lib/client-types";
 import { LeadDetailPanel } from "@/components/crm/LeadDetailPanel";
+import { CompaniesHouseLookupDialog } from "@/components/crm/CompaniesHouseLookupDialog";
+import { mapCHProfileToFormData, type CHCompanyProfile } from "@/lib/companies-house-lookup";
 
 interface Lead {
   id: string;
@@ -85,6 +87,9 @@ const CRM = () => {
   // Lead detail slideout state (replaces old edit dialog)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
+  
+  // Companies House lookup dialog state
+  const [chLookupOpen, setCHLookupOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -392,6 +397,7 @@ const CRM = () => {
                             size="icon"
                             disabled={submitting}
                             title="Lookup on Companies House"
+                            onClick={() => setCHLookupOpen(true)}
                           >
                             <Search className="h-4 w-4" />
                           </Button>
@@ -564,6 +570,24 @@ const CRM = () => {
             open={detailPanelOpen}
             onOpenChange={setDetailPanelOpen}
             onLeadUpdated={loadLeads}
+          />
+
+          {/* Companies House Lookup Dialog */}
+          <CompaniesHouseLookupDialog
+            open={chLookupOpen}
+            onOpenChange={setCHLookupOpen}
+            initialQuery={formData.company_name}
+            onCompanySelected={(profile: CHCompanyProfile) => {
+              const mappedData = mapCHProfileToFormData(profile);
+              setFormData({
+                ...formData,
+                company_name: mappedData.company_name,
+              });
+              toast({
+                title: "Company data loaded",
+                description: `${mappedData.company_name} (${mappedData.company_number}) details have been populated.`,
+              });
+            }}
           />
         </div>
       </div>
