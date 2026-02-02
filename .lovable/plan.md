@@ -9,8 +9,8 @@
 | Phase 2 | ✅ COMPLETE | CRM 5-stage pipeline, stage timestamps, Lead Detail Panel with Quotes tab |
 | Phase 3 | ✅ COMPLETE | SLA engine tables, sla-engine.ts service, practice settings expansion |
 | Phase 4 | ✅ COMPLETE | Welcome Dashboard cleanup, Overview redesign with Overdue Actions + Staff Variance |
-| Phase 5 | ⬜ PENDING | Documents, contacts |
-| Phase 6 | 🔄 IN PROGRESS | Notifications clearable (done), session management (pending), text cleanup (pending) |
+| Phase 5 | ✅ COMPLETE | Document signature flow, visibility tracking, contacts simplification (director/bookkeeper/other) |
+| Phase 6 | ✅ COMPLETE | Notifications clearable, session management tables, HMRC authorisations, text cleanup |
 
 ---
 

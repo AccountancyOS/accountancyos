@@ -93,7 +93,7 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["job-filing", jobId] });
       queryClient.invalidateQueries({ queryKey: ["job", jobId] });
-      toast({ title: "Filing marked as filed. Job complete!" });
+      toast({ title: "Filing marked as filed. Job complete." });
     },
   });
 

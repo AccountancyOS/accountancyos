@@ -143,7 +143,7 @@ export default function FilingDetail() {
         }
         queryClient.invalidateQueries({ queryKey: ["filing", filingId] });
         queryClient.invalidateQueries({ queryKey: ["job", filing?.job_id] });
-        toast({ title: "Filing marked as filed. Job complete!" });
+        toast({ title: "Filing marked as filed. Job complete." });
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" });
       }

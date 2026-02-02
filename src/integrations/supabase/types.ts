@@ -3437,6 +3437,7 @@ export type Database = {
       }
       contacts: {
         Row: {
+          can_sign: boolean | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
@@ -3450,6 +3451,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          can_sign?: boolean | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -3463,6 +3465,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          can_sign?: boolean | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -6454,6 +6457,73 @@ export type Database = {
           },
         ]
       }
+      hmrc_authorisations: {
+        Row: {
+          auth_type: string
+          authorised_at: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          reference: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auth_type: string
+          authorised_at?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          reference?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auth_type?: string
+          authorised_at?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          reference?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hmrc_authorisations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hmrc_authorisations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hmrc_authorisations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       idempotency_keys: {
         Row: {
           created_at: string
@@ -6882,6 +6952,10 @@ export type Database = {
       }
       job_documents: {
         Row: {
+          archived: boolean | null
+          archived_at: string | null
+          auto_archive_at: string | null
+          client_visible: boolean | null
           file_name: string
           file_path: string
           file_size: number | null
@@ -6889,6 +6963,12 @@ export type Database = {
           job_id: string
           mime_type: string | null
           organization_id: string
+          scroll_verified: boolean | null
+          signature_ip: string | null
+          signature_required: boolean | null
+          signature_typed_name: string | null
+          signed_at: string | null
+          signed_by: string | null
           tags: Json | null
           task_id: string | null
           uploaded_at: string
@@ -6896,6 +6976,10 @@ export type Database = {
           version: number | null
         }
         Insert: {
+          archived?: boolean | null
+          archived_at?: string | null
+          auto_archive_at?: string | null
+          client_visible?: boolean | null
           file_name: string
           file_path: string
           file_size?: number | null
@@ -6903,6 +6987,12 @@ export type Database = {
           job_id: string
           mime_type?: string | null
           organization_id: string
+          scroll_verified?: boolean | null
+          signature_ip?: string | null
+          signature_required?: boolean | null
+          signature_typed_name?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
           tags?: Json | null
           task_id?: string | null
           uploaded_at?: string
@@ -6910,6 +7000,10 @@ export type Database = {
           version?: number | null
         }
         Update: {
+          archived?: boolean | null
+          archived_at?: string | null
+          auto_archive_at?: string | null
+          client_visible?: boolean | null
           file_name?: string
           file_path?: string
           file_size?: number | null
@@ -6917,6 +7011,12 @@ export type Database = {
           job_id?: string
           mime_type?: string | null
           organization_id?: string
+          scroll_verified?: boolean | null
+          signature_ip?: string | null
+          signature_required?: boolean | null
+          signature_typed_name?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
           tags?: Json | null
           task_id?: string | null
           uploaded_at?: string
@@ -11271,6 +11371,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "user_saved_views_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_sessions: {
+        Row: {
+          created_at: string | null
+          device_info: Json | null
+          expires_at: string
+          id: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          ip_address: string | null
+          last_activity_at: string | null
+          organization_id: string
+          session_token: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          device_info?: Json | null
+          expires_at: string
+          id?: string
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          ip_address?: string | null
+          last_activity_at?: string | null
+          organization_id: string
+          session_token: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          device_info?: Json | null
+          expires_at?: string
+          id?: string
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          ip_address?: string | null
+          last_activity_at?: string | null
+          organization_id?: string
+          session_token?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_sessions_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

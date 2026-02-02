@@ -42,12 +42,10 @@ interface AddContactDialogProps {
   editingContact?: Contact | null;
 }
 
+// Simplified contact roles per Phase 5.2
 const ROLE_OPTIONS = [
   { value: "Director", label: "Director" },
-  { value: "FD", label: "Finance Director" },
   { value: "Bookkeeper", label: "Bookkeeper" },
-  { value: "Secretary", label: "Secretary" },
-  { value: "Personal", label: "Personal" },
   { value: "Other", label: "Other" },
 ];
 
