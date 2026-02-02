@@ -107,3 +107,9 @@ verify_jwt = true
 
 [functions.check-subscription]
 verify_jwt = true
+
+[functions.sla-check]
+verify_jwt = false
+
+[functions.session-cleanup]
+verify_jwt = false

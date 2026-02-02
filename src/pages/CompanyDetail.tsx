@@ -31,7 +31,8 @@ import {
   AlertCircle,
   Wallet,
   Lock,
-  Send
+  Send,
+  Pencil
 } from "lucide-react";
 import { format } from "date-fns";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
@@ -42,6 +43,7 @@ import { CompanyPayrollTab } from "@/components/cosec/CompanyPayrollTab";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEntityServices } from "@/hooks/useEntityServices";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
+import { YearEndEditor } from "@/components/company/YearEndEditor";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -49,6 +51,7 @@ const CompanyDetail = () => {
   const { organization } = useOrganization();
   const [activeTab, setActiveTab] = useState("overview");
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isYearEndOpen, setIsYearEndOpen] = useState(false);
 
   // Service gating for Payroll tab
   const { hasPayroll, isLoading: servicesLoading } = useEntityServices(
@@ -273,7 +276,17 @@ const CompanyDetail = () => {
                       <p className="font-medium">{company.company_type || "Private Limited"}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Year End</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">Year End</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setIsYearEndOpen(true)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <p className="font-medium">
                         {company.year_end_day && company.year_end_month
                           ? `${company.year_end_day}/${company.year_end_month}`
@@ -471,6 +484,16 @@ const CompanyDetail = () => {
           companyId={companyId}
           defaultTo={company.email}
           defaultToName={company.company_name}
+        />
+
+        {/* Year End Editor */}
+        <YearEndEditor
+          companyId={companyId!}
+          currentMonth={company.year_end_month}
+          currentDay={company.year_end_day}
+          open={isYearEndOpen}
+          onOpenChange={setIsYearEndOpen}
+          onSaved={() => refetch()}
         />
       </div>
     </DashboardLayout>
