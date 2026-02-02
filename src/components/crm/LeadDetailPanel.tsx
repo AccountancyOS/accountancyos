@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -121,8 +121,8 @@ export const LeadDetailPanel = ({
     lead_type: "other" as ClientType,
   });
 
-  // Sync form data when lead changes
-  useState(() => {
+  // Sync form data when lead changes - Fixed: using useEffect instead of useState
+  useEffect(() => {
     if (lead) {
       setFormData({
         first_name: lead.first_name,
@@ -135,7 +135,7 @@ export const LeadDetailPanel = ({
         lead_type: lead.lead_type || "other",
       });
     }
-  });
+  }, [lead]);
 
   // Fetch quotes for this lead
   const { data: quotes, isLoading: quotesLoading } = useQuery({

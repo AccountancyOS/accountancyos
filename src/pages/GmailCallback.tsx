@@ -44,7 +44,7 @@ const GmailCallback = () => {
         }
 
         setStatus("success");
-        setMessage("Gmail connected successfully!");
+        setMessage("Gmail connected successfully");
         setTimeout(() => navigate("/settings?gmail_connected=true"), 1500);
       } catch (err) {
         console.error("Gmail callback error:", err);

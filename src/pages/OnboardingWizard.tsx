@@ -205,7 +205,7 @@ const OnboardingWizard = () => {
       await refreshOrganization();
 
       toast({
-        title: "Setup complete!",
+        title: "Setup complete",
         description: "Welcome to AccountancyOS. Let's get started.",
       });
 

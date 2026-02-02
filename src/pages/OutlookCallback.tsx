@@ -49,7 +49,7 @@ const OutlookCallback = () => {
         }
 
         setStatus("success");
-        setMessage("Outlook connected successfully!");
+        setMessage("Outlook connected successfully");
         setTimeout(() => navigate("/settings?outlook_connected=true"), 1500);
       } catch (err) {
         console.error("Outlook callback error:", err);

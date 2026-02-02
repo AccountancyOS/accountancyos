@@ -92,7 +92,7 @@ export function BankingTab({ entity }: BankingTabProps) {
   useEffect(() => {
     const connectionStatus = searchParams.get('connection');
     if (connectionStatus === 'success') {
-      toast.success("Bank connected successfully! Accounts have been imported.");
+      toast.success("Bank connected successfully. Accounts have been imported.");
       searchParams.delete('connection');
       searchParams.delete('entity');
       setSearchParams(searchParams);

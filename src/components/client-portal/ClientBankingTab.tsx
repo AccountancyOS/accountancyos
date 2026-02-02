@@ -35,7 +35,7 @@ export default function ClientBankingTab({ clientId, companyId }: ClientBankingT
   useEffect(() => {
     const connectionStatus = searchParams.get('connection');
     if (connectionStatus === 'success') {
-      toast.success("Bank connected successfully! Your accounts have been imported.");
+      toast.success("Bank connected successfully. Your accounts have been imported.");
       searchParams.delete('connection');
       searchParams.delete('entity');
       setSearchParams(searchParams);
