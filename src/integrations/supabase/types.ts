@@ -2073,6 +2073,216 @@ export type Database = {
           },
         ]
       }
+      client_detail_cgt: {
+        Row: {
+          cgt_number: string | null
+          client_id: string
+          created_at: string | null
+          disposal_date: string | null
+          home_address: Json | null
+          id: string
+          organization_id: string
+          property_address: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          cgt_number?: string | null
+          client_id: string
+          created_at?: string | null
+          disposal_date?: string | null
+          home_address?: Json | null
+          id?: string
+          organization_id: string
+          property_address?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          cgt_number?: string | null
+          client_id?: string
+          created_at?: string | null
+          disposal_date?: string | null
+          home_address?: Json | null
+          id?: string
+          organization_id?: string
+          property_address?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_detail_cgt_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_detail_cgt_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_detail_charity: {
+        Row: {
+          charity_number: string | null
+          charity_status: string | null
+          charity_year_end: string | null
+          client_id: string
+          created_at: string | null
+          gift_aid_claim_expiry: string | null
+          id: string
+          organization_id: string
+          trading_as: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          charity_number?: string | null
+          charity_status?: string | null
+          charity_year_end?: string | null
+          client_id: string
+          created_at?: string | null
+          gift_aid_claim_expiry?: string | null
+          id?: string
+          organization_id: string
+          trading_as?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          charity_number?: string | null
+          charity_status?: string | null
+          charity_year_end?: string | null
+          client_id?: string
+          created_at?: string | null
+          gift_aid_claim_expiry?: string | null
+          id?: string
+          organization_id?: string
+          trading_as?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_detail_charity_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_detail_charity_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_detail_partnership: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          id: string
+          organization_id: string
+          partners: Json | null
+          partnership_address: Json | null
+          partnership_utr: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          id?: string
+          organization_id: string
+          partners?: Json | null
+          partnership_address?: Json | null
+          partnership_utr?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          organization_id?: string
+          partners?: Json | null
+          partnership_address?: Json | null
+          partnership_utr?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_detail_partnership_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_detail_partnership_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_detail_sa: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          id: string
+          is_mtd: boolean
+          mtd_final_declaration_deadline: string | null
+          mtd_quarters: Json | null
+          organization_id: string
+          payment_on_account_jan: number | null
+          payment_on_account_jul: number | null
+          refund_expected: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          id?: string
+          is_mtd?: boolean
+          mtd_final_declaration_deadline?: string | null
+          mtd_quarters?: Json | null
+          organization_id: string
+          payment_on_account_jan?: number | null
+          payment_on_account_jul?: number | null
+          refund_expected?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          is_mtd?: boolean
+          mtd_final_declaration_deadline?: string | null
+          mtd_quarters?: Json | null
+          organization_id?: string
+          payment_on_account_jan?: number | null
+          payment_on_account_jul?: number | null
+          refund_expected?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_detail_sa_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_detail_sa_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_messages: {
         Row: {
           attachments: Json | null
@@ -2280,6 +2490,7 @@ export type Database = {
           aml_verified_by: string | null
           archived_at: string | null
           city: string | null
+          client_type: string
           country: string | null
           created_at: string
           date_of_birth: string | null
@@ -2288,11 +2499,14 @@ export type Database = {
           first_name: string
           id: string
           last_name: string
+          mobile_number: string | null
           national_insurance_number: string | null
+          nino: string | null
           notes: string | null
           organization_id: string
           phone: string | null
           postcode: string | null
+          preferred_name: string | null
           status: string
           tags: Json | null
           updated_at: string
@@ -2307,6 +2521,7 @@ export type Database = {
           aml_verified_by?: string | null
           archived_at?: string | null
           city?: string | null
+          client_type?: string
           country?: string | null
           created_at?: string
           date_of_birth?: string | null
@@ -2315,11 +2530,14 @@ export type Database = {
           first_name: string
           id?: string
           last_name: string
+          mobile_number?: string | null
           national_insurance_number?: string | null
+          nino?: string | null
           notes?: string | null
           organization_id: string
           phone?: string | null
           postcode?: string | null
+          preferred_name?: string | null
           status?: string
           tags?: Json | null
           updated_at?: string
@@ -2334,6 +2552,7 @@ export type Database = {
           aml_verified_by?: string | null
           archived_at?: string | null
           city?: string | null
+          client_type?: string
           country?: string | null
           created_at?: string
           date_of_birth?: string | null
@@ -2342,11 +2561,14 @@ export type Database = {
           first_name?: string
           id?: string
           last_name?: string
+          mobile_number?: string | null
           national_insurance_number?: string | null
+          nino?: string | null
           notes?: string | null
           organization_id?: string
           phone?: string | null
           postcode?: string | null
+          preferred_name?: string | null
           status?: string
           tags?: Json | null
           updated_at?: string
@@ -2371,8 +2593,10 @@ export type Database = {
           aml_verified_at: string | null
           aml_verified_by: string | null
           archived_at: string | null
+          auth_code: string | null
           ch_company_profile: Json | null
           ch_last_synced_at: string | null
+          ch_personal_code: string | null
           city: string | null
           companies_house_auth_code: string | null
           company_name: string
@@ -2382,18 +2606,24 @@ export type Database = {
           confirmation_statement_next_due: string | null
           country: string | null
           created_at: string
+          director_nationality: string | null
           disengaged_at: string | null
           email: string
           id: string
           incorporation_date: string | null
+          internal_reference: string | null
           notes: string | null
           organization_id: string
+          partner_in_charge: string | null
           phone: string | null
           postcode: string | null
           registered_office_address: Json | null
           sic_codes: Json | null
+          staff_in_charge: string | null
           status: string
           tags: Json | null
+          trading_address: Json | null
+          trading_status: string | null
           updated_at: string
           utr: string | null
           vat_frequency: string | null
@@ -2411,8 +2641,10 @@ export type Database = {
           aml_verified_at?: string | null
           aml_verified_by?: string | null
           archived_at?: string | null
+          auth_code?: string | null
           ch_company_profile?: Json | null
           ch_last_synced_at?: string | null
+          ch_personal_code?: string | null
           city?: string | null
           companies_house_auth_code?: string | null
           company_name: string
@@ -2422,18 +2654,24 @@ export type Database = {
           confirmation_statement_next_due?: string | null
           country?: string | null
           created_at?: string
+          director_nationality?: string | null
           disengaged_at?: string | null
           email: string
           id?: string
           incorporation_date?: string | null
+          internal_reference?: string | null
           notes?: string | null
           organization_id: string
+          partner_in_charge?: string | null
           phone?: string | null
           postcode?: string | null
           registered_office_address?: Json | null
           sic_codes?: Json | null
+          staff_in_charge?: string | null
           status?: string
           tags?: Json | null
+          trading_address?: Json | null
+          trading_status?: string | null
           updated_at?: string
           utr?: string | null
           vat_frequency?: string | null
@@ -2451,8 +2689,10 @@ export type Database = {
           aml_verified_at?: string | null
           aml_verified_by?: string | null
           archived_at?: string | null
+          auth_code?: string | null
           ch_company_profile?: Json | null
           ch_last_synced_at?: string | null
+          ch_personal_code?: string | null
           city?: string | null
           companies_house_auth_code?: string | null
           company_name?: string
@@ -2462,18 +2702,24 @@ export type Database = {
           confirmation_statement_next_due?: string | null
           country?: string | null
           created_at?: string
+          director_nationality?: string | null
           disengaged_at?: string | null
           email?: string
           id?: string
           incorporation_date?: string | null
+          internal_reference?: string | null
           notes?: string | null
           organization_id?: string
+          partner_in_charge?: string | null
           phone?: string | null
           postcode?: string | null
           registered_office_address?: Json | null
           sic_codes?: Json | null
+          staff_in_charge?: string | null
           status?: string
           tags?: Json | null
+          trading_address?: Json | null
+          trading_status?: string | null
           updated_at?: string
           utr?: string | null
           vat_frequency?: string | null
@@ -2489,6 +2735,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_partner_in_charge_fkey"
+            columns: ["partner_in_charge"]
+            isOneToOne: false
+            referencedRelation: "organization_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_staff_in_charge_fkey"
+            columns: ["staff_in_charge"]
+            isOneToOne: false
+            referencedRelation: "organization_users"
             referencedColumns: ["id"]
           },
         ]
@@ -7347,6 +7607,8 @@ export type Database = {
       leads: {
         Row: {
           assigned_to: string | null
+          ch_company_profile: Json | null
+          chasing_started_at: string | null
           converted_at: string | null
           created_at: string
           email: string
@@ -7354,17 +7616,24 @@ export type Database = {
           first_name: string
           id: string
           last_name: string
+          lead_type: string
+          lost_at: string | null
           lost_reason: string | null
           notes: string | null
           organization_id: string
           phone: string | null
           pipeline_stage: string
+          proposal_sent_at: string | null
+          qualified_at: string | null
           source: string | null
           tags: Json | null
           updated_at: string
+          won_at: string | null
         }
         Insert: {
           assigned_to?: string | null
+          ch_company_profile?: Json | null
+          chasing_started_at?: string | null
           converted_at?: string | null
           created_at?: string
           email: string
@@ -7372,17 +7641,24 @@ export type Database = {
           first_name: string
           id?: string
           last_name: string
+          lead_type?: string
+          lost_at?: string | null
           lost_reason?: string | null
           notes?: string | null
           organization_id: string
           phone?: string | null
           pipeline_stage?: string
+          proposal_sent_at?: string | null
+          qualified_at?: string | null
           source?: string | null
           tags?: Json | null
           updated_at?: string
+          won_at?: string | null
         }
         Update: {
           assigned_to?: string | null
+          ch_company_profile?: Json | null
+          chasing_started_at?: string | null
           converted_at?: string | null
           created_at?: string
           email?: string
@@ -7390,14 +7666,19 @@ export type Database = {
           first_name?: string
           id?: string
           last_name?: string
+          lead_type?: string
+          lost_at?: string | null
           lost_reason?: string | null
           notes?: string | null
           organization_id?: string
           phone?: string | null
           pipeline_stage?: string
+          proposal_sent_at?: string | null
+          qualified_at?: string | null
           source?: string | null
           tags?: Json | null
           updated_at?: string
+          won_at?: string | null
         }
         Relationships: [
           {

@@ -1,6 +1,19 @@
 
 # AccountancyOS Architecture Overhaul & UX Refinement Plan
 
+## Progress Tracker
+
+| Phase | Status | Completed Items |
+|-------|--------|-----------------|
+| Phase 1 | ✅ COMPLETE | Client type schema, detail tables, lead_type alignment, UI components |
+| Phase 2 | 🔄 IN PROGRESS | CRM 5-stage pipeline (done), stage timestamps (done), Quotes integration (pending) |
+| Phase 3 | ⬜ PENDING | SLA engine, practice settings |
+| Phase 4 | 🔄 IN PROGRESS | Welcome Dashboard cleanup (done), Overview redesign (pending) |
+| Phase 5 | ⬜ PENDING | Documents, contacts |
+| Phase 6 | ⬜ PENDING | Polish, notifications, session management |
+
+---
+
 ## Executive Summary
 
 This plan addresses your comprehensive review to transform AccountancyOS into a production-grade practice management system. Based on your priorities, we're implementing **architecture-first** changes, followed by UX refinements. The work is organised into 6 phases over approximately 8-12 weeks of development.

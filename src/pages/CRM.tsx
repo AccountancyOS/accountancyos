@@ -11,9 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical, Trash2, Calendar, Users } from "lucide-react";
+import { Plus, Phone, Mail, User, TrendingUp, Loader2, GripVertical, Trash2, Calendar, Building2, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +38,12 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { format } from "date-fns";
+import {
+  CLIENT_TYPES,
+  CLIENT_TYPE_LABELS,
+  isCompanyBasedType,
+  type ClientType,
+} from "@/lib/client-types";
 
 interface Lead {
   id: string;
@@ -51,11 +56,13 @@ interface Lead {
   estimated_monthly_value: number | null;
   notes: string | null;
   created_at: string;
+  lead_type: ClientType;
+  ch_company_profile: any | null;
 }
 
+// Phase 2.1: Removed "qualified" stage - now 5-stage pipeline
 const pipelineStages = [
   { value: "new", label: "New", color: "bg-blue-500" },
-  { value: "qualified", label: "Qualified", color: "bg-purple-500" },
   { value: "proposal_sent", label: "Proposal Sent", color: "bg-yellow-500" },
   { value: "chasing", label: "Chasing", color: "bg-orange-500" },
   { value: "won", label: "Won", color: "bg-green-500" },
@@ -82,6 +89,7 @@ const CRM = () => {
     source: "website",
     estimated_monthly_value: "",
     notes: "",
+    lead_type: "other" as ClientType,
   });
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -103,6 +111,8 @@ const CRM = () => {
     source: "website",
     estimated_monthly_value: "",
     notes: "",
+    lead_type: "other" as ClientType,
+    company_name: "",
   });
 
   useEffect(() => {
@@ -120,7 +130,11 @@ const CRM = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setLeads(data || []);
+      setLeads((data || []).map(lead => ({
+        ...lead,
+        lead_type: (lead.lead_type || 'other') as ClientType,
+        ch_company_profile: lead.ch_company_profile,
+      })));
     } catch (error: any) {
       toast({
         title: "Error loading leads",
@@ -137,10 +151,12 @@ const CRM = () => {
     setSubmitting(true);
 
     try {
+      const isCompanyLead = isCompanyBasedType(formData.lead_type);
+      
       const { error } = await supabase.from("leads").insert({
         organization_id: organization!.id,
-        first_name: formData.first_name,
-        last_name: formData.last_name,
+        first_name: isCompanyLead ? formData.company_name : formData.first_name,
+        last_name: isCompanyLead ? "" : formData.last_name,
         email: formData.email,
         phone: formData.phone || null,
         source: formData.source,
@@ -149,6 +165,7 @@ const CRM = () => {
           : null,
         notes: formData.notes || null,
         pipeline_stage: "new",
+        lead_type: formData.lead_type,
       });
 
       if (error) throw error;
@@ -167,6 +184,8 @@ const CRM = () => {
         source: "website",
         estimated_monthly_value: "",
         notes: "",
+        lead_type: "other",
+        company_name: "",
       });
       loadLeads();
     } catch (error: any) {
@@ -182,9 +201,23 @@ const CRM = () => {
 
   const updateStage = async (leadId: string, newStage: string) => {
     try {
+      // Build update data with stage timestamp
+      const updateData: Record<string, any> = { pipeline_stage: newStage };
+      
+      // Phase 2.3: Add timestamp for stage changes
+      if (newStage === 'proposal_sent') {
+        updateData.proposal_sent_at = new Date().toISOString();
+      } else if (newStage === 'chasing') {
+        updateData.chasing_started_at = new Date().toISOString();
+      } else if (newStage === 'won') {
+        updateData.won_at = new Date().toISOString();
+      } else if (newStage === 'lost') {
+        updateData.lost_at = new Date().toISOString();
+      }
+
       const { error } = await supabase
         .from("leads")
-        .update({ pipeline_stage: newStage })
+        .update(updateData)
         .eq("id", leadId);
 
       if (error) throw error;
@@ -197,7 +230,7 @@ const CRM = () => {
 
       toast({
         title: "Stage updated",
-        description: "Lead stage has been updated successfully.",
+        description: "Lead stage has been updated.",
       });
     } catch (error: any) {
       toast({
@@ -218,6 +251,7 @@ const CRM = () => {
       source: lead.source || "website",
       estimated_monthly_value: lead.estimated_monthly_value?.toString() || "",
       notes: lead.notes || "",
+      lead_type: lead.lead_type || "other",
     });
     setEditDialogOpen(true);
   };
@@ -240,6 +274,7 @@ const CRM = () => {
             ? parseFloat(editFormData.estimated_monthly_value)
             : null,
           notes: editFormData.notes || null,
+          lead_type: editFormData.lead_type,
         })
         .eq("id", selectedLead.id);
 
@@ -277,7 +312,7 @@ const CRM = () => {
 
       toast({
         title: "Lead deleted",
-        description: "Lead has been removed successfully.",
+        description: "Lead has been removed.",
       });
 
       setEditDialogOpen(false);
@@ -323,6 +358,8 @@ const CRM = () => {
   const getStageInfo = (stage: string) => {
     return pipelineStages.find((s) => s.value === stage);
   };
+
+  const isCompanyLeadType = isCompanyBasedType(formData.lead_type);
 
   // Pipeline skeleton loading state
   const PipelineSkeleton = () => (
@@ -392,7 +429,7 @@ const CRM = () => {
                   Add Lead
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Add New Lead</DialogTitle>
                   <DialogDescription>
@@ -400,32 +437,90 @@ const CRM = () => {
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="first_name">First Name *</Label>
-                      <Input
-                        id="first_name"
-                        value={formData.first_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, first_name: e.target.value })
-                        }
-                        required
-                        disabled={submitting}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="last_name">Last Name *</Label>
-                      <Input
-                        id="last_name"
-                        value={formData.last_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, last_name: e.target.value })
-                        }
-                        required
-                        disabled={submitting}
-                      />
-                    </div>
+                  {/* Lead Type Selector */}
+                  <div className="space-y-2">
+                    <Label htmlFor="lead_type">Lead Type</Label>
+                    <Select
+                      value={formData.lead_type}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, lead_type: value as ClientType })
+                      }
+                      disabled={submitting}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select lead type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLIENT_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {CLIENT_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
+                  {/* Conditional fields based on lead type */}
+                  {isCompanyLeadType ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="company_name">Company Name *</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="company_name"
+                          value={formData.company_name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, company_name: e.target.value })
+                          }
+                          required
+                          disabled={submitting}
+                          placeholder="Enter company name"
+                        />
+                        {(formData.lead_type === 'limited_company' || formData.lead_type === 'llp') && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            disabled={submitting}
+                            title="Lookup on Companies House"
+                          >
+                            <Search className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {(formData.lead_type === 'limited_company' || formData.lead_type === 'llp') && (
+                        <p className="text-xs text-muted-foreground">
+                          Click search to lookup company details from Companies House
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="first_name">First Name *</Label>
+                        <Input
+                          id="first_name"
+                          value={formData.first_name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, first_name: e.target.value })
+                          }
+                          required
+                          disabled={submitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="last_name">Last Name *</Label>
+                        <Input
+                          id="last_name"
+                          value={formData.last_name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, last_name: e.target.value })
+                          }
+                          required
+                          disabled={submitting}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="email">Email *</Label>
@@ -535,7 +630,7 @@ const CRM = () => {
             </Dialog>
           </div>
 
-            <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-6">
+            <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">
               {pipelineStages.map((stage) => (
                 <DroppableColumn
                   key={stage.value}
@@ -555,7 +650,7 @@ const CRM = () => {
 
           {/* Edit Lead Dialog */}
           <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Lead Details</DialogTitle>
                 <DialogDescription>
@@ -565,9 +660,12 @@ const CRM = () => {
 
               {selectedLead && (
                 <>
-                  <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center gap-3 mb-4 flex-wrap">
                     <Badge className={getStageInfo(selectedLead.pipeline_stage)?.color}>
                       {getStageInfo(selectedLead.pipeline_stage)?.label}
+                    </Badge>
+                    <Badge variant="outline">
+                      {CLIENT_TYPE_LABELS[selectedLead.lead_type] || 'Other'}
                     </Badge>
                     <span className="text-sm text-muted-foreground flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
@@ -576,9 +674,34 @@ const CRM = () => {
                   </div>
 
                   <form onSubmit={handleUpdateLead} className="space-y-4">
+                    {/* Lead Type */}
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_lead_type">Lead Type</Label>
+                      <Select
+                        value={editFormData.lead_type}
+                        onValueChange={(value) =>
+                          setEditFormData({ ...editFormData, lead_type: value as ClientType })
+                        }
+                        disabled={isUpdating}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CLIENT_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {CLIENT_TYPE_LABELS[type]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="edit_first_name">First Name *</Label>
+                        <Label htmlFor="edit_first_name">
+                          {isCompanyBasedType(editFormData.lead_type) ? "Company Name" : "First Name"} *
+                        </Label>
                         <Input
                           id="edit_first_name"
                           value={editFormData.first_name}
@@ -589,18 +712,20 @@ const CRM = () => {
                           disabled={isUpdating}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit_last_name">Last Name *</Label>
-                        <Input
-                          id="edit_last_name"
-                          value={editFormData.last_name}
-                          onChange={(e) =>
-                            setEditFormData({ ...editFormData, last_name: e.target.value })
-                          }
-                          required
-                          disabled={isUpdating}
-                        />
-                      </div>
+                      {!isCompanyBasedType(editFormData.lead_type) && (
+                        <div className="space-y-2">
+                          <Label htmlFor="edit_last_name">Last Name *</Label>
+                          <Input
+                            id="edit_last_name"
+                            value={editFormData.last_name}
+                            onChange={(e) =>
+                              setEditFormData({ ...editFormData, last_name: e.target.value })
+                            }
+                            required
+                            disabled={isUpdating}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -831,6 +956,8 @@ const LeadCard = ({ lead, onUpdateStage, onLeadClick, isDragging, dragListeners,
     onLeadClick?.(lead);
   };
 
+  const isCompanyLead = isCompanyBasedType(lead.lead_type);
+
   return (
     <Card 
       className={`p-4 hover:shadow-md transition-shadow cursor-pointer ${isDragging ? "shadow-lg" : ""}`}
@@ -842,12 +969,21 @@ const LeadCard = ({ lead, onUpdateStage, onLeadClick, isDragging, dragListeners,
             <div {...dragListeners} {...dragAttributes} data-drag-handle className="cursor-grab active:cursor-grabbing">
               <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </div>
-            <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            {isCompanyLead ? (
+              <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            ) : (
+              <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            )}
             <p className="text-sm font-medium">
               {lead.first_name} {lead.last_name}
             </p>
           </div>
         </div>
+        {lead.lead_type && lead.lead_type !== 'other' && (
+          <Badge variant="outline" className="text-xs">
+            {CLIENT_TYPE_LABELS[lead.lead_type]}
+          </Badge>
+        )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Mail className="h-3 w-3" />
           <span className="truncate">{lead.email}</span>
