@@ -1,25 +1,63 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Loader2, ArrowLeft } from "lucide-react";
+import { Building2, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
+
+type AuthMode = "signin" | "signup" | "forgot" | "reset-password";
 
 const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const { setAuthFlow } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [isRedirectingToStripe, setIsRedirectingToStripe] = useState(false);
+  const [linkExpired, setLinkExpired] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Handle password recovery detection
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "PASSWORD_RECOVERY") {
+          console.debug('[Auth] PASSWORD_RECOVERY event detected');
+          setMode("reset-password");
+          setAuthFlow("recovery");
+        }
+      }
+    );
+
+    // Also check URL hash on mount for recovery tokens
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery")) {
+      console.debug('[Auth] Recovery hash detected in URL');
+      // Verify there's a valid session with the recovery token
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          setMode("reset-password");
+          setAuthFlow("recovery");
+        } else {
+          // Hash present but no valid session = expired/used link
+          setLinkExpired(true);
+        }
+      });
+    }
+
+    return () => subscription.unsubscribe();
+  }, [setAuthFlow]);
 
   // Handle ?canceled=true from Stripe
   useEffect(() => {
@@ -46,6 +84,9 @@ const Auth = () => {
       });
 
       if (error) throw error;
+
+      // Reset auth flow on successful sign in
+      setAuthFlow("normal");
 
       toast({
         title: "Welcome back",
@@ -186,6 +227,70 @@ const Auth = () => {
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwords don't match",
+        description: "Please make sure both passwords are the same.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({ 
+        password: newPassword 
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Password updated",
+        description: "Your password has been successfully updated. Please sign in with your new password.",
+      });
+
+      // Sign out to clear recovery session
+      await supabase.auth.signOut();
+      
+      // Reset auth flow and clean up URL
+      setAuthFlow("normal");
+      window.history.replaceState({}, '', '/auth');
+      
+      // Reset form state
+      setNewPassword("");
+      setConfirmPassword("");
+      setMode("signin");
+    } catch (error: any) {
+      toast({
+        title: "Error updating password",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToSignIn = () => {
+    setAuthFlow("normal");
+    setLinkExpired(false);
+    setMode("signin");
+    window.history.replaceState({}, '', '/auth');
+  };
+
   // Show redirect overlay when going to Stripe
   if (isRedirectingToStripe) {
     return (
@@ -199,6 +304,125 @@ const Auth = () => {
                 You'll be taken to Stripe to complete your payment setup.
               </p>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show link expired state
+  if (linkExpired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="space-y-4 pb-8">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="bg-destructive/10 p-2 rounded-lg">
+                <AlertCircle className="h-6 w-6 text-destructive" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl text-center">Reset Link Expired</CardTitle>
+            <CardDescription className="text-center">
+              This password reset link has expired or has already been used.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <Button 
+              className="w-full" 
+              onClick={() => {
+                setLinkExpired(false);
+                setMode("forgot");
+              }}
+            >
+              Request New Reset Link
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={handleBackToSignIn}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show reset password form
+  if (mode === "reset-password") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="space-y-4 pb-8">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="bg-primary p-2 rounded-lg">
+                <Building2 className="h-6 w-6 text-primary-foreground" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl text-center">Set New Password</CardTitle>
+            <CardDescription className="text-center">
+              Enter your new password below
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                  minLength={6}
+                  placeholder="Enter new password"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                  minLength={6}
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Password"
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={handleBackToSignIn}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Sign In
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -261,7 +485,7 @@ const Auth = () => {
               </Button>
             </form>
           ) : (
-            <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
+            <Tabs value={mode} onValueChange={(v) => setMode(v as AuthMode)}>
               <TabsList className="grid w-full grid-cols-2 mb-8">
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
