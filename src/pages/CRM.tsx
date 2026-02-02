@@ -44,6 +44,7 @@ import {
   isCompanyBasedType,
   type ClientType,
 } from "@/lib/client-types";
+import { LeadDetailPanel } from "@/components/crm/LeadDetailPanel";
 
 interface Lead {
   id: string;
@@ -58,6 +59,9 @@ interface Lead {
   created_at: string;
   lead_type: ClientType;
   ch_company_profile: any | null;
+  proposal_sent_at: string | null;
+  won_at: string | null;
+  lost_at: string | null;
 }
 
 // Phase 2.1: Removed "qualified" stage - now 5-stage pipeline
@@ -78,21 +82,9 @@ const CRM = () => {
   const [submitting, setSubmitting] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
 
-  // Edit dialog state
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // Lead detail slideout state (replaces old edit dialog)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [editFormData, setEditFormData] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    source: "website",
-    estimated_monthly_value: "",
-    notes: "",
-    lead_type: "other" as ClientType,
-  });
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -243,89 +235,7 @@ const CRM = () => {
 
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
-    setEditFormData({
-      first_name: lead.first_name,
-      last_name: lead.last_name,
-      email: lead.email,
-      phone: lead.phone || "",
-      source: lead.source || "website",
-      estimated_monthly_value: lead.estimated_monthly_value?.toString() || "",
-      notes: lead.notes || "",
-      lead_type: lead.lead_type || "other",
-    });
-    setEditDialogOpen(true);
-  };
-
-  const handleUpdateLead = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLead) return;
-    setIsUpdating(true);
-
-    try {
-      const { error } = await supabase
-        .from("leads")
-        .update({
-          first_name: editFormData.first_name,
-          last_name: editFormData.last_name,
-          email: editFormData.email,
-          phone: editFormData.phone || null,
-          source: editFormData.source,
-          estimated_monthly_value: editFormData.estimated_monthly_value
-            ? parseFloat(editFormData.estimated_monthly_value)
-            : null,
-          notes: editFormData.notes || null,
-          lead_type: editFormData.lead_type,
-        })
-        .eq("id", selectedLead.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Lead updated",
-        description: "Lead has been updated successfully.",
-      });
-
-      setEditDialogOpen(false);
-      loadLeads();
-    } catch (error: any) {
-      toast({
-        title: "Error updating lead",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleDeleteLead = async () => {
-    if (!selectedLead) return;
-    setIsDeleting(true);
-
-    try {
-      const { error } = await supabase
-        .from("leads")
-        .delete()
-        .eq("id", selectedLead.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Lead deleted",
-        description: "Lead has been removed.",
-      });
-
-      setEditDialogOpen(false);
-      loadLeads();
-    } catch (error: any) {
-      toast({
-        title: "Error deleting lead",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsDeleting(false);
-    }
+    setDetailPanelOpen(true);
   };
 
   const getLeadsByStage = (stage: string) => {
@@ -648,230 +558,13 @@ const CRM = () => {
             </DragOverlay>
           </DndContext>
 
-          {/* Edit Lead Dialog */}
-          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Lead Details</DialogTitle>
-                <DialogDescription>
-                  View and edit lead information
-                </DialogDescription>
-              </DialogHeader>
-
-              {selectedLead && (
-                <>
-                  <div className="flex items-center gap-3 mb-4 flex-wrap">
-                    <Badge className={getStageInfo(selectedLead.pipeline_stage)?.color}>
-                      {getStageInfo(selectedLead.pipeline_stage)?.label}
-                    </Badge>
-                    <Badge variant="outline">
-                      {CLIENT_TYPE_LABELS[selectedLead.lead_type] || 'Other'}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      Created {format(new Date(selectedLead.created_at), "dd MMM yyyy")}
-                    </span>
-                  </div>
-
-                  <form onSubmit={handleUpdateLead} className="space-y-4">
-                    {/* Lead Type */}
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_lead_type">Lead Type</Label>
-                      <Select
-                        value={editFormData.lead_type}
-                        onValueChange={(value) =>
-                          setEditFormData({ ...editFormData, lead_type: value as ClientType })
-                        }
-                        disabled={isUpdating}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CLIENT_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {CLIENT_TYPE_LABELS[type]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit_first_name">
-                          {isCompanyBasedType(editFormData.lead_type) ? "Company Name" : "First Name"} *
-                        </Label>
-                        <Input
-                          id="edit_first_name"
-                          value={editFormData.first_name}
-                          onChange={(e) =>
-                            setEditFormData({ ...editFormData, first_name: e.target.value })
-                          }
-                          required
-                          disabled={isUpdating}
-                        />
-                      </div>
-                      {!isCompanyBasedType(editFormData.lead_type) && (
-                        <div className="space-y-2">
-                          <Label htmlFor="edit_last_name">Last Name *</Label>
-                          <Input
-                            id="edit_last_name"
-                            value={editFormData.last_name}
-                            onChange={(e) =>
-                              setEditFormData({ ...editFormData, last_name: e.target.value })
-                            }
-                            required
-                            disabled={isUpdating}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_email">Email *</Label>
-                      <Input
-                        id="edit_email"
-                        type="email"
-                        value={editFormData.email}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, email: e.target.value })
-                        }
-                        required
-                        disabled={isUpdating}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_phone">Phone</Label>
-                      <Input
-                        id="edit_phone"
-                        type="tel"
-                        value={editFormData.phone}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, phone: e.target.value })
-                        }
-                        disabled={isUpdating}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit_source">Source</Label>
-                        <Select
-                          value={editFormData.source}
-                          onValueChange={(value) =>
-                            setEditFormData({ ...editFormData, source: value })
-                          }
-                          disabled={isUpdating}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="website">Website</SelectItem>
-                            <SelectItem value="referral">Referral</SelectItem>
-                            <SelectItem value="ad">Advertisement</SelectItem>
-                            <SelectItem value="direct">Direct</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="edit_estimated_monthly_value">
-                          Est. Monthly Value (£)
-                        </Label>
-                        <Input
-                          id="edit_estimated_monthly_value"
-                          type="number"
-                          step="0.01"
-                          value={editFormData.estimated_monthly_value}
-                          onChange={(e) =>
-                            setEditFormData({
-                              ...editFormData,
-                              estimated_monthly_value: e.target.value,
-                            })
-                          }
-                          disabled={isUpdating}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_notes">Notes</Label>
-                      <Textarea
-                        id="edit_notes"
-                        value={editFormData.notes}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, notes: e.target.value })
-                        }
-                        rows={3}
-                        disabled={isUpdating}
-                      />
-                    </div>
-
-                    <DialogFooter className="flex justify-between sm:justify-between">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button type="button" variant="destructive" disabled={isDeleting}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete Lead
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Lead?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently delete {selectedLead.first_name} {selectedLead.last_name} from your CRM.
-                              This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={handleDeleteLead}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              {isDeleting ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Deleting...
-                                </>
-                              ) : (
-                                "Delete"
-                              )}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-
-                      <div className="flex gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setEditDialogOpen(false)}
-                          disabled={isUpdating}
-                        >
-                          Cancel
-                        </Button>
-                        <Button type="submit" disabled={isUpdating}>
-                          {isUpdating ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            "Save Changes"
-                          )}
-                        </Button>
-                      </div>
-                    </DialogFooter>
-                  </form>
-                </>
-              )}
-            </DialogContent>
-          </Dialog>
+          {/* Lead Detail Panel (replaces old edit dialog) */}
+          <LeadDetailPanel
+            lead={selectedLead}
+            open={detailPanelOpen}
+            onOpenChange={setDetailPanelOpen}
+            onLeadUpdated={loadLeads}
+          />
         </div>
       </div>
     </DashboardLayout>

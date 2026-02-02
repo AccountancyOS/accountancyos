@@ -41,11 +41,11 @@ export default function Settings() {
     const error = searchParams.get("error");
 
     if (gmailConnected === "true") {
-      toast.success("Gmail account connected successfully!");
+      toast.success("Gmail account connected successfully");
       queryClient.invalidateQueries({ queryKey: ["connected-mailboxes"] });
       setSearchParams({});
     } else if (outlookConnected === "true") {
-      toast.success("Outlook account connected successfully!");
+      toast.success("Outlook account connected successfully");
       queryClient.invalidateQueries({ queryKey: ["connected-mailboxes"] });
       setSearchParams({});
     } else if (error) {

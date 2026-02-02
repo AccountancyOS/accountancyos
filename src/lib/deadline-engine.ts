@@ -480,7 +480,377 @@ export async function generateVATDeadlines(
   }
 }
 
-// ==================== DEADLINE APPROACHING DETECTION ====================
+// ==================== SELF ASSESSMENT DEADLINES ====================
+
+/**
+ * Generate Self Assessment deadlines for a client
+ * Supports both MTD and non-MTD clients
+ * 
+ * SA Non-MTD Deadlines:
+ * - 31 October: Paper filing deadline
+ * - 31 January: Online filing deadline & first POA payment
+ * - 31 July: Second POA payment
+ * 
+ * SA MTD Quarterly Deadlines:
+ * - Q1: 6 Apr - 5 Jul → Update due 7 Aug
+ * - Q2: 6 Jul - 5 Oct → Update due 7 Nov
+ * - Q3: 6 Oct - 5 Jan → Update due 7 Feb
+ * - Q4: 6 Jan - 5 Apr → Update due 7 May
+ * - Final declaration: 31 January
+ */
+export async function generateSADeadlines(
+  organizationId: string,
+  clientId: string,
+  taxYear: string, // e.g., "2024/25"
+  isMTD: boolean = false
+): Promise<DeadlineGenerationResult[]> {
+  const results: DeadlineGenerationResult[] = [];
+  
+  try {
+    // Parse tax year (e.g., "2024/25" → start year 2024)
+    const [startYear] = taxYear.split("/").map(Number);
+    const taxYearEnd = new Date(startYear + 1, 0, 31); // 31 January following tax year
+    
+    if (isMTD) {
+      // Generate MTD quarterly update deadlines
+      const quarters = [
+        { q: 1, periodStart: new Date(startYear, 3, 6), periodEnd: new Date(startYear, 6, 5), dueMonth: 7, dueDay: 7 }, // Q1: Apr-Jul → 7 Aug
+        { q: 2, periodStart: new Date(startYear, 6, 6), periodEnd: new Date(startYear, 9, 5), dueMonth: 10, dueDay: 7 }, // Q2: Jul-Oct → 7 Nov
+        { q: 3, periodStart: new Date(startYear, 9, 6), periodEnd: new Date(startYear + 1, 0, 5), dueMonth: 1, dueDay: 7 }, // Q3: Oct-Jan → 7 Feb (next year)
+        { q: 4, periodStart: new Date(startYear + 1, 0, 6), periodEnd: new Date(startYear + 1, 3, 5), dueMonth: 4, dueDay: 7 }, // Q4: Jan-Apr → 7 May (next year)
+      ];
+      
+      for (const q of quarters) {
+        const dueYear = q.q >= 3 ? startYear + 1 : startYear;
+        const dueDate = new Date(dueYear, q.dueMonth, q.dueDay);
+        const warningDate = new Date(dueDate);
+        warningDate.setDate(warningDate.getDate() - 14);
+        
+        // Check for existing
+        const { data: existing } = await supabase
+          .from("deadlines")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("client_id", clientId)
+          .eq("service_code", "SA_MTD_QUARTERLY")
+          .eq("period_end", q.periodEnd.toISOString().split("T")[0])
+          .maybeSingle();
+        
+        if (!existing) {
+          const { data: deadline, error } = await supabase
+            .from("deadlines")
+            .insert({
+              organization_id: organizationId,
+              client_id: clientId,
+              name: `MTD Quarterly Update Q${q.q} - ${taxYear}`,
+              deadline_type: "statutory",
+              filing_body: "HMRC",
+              service_code: "SA_MTD_QUARTERLY",
+              due_date: dueDate.toISOString().split("T")[0],
+              period_start: q.periodStart.toISOString().split("T")[0],
+              period_end: q.periodEnd.toISOString().split("T")[0],
+              warning_date: warningDate.toISOString().split("T")[0],
+              status: "pending",
+              risk_score: 0,
+            })
+            .select()
+            .single();
+          
+          results.push(error ? { success: false, error: error.message } : { success: true, deadlineId: deadline.id });
+        } else {
+          results.push({ success: true, skipped: true, reason: "Deadline already exists", deadlineId: existing.id });
+        }
+      }
+      
+      // MTD Final Declaration (31 January)
+      const finalDecDate = new Date(startYear + 2, 0, 31); // 31 Jan following tax year end
+      const { data: existingFinal } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .eq("service_code", "SA_MTD_FINAL")
+        .eq("due_date", finalDecDate.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existingFinal) {
+        const { data: finalDec, error: finalError } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            client_id: clientId,
+            name: `MTD Final Declaration - ${taxYear}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC",
+            service_code: "SA_MTD_FINAL",
+            due_date: finalDecDate.toISOString().split("T")[0],
+            payment_date: finalDecDate.toISOString().split("T")[0],
+            warning_date: new Date(startYear + 2, 0, 17).toISOString().split("T")[0], // 14 days before
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        results.push(finalError ? { success: false, error: finalError.message } : { success: true, deadlineId: finalDec.id });
+      }
+      
+    } else {
+      // Non-MTD SA deadlines
+      
+      // Paper filing deadline: 31 October
+      const paperDeadline = new Date(startYear + 1, 9, 31); // 31 Oct following tax year
+      const { data: existingPaper } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .eq("service_code", "SA_PAPER")
+        .eq("due_date", paperDeadline.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existingPaper) {
+        const { data: paper, error: paperError } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            client_id: clientId,
+            name: `SA Paper Filing - ${taxYear}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC",
+            service_code: "SA_PAPER",
+            due_date: paperDeadline.toISOString().split("T")[0],
+            warning_date: new Date(startYear + 1, 9, 17).toISOString().split("T")[0],
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        results.push(paperError ? { success: false, error: paperError.message } : { success: true, deadlineId: paper.id });
+      }
+      
+      // Online filing deadline: 31 January
+      const onlineDeadline = new Date(startYear + 2, 0, 31); // 31 Jan following tax year
+      const { data: existingOnline } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .eq("service_code", "SA_ONLINE")
+        .eq("due_date", onlineDeadline.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existingOnline) {
+        const { data: online, error: onlineError } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            client_id: clientId,
+            name: `SA Online Filing & POA 1 - ${taxYear}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC",
+            service_code: "SA_ONLINE",
+            due_date: onlineDeadline.toISOString().split("T")[0],
+            payment_date: onlineDeadline.toISOString().split("T")[0],
+            warning_date: new Date(startYear + 2, 0, 17).toISOString().split("T")[0],
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        results.push(onlineError ? { success: false, error: onlineError.message } : { success: true, deadlineId: online.id });
+      }
+      
+      // POA 2: 31 July
+      const poa2Deadline = new Date(startYear + 1, 6, 31); // 31 July following tax year
+      const { data: existingPOA2 } = await supabase
+        .from("deadlines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("client_id", clientId)
+        .eq("service_code", "SA_POA2")
+        .eq("due_date", poa2Deadline.toISOString().split("T")[0])
+        .maybeSingle();
+      
+      if (!existingPOA2) {
+        const { data: poa2, error: poa2Error } = await supabase
+          .from("deadlines")
+          .insert({
+            organization_id: organizationId,
+            client_id: clientId,
+            name: `SA Payment on Account 2 - ${taxYear}`,
+            deadline_type: "statutory",
+            filing_body: "HMRC",
+            service_code: "SA_POA2",
+            due_date: poa2Deadline.toISOString().split("T")[0],
+            payment_date: poa2Deadline.toISOString().split("T")[0],
+            warning_date: new Date(startYear + 1, 6, 17).toISOString().split("T")[0],
+            status: "pending",
+            risk_score: 0,
+          })
+          .select()
+          .single();
+        
+        results.push(poa2Error ? { success: false, error: poa2Error.message } : { success: true, deadlineId: poa2.id });
+      }
+    }
+    
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating SA deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
+
+/**
+ * Generate Corporation Tax and Accounts deadlines for a company
+ * 
+ * Deadlines:
+ * - Accounts filing: ARD + 9 months
+ * - CT600 filing: ARD + 12 months
+ * - CT payment: ARD + 9 months + 1 day
+ */
+export async function generateCTDeadlines(
+  organizationId: string,
+  companyId: string,
+  periodEnd: Date // Accounting Reference Date
+): Promise<DeadlineGenerationResult[]> {
+  const results: DeadlineGenerationResult[] = [];
+  
+  try {
+    const periodEndStr = periodEnd.toISOString().split("T")[0];
+    
+    // Accounts filing deadline: ARD + 9 months
+    const accountsDeadline = new Date(periodEnd);
+    accountsDeadline.setMonth(accountsDeadline.getMonth() + 9);
+    
+    const { data: existingAccounts } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "ACCOUNTS_FILING")
+      .eq("period_end", periodEndStr)
+      .maybeSingle();
+    
+    if (!existingAccounts) {
+      const warningDate = new Date(accountsDeadline);
+      warningDate.setDate(warningDate.getDate() - 30);
+      
+      const { data: accounts, error: accountsError } = await supabase
+        .from("deadlines")
+        .insert({
+          organization_id: organizationId,
+          company_id: companyId,
+          name: `Annual Accounts - YE ${periodEndStr}`,
+          deadline_type: "statutory",
+          filing_body: "COMPANIES_HOUSE",
+          service_code: "ACCOUNTS_FILING",
+          due_date: accountsDeadline.toISOString().split("T")[0],
+          period_end: periodEndStr,
+          warning_date: warningDate.toISOString().split("T")[0],
+          active_window_start: new Date(periodEnd.getTime() + 86400000).toISOString().split("T")[0], // Day after period end
+          status: "pending",
+          risk_score: 0,
+        })
+        .select()
+        .single();
+      
+      results.push(accountsError ? { success: false, error: accountsError.message } : { success: true, deadlineId: accounts.id });
+    } else {
+      results.push({ success: true, skipped: true, reason: "Deadline already exists", deadlineId: existingAccounts.id });
+    }
+    
+    // CT600 filing deadline: ARD + 12 months
+    const ctFilingDeadline = new Date(periodEnd);
+    ctFilingDeadline.setFullYear(ctFilingDeadline.getFullYear() + 1);
+    
+    const { data: existingCT } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "CT600_FILING")
+      .eq("period_end", periodEndStr)
+      .maybeSingle();
+    
+    if (!existingCT) {
+      const ctWarning = new Date(ctFilingDeadline);
+      ctWarning.setDate(ctWarning.getDate() - 30);
+      
+      const { data: ct, error: ctError } = await supabase
+        .from("deadlines")
+        .insert({
+          organization_id: organizationId,
+          company_id: companyId,
+          name: `CT600 Return - YE ${periodEndStr}`,
+          deadline_type: "statutory",
+          filing_body: "HMRC",
+          service_code: "CT600_FILING",
+          due_date: ctFilingDeadline.toISOString().split("T")[0],
+          period_end: periodEndStr,
+          warning_date: ctWarning.toISOString().split("T")[0],
+          status: "pending",
+          risk_score: 0,
+        })
+        .select()
+        .single();
+      
+      results.push(ctError ? { success: false, error: ctError.message } : { success: true, deadlineId: ct.id });
+    } else {
+      results.push({ success: true, skipped: true, reason: "Deadline already exists", deadlineId: existingCT.id });
+    }
+    
+    // CT payment deadline: ARD + 9 months + 1 day
+    const ctPaymentDeadline = new Date(periodEnd);
+    ctPaymentDeadline.setMonth(ctPaymentDeadline.getMonth() + 9);
+    ctPaymentDeadline.setDate(ctPaymentDeadline.getDate() + 1);
+    
+    const { data: existingPayment } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "CT_PAYMENT")
+      .eq("period_end", periodEndStr)
+      .maybeSingle();
+    
+    if (!existingPayment) {
+      const paymentWarning = new Date(ctPaymentDeadline);
+      paymentWarning.setDate(paymentWarning.getDate() - 14);
+      
+      const { data: payment, error: paymentError } = await supabase
+        .from("deadlines")
+        .insert({
+          organization_id: organizationId,
+          company_id: companyId,
+          name: `CT Payment - YE ${periodEndStr}`,
+          deadline_type: "statutory",
+          filing_body: "HMRC",
+          service_code: "CT_PAYMENT",
+          due_date: ctPaymentDeadline.toISOString().split("T")[0],
+          payment_date: ctPaymentDeadline.toISOString().split("T")[0],
+          period_end: periodEndStr,
+          warning_date: paymentWarning.toISOString().split("T")[0],
+          status: "pending",
+          risk_score: 0,
+        })
+        .select()
+        .single();
+      
+      results.push(paymentError ? { success: false, error: paymentError.message } : { success: true, deadlineId: payment.id });
+    } else {
+      results.push({ success: true, skipped: true, reason: "Deadline already exists", deadlineId: existingPayment.id });
+    }
+    
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating CT deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
 
 /**
  * Check deadlines and emit events for those entering warning window.

@@ -28,9 +28,16 @@ export default function ClientPortal() {
     queryKey: ["client", clientId],
     queryFn: async () => {
       if (!clientId) return null;
+      // Join client detail tables for type-specific data
       const { data, error } = await supabase
         .from("clients")
-        .select("*")
+        .select(`
+          *,
+          client_detail_sa(*),
+          client_detail_cgt(*),
+          client_detail_partnership(*),
+          client_detail_charity(*)
+        `)
         .eq("id", clientId)
         .single();
 
