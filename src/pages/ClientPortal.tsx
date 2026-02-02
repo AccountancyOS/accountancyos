@@ -17,6 +17,8 @@ import { ConversationsTab } from "@/components/client-portal/ConversationsTab";
 import ClientQuestionnairesTab from "@/components/client-portal/ClientQuestionnairesTab";
 import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab";
 import { ContactsList } from "@/components/contacts/ContactsList";
+import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab";
+import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -151,31 +153,15 @@ export default function ClientPortal() {
             </TabsContent>
 
             <TabsContent value="deadlines">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Upcoming Deadlines</CardTitle>
-                  <CardDescription>
-                    Key statutory and service deadlines for this client
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Deadlines view coming soon...</p>
-                </CardContent>
-              </Card>
+              <ClientDeadlinesTab clientId={client.id} />
             </TabsContent>
 
             <TabsContent value="services">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Active Services</CardTitle>
-                  <CardDescription>
-                    Services and engagements for this client
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Services view coming soon...</p>
-                </CardContent>
-              </Card>
+              <ClientServicesTab clientId={client.id} />
+            </TabsContent>
+
+            <TabsContent value="services">
+              <ClientServicesTab clientId={client.id} />
             </TabsContent>
 
             <TabsContent value="billing">
