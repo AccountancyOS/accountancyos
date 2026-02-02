@@ -52,6 +52,7 @@ import {
   type ClientType,
 } from "@/lib/client-types";
 import { useNavigate } from "react-router-dom";
+import { convertLeadToClient } from "@/lib/lead-conversion-service";
 
 interface Lead {
   id: string;
@@ -109,6 +110,37 @@ export const LeadDetailPanel = ({
   const [activeTab, setActiveTab] = useState("overview");
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+
+  const handleConvertToClient = async () => {
+    if (!lead || !organization) return;
+    setIsConverting(true);
+
+    const result = await convertLeadToClient(lead, organization.id);
+
+    if (result.success) {
+      toast({
+        title: "Lead converted",
+        description: "Lead has been converted to a client record.",
+      });
+      onOpenChange(false);
+      onLeadUpdated();
+      // Navigate to the new client
+      if (result.clientId) {
+        navigate(`/clients/${result.clientId}`);
+      } else if (result.companyId) {
+        navigate(`/companies/${result.companyId}`);
+      }
+    } else {
+      toast({
+        title: "Conversion failed",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+
+    setIsConverting(false);
+  };
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -281,15 +313,27 @@ export const LeadDetailPanel = ({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl overflow-hidden flex flex-col">
         <SheetHeader className="flex-shrink-0">
-          <div className="flex items-center gap-3">
-            {isCompanyLead ? (
-              <Building2 className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <User className="h-5 w-5 text-muted-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {isCompanyLead ? (
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <User className="h-5 w-5 text-muted-foreground" />
+              )}
+              <SheetTitle className="flex-1">
+                {lead.first_name} {lead.last_name}
+              </SheetTitle>
+            </div>
+            {lead.pipeline_stage === "won" && (
+              <Button size="sm" onClick={handleConvertToClient} disabled={isConverting}>
+                {isConverting ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                Convert to Client
+              </Button>
             )}
-            <SheetTitle className="flex-1">
-              {lead.first_name} {lead.last_name}
-            </SheetTitle>
           </div>
           <SheetDescription className="flex items-center gap-2 flex-wrap">
             <Badge className={stageInfo?.color}>{stageInfo?.label}</Badge>
