@@ -1,467 +1,357 @@
 
-# AccountancyOS Architecture Overhaul & UX Refinement Plan
 
-## Progress Tracker
-
-| Phase | Status | Completed Items |
-|-------|--------|-----------------|
-| Phase 1 | ✅ COMPLETE | Client type schema, detail tables, lead_type alignment, UI components |
-| Phase 2 | ✅ COMPLETE | CRM 5-stage pipeline, stage timestamps, Lead Detail Panel with Quotes tab |
-| Phase 3 | ✅ COMPLETE | SLA engine tables, sla-engine.ts service, practice settings expansion |
-| Phase 4 | ✅ COMPLETE | Welcome Dashboard cleanup, Overview redesign with Overdue Actions + Staff Variance |
-| Phase 5 | ✅ COMPLETE | Document signature flow, visibility tracking, contacts simplification (director/bookkeeper/other) |
-| Phase 6 | ✅ COMPLETE | Notifications clearable, session management tables, HMRC authorisations, text cleanup |
-
----
+# Comprehensive End-to-End Testing Review: AccountancyOS
 
 ## Executive Summary
 
-This plan addresses your comprehensive review to transform AccountancyOS into a production-grade practice management system. Based on your priorities, we're implementing **architecture-first** changes, followed by UX refinements. The work is organised into 6 phases over approximately 8-12 weeks of development.
+After tracing through the complete user journey from sign-up through all major workflows, I have identified **47 distinct issues** across 9 categories. These range from critical data flow breaks to minor UX polish items. This review covers the accountant experience, client portal experience, and data integrity across all modules.
 
 ---
 
-## Phase 1: Client Type Architecture (Foundation)
+## Complete User Journey Testing Results
 
-### 1.1 Database Schema: Type-Specific Detail Tables
+### Journey 1: New Firm Sign-up → Setup → First Client
 
-Create validated sub-schemas for each client type while maintaining a unified core client record:
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| Auth.tsx - Sign Up | ⚠️ Partial | Missing `autoComplete` attributes on password fields |
+| Stripe Checkout | ✅ Works | Proper redirect and polling mechanism |
+| OnboardingWizard.tsx | ⚠️ Partial | Exclamation mark in "Setup complete!" toast |
+| Practice Setup Steps | ⚠️ Partial | No skip button visible per Phase 4.2 plan |
+| First Client Creation | ⚠️ Partial | Dialog works but detail tables not queried on edit |
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         CORE TABLES                                     │
-├─────────────────────────────────────────────────────────────────────────┤
-│  clients (existing)                                                      │
-│    + client_type ENUM (sa_non_mtd, sa_mtd, partnership, llp,            │
-│                        limited_company, charity, cgt, other)             │
-│    + preferred_name TEXT                                                 │
-│    + mobile_number TEXT                                                  │
-│                                                                          │
-│  companies (existing - becomes the "Limited Company" detail schema)      │
-│    + auth_code TEXT (CH auth code)                                       │
-│    + trading_status ENUM                                                 │
-│    + trading_address JSONB                                               │
-│    + ch_personal_code TEXT (director)                                    │
-│    + director_nationality TEXT                                           │
-│    + partner_in_charge UUID                                              │
-│    + staff_in_charge UUID                                                │
-│    + internal_reference TEXT                                             │
-└─────────────────────────────────────────────────────────────────────────┘
+### Journey 2: CRM → Lead → Quote → Client Conversion
 
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    TYPE-SPECIFIC DETAIL TABLES                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│  client_detail_sa (Self-Assessment - MTD and Non-MTD)                   │
-│    - client_id FK                                                        │
-│    - is_mtd BOOLEAN                                                      │
-│    - mtd_quarters JSONB (for MTD)                                        │
-│    - mtd_final_declaration_deadline DATE                                 │
-│    - payment_on_account_jan DECIMAL                                      │
-│    - payment_on_account_jul DECIMAL                                      │
-│    - refund_expected BOOLEAN                                             │
-│                                                                          │
-│  client_detail_partnership                                               │
-│    - client_id FK (the partnership itself)                               │
-│    - partnership_utr TEXT                                                │
-│    - partnership_address JSONB                                           │
-│    - partners JSONB[] (array of partner details with UTR/address/DOB)   │
-│                                                                          │
-│  client_detail_cgt                                                       │
-│    - client_id FK                                                        │
-│    - cgt_number TEXT                                                     │
-│    - home_address JSONB                                                  │
-│    - property_address JSONB                                              │
-│    - disposal_date DATE                                                  │
-│                                                                          │
-│  client_detail_charity                                                   │
-│    - client_id FK                                                        │
-│    - charity_number TEXT                                                 │
-│    - charity_status ENUM                                                 │
-│    - trading_as TEXT                                                     │
-│    - charity_year_end DATE                                               │
-│    - gift_aid_claim_expiry DATE                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| CRM Page | ⚠️ Partial | LeadDetailPanel created but NOT wired in |
+| Lead Creation | ✅ Works | 8 lead types, CH lookup UI exists (no function) |
+| Quote Integration | ❌ Broken | LeadDetailPanel has Quotes tab but CRM uses old dialog |
+| Stage Timestamps | ✅ Works | proposal_sent_at, won_at, etc. properly set |
+| Lead-to-Client Conversion | ⚠️ Unclear | Conversion logic not visible in current CRM.tsx |
 
-### 1.2 Lead Type Alignment
+### Journey 3: Client Management → Services → Jobs
 
-Add `lead_type` to leads table with same ENUM values as client types:
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| Client Detail View | ⚠️ Incomplete | Type-specific details not loaded/displayed |
+| Client Types | ⚠️ Partial | 8 types exist but no edit flow for existing clients |
+| Services Tab | ❌ Placeholder | "Services view coming soon..." text |
+| Deadlines Tab | ❌ Placeholder | "Deadlines view coming soon..." text |
+| Billing Tab | ❌ Placeholder | "Billing view coming soon..." text |
+| Job Creation | ⚠️ Works | But no link from client detail services |
 
-```sql
-ALTER TABLE leads ADD COLUMN lead_type TEXT NOT NULL DEFAULT 'other';
--- Options: sa_non_mtd, sa_mtd, partnership, llp, limited_company, charity, cgt, other
-```
+### Journey 4: SA MTD vs SA Non-MTD Client Flow
 
-### 1.3 Companies House Integration at Lead Stage
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| Client Type Selection | ✅ Works | sa_mtd and sa_non_mtd options exist |
+| Detail Fields | ⚠️ Partial | MTD toggle shows, quarters field exists |
+| MTD Deadline Generation | ❌ Missing | No MTD quarter deadline logic in deadline-engine.ts |
+| MTD Quarterly Updates | ❌ Missing | No workpaper/filing for MTD quarterly updates |
+| MTD Final Declaration | ⚠️ Partial | mtd_final_declaration_deadline field exists but unused |
+| SA Non-MTD Deadline | ❌ Missing | No automatic 31 Jan deadline generation |
 
-- When lead_type is `limited_company` or `llp`, show "Lookup Company" button
-- Call Companies House API to pre-populate company data
-- Store fetched data in `leads.ch_company_profile` JSONB
-- On conversion to client, data flows to companies table
+### Journey 5: Limited Company Flow (CT600 + Accounts)
 
-### 1.4 UI Components
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| Company Creation | ✅ Works | Companies House lookup UI present |
+| Companies House API | ❌ Not Implemented | Search button has no onClick handler |
+| Year End Configuration | ⚠️ Partial | year_end_month/day columns exist, not in UI |
+| Accounts Deadline | ⚠️ Partial | TODO comment in deadline-engine.ts line 124 |
+| CT600 Deadline | ⚠️ Incomplete | 9 months + 1 day logic not automated |
+| Filing Workflow | ✅ Works | CT600 XML builder exists, filing tabs work |
 
-**Unified Client Form with Conditional Visibility:**
-- Core fields always visible (name, email, phone, address)
-- Type selector dropdown with all 8 options
-- On type selection, reveal type-specific panel
-- Validate against the appropriate sub-schema before save
+### Journey 6: VAT Return Workflow
 
----
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| VAT Registration | ⚠️ Partial | VATRegistrationSettings component exists |
+| VAT Return Calculation | ✅ Works | VATReturnsTab calculates from ledger |
+| VAT Scheme Support | ⚠️ Partial | Standard scheme works, others untested |
+| VAT Deadline Generation | ✅ Works | generateVATDeadlines function exists |
+| HMRC MTD VAT Submission | ⚠️ Partial | hmrc-vat-submit edge function exists |
+| VAT to Ledger Reconciliation | ⚠️ Partial | VATReconciliationPanel exists but minimal |
 
-## Phase 2: CRM & Quotes Consolidation
+### Journey 7: Payroll Module
 
-### 2.1 Remove Qualified Stage
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| PAYE Scheme Setup | ✅ Works | PayeSchemesTab, AddPayeSchemeDialog exist |
+| Employee Management | ✅ Works | Full employee model with all RTI fields |
+| Pay Run Creation | ✅ Works | CreatePayRunDialog creates draft pay runs |
+| Payroll Calculation | ✅ Excellent | Pure calculation engine with 2024/25 + 2023/24 rates |
+| Tax Code Parsing | ✅ Excellent | Scottish/Welsh/K codes all handled |
+| NIC Calculation | ✅ Excellent | All bands and categories implemented |
+| Payslip Generation | ⚠️ Partial | PayslipViewDialog exists but untested |
+| RTI Submission | ⚠️ Partial | rti-submit edge function exists |
+| P45/P60 Generation | ❌ Missing | Referenced in constants but no generator |
+| Payroll → Ledger Journal | ❌ Missing | Plan requirement but no implementation |
 
-Update pipeline from 6 stages to 5:
-```
-New → Proposal Sent → Chasing → Won → Lost
-```
+### Journey 8: CIS Module
 
-### 2.2 Integrate Quotes into CRM
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| Contractor Management | ✅ Works | CISContractorsTab exists |
+| Subcontractor Verification | ⚠️ Partial | UI exists, HMRC API integration unclear |
+| CIS Payment Recording | ✅ Works | CISPaymentsTab exists |
+| CIS Return Generation | ✅ Works | CISReturnsTab, generateCISDeadlines |
+| HMRC Submission | ⚠️ Partial | cis-submit edge function exists |
 
-**Lead Detail Panel (slideout or modal):**
-- Overview tab: lead info, stage history, activity log
-- Conversations tab: email history with client
-- Quotes tab: create/view/send quotes directly from lead
-- Documents tab: shared files
+### Journey 9: Client Portal Experience
 
-**CRM Page Changes:**
-- "Send Quote" button added alongside "Create Lead"
-- Clicking lead opens detail panel instead of edit modal
-- Quote status visible in lead card (Draft/Sent/Accepted/Rejected)
-- Outstanding quotes column in CRM Kanban view
-
-### 2.3 Lead Stage Timestamps
-
-Add columns to track progression:
-```sql
-ALTER TABLE leads ADD COLUMN qualified_at TIMESTAMPTZ;
-ALTER TABLE leads ADD COLUMN proposal_sent_at TIMESTAMPTZ;
-ALTER TABLE leads ADD COLUMN chasing_started_at TIMESTAMPTZ;
-ALTER TABLE leads ADD COLUMN won_at TIMESTAMPTZ;
-ALTER TABLE leads ADD COLUMN lost_at TIMESTAMPTZ;
-```
-
-Auto-populate on stage change for automation triggers.
+| Stage | Status | Issues Found |
+|-------|--------|--------------|
+| Portal Preview | ✅ Works | Read-only preview with visibility controls |
+| Document Visibility | ⚠️ Partial | client_visible column exists but toggle broken |
+| Document Download | ❌ Not Implemented | Download button has no handler |
+| Document Upload | ❌ Not Implemented | Upload button has no handler |
+| Signature Flow | ⚠️ Incomplete | Component exists but shows placeholder text |
+| Questionnaire Response | ✅ Works | QuestionnaireResponse.tsx functional |
+| Message Sending | ⚠️ Partial | NewMessageDialog exists |
 
 ---
 
-## Phase 3: SLA Engine & Practice Settings
+## Critical Data Flow Issues
 
-### 3.1 SLA Configuration Tables
+### Issue 1: Client Type Details Not Queried on Edit
 
-```sql
-CREATE TABLE sla_definitions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID NOT NULL REFERENCES organizations(id),
-  sla_type TEXT NOT NULL, -- 'client_email', 'in_app_message', 'internal_message', 'job', 'task'
-  job_type TEXT, -- only for job SLAs
-  service_code TEXT, -- links to services_catalog
-  trigger_event TEXT NOT NULL,
-  trigger_status TEXT, -- for jobs: status that starts SLA
-  pause_conditions JSONB DEFAULT '[]',
-  stop_conditions JSONB DEFAULT '[]',
-  default_duration_hours INTEGER NOT NULL,
-  urgent_duration_hours INTEGER,
-  active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+**Location:** `src/pages/ClientPortal.tsx`, `src/pages/Clients.tsx`
+**Impact:** HIGH - Client type-specific data (UTR, NINO, POA amounts) never displayed after creation
+**Current Behavior:** Only base client fields fetched; client_detail_sa, client_detail_cgt, etc. never joined
+**Fix Required:** Add detail table joins in client queries
 
-CREATE TABLE sla_instances (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID NOT NULL,
-  sla_definition_id UUID REFERENCES sla_definitions(id),
-  entity_type TEXT NOT NULL, -- 'email', 'message', 'job', 'task'
-  entity_id UUID NOT NULL,
-  started_at TIMESTAMPTZ NOT NULL,
-  paused_at TIMESTAMPTZ,
-  paused_total_seconds INTEGER DEFAULT 0,
-  due_at TIMESTAMPTZ NOT NULL,
-  completed_at TIMESTAMPTZ,
-  breached BOOLEAN DEFAULT false,
-  status TEXT DEFAULT 'active', -- 'active', 'paused', 'completed', 'breached'
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### 3.2 Practice Settings Expansion
-
-Add to `org_settings`:
-```sql
-ALTER TABLE org_settings ADD COLUMN business_hours_start TIME DEFAULT '09:00';
-ALTER TABLE org_settings ADD COLUMN business_hours_end TIME DEFAULT '17:30';
-ALTER TABLE org_settings ADD COLUMN business_days TEXT[] DEFAULT ARRAY['monday','tuesday','wednesday','thursday','friday'];
-ALTER TABLE org_settings ADD COLUMN deadline_buffer_days_vat INTEGER DEFAULT 7;
-ALTER TABLE org_settings ADD COLUMN deadline_buffer_days_sa INTEGER DEFAULT 14;
-ALTER TABLE org_settings ADD COLUMN sla_email_response_hours INTEGER DEFAULT 24;
-ALTER TABLE org_settings ADD COLUMN sla_internal_message_hours INTEGER DEFAULT 8;
-```
-
-### 3.3 SLA Engine Service
-
-Create `src/lib/sla-engine.ts`:
-- `startSLA(entityType, entityId, triggeredBy)` - creates SLA instance
-- `pauseSLA(slaInstanceId, reason)` - pauses with timestamp
-- `resumeSLA(slaInstanceId)` - resumes, adds paused time
-- `completeSLA(slaInstanceId)` - marks complete
-- `checkSLABreaches()` - background job to flag breached SLAs
-- `calculateAdjustedDueDate(startTime, durationHours, businessHours)` - respects business hours
-
-### 3.4 Deadline Override Logic
-
-When statutory deadline is sooner than SLA expiry:
 ```typescript
-if (deadlineDate < slaInstance.due_at) {
-  slaInstance.due_at = deadlineDate;
-  slaInstance.compressed = true;
-  flagJobAsAtRisk(jobId);
-}
+// Current (broken):
+.from("clients").select("*")
+
+// Should be:
+.from("clients").select(`
+  *,
+  client_detail_sa(*),
+  client_detail_cgt(*),
+  client_detail_partnership(*),
+  client_detail_charity(*)
+`)
 ```
 
----
+### Issue 2: LeadDetailPanel Not Connected to CRM
 
-## Phase 4: Dashboard & Overview Redesign
+**Location:** `src/pages/CRM.tsx` (lines 244-256)
+**Impact:** HIGH - Phase 2.2 requirement (integrated quotes) not functional
+**Current Behavior:** Clicking lead opens old `editDialogOpen` modal, not new tabbed panel
+**Evidence:** `LeadDetailPanel` is imported but never rendered in CRM.tsx
+**Fix Required:** Replace edit dialog with LeadDetailPanel slideout
 
-### 4.1 Replace Current Overview
+### Issue 3: SA/MTD Deadline Engine Gaps
 
-Remove current widgets, replace with:
+**Location:** `src/lib/deadline-engine.ts`
+**Impact:** HIGH - Self Assessment clients get no automated deadlines
+**Missing:**
+- No `generateSADeadlines()` function for 31 Jan paper/online deadlines
+- No MTD quarterly update deadline generation
+- No POA (31 Jan, 31 Jul) reminder generation
+- `mtd_final_declaration_deadline` field exists but unused
 
-**KPI Cards Row:**
-- Total Clients (count)
-- Total Leads (count with pipeline breakdown)
-- Current Month Revenue (from active engagements)
-- Lead Revenue (from unsent/pending quotes)
+### Issue 4: Companies House Lookup Not Functional
 
-**Overdue Actions Panel:**
-- Overdue Conversations (grouped by SLA breach severity)
-- Overdue Emails (same)
-- Overdue Tasks (same)
-- Each shows staff member responsible
+**Location:** `src/pages/CRM.tsx` (lines 478-488)
+**Impact:** MEDIUM - Phase 1.3 requirement not met
+**Current:** Button exists with `<Search>` icon but no `onClick` handler
+**Missing:** 
+- API call to Companies House
+- Auto-population of company data
+- `ch_company_profile` JSONB storage
 
-**Deadlines Panel:**
-- Overdue Deadlines (red, linked to service)
-- Upcoming Deadlines (this week, this month)
-- Filterable by staff member
+### Issue 5: Staff Variance Table Uses Placeholder Data
 
-**Staff Variance (practice owner view):**
-- Table showing each staff member's workload and SLA performance
-
-### 4.2 Welcome Dashboard Cleanup
-
-Remove from WelcomeDashboard.tsx:
-- "🎉" emoji from "Welcome to AccountancyOS!"
-- Remove "Next Steps" section entirely
-- Make setup progress tasks skippable (add skip button)
-
----
-
-## Phase 5: Documents & Contacts Refinement
-
-### 5.1 Document Management Enhancement
-
-**Add columns to document storage:**
-```sql
-ALTER TABLE job_documents ADD COLUMN client_visible BOOLEAN DEFAULT false;
-ALTER TABLE job_documents ADD COLUMN signature_required BOOLEAN DEFAULT false;
-ALTER TABLE job_documents ADD COLUMN signed_at TIMESTAMPTZ;
-ALTER TABLE job_documents ADD COLUMN signed_by UUID;
-ALTER TABLE job_documents ADD COLUMN signature_ip TEXT;
-ALTER TABLE job_documents ADD COLUMN auto_archive_at DATE; -- upload_date + 7 years
-```
-
-**Signature Flow:**
-1. Document upload with `signature_required = true`
-2. Client must scroll through entire document (track scroll position)
-3. Signature bar only enabled after scroll complete
-4. Capture typed signature, timestamp, IP
-5. Auto-save signed version with watermark
-
-**Bulk Operations:**
-- Multi-select documents
-- Toggle visibility/signature for selected
-- Bulk delete with confirmation
-
-### 5.2 Contact Types Simplification
-
-Update contacts role options:
-```typescript
-const CONTACT_ROLES = ['director', 'bookkeeper', 'other'] as const;
-// Remove: 'fd', 'secretary', 'personal'
-```
-
-**Contact Permissions:**
-- Director: `can_sign` toggle, `is_primary` toggle
-- Bookkeeper: limited visibility, no signing
-- Other: limited visibility, no signing
-
-### 5.3 Auto-Archive
-
-Background job (daily cron):
-```sql
-UPDATE job_documents 
-SET archived = true, archived_at = now()
-WHERE created_at < now() - INTERVAL '7 years'
-AND archived = false;
-```
+**Location:** `src/components/dashboard/StaffVarianceTable.tsx` (lines 33-38)
+**Impact:** MEDIUM - Dashboard accuracy compromised
+**Current:** Returns `activeJobs: 0` and `performance: 100` for all users
+**Missing:** 
+- Real job count query by assignee
+- SLA breach percentage calculation
+- Actual workload metrics
 
 ---
 
-## Phase 6: Miscellaneous Fixes & Polish
+## Missing Features from Plan
 
-### 6.1 Notifications
-
-**Make notifications clearable:**
-- Add "Clear All" button to notification bell dropdown
-- Add individual dismiss (X) button per notification
-- Add "Mark all as read" option
-
-**Database change:**
-```sql
-ALTER TABLE notifications ADD COLUMN dismissed BOOLEAN DEFAULT false;
-ALTER TABLE notifications ADD COLUMN dismissed_at TIMESTAMPTZ;
-```
-
-### 6.2 Text Cleanup
-
-**Remove all emojis and exclamation marks from:**
-- Toast messages
-- Welcome text
-- Button labels
-- Placeholder text
-
-Replace with professional periods.
-
-### 6.3 Session Management
-
-**Auto logout settings:**
-```sql
-ALTER TABLE org_settings ADD COLUMN session_timeout_minutes INTEGER DEFAULT 480; -- 8 hours
-ALTER TABLE org_settings ADD COLUMN single_session_only BOOLEAN DEFAULT false;
-```
-
-**Implementation:**
-- Track session in `user_sessions` table
-- On new login with `single_session_only = true`, invalidate previous sessions
-- Background check for session timeout
-
-### 6.4 Services Tab on Client
-
-**Show fees with toggle:**
-- Display all active services with current fees
-- "One-off" vs "Monthly" indicator
-- Fee adjustment triggers new engagement letter requirement
-- Total monthly and one-off fees calculated at bottom
-
-### 6.5 HMRC Authorisations Tracking
-
-Add to client/company detail:
-```sql
-CREATE TABLE hmrc_authorisations (
-  id UUID PRIMARY KEY,
-  organization_id UUID NOT NULL,
-  client_id UUID,
-  company_id UUID,
-  auth_type TEXT NOT NULL, -- 'personal', 'company', 'paye'
-  authorised_at DATE,
-  expires_at DATE,
-  status TEXT DEFAULT 'pending',
-  notes TEXT
-);
-```
+| Plan Item | Phase | Status | Location |
+|-----------|-------|--------|----------|
+| Send Quote button in CRM header | 2.2 | ❌ Missing | CRM.tsx |
+| Quote status on lead cards | 2.2 | ❌ Missing | CRM.tsx |
+| Skip button for setup tasks | 4.2 | ❌ Missing | OnboardingWizard.tsx |
+| Conversations tab in LeadDetailPanel | 2.2 | ❌ Placeholder only | LeadDetailPanel.tsx |
+| Documents tab in LeadDetailPanel | 2.2 | ❌ Placeholder only | LeadDetailPanel.tsx |
+| Session tracking on login | 6.3 | ❌ Not implemented | Auth.tsx |
+| Single session enforcement | 6.3 | ❌ Not implemented | - |
+| sla-check edge function | 3.3 | ❌ Not created | - |
+| document-archive edge function | 5.3 | ❌ Not created | - |
+| session-cleanup edge function | 6.3 | ❌ Not created | - |
+| Payroll → Ledger journal | 7 | ❌ Missing | payrun-service.ts |
+| P45/P60 document generation | 7 | ❌ Missing | - |
 
 ---
 
-## Technical Implementation Notes
+## UI/UX Issues from Accountant Perspective
 
-### Database Migrations
+### Pain Point 1: No Services or Deadlines on Client Detail
 
-All schema changes will be atomic migrations with:
-- Forward migration
-- RLS policies for new tables
-- Indexes for query performance
+**User Story:** "I click on a client and want to see what services they have and when things are due."
+**Current:** "Services view coming soon...", "Deadlines view coming soon..."
+**Impact:** Accountants cannot view critical client engagement information
+**Fix:** Wire up Services tab to engagements table, Deadlines tab to deadlines table
 
-### API Endpoints
+### Pain Point 2: Cannot Edit Client Type Details
 
-New edge functions required:
-- `sla-check` - periodic SLA breach detection
-- `document-archive` - daily archive job
-- `session-cleanup` - session timeout enforcement
+**User Story:** "I added a client as SA Non-MTD but now they've joined MTD. I need to update their record."
+**Current:** No edit flow for client_type or detail table fields
+**Impact:** Accountants must delete and recreate clients to change type
+**Fix:** Add edit dialog/form for client details with type-specific fields
 
-### UI Components
+### Pain Point 3: Company Year End Not Configurable
 
-New components to create:
-- `LeadDetailPanel.tsx` - slideout for lead management
-- `QuoteBuilderInline.tsx` - quote creation within lead panel
-- `SLAIndicator.tsx` - shows SLA status on items
-- `ClientTypeForm.tsx` - unified form with conditional sections
-- `DocumentSignatureFlow.tsx` - scroll-to-sign implementation
-- `StaffVarianceTable.tsx` - dashboard component
+**User Story:** "I need to set this company's year end to 30 September."
+**Current:** year_end_month and year_end_day columns exist but no UI
+**Impact:** Cannot set year ends, so accounts/CT deadlines cannot auto-generate
+**Fix:** Add year end selector to company detail view
 
-### Existing Components to Modify
+### Pain Point 4: No Conversion Flow in CRM
 
-| Component | Changes |
-|-----------|---------|
-| `CRM.tsx` | Remove Qualified column, add Send Quote button, add lead detail slideout |
-| `AddClientDialog.tsx` | Expand to 8 client types with type-specific fields |
-| `WelcomeDashboard.tsx` | Remove emoji, remove Next Steps, add skip to tasks |
-| `NotificationBell.tsx` | Add clear all, dismiss individual, mark all read |
-| `Overview.tsx` | Complete redesign per 4.1 |
-| `ClientPortal.tsx` | Add Services tab with fees, HMRC auth tab |
-| `ClientDocumentsTab.tsx` | Full implementation with visibility/signature |
+**User Story:** "This lead accepted our quote. How do I convert them to a client?"
+**Current:** Lead status can be set to "won" but no conversion action
+**Impact:** Manual client creation required; no data flows from lead
+**Fix:** Add "Convert to Client" button that creates client record from lead data
 
----
+### Pain Point 5: Quotes Page Separate from CRM
 
-## Prioritised Delivery Order
-
-| Week | Phase | Key Deliverables |
-|------|-------|------------------|
-| 1-2 | Phase 1 | Client type schema, detail tables, Companies House lookup |
-| 3-4 | Phase 2 | CRM consolidation, Quotes integration, stage timestamps |
-| 5-6 | Phase 3 | SLA engine, practice settings, deadline override logic |
-| 7-8 | Phase 4 | Dashboard redesign, Overview rebuild |
-| 9-10 | Phase 5 | Documents enhancement, signature flow, contacts simplification |
-| 11-12 | Phase 6 | Polish, session management, text cleanup |
+**User Story:** "I want to create a quote for this lead without leaving the CRM."
+**Current:** Must navigate to /quotes separately; LeadDetailPanel has Quotes tab but isn't connected
+**Impact:** Extra navigation, context switching
+**Fix:** Wire LeadDetailPanel into CRM as per Phase 2.2 plan
 
 ---
 
-## Questions Resolved from Your Review
+## UI/UX Issues from Client Perspective
 
-| Your Note | Resolution |
-|-----------|------------|
-| "Remove emoji and !" | Phase 6.2 - comprehensive text cleanup |
-| "Notifications should be clearable" | Phase 6.1 - dismiss individual and clear all |
-| "Remove Qualified column" | Phase 2.1 - 5-stage pipeline |
-| "Send Quote button in CRM" | Phase 2.2 - quotes integrated into lead panel |
-| "Lead type dropdown" | Phase 1.2 - aligned with client types |
-| "Companies House at lead stage" | Phase 1.3 - lookup on lead creation |
-| "8 client types with specific fields" | Phase 1.1 - type-specific detail tables |
-| "SLA system" | Phase 3 - complete deterministic SLA engine |
-| "Auto logout / single session" | Phase 6.3 - session management |
-| "Document signature scroll-through" | Phase 5.1 - signature flow |
-| "Contact types simplification" | Phase 5.2 - director/bookkeeper/other only |
-| "Services with fees on client" | Phase 6.4 - full implementation |
+### Pain Point 1: Documents Cannot Be Downloaded
 
----
+**User Story:** "My accountant uploaded my tax return and I need to download it."
+**Current:** Download button in ClientDocumentsTab has no onClick handler
+**Impact:** Clients cannot access their documents
+**Fix:** Implement document download from Supabase Storage
 
-## What's Not Changing (Already Correct)
+### Pain Point 2: Documents Cannot Be Uploaded
 
-- Lead-to-client conversion workflow (already implemented correctly)
-- Deadline engine architecture (solid foundation)
-- Jobs module structure (matches your spec)
-- Automation engine (well-designed)
-- Engagement letter e-signature (already works)
-- Bookkeeping module (comprehensive)
+**User Story:** "I need to upload my bank statements for my accountant."
+**Current:** Upload button has no onClick handler
+**Impact:** Clients cannot submit records
+**Fix:** Implement document upload to job_documents
+
+### Pain Point 3: Signature Flow Incomplete
+
+**User Story:** "I need to sign my engagement letter."
+**Current:** Shows "Document preview loading..." placeholder text
+**Impact:** Clients cannot complete signatures
+**Fix:** Implement PDF rendering in DocumentSignatureFlow
 
 ---
 
-## Next Steps
+## Database Integrity Issues
 
-Upon approval of this plan:
+### Issue 1: Orphaned Detail Records Possible
 
-1. **Phase 1 begins** with database migrations for client type architecture
-2. Each phase will be implemented incrementally with testing
-3. RLS policies updated alongside schema changes
-4. UI components built with existing design system
-5. Each phase ends with integration testing before moving to next
+**Risk:** If client is deleted, detail tables may retain orphaned records
+**Fix:** Add ON DELETE CASCADE to client_detail_* foreign keys
+
+### Issue 2: Missing RLS on Detail Tables
+
+**Risk:** Security linter warning about RLS without policies
+**Fix:** Add appropriate RLS policies matching parent table access
+
+### Issue 3: Unused Schema Columns
+
+The following columns were added but appear unused in application code:
+
+| Table | Column | Usage |
+|-------|--------|-------|
+| clients | mobile_number | Created but never displayed |
+| clients | preferred_name | Created but never displayed |
+| companies | trading_status | Created but no UI |
+| companies | trading_address | Created but no UI |
+| companies | director_nationality | Created but no UI |
+| client_detail_sa | mtd_quarters | Created but never populated |
+| sla_definitions | * | Table created but no seeded definitions |
+
+---
+
+## Text Cleanup Still Required
+
+| File | Issue | Line |
+|------|-------|------|
+| OnboardingWizard.tsx | "Setup complete!" | L208 |
+| GmailCallback.tsx | "Gmail connected successfully!" | L47 |
+| OutlookCallback.tsx | "Outlook connected successfully!" | L52 |
+| BankingTab.tsx | "Bank connected successfully! Accounts..." | L95 |
+| ClientBankingTab.tsx | "Bank connected successfully! Your accounts..." | L38 |
+| Settings.tsx | "Gmail account connected successfully!" | L44 |
+| Settings.tsx | "Outlook account connected successfully!" | L48 |
+| e2e-flow-validation.ts | Contains ✅ and ❌ emojis | L592 |
+
+---
+
+## Priority Remediation Order
+
+### Tier 1: Critical Data Flow (Must Fix)
+1. Wire LeadDetailPanel into CRM.tsx
+2. Add client detail table joins in client queries
+3. Create SA deadline generation function
+4. Implement Companies House API lookup
+5. Add client type edit flow
+
+### Tier 2: Core Functionality (Should Fix)
+6. Implement document download handler
+7. Implement document upload handler
+8. Add year end configuration UI for companies
+9. Implement Staff Variance real calculations
+10. Add "Convert to Client" flow in CRM
+11. Wire up Services tab on ClientPortal
+
+### Tier 3: Automation & Background (Plan Requirement)
+12. Create sla-check edge function
+13. Create document-archive edge function
+14. Seed default SLA definitions for new organizations
+15. Implement session tracking
+16. Add Payroll → Ledger journal posting
+
+### Tier 4: Polish & Completeness
+17. Fix LeadDetailPanel useState bug
+18. Add autoComplete attributes to Auth.tsx
+19. Complete text cleanup (7 files)
+20. Add P45/P60 generation
+21. Implement DocumentSignatureFlow PDF rendering
+22. Add skip buttons to OnboardingWizard
+
+---
+
+## Testing Recommendations
+
+### Before Production Release
+
+1. **End-to-end signup test** - New user through to first job creation
+2. **SA MTD client journey** - Full lifecycle with quarterly updates
+3. **Ltd Co journey** - CH sync → Accounts → CT600 → Filing
+4. **Payroll run test** - Create employee, run payroll, generate payslip
+5. **VAT return test** - Enter transactions, calculate return, review boxes
+6. **Client portal test** - Login as client, view documents, sign engagement letter
+
+### Automated Test Coverage Needed
+
+- Client type validation (8 types × create/edit/view)
+- Deadline generation (SA/MTD/CT/VAT/CIS/RTI)
+- Payroll calculation engine (edge cases: Scottish rates, K codes, directors)
+- SLA engine (start/pause/stop/breach detection)
+- Filing workflow (snapshot → approval → submission)
 
