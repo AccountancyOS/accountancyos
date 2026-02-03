@@ -67,6 +67,41 @@ serve(async (req) => {
     const organizationId = orgUser.organization_id;
     logStep("Found organization", { organizationId });
 
+    // OPTIMIZATION: Check if organization has a stripe_customer_id
+    // If not, user never completed checkout - skip Stripe API calls entirely
+    const { data: orgData } = await supabaseAdmin
+      .from('organizations')
+      .select('stripe_customer_id')
+      .eq('id', organizationId)
+      .single();
+
+    if (!orgData?.stripe_customer_id) {
+      logStep("No stripe_customer_id - skipping Stripe API, returning unsubscribed");
+      
+      // Cache this result to prevent repeated edge function calls
+      await supabaseAdmin
+        .from('organization_subscription_cache')
+        .upsert({
+          organization_id: organizationId,
+          subscribed: false,
+          subscription_id: null,
+          subscription_status: null,
+          subscription_end: null,
+          checked_at: new Date().toISOString(),
+        }, { onConflict: 'organization_id' });
+
+      return new Response(JSON.stringify({ 
+        subscribed: false, 
+        from_cache: false,
+        reason: 'no_stripe_customer' 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    logStep("Organization has stripe_customer_id, proceeding with Stripe check");
+
     // Check if we should use cached value
     const { data: cache } = await supabaseAdmin
       .from('organization_subscription_cache')
