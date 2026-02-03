@@ -4,6 +4,8 @@
 export const CLIENT_TYPES = [
   'sa_non_mtd',
   'sa_mtd',
+  'sole_trader',
+  'landlord',
   'partnership',
   'llp',
   'limited_company',
@@ -17,6 +19,8 @@ export type ClientType = typeof CLIENT_TYPES[number];
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   sa_non_mtd: 'Self-Assessment (Non-MTD)',
   sa_mtd: 'Self-Assessment (MTD)',
+  sole_trader: 'Sole Trader',
+  landlord: 'Landlord',
   partnership: 'Partnership',
   llp: 'LLP',
   limited_company: 'Limited Company',
@@ -28,6 +32,8 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 export const CLIENT_TYPE_DESCRIPTIONS: Record<ClientType, string> = {
   sa_non_mtd: 'Individual requiring Self-Assessment tax return',
   sa_mtd: 'Individual on Making Tax Digital for Income Tax',
+  sole_trader: 'Self-employed individual running their own business',
+  landlord: 'Property investor with rental income',
   partnership: 'Traditional partnership (non-LLP)',
   llp: 'Limited Liability Partnership',
   limited_company: 'Private or public limited company',
@@ -38,7 +44,7 @@ export const CLIENT_TYPE_DESCRIPTIONS: Record<ClientType, string> = {
 
 // Indicates which client types use the companies table vs clients table
 export const COMPANY_BASED_TYPES: ClientType[] = ['limited_company', 'llp', 'charity'];
-export const INDIVIDUAL_BASED_TYPES: ClientType[] = ['sa_non_mtd', 'sa_mtd', 'partnership', 'cgt', 'other'];
+export const INDIVIDUAL_BASED_TYPES: ClientType[] = ['sa_non_mtd', 'sa_mtd', 'sole_trader', 'landlord', 'partnership', 'cgt', 'other'];
 
 // Lead type mirrors client type for conversion flow
 export type LeadType = ClientType;
@@ -77,6 +83,28 @@ export const CLIENT_TYPE_FIELD_CONFIG: Record<ClientType, ClientTypeFieldConfig>
     showCompanyNumber: false,
     showCharityNumber: false,
     showMtdQuarters: true,
+    showPartners: false,
+    showDisposalDate: false,
+    detailTable: 'client_detail_sa',
+  },
+  sole_trader: {
+    showUtr: true,
+    showNino: true,
+    showVat: true,
+    showCompanyNumber: false,
+    showCharityNumber: false,
+    showMtdQuarters: false,
+    showPartners: false,
+    showDisposalDate: false,
+    detailTable: 'client_detail_sa',
+  },
+  landlord: {
+    showUtr: true,
+    showNino: true,
+    showVat: false,
+    showCompanyNumber: false,
+    showCharityNumber: false,
+    showMtdQuarters: false,
     showPartners: false,
     showDisposalDate: false,
     detailTable: 'client_detail_sa',
