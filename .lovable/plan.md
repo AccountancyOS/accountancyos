@@ -1,149 +1,350 @@
+# AccountancyOS Review Document - Full Implementation Plan
 
-
-# Add Client Type Filters to Clients Page
-
-## Problem Summary
-
-The Clients page currently only shows two broad categories: "Individuals" and "Companies". However, the system supports 8 distinct client types with different tax and compliance requirements. Users need to filter by specific client types to manage their workload effectively.
-
-**Current:** Only Individuals / Companies tabs
-**Required:** Filter chips for all 8 client types defined in the system
+## Document Source
+Based on comprehensive review document: `AccountancyOS_review_1-2.docx`
 
 ---
 
-## Solution Overview
-
-Add a row of filter chips below the search bar that allows filtering by specific client type. The filters will be context-aware, showing individual-based types when on the Individuals tab and company-based types when on the Companies tab.
-
----
-
-## UI Design
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Clients                                              [Link] [+ Add]    │
-│  Manage your client relationships                                       │
-├─────────────────────────────────────────────────────────────────────────┤
-│  [🔍 Search clients and companies...     ]                              │
-│                                                                         │
-│  [Individuals (12)] [Companies (8)] [Portal Links]    ← Existing tabs   │
-│                                                                         │
-│  Type: [All] [SA Non-MTD (4)] [SA MTD (3)] [Partnership (2)]            │
-│        [CGT (2)] [Other (1)]                          ← NEW filters     │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ Name          │ Type           │ Email        │ Phone  │ City   │   │
-│  ├───────────────┼────────────────┼──────────────┼────────┼────────┤   │
-│  │ John Smith    │ SA (MTD)       │ j@email.com  │ 07...  │ London │   │
-│  │ Mary Jones    │ Partnership    │ m@email.com  │ 07...  │ Leeds  │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-When on the **Companies** tab:
-
-```text
-│  Type: [All] [Limited Company (5)] [LLP (2)] [Charity (1)]              │
-```
+## Implementation Status Legend
+- ✅ **DONE** - Fully implemented
+- 🔄 **PARTIAL** - Partially implemented, needs work
+- ❌ **TODO** - Not yet implemented
 
 ---
 
-## Technical Implementation
+# Phase 1: Overview/Dashboard Redesign
 
-### File 1: `src/components/clients/ClientTypeFilters.tsx` (NEW)
+## 1.1 Notifications
+| Change | Status | Notes |
+|--------|--------|-------|
+| Notifications should be clearable | ❌ TODO | Add dismiss/clear functionality |
+| Remove emoji and !, replace with . | ✅ DONE | Professional tone enforced |
 
-Create a reusable filter component similar to `JobsQuickFilters`:
+## 1.2 Setup Progress
+| Change | Status | Notes |
+|--------|--------|-------|
+| Setup progress tasks should be skippable | ❌ TODO | Add skip button |
+| Remove "Next Steps" section entirely | ❌ TODO | Remove from Overview |
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `activeType` | `ClientType \| null` | Currently selected type filter |
-| `onTypeChange` | `(type: ClientType \| null) => void` | Filter change handler |
-| `typeCounts` | `Record<string, number>` | Count of clients per type |
-| `mode` | `'individual' \| 'company'` | Which type set to show |
-
-The component will:
-- Show "All" button plus type-specific buttons
-- Display counts in badges
-- Use `INDIVIDUAL_BASED_TYPES` or `COMPANY_BASED_TYPES` based on mode
-- Use `CLIENT_TYPE_LABELS` for display names
-
-### File 2: `src/pages/Clients.tsx`
-
-**Changes:**
-
-1. Add state for type filter:
-   ```typescript
-   const [typeFilter, setTypeFilter] = useState<ClientType | null>(null);
-   ```
-
-2. Add a "Type" column to both tables showing the client/company type
-
-3. Compute type counts from the data:
-   ```typescript
-   const individualTypeCounts = useMemo(() => {
-     const counts: Record<string, number> = {};
-     clients?.forEach(c => {
-       counts[c.client_type] = (counts[c.client_type] || 0) + 1;
-     });
-     return counts;
-   }, [clients]);
-   ```
-
-4. Filter data by selected type:
-   ```typescript
-   const filteredClients = clients?.filter((client) => {
-     const matchesSearch = `${client.first_name} ${client.last_name} ${client.email}`
-       .toLowerCase()
-       .includes(searchTerm.toLowerCase());
-     const matchesType = !typeFilter || client.client_type === typeFilter;
-     return matchesSearch && matchesType;
-   });
-   ```
-
-5. Add `ClientTypeFilters` component below search input
-
-6. Reset type filter when switching tabs
-
-7. Add Type column to tables using `CLIENT_TYPE_LABELS` for display
-
-### File 3: Companies Table Enhancement
-
-For the Companies tab, we need to handle the `company_type` field:
-- Map existing company_type values to our defined types
-- If no `company_type`, default to "Limited Company"
-- Show LLP and Charity as separate filter options
+## 1.3 Dashboard KPIs (Replace current layout)
+| Change | Status | Notes |
+|--------|--------|-------|
+| Upcoming deadlines widget | 🔄 PARTIAL | Exists but needs refinement |
+| Total number of clients | 🔄 PARTIAL | KPI card exists |
+| Total number of leads | 🔄 PARTIAL | KPI card exists |
+| Overdue action points (Conversations, Emails, Tasks) | 🔄 PARTIAL | Panel exists, needs SLA integration |
+| Overdue deadlines (linked to services) | ❌ TODO | |
+| Upcoming deadlines (with service linking) | 🔄 PARTIAL | |
+| Firm current revenue (based on actual clients/fees) | ❌ TODO | |
+| Lead revenue (based on unaccepted quotes) | ❌ TODO | |
+| Staff variance table (owner sees all, staff sees own) | 🔄 PARTIAL | Component exists |
 
 ---
 
-## Data Flow
+# Phase 2: CRM/Leads Page
 
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ User selects filter chip (e.g., "SA MTD")                            │
-│     ↓                                                                │
-│ setTypeFilter('sa_mtd')                                              │
-│     ↓                                                                │
-│ filteredClients recalculates with type filter applied                │
-│     ↓                                                                │
-│ Table re-renders showing only SA MTD clients                         │
-└──────────────────────────────────────────────────────────────────────┘
-```
+## 2.1 Lead Type Dropdown
+| Change | Status | Notes |
+|--------|--------|-------|
+| Lead type dropdown matches Client types | ✅ DONE | 8 types implemented |
+| Types: SA non-MTD, SA MTD, Partnership, LLP, Limited Company, CGT, Charity, Other | ✅ DONE | |
+
+## 2.2 Companies House Integration
+| Change | Status | Notes |
+|--------|--------|-------|
+| CH lookup in CRM stage | ✅ DONE | CompaniesHouseLookupDialog exists |
+| Data flows to Client page if lead won | ✅ DONE | lead-conversion-service handles this |
+
+## 2.3 Quote Flow
+| Change | Status | Notes |
+|--------|--------|-------|
+| Add "Send Quote" button next to Create Lead | ❌ TODO | Quick quote from CRM |
+| Manage quotes from CRM page (declutter Quotes page) | ❌ TODO | UX consideration |
+| Outstanding quotes visible in CRM column | ❌ TODO | |
+
+## 2.4 Lead Lifecycle
+| Change | Status | Notes |
+|--------|--------|-------|
+| Track dates when lead moves through stages | ❌ TODO | qualified_at, proposal_sent_at, etc. |
+| Click into lead to see email history | 🔄 PARTIAL | LeadDetailPanel exists |
+| Move to "Chasing" at 1st automated email chaser | ❌ TODO | Automation trigger |
+| Lead → Client auto-creation on EL signing | ✅ DONE | lead-conversion-service |
+| Consider removing "Qualified" column | ❌ TODO | UX simplification |
 
 ---
 
-## Files Summary
+# Phase 3: Client Management
 
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `src/components/clients/ClientTypeFilters.tsx` | Create | New filter chip component |
-| `src/pages/Clients.tsx` | Modify | Add filter state, type column, integrate filter component |
+## 3.1 Client Types
+| Change | Status | Notes |
+|--------|--------|-------|
+| 8 client types in dropdown | ✅ DONE | ClientTypeSelector component |
+| Type filters on Clients page | ✅ DONE | ClientTypeFilters component |
+| Type column in tables | ✅ DONE | |
+
+## 3.2 Engagement Letter Tracking
+| Change | Status | Notes |
+|--------|--------|-------|
+| All clients show date EL was last signed | ❌ TODO | Display in table/detail |
+
+## 3.3 HMRC Authorisations
+| Change | Status | Notes |
+|--------|--------|-------|
+| Personal HMRC auth location | ❌ TODO | |
+| Company HMRC auth location | ❌ TODO | |
+| PAYE HMRC auth location | ❌ TODO | |
+
+## 3.4 Type-Specific Details Tabs
+
+### Limited Company
+| Field | Status | Notes |
+|-------|--------|-------|
+| Company name (from CH API) | ✅ DONE | |
+| Incorporation date (from CH API) | ✅ DONE | |
+| Year end date (from CH API) | ✅ DONE | |
+| Trading status | ❌ TODO | |
+| UTR | ✅ DONE | In companies table |
+| SIC code (from CH API) | ✅ DONE | |
+| Registered address | ✅ DONE | |
+| Trading address | ❌ TODO | Separate field needed |
+| Director details (name, DOB, address, NINO, UTR, CH personal code, nationality) | 🔄 PARTIAL | Basic director info exists |
+| Partner in charge | ✅ DONE | |
+| Staff in charge | ❌ TODO | |
+| Internal reference | ✅ DONE | |
+| Auth code | ✅ DONE | |
+| Accounts due date | ❌ TODO | |
+| CT600 due date | ❌ TODO | |
+| Tax payable date | ❌ TODO | |
+
+### LLP
+| Field | Status | Notes |
+|-------|--------|-------|
+| Same as Ltd Co with partner details | 🔄 PARTIAL | |
+| Nominated contacts/minimum partners | ❌ TODO | |
+
+### Partnership
+| Field | Status | Notes |
+|-------|--------|-------|
+| Partnership UTR | ✅ DONE | client_detail_partnership |
+| Partnership address | ❌ TODO | |
+| Partner details (min 2 partners) | ❌ TODO | |
+
+### Self-Assessment (non-MTD)
+| Field | Status | Notes |
+|-------|--------|-------|
+| DOB | ❌ TODO | |
+| UTR | ✅ DONE | client_detail_sa |
+| NINO | ✅ DONE | client_detail_sa |
+| Address | ❌ TODO | |
+| Preferred name | ❌ TODO | |
+| Mobile number | 🔄 PARTIAL | phone field exists |
+| CH personal code (if linked to company) | ❌ TODO | |
+
+### Self-Assessment (MTD)
+| Field | Status | Notes |
+|-------|--------|-------|
+| Same as non-MTD | 🔄 PARTIAL | |
+| MTD quarter deadlines | ❌ TODO | |
+| MTD final declaration deadlines | ❌ TODO | |
+
+### Capital Gains Tax
+| Field | Status | Notes |
+|-------|--------|-------|
+| Individual name | ✅ DONE | |
+| NINO | ✅ DONE | client_detail_cgt |
+| CGT number | ✅ DONE | client_detail_cgt |
+| Home address | ❌ TODO | |
+| Property address | ✅ DONE | client_detail_cgt |
+
+### Charity
+| Field | Status | Notes |
+|-------|--------|-------|
+| Charity number | ✅ DONE | client_detail_charity |
+| Charity status | ❌ TODO | |
+| Incorporation date | ❌ TODO | |
+| Trading as | ❌ TODO | |
+| Charity accounts YE | ❌ TODO | |
+| Charity commission submission due | ❌ TODO | |
 
 ---
 
-## Additional Enhancements
+# Phase 4: Client Portal Tabs
 
-1. **Type column in table** - Shows the specific client type (e.g., "SA (MTD)", "Partnership")
-2. **Count badges** - Each filter chip shows how many clients of that type exist
-3. **Tab-aware filtering** - Filters change based on whether Individuals or Companies tab is active
-4. **Clear on tab switch** - Reset type filter when switching between tabs
+## 4.1 Conversations Page
+| Change | Status | Notes |
+|--------|--------|-------|
+| History of emails, in-app messages, internal messages | 🔄 PARTIAL | ConversationsTab exists |
+| Tag messages to jobs | ❌ TODO | |
+| Link to response time SLA | ❌ TODO | |
+| Reply to email like normal email | 🔄 PARTIAL | |
+| Group conversations by tag/job | ❌ TODO | |
+| Archive option | ❌ TODO | |
+| Persist filter setting | ❌ TODO | |
+| Default to Primary contact | ❌ TODO | |
+
+## 4.2 Documents Page
+| Change | Status | Notes |
+|--------|--------|-------|
+| Accountant upload with client visible toggle | ❌ TODO | |
+| Signature required toggle | ❌ TODO | |
+| Delete multiple documents at once | ❌ TODO | |
+| Auto-archive after 7 years | ❌ TODO | |
+| Audit trail (who uploaded, when, who signed, when) | ❌ TODO | |
+| Mandatory scroll before signature | ❌ TODO | |
+| Signature bar greyed until scroll complete | ❌ TODO | |
+
+## 4.3 Contacts Page
+| Change | Status | Notes |
+|--------|--------|-------|
+| Add other individuals to account | 🔄 PARTIAL | ContactsList exists |
+| Director contact type with document signer toggle | ❌ TODO | |
+| Make primary contact option | ❌ TODO | |
+| Bookkeeper contact type (limited visibility) | ❌ TODO | |
+| Other contact type | ❌ TODO | |
+| Remove Finance Director/Secretary/Personal types | ❌ TODO | |
+
+## 4.4 Questionnaire Tab
+| Change | Status | Notes |
+|--------|--------|-------|
+| View/add questionnaires | 🔄 PARTIAL | ClientQuestionnairesTab exists |
+| Notice if no templates created | ❌ TODO | |
+| Link questionnaire to job | ❌ TODO | |
+| Replace "Period label" with "Linked Job" | ❌ TODO | |
+| Show To Be Completed/Completed status | 🔄 PARTIAL | |
+| Completion date links to job progress | ❌ TODO | |
+| Template email queued on send | 🔄 PARTIAL | |
+
+## 4.5 Workpapers Tab
+| Change | Status | Notes |
+|--------|--------|-------|
+| View current and old workpapers | 🔄 PARTIAL | ClientWorkpapersTab exists |
+| Create workpaper (notice if no template) | ❌ TODO | |
+| Auto-create from bookkeeping + questionnaire | 🔄 PARTIAL | |
+| Active/Completed status | ❌ TODO | |
+| Lock on submission to CH/HMRC | ❌ TODO | |
+| Unlock for amendments | ❌ TODO | |
+
+## 4.6 Deadlines Tab
+| Change | Status | Notes |
+|--------|--------|-------|
+| Show upcoming deadlines for services/jobs | 🔄 PARTIAL | ClientDeadlinesTab exists |
+| SA non-MTD deadlines | ✅ DONE | deadline-engine |
+| SA MTD deadlines (quarterly + final) | ❌ TODO | |
+| Payment triggers (31 Jan, 31 Jul) | ❌ TODO | |
+| Limited company deadlines (Accounts, CT600, CT payment, CS) | 🔄 PARTIAL | |
+| LLP deadlines | ❌ TODO | |
+| VAT deadlines | 🔄 PARTIAL | |
+| PAYE deadlines | ❌ TODO | |
+| Partnership deadlines | ❌ TODO | |
+| Charity deadlines | ❌ TODO | |
+| CGT deadlines (60 days from completion) | ❌ TODO | |
+
+## 4.7 Services Tab
+| Change | Status | Notes |
+|--------|--------|-------|
+| Pre-populated standard services list | 🔄 PARTIAL | |
+| Services: Accounts, CT600, CS, Bookkeeping, VAT, Payroll, CIS, MTD quarterly, MTD final, Registered address, Advisory, Software, CGT, SA | ❌ TODO | Full list |
+| Fees pull through from quote | ❌ TODO | |
+| One-off vs Monthly toggle | ❌ TODO | |
+| Toggle services on/off later | ❌ TODO | |
+| Client-specific fee updates | ❌ TODO | |
+| New service/fee change triggers new EL | ❌ TODO | |
+| Total fees summary (one-off vs monthly) | ❌ TODO | |
+
+## 4.8 Billing Tab
+| Change | Status | Notes |
+|--------|--------|-------|
+| Quote history (accepted/rejected) | ❌ TODO | |
+| Quote acceptance dates | ❌ TODO | |
+| Invoice history | ❌ TODO | |
+| Payment history | ❌ TODO | |
+| Filter by calendar year | ❌ TODO | |
+| Total billing visibility | ❌ TODO | |
+
+## 4.9 Settings Tab
+| Change | Status | Notes |
+|--------|--------|-------|
+| Adjust automations per client | ❌ TODO | |
+
+---
+
+# Phase 5: Service-Specific Fields
+
+## 5.1 PAYE Service Fields
+| Field | Status | Notes |
+|-------|--------|-------|
+| Employers reference | ❌ TODO | |
+| Accounts office reference | ❌ TODO | |
+| Tax year | ❌ TODO | |
+| RTI deadline (auto) | ❌ TODO | |
+| Pension declaration date | ❌ TODO | |
+
+## 5.2 Pension Service Fields
+| Field | Status | Notes |
+|-------|--------|-------|
+| Pension provider | ❌ TODO | |
+| Pension number | ❌ TODO | |
+| Auto enrolment staging | ❌ TODO | |
+
+## 5.3 VAT Service Fields
+| Field | Status | Notes |
+|-------|--------|-------|
+| VAT number | ✅ DONE | vat_settings table |
+| VAT quarters | ✅ DONE | |
+| VAT member state | ❌ TODO | |
+| Date of registration | ❌ TODO | |
+| Effective date | ❌ TODO | |
+
+---
+
+# Phase 6: Deadline Engine Enhancements
+
+| Deadline Type | Calculation | Status |
+|--------------|-------------|--------|
+| SA non-MTD | 31 January filing + payment | ✅ DONE |
+| SA MTD quarterly | 1 month 7 days after quarter end | ❌ TODO |
+| SA MTD end of period | 31 January | ❌ TODO |
+| SA MTD final declaration | 31 January | ❌ TODO |
+| SA payments on account | 31 Jan + 31 Jul | ❌ TODO |
+| Ltd Co Accounts | ARD + 9 months | ✅ DONE |
+| CT600 | 12 months after YE | ✅ DONE |
+| Corporation tax due | ARD + 9 months + 1 day | ❌ TODO |
+| Confirmation Statement | Per CH | 🔄 PARTIAL |
+| LLP Accounts | Per CH | ❌ TODO |
+| Partnership return | 31 January | ❌ TODO |
+| VAT | Period end + 37 days | ✅ DONE |
+| PAYE RTI | On or before payday | ❌ TODO |
+| PAYE payment | 22nd following month | ❌ TODO |
+| EPS | 19th following month | ❌ TODO |
+| Pension | 22nd following month | ❌ TODO |
+| P60 | 31 May | ❌ TODO |
+| Charity annual return | YE + 10 months | ❌ TODO |
+| Charity accounts | YE + 10 months | ❌ TODO |
+| Charity accounts (CH) | YE + 9 months | ❌ TODO |
+| CGT return | Completion + 60 days | ❌ TODO |
+
+---
+
+# Implementation Priority Order
+
+## Immediate (This Session)
+1. ❌ Remove "Next Steps" section from Overview
+2. ❌ Make notifications clearable
+3. ❌ Make setup progress skippable
+
+## High Priority (Next)
+4. ❌ Add missing client detail fields (DOB, trading address, etc.)
+5. ❌ Service-specific fields (PAYE, Pension, VAT)
+6. ❌ Lead stage date tracking
+7. ❌ Engagement letter date display
+
+## Medium Priority
+8. ❌ Full deadline engine enhancements
+9. ❌ Services tab with fees
+10. ❌ Billing tab
+
+## Lower Priority
+11. ❌ Document signature workflow
+12. ❌ Conversation grouping/archiving
+13. ❌ Quote management in CRM
 
