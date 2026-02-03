@@ -14,9 +14,10 @@ import {
   FileText,
   Building2,
   Upload,
-  Sparkles
+  Sparkles,
+  Loader2
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface ChecklistItem {
   id: string;
@@ -28,8 +29,7 @@ interface ChecklistItem {
 
 export default function WelcomeDashboard() {
   const navigate = useNavigate();
-  const { organization } = useOrganization();
-  const { toast } = useToast();
+  const { organization, refreshOrganization } = useOrganization();
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     { id: "branding", label: "Confirm branding", completed: false, action: "/settings/branding", icon: Sparkles },
     { id: "clients", label: "Import clients", completed: false, action: "/clients", icon: Upload },
@@ -37,10 +37,24 @@ export default function WelcomeDashboard() {
     { id: "compliance", label: "Connect Companies House & HMRC", completed: false, action: "/settings/hmrc", icon: Building2 },
   ]);
   const [loading, setLoading] = useState(true);
+  const [skipping, setSkipping] = useState(false);
 
   useEffect(() => {
+    // If setup already dismissed, redirect to overview
+    if (organization?.setup_dismissed) {
+      navigate("/overview");
+      return;
+    }
     checkCompletionStatus();
   }, [organization]);
+
+  // Auto-redirect when all tasks are complete
+  useEffect(() => {
+    const allComplete = checklist.every(item => item.completed);
+    if (allComplete && !loading && organization) {
+      handleSkipSetup(true);
+    }
+  }, [checklist, loading, organization]);
 
   const checkCompletionStatus = async () => {
     if (!organization) return;
@@ -102,6 +116,37 @@ export default function WelcomeDashboard() {
     }
   };
 
+  const handleSkipSetup = async (isAutoComplete = false) => {
+    if (!organization) return;
+    
+    setSkipping(true);
+    try {
+      const { error } = await supabase
+        .from("organizations")
+        .update({ setup_dismissed: true })
+        .eq("id", organization.id);
+
+      if (error) {
+        console.error("Error dismissing setup:", error);
+        toast.error("Failed to skip setup.");
+        return;
+      }
+
+      await refreshOrganization();
+      
+      if (!isAutoComplete) {
+        toast.success("Setup skipped. You can complete these tasks anytime from Settings.");
+      }
+      
+      navigate("/overview");
+    } catch (error) {
+      console.error("Error skipping setup:", error);
+      toast.error("Failed to skip setup.");
+    } finally {
+      setSkipping(false);
+    }
+  };
+
   const completedCount = checklist.filter(item => item.completed).length;
   const progress = (completedCount / checklist.length) * 100;
 
@@ -118,11 +163,27 @@ export default function WelcomeDashboard() {
 
         {/* Setup Progress */}
         <Card>
-          <CardHeader>
-            <CardTitle>Setup Progress</CardTitle>
-            <CardDescription>
-              {completedCount} of {checklist.length} tasks completed
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle>Setup Progress</CardTitle>
+              <CardDescription>
+                {completedCount} of {checklist.length} tasks completed
+              </CardDescription>
+            </div>
+            <Button 
+              variant="ghost" 
+              onClick={() => handleSkipSetup(false)}
+              disabled={skipping}
+            >
+              {skipping ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Skipping...
+                </>
+              ) : (
+                "Skip Setup"
+              )}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             <Progress value={progress} className="h-2" />
