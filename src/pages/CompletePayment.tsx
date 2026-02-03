@@ -119,6 +119,7 @@ const CompletePayment = () => {
   useEffect(() => {
     const checkStripeReturn = async () => {
       const stripeReturnTs = localStorage.getItem("stripe_return_ts");
+      const stripeReturnSessionId = localStorage.getItem("stripe_return_session_id");
       const reason = searchParams.get("reason");
       
       // If redirected here with verification_pending reason, show verifying state
@@ -146,11 +147,13 @@ const CompletePayment = () => {
         return;
       }
       
-      // Check for recent Stripe return guard
-      if (stripeReturnTs) {
+      // OPTIMIZATION: Only poll if there's BOTH a timestamp AND a session ID
+      // This means user actually went through Stripe checkout
+      // If there's just a timestamp but no session ID, user abandoned before completing
+      if (stripeReturnTs && stripeReturnSessionId) {
         const returnAge = Date.now() - parseInt(stripeReturnTs, 10);
         if (returnAge < STRIPE_RETURN_GUARD_TTL) {
-          console.log("[CompletePayment] Recent Stripe return detected, verifying");
+          console.log("[CompletePayment] Recent Stripe return with session ID, verifying");
           setIsVerifying(true);
           
           // Poll for billing status
@@ -185,6 +188,10 @@ const CompletePayment = () => {
           localStorage.removeItem("stripe_return_ts");
           localStorage.removeItem("stripe_return_session_id");
         }
+      } else if (stripeReturnTs && !stripeReturnSessionId) {
+        // User started checkout but never completed - clean up stale guard
+        console.log("[CompletePayment] Stripe return guard without session ID - cleaning up");
+        localStorage.removeItem("stripe_return_ts");
       }
     };
     

@@ -78,6 +78,43 @@ let inFlightSubscriptionCheck: Promise<{ subscribed: boolean; subscriptionEnd: s
 let subscriptionResultCache: { value: { subscribed: boolean; subscriptionEnd: string | null }; ts: number } | null = null;
 const SUBSCRIPTION_CACHE_TTL = 15000; // 15 seconds
 
+// ==================== STRIPE CHECK OPTIMIZATION ====================
+
+/**
+ * Determines if we should skip the Stripe API check entirely.
+ * Returns true when we know for certain the user has no active subscription
+ * without needing to call Stripe.
+ */
+const shouldSkipStripeCheck = (org: Organization | null): boolean => {
+  if (!org) return true;
+  
+  // If there's a recent Stripe return guard, we need to check Stripe
+  const stripeReturnTs = localStorage.getItem("stripe_return_ts");
+  if (stripeReturnTs) {
+    const STRIPE_RETURN_GUARD_TTL = 2 * 60 * 1000; // 2 minutes
+    const returnAge = Date.now() - parseInt(stripeReturnTs, 10);
+    if (returnAge < STRIPE_RETURN_GUARD_TTL) {
+      return false; // Recent Stripe return - need to verify
+    }
+  }
+  
+  // If billing is active, we may need to verify subscription details
+  if (org.billing_status === 'active') {
+    return false;
+  }
+  
+  // If there's no stripe_customer_id, user never completed Stripe checkout
+  // No point calling Stripe API - they definitely don't have a subscription
+  if (!org.stripe_customer_id) {
+    console.log("[App] Skipping Stripe check - no stripe_customer_id");
+    return true;
+  }
+  
+  // User has a stripe_customer_id but billing isn't active
+  // Could be past_due, canceled, etc. - need to check Stripe for latest status
+  return false;
+};
+
 // ==================== PROVIDER ====================
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
@@ -326,6 +363,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           setTimeout(async () => {
             const orgId = await loadOrganization(newSession.user.id);
             if (orgId) {
+              // Re-fetch org to get latest data for skip check
+              const { data: freshOrg } = await supabase
+                .from('organizations')
+                .select('id, billing_status, stripe_customer_id')
+                .eq('id', orgId)
+                .maybeSingle();
+              
+              // Skip Stripe check if we know there's no subscription
+              if (shouldSkipStripeCheck(freshOrg as Organization | null)) {
+                setSubscribed(false);
+                setSubscriptionEnd(null);
+                return;
+              }
+              
               const usedCache = await readSubscriptionFromCache(orgId);
               if (!usedCache) {
                 const result = await checkSubscriptionFromStripe(newSession);
@@ -354,6 +405,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setTimeout(async () => {
           const orgId = await loadOrganization(existingSession.user.id);
           if (orgId) {
+            // Re-fetch org to get latest data for skip check
+            const { data: freshOrg } = await supabase
+              .from('organizations')
+              .select('id, billing_status, stripe_customer_id')
+              .eq('id', orgId)
+              .maybeSingle();
+            
+            // Skip Stripe check if we know there's no subscription
+            if (shouldSkipStripeCheck(freshOrg as Organization | null)) {
+              setSubscribed(false);
+              setSubscriptionEnd(null);
+              return;
+            }
+            
             const usedCache = await readSubscriptionFromCache(orgId);
             if (!usedCache) {
               const result = await checkSubscriptionFromStripe(existingSession);
