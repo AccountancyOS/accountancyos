@@ -1,350 +1,147 @@
-# AccountancyOS Review Document - Full Implementation Plan
 
-## Document Source
-Based on comprehensive review document: `AccountancyOS_review_1-2.docx`
+# Add Week and Month View Options to Deadlines Calendar
 
----
+## Problem Summary
 
-## Implementation Status Legend
-- ✅ **DONE** - Fully implemented
-- 🔄 **PARTIAL** - Partially implemented, needs work
-- ❌ **TODO** - Not yet implemented
+The current Deadlines calendar view only allows clicking individual days to see deadlines. This is cumbersome when users want to review all deadlines for an entire week or month at a glance - a common workflow for practice managers planning workload.
+
+**Current Behavior:** Click a day → see that day's deadlines only
+**Desired Behavior:** Toggle between Day/Week/Month views → see aggregated deadlines
 
 ---
 
-# Phase 1: Overview/Dashboard Redesign
+## Solution Overview
 
-## 1.1 Notifications
-| Change | Status | Notes |
-|--------|--------|-------|
-| Notifications should be clearable | ❌ TODO | Add dismiss/clear functionality |
-| Remove emoji and !, replace with . | ✅ DONE | Professional tone enforced |
-
-## 1.2 Setup Progress
-| Change | Status | Notes |
-|--------|--------|-------|
-| Setup progress tasks should be skippable | ❌ TODO | Add skip button |
-| Remove "Next Steps" section entirely | ❌ TODO | Remove from Overview |
-
-## 1.3 Dashboard KPIs (Replace current layout)
-| Change | Status | Notes |
-|--------|--------|-------|
-| Upcoming deadlines widget | 🔄 PARTIAL | Exists but needs refinement |
-| Total number of clients | 🔄 PARTIAL | KPI card exists |
-| Total number of leads | 🔄 PARTIAL | KPI card exists |
-| Overdue action points (Conversations, Emails, Tasks) | 🔄 PARTIAL | Panel exists, needs SLA integration |
-| Overdue deadlines (linked to services) | ❌ TODO | |
-| Upcoming deadlines (with service linking) | 🔄 PARTIAL | |
-| Firm current revenue (based on actual clients/fees) | ❌ TODO | |
-| Lead revenue (based on unaccepted quotes) | ❌ TODO | |
-| Staff variance table (owner sees all, staff sees own) | 🔄 PARTIAL | Component exists |
+Add a view mode toggle (Day | Week | Month) above the calendar that changes both how the calendar displays and how deadlines are filtered in the side panel.
 
 ---
 
-# Phase 2: CRM/Leads Page
+## UI Design
 
-## 2.1 Lead Type Dropdown
-| Change | Status | Notes |
-|--------|--------|-------|
-| Lead type dropdown matches Client types | ✅ DONE | 8 types implemented |
-| Types: SA non-MTD, SA MTD, Partnership, LLP, Limited Company, CGT, Charity, Other | ✅ DONE | |
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Calendar View                                                          │
+│                                                                         │
+│  View: [Day] [Week] [Month]     ← NEW toggle group                      │
+│                                                                         │
+│  ┌─────────────────────────────────┐  ┌───────────────────────────────┐ │
+│  │                                 │  │ Week of 3 Feb 2025            │ │
+│  │     February 2025               │  │                               │ │
+│  │  [calendar with week highlight] │  │ ┌── Mon 3 Feb ─────────────┐  │ │
+│  │                                 │  │ │ SA Return - John Smith   │  │ │
+│  │                                 │  │ │ VAT Return - ABC Ltd     │  │ │
+│  │                                 │  │ └─────────────────────────-┘  │ │
+│  │                                 │  │                               │ │
+│  │                                 │  │ ┌── Thu 6 Feb ─────────────┐  │ │
+│  │                                 │  │ │ CT600 - XYZ Corp         │  │ │
+│  └─────────────────────────────────┘  │ └─────────────────────────-┘  │ │
+│                                       │                               │ │
+│                                       │ Total: 3 deadlines this week  │ │
+│                                       └───────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-## 2.2 Companies House Integration
-| Change | Status | Notes |
-|--------|--------|-------|
-| CH lookup in CRM stage | ✅ DONE | CompaniesHouseLookupDialog exists |
-| Data flows to Client page if lead won | ✅ DONE | lead-conversion-service handles this |
-
-## 2.3 Quote Flow
-| Change | Status | Notes |
-|--------|--------|-------|
-| Add "Send Quote" button next to Create Lead | ❌ TODO | Quick quote from CRM |
-| Manage quotes from CRM page (declutter Quotes page) | ❌ TODO | UX consideration |
-| Outstanding quotes visible in CRM column | ❌ TODO | |
-
-## 2.4 Lead Lifecycle
-| Change | Status | Notes |
-|--------|--------|-------|
-| Track dates when lead moves through stages | ❌ TODO | qualified_at, proposal_sent_at, etc. |
-| Click into lead to see email history | 🔄 PARTIAL | LeadDetailPanel exists |
-| Move to "Chasing" at 1st automated email chaser | ❌ TODO | Automation trigger |
-| Lead → Client auto-creation on EL signing | ✅ DONE | lead-conversion-service |
-| Consider removing "Qualified" column | ❌ TODO | UX simplification |
+For **Month** view, the right panel shows deadlines grouped by week or simply lists all deadlines for the visible month with counts.
 
 ---
 
-# Phase 3: Client Management
+## Technical Implementation
 
-## 3.1 Client Types
-| Change | Status | Notes |
-|--------|--------|-------|
-| 8 client types in dropdown | ✅ DONE | ClientTypeSelector component |
-| Type filters on Clients page | ✅ DONE | ClientTypeFilters component |
-| Type column in tables | ✅ DONE | |
+### File: `src/components/deadlines/DeadlinesCalendar.tsx`
 
-## 3.2 Engagement Letter Tracking
-| Change | Status | Notes |
-|--------|--------|-------|
-| All clients show date EL was last signed | ❌ TODO | Display in table/detail |
+**Changes:**
 
-## 3.3 HMRC Authorisations
-| Change | Status | Notes |
-|--------|--------|-------|
-| Personal HMRC auth location | ❌ TODO | |
-| Company HMRC auth location | ❌ TODO | |
-| PAYE HMRC auth location | ❌ TODO | |
+1. Add view mode state:
+   ```typescript
+   type ViewMode = "day" | "week" | "month";
+   const [viewMode, setViewMode] = useState<ViewMode>("day");
+   ```
 
-## 3.4 Type-Specific Details Tabs
+2. Add ToggleGroup for view selection (above the calendar card)
 
-### Limited Company
-| Field | Status | Notes |
-|-------|--------|-------|
-| Company name (from CH API) | ✅ DONE | |
-| Incorporation date (from CH API) | ✅ DONE | |
-| Year end date (from CH API) | ✅ DONE | |
-| Trading status | ❌ TODO | |
-| UTR | ✅ DONE | In companies table |
-| SIC code (from CH API) | ✅ DONE | |
-| Registered address | ✅ DONE | |
-| Trading address | ❌ TODO | Separate field needed |
-| Director details (name, DOB, address, NINO, UTR, CH personal code, nationality) | 🔄 PARTIAL | Basic director info exists |
-| Partner in charge | ✅ DONE | |
-| Staff in charge | ❌ TODO | |
-| Internal reference | ✅ DONE | |
-| Auth code | ✅ DONE | |
-| Accounts due date | ❌ TODO | |
-| CT600 due date | ❌ TODO | |
-| Tax payable date | ❌ TODO | |
+3. Add date range calculation based on view mode:
+   - Day: Single selected date (current behavior)
+   - Week: `startOfWeek(selectedDate)` to `endOfWeek(selectedDate)`
+   - Month: `startOfMonth(selectedDate)` to `endOfMonth(selectedDate)`
 
-### LLP
-| Field | Status | Notes |
-|-------|--------|-------|
-| Same as Ltd Co with partner details | 🔄 PARTIAL | |
-| Nominated contacts/minimum partners | ❌ TODO | |
+4. Update deadline filtering to use date range:
+   ```typescript
+   const deadlinesInRange = deadlines?.filter((d) => {
+     const dueDate = new Date(d.due_date);
+     return isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd });
+   });
+   ```
 
-### Partnership
-| Field | Status | Notes |
-|-------|--------|-------|
-| Partnership UTR | ✅ DONE | client_detail_partnership |
-| Partnership address | ❌ TODO | |
-| Partner details (min 2 partners) | ❌ TODO | |
+5. Update right panel display:
+   - Day view: Current behavior (list deadlines for that day)
+   - Week view: Group deadlines by day within the week
+   - Month view: Group deadlines by week or show full list with date column
 
-### Self-Assessment (non-MTD)
-| Field | Status | Notes |
-|-------|--------|-------|
-| DOB | ❌ TODO | |
-| UTR | ✅ DONE | client_detail_sa |
-| NINO | ✅ DONE | client_detail_sa |
-| Address | ❌ TODO | |
-| Preferred name | ❌ TODO | |
-| Mobile number | 🔄 PARTIAL | phone field exists |
-| CH personal code (if linked to company) | ❌ TODO | |
+6. Update header text:
+   - Day: "February 3, 2025"
+   - Week: "Week of February 3, 2025"  
+   - Month: "February 2025"
 
-### Self-Assessment (MTD)
-| Field | Status | Notes |
-|-------|--------|-------|
-| Same as non-MTD | 🔄 PARTIAL | |
-| MTD quarter deadlines | ❌ TODO | |
-| MTD final declaration deadlines | ❌ TODO | |
-
-### Capital Gains Tax
-| Field | Status | Notes |
-|-------|--------|-------|
-| Individual name | ✅ DONE | |
-| NINO | ✅ DONE | client_detail_cgt |
-| CGT number | ✅ DONE | client_detail_cgt |
-| Home address | ❌ TODO | |
-| Property address | ✅ DONE | client_detail_cgt |
-
-### Charity
-| Field | Status | Notes |
-|-------|--------|-------|
-| Charity number | ✅ DONE | client_detail_charity |
-| Charity status | ❌ TODO | |
-| Incorporation date | ❌ TODO | |
-| Trading as | ❌ TODO | |
-| Charity accounts YE | ❌ TODO | |
-| Charity commission submission due | ❌ TODO | |
+7. Add visual highlighting on calendar:
+   - Day: Highlight selected day (current)
+   - Week: Highlight entire week row
+   - Month: Highlight all days in month
 
 ---
 
-# Phase 4: Client Portal Tabs
+## New Imports Required
 
-## 4.1 Conversations Page
-| Change | Status | Notes |
-|--------|--------|-------|
-| History of emails, in-app messages, internal messages | 🔄 PARTIAL | ConversationsTab exists |
-| Tag messages to jobs | ❌ TODO | |
-| Link to response time SLA | ❌ TODO | |
-| Reply to email like normal email | 🔄 PARTIAL | |
-| Group conversations by tag/job | ❌ TODO | |
-| Archive option | ❌ TODO | |
-| Persist filter setting | ❌ TODO | |
-| Default to Primary contact | ❌ TODO | |
-
-## 4.2 Documents Page
-| Change | Status | Notes |
-|--------|--------|-------|
-| Accountant upload with client visible toggle | ❌ TODO | |
-| Signature required toggle | ❌ TODO | |
-| Delete multiple documents at once | ❌ TODO | |
-| Auto-archive after 7 years | ❌ TODO | |
-| Audit trail (who uploaded, when, who signed, when) | ❌ TODO | |
-| Mandatory scroll before signature | ❌ TODO | |
-| Signature bar greyed until scroll complete | ❌ TODO | |
-
-## 4.3 Contacts Page
-| Change | Status | Notes |
-|--------|--------|-------|
-| Add other individuals to account | 🔄 PARTIAL | ContactsList exists |
-| Director contact type with document signer toggle | ❌ TODO | |
-| Make primary contact option | ❌ TODO | |
-| Bookkeeper contact type (limited visibility) | ❌ TODO | |
-| Other contact type | ❌ TODO | |
-| Remove Finance Director/Secretary/Personal types | ❌ TODO | |
-
-## 4.4 Questionnaire Tab
-| Change | Status | Notes |
-|--------|--------|-------|
-| View/add questionnaires | 🔄 PARTIAL | ClientQuestionnairesTab exists |
-| Notice if no templates created | ❌ TODO | |
-| Link questionnaire to job | ❌ TODO | |
-| Replace "Period label" with "Linked Job" | ❌ TODO | |
-| Show To Be Completed/Completed status | 🔄 PARTIAL | |
-| Completion date links to job progress | ❌ TODO | |
-| Template email queued on send | 🔄 PARTIAL | |
-
-## 4.5 Workpapers Tab
-| Change | Status | Notes |
-|--------|--------|-------|
-| View current and old workpapers | 🔄 PARTIAL | ClientWorkpapersTab exists |
-| Create workpaper (notice if no template) | ❌ TODO | |
-| Auto-create from bookkeeping + questionnaire | 🔄 PARTIAL | |
-| Active/Completed status | ❌ TODO | |
-| Lock on submission to CH/HMRC | ❌ TODO | |
-| Unlock for amendments | ❌ TODO | |
-
-## 4.6 Deadlines Tab
-| Change | Status | Notes |
-|--------|--------|-------|
-| Show upcoming deadlines for services/jobs | 🔄 PARTIAL | ClientDeadlinesTab exists |
-| SA non-MTD deadlines | ✅ DONE | deadline-engine |
-| SA MTD deadlines (quarterly + final) | ❌ TODO | |
-| Payment triggers (31 Jan, 31 Jul) | ❌ TODO | |
-| Limited company deadlines (Accounts, CT600, CT payment, CS) | 🔄 PARTIAL | |
-| LLP deadlines | ❌ TODO | |
-| VAT deadlines | 🔄 PARTIAL | |
-| PAYE deadlines | ❌ TODO | |
-| Partnership deadlines | ❌ TODO | |
-| Charity deadlines | ❌ TODO | |
-| CGT deadlines (60 days from completion) | ❌ TODO | |
-
-## 4.7 Services Tab
-| Change | Status | Notes |
-|--------|--------|-------|
-| Pre-populated standard services list | 🔄 PARTIAL | |
-| Services: Accounts, CT600, CS, Bookkeeping, VAT, Payroll, CIS, MTD quarterly, MTD final, Registered address, Advisory, Software, CGT, SA | ❌ TODO | Full list |
-| Fees pull through from quote | ❌ TODO | |
-| One-off vs Monthly toggle | ❌ TODO | |
-| Toggle services on/off later | ❌ TODO | |
-| Client-specific fee updates | ❌ TODO | |
-| New service/fee change triggers new EL | ❌ TODO | |
-| Total fees summary (one-off vs monthly) | ❌ TODO | |
-
-## 4.8 Billing Tab
-| Change | Status | Notes |
-|--------|--------|-------|
-| Quote history (accepted/rejected) | ❌ TODO | |
-| Quote acceptance dates | ❌ TODO | |
-| Invoice history | ❌ TODO | |
-| Payment history | ❌ TODO | |
-| Filter by calendar year | ❌ TODO | |
-| Total billing visibility | ❌ TODO | |
-
-## 4.9 Settings Tab
-| Change | Status | Notes |
-|--------|--------|-------|
-| Adjust automations per client | ❌ TODO | |
+```typescript
+import { 
+  startOfWeek, 
+  endOfWeek, 
+  startOfMonth, 
+  endOfMonth, 
+  isWithinInterval,
+  eachDayOfInterval,
+  isSameWeek
+} from "date-fns";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+```
 
 ---
 
-# Phase 5: Service-Specific Fields
+## Data Flow
 
-## 5.1 PAYE Service Fields
-| Field | Status | Notes |
-|-------|--------|-------|
-| Employers reference | ❌ TODO | |
-| Accounts office reference | ❌ TODO | |
-| Tax year | ❌ TODO | |
-| RTI deadline (auto) | ❌ TODO | |
-| Pension declaration date | ❌ TODO | |
-
-## 5.2 Pension Service Fields
-| Field | Status | Notes |
-|-------|--------|-------|
-| Pension provider | ❌ TODO | |
-| Pension number | ❌ TODO | |
-| Auto enrolment staging | ❌ TODO | |
-
-## 5.3 VAT Service Fields
-| Field | Status | Notes |
-|-------|--------|-------|
-| VAT number | ✅ DONE | vat_settings table |
-| VAT quarters | ✅ DONE | |
-| VAT member state | ❌ TODO | |
-| Date of registration | ❌ TODO | |
-| Effective date | ❌ TODO | |
+```text
+┌───────────────────────────────────────────────────────────────────────┐
+│ User clicks "Week" toggle                                             │
+│     ↓                                                                 │
+│ setViewMode("week")                                                   │
+│     ↓                                                                 │
+│ rangeStart = startOfWeek(selectedDate)                                │
+│ rangeEnd = endOfWeek(selectedDate)                                    │
+│     ↓                                                                 │
+│ deadlinesInRange filters all deadlines within that week               │
+│     ↓                                                                 │
+│ Panel shows deadlines grouped by day of week                          │
+└───────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-# Phase 6: Deadline Engine Enhancements
+## Files Summary
 
-| Deadline Type | Calculation | Status |
-|--------------|-------------|--------|
-| SA non-MTD | 31 January filing + payment | ✅ DONE |
-| SA MTD quarterly | 1 month 7 days after quarter end | ❌ TODO |
-| SA MTD end of period | 31 January | ❌ TODO |
-| SA MTD final declaration | 31 January | ❌ TODO |
-| SA payments on account | 31 Jan + 31 Jul | ❌ TODO |
-| Ltd Co Accounts | ARD + 9 months | ✅ DONE |
-| CT600 | 12 months after YE | ✅ DONE |
-| Corporation tax due | ARD + 9 months + 1 day | ❌ TODO |
-| Confirmation Statement | Per CH | 🔄 PARTIAL |
-| LLP Accounts | Per CH | ❌ TODO |
-| Partnership return | 31 January | ❌ TODO |
-| VAT | Period end + 37 days | ✅ DONE |
-| PAYE RTI | On or before payday | ❌ TODO |
-| PAYE payment | 22nd following month | ❌ TODO |
-| EPS | 19th following month | ❌ TODO |
-| Pension | 22nd following month | ❌ TODO |
-| P60 | 31 May | ❌ TODO |
-| Charity annual return | YE + 10 months | ❌ TODO |
-| Charity accounts | YE + 10 months | ❌ TODO |
-| Charity accounts (CH) | YE + 9 months | ❌ TODO |
-| CGT return | Completion + 60 days | ❌ TODO |
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `src/components/deadlines/DeadlinesCalendar.tsx` | Modify | Add view mode toggle, date range calculation, grouped deadline display |
 
 ---
 
-# Implementation Priority Order
+## Edge Cases
 
-## Immediate (This Session)
-1. ❌ Remove "Next Steps" section from Overview
-2. ❌ Make notifications clearable
-3. ❌ Make setup progress skippable
+- Empty weeks/months show "No deadlines this week/month" message
+- Week starts on Monday (UK accountant standard) - use `{ weekStartsOn: 1 }` option
+- Clicking a day in the calendar still updates the selected date, which then determines the week/month range
+- Counts shown in each grouping (e.g., "3 deadlines" next to day header)
 
-## High Priority (Next)
-4. ❌ Add missing client detail fields (DOB, trading address, etc.)
-5. ❌ Service-specific fields (PAYE, Pension, VAT)
-6. ❌ Lead stage date tracking
-7. ❌ Engagement letter date display
+---
 
-## Medium Priority
-8. ❌ Full deadline engine enhancements
-9. ❌ Services tab with fees
-10. ❌ Billing tab
+## Summary
 
-## Lower Priority
-11. ❌ Document signature workflow
-12. ❌ Conversation grouping/archiving
-13. ❌ Quote management in CRM
-
+This enhancement allows users to quickly scan all deadlines for a week or month without clicking through individual days, matching how accountants typically plan their workload around weekly/monthly cycles.
