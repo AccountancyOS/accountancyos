@@ -44,6 +44,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEntityServices } from "@/hooks/useEntityServices";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { YearEndEditor } from "@/components/company/YearEndEditor";
+import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -273,7 +274,11 @@ const CompanyDetail = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Company Type</p>
-                      <p className="font-medium">{company.company_type || "Private Limited"}</p>
+                      <p className="font-medium">
+                        {company.company_type 
+                          ? CLIENT_TYPE_LABELS[company.company_type as ClientType] || company.company_type
+                          : "Limited Company"}
+                      </p>
                     </div>
                     <div>
                       <div className="flex items-center justify-between">
