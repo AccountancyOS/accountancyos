@@ -1,212 +1,131 @@
 
-
-# Password Reset Flow Fix
+# Skip Setup Progress Implementation
 
 ## Problem Summary
 
-The password reset flow is broken because:
+The WelcomeDashboard shows a Setup Progress checklist that cannot be skipped or dismissed. According to the practice onboarding flow requirements, setup tasks should be skippable so firms can transition to active practice management immediately.
 
-1. **No recovery state tracking**: The auth context doesn't distinguish between normal authentication and password recovery mode
-2. **Premature redirect**: `PublicRoute` redirects all authenticated users, including those in recovery mode, preventing them from setting a new password
-3. **Missing UI**: `Auth.tsx` has no form for entering a new password and doesn't listen for the `PASSWORD_RECOVERY` event
+**Current behavior:**
+- User completes OnboardingWizard → routed to `/welcome`
+- WelcomeDashboard always shows Setup Progress card
+- No way to skip or dismiss the checklist
+- No clear path to the main `/overview` dashboard
 
-## Architecture Overview
+**Expected behavior:**
+- Users can skip the setup checklist and go straight to the Overview dashboard
+- Once dismissed, the setup checklist stays hidden (stored in database)
+- Users can still access setup tasks from Settings if needed later
 
-```text
-Current Flow (Broken):
-┌─────────────────────────────────────────────────────────────────┐
-│ User clicks email link                                          │
-│      ↓                                                          │
-│ /auth?reset=true#access_token=...&type=recovery                 │
-│      ↓                                                          │
-│ Supabase auto-authenticates from hash tokens                    │
-│      ↓                                                          │
-│ PublicRoute sees user → Redirects to /                          │
-│      ↓                                                          │
-│ Recovery token consumed, user can't reset password              │
-└─────────────────────────────────────────────────────────────────┘
-
-Fixed Flow:
-┌─────────────────────────────────────────────────────────────────┐
-│ User clicks email link                                          │
-│      ↓                                                          │
-│ /auth?reset=true#access_token=...&type=recovery                 │
-│      ↓                                                          │
-│ Auth.tsx detects PASSWORD_RECOVERY event                        │
-│      ↓                                                          │
-│ Sets authFlow = "recovery" in context                           │
-│      ↓                                                          │
-│ PublicRoute sees authFlow = "recovery" → Allows access          │
-│      ↓                                                          │
-│ User sees "Set New Password" form                               │
-│      ↓                                                          │
-│ User submits → supabase.auth.updateUser({ password })           │
-│      ↓                                                          │
-│ Sign out, clear URL, show sign-in form                          │
-└─────────────────────────────────────────────────────────────────┘
-```
+---
 
 ## Technical Implementation
 
-### File 1: `src/lib/auth-context.tsx`
+### File 1: Database Migration
+
+**New column needed:**
+
+Add `setup_dismissed` boolean column to the `organizations` table to persist the user's choice to skip setup.
+
+```sql
+ALTER TABLE organizations
+ADD COLUMN IF NOT EXISTS setup_dismissed boolean DEFAULT false;
+```
+
+---
+
+### File 2: `src/pages/WelcomeDashboard.tsx`
 
 **Changes:**
-- Add `authFlow: "normal" | "recovery"` state
-- Add `setAuthFlow` function to allow Auth.tsx to update flow state
-- Expose `authFlow` in context value
 
-| New State | Type | Default |
-|-----------|------|---------|
-| `authFlow` | `"normal" \| "recovery"` | `"normal"` |
+1. Add state for `setupDismissed` (fetched from organization)
+2. Add "Skip Setup" button to the Setup Progress card header
+3. On skip: update `organizations.setup_dismissed = true` and redirect to `/overview`
+4. If `setup_dismissed` is true: redirect to `/overview` on mount
+5. Auto-redirect to `/overview` when all 4 checklist items are complete
+
+| New State | Type | Source |
+|-----------|------|--------|
+| `setupDismissed` | `boolean` | `organization.setup_dismissed` |
 
 | New Function | Purpose |
 |--------------|---------|
-| `setAuthFlow(flow)` | Allows Auth.tsx to set recovery mode |
+| `handleSkipSetup()` | Sets `setup_dismissed = true`, shows toast, redirects to `/overview` |
 
----
-
-### File 2: `src/App.tsx`
-
-**Changes to PublicRoute (lines 93-109):**
-- Import `authFlow` from `useAuth()`
-- Modify redirect condition to respect recovery mode
+**UI Changes:**
 
 ```text
-Before: if (user) → redirect
-After:  if (user && authFlow !== "recovery") → redirect
+┌─────────────────────────────────────────────────────────────────┐
+│  Setup Progress                                    [Skip Setup] │
+│  2 of 4 tasks completed                                         │
+│  ═══════════════════░░░░░░░░░░░░░░░░░░░░░░░░░░░  50%           │
+│                                                                 │
+│  ☑ Confirm branding                                             │
+│  ☐ Import clients                                    [Go →]     │
+│  ☐ Add first lead                                    [Go →]     │
+│  ☑ Connect Companies House & HMRC                               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-This ensures users in recovery mode stay on `/auth` even though they're technically authenticated.
+The "Skip Setup" button will be a ghost/outline button in the card header.
 
 ---
 
-### File 3: `src/pages/Auth.tsx`
+### File 3: `src/pages/Index.tsx`
 
 **Changes:**
 
-1. **Extend mode state type:**
-   - Current: `"signin" | "signup" | "forgot"`
-   - New: `"signin" | "signup" | "forgot" | "reset-password"`
+Update Priority 5 routing logic:
 
-2. **Add new state:**
-   - `newPassword: string`
-   - `confirmPassword: string`
-   - `linkExpired: boolean` (for error state)
+```text
+Before:
+  Priority 5: All good → welcome dashboard (/welcome)
 
-3. **Add recovery detection useEffect:**
-   - Subscribe to `supabase.auth.onAuthStateChange`
-   - On `PASSWORD_RECOVERY` event:
-     - Set `mode` to `"reset-password"`
-     - Call `setAuthFlow("recovery")` from context
-   - Also detect recovery from URL hash on mount as fallback
-   - If hash contains `type=recovery` but no session, show "link expired" state
+After:
+  Priority 5: Check setup_dismissed
+    - If setup_dismissed = true → /overview
+    - If setup_dismissed = false → /welcome
+```
 
-4. **Add handleResetPassword function:**
-   - Validate passwords match
-   - Call `supabase.auth.updateUser({ password })`
-   - On success:
-     - Show success toast
-     - Sign out to clear recovery session
-     - Clear URL hash and query params
-     - Reset `authFlow` to `"normal"`
-     - Switch mode to `"signin"`
-   - On failure: Show error toast, stay on form
-
-5. **Add Reset Password form UI:**
-   - Header: "Set New Password"
-   - New password input (minLength 6)
-   - Confirm password input
-   - Submit button with loading state
-   - Back to sign in link
-
-6. **Add Link Expired UI:**
-   - Header: "Reset Link Expired"
-   - Message explaining the link is no longer valid
-   - Button to request new reset link (switches to forgot mode)
+This ensures users who skipped setup go directly to the operational dashboard on future logins.
 
 ---
 
-## UI Specifications
+### File 4: `src/lib/app-context.tsx` (or organization types)
 
-### Reset Password Form
+**Changes:**
 
-```text
-┌─────────────────────────────────────────┐
-│          [AccountancyOS Logo]           │
-│                                         │
-│         Set New Password                │
-│   Enter your new password below         │
-│                                         │
-│  New Password                           │
-│  ┌─────────────────────────────────┐    │
-│  │ ••••••••                        │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│  Confirm Password                       │
-│  ┌─────────────────────────────────┐    │
-│  │ ••••••••                        │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│  ┌─────────────────────────────────┐    │
-│  │        Update Password          │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│         ← Back to Sign In               │
-│                                         │
-└─────────────────────────────────────────┘
-```
+Ensure `setup_dismissed` is included in the organization type definition so TypeScript is aware of the field.
 
-### Link Expired State
+---
+
+## User Flow After Implementation
 
 ```text
-┌─────────────────────────────────────────┐
-│          [AccountancyOS Logo]           │
-│                                         │
-│         Reset Link Expired              │
-│                                         │
-│  This password reset link has expired   │
-│  or has already been used.              │
-│                                         │
-│  ┌─────────────────────────────────┐    │
-│  │     Request New Reset Link      │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│         ← Back to Sign In               │
-│                                         │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ User completes OnboardingWizard                                 │
+│      ↓                                                          │
+│ Routed to /welcome                                              │
+│      ↓                                                          │
+│ User sees Setup Progress card                                   │
+│      ↓                                                          │
+│ [Option A] User completes all tasks → Auto-redirect to /overview│
+│      OR                                                         │
+│ [Option B] User clicks "Skip Setup" → Redirect to /overview     │
+│      ↓                                                          │
+│ On future logins: Goes directly to /overview                    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Edge Cases Handled
+## Edge Cases
 
 | Scenario | Handling |
 |----------|----------|
-| User clicks expired link | Hash detected but no session → show "Link Expired" UI |
-| User clicks already-used link | Same as expired |
-| User refreshes during reset | Recovery session persists, form re-renders |
-| Passwords don't match | Client-side validation error shown |
-| Password too short | Supabase returns error, displayed to user |
-| User cancels and goes to sign-in | Back link available, authFlow reset on successful sign-in |
-| Normal sign-in after fix | Works as before, authFlow defaults to "normal" |
-
----
-
-## Testing Checklist
-
-After implementation, verify:
-
-- [ ] Password reset email can be requested
-- [ ] Clicking email link shows reset form (not redirected)
-- [ ] Entering mismatched passwords shows error
-- [ ] Submitting valid password updates successfully
-- [ ] User is signed out after successful update
-- [ ] URL is cleaned (no hash/query params)
-- [ ] User can sign in with new password
-- [ ] Expired/used links show clear error message
-- [ ] Normal sign-in flow still works
-- [ ] Normal sign-up flow still works
-- [ ] Authenticated users still redirect from /auth (when not in recovery)
+| User skips, then wants to complete tasks | Access via Settings or sidebar navigation |
+| All tasks complete before skip | Auto-redirect to Overview, no skip needed |
+| Organization data not loaded | Show loading state, don't redirect |
+| User navigates directly to /welcome after skip | Allow access (it's a valid route) |
 
 ---
 
@@ -214,7 +133,8 @@ After implementation, verify:
 
 | File | Changes |
 |------|---------|
-| `src/lib/auth-context.tsx` | Add `authFlow` state and `setAuthFlow` function |
-| `src/App.tsx` | Update PublicRoute to check `authFlow` before redirect |
-| `src/pages/Auth.tsx` | Add recovery detection, reset form, expired state, submit handler |
-
+| Database migration | Add `setup_dismissed` boolean column to `organizations` |
+| `src/pages/WelcomeDashboard.tsx` | Add Skip Setup button, auto-redirect logic |
+| `src/pages/Index.tsx` | Update routing to respect `setup_dismissed` |
+| `src/lib/app-context.tsx` | Ensure `setup_dismissed` type is defined |
+| `src/integrations/supabase/types.ts` | Auto-updated when migration runs |
