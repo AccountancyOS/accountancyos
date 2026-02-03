@@ -31,10 +31,43 @@ export const PracticeProfileStep = ({ organizationId, onComplete, onSkip }: Prac
 
   const handleLogoUpload = async (file: File) => {
     if (!organizationId) return;
-    
+
+    // Validate file type (both MIME and extension)
+    const allowedMimeTypes = ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'];
+    const allowedExtensions = ['png', 'svg', 'jpg', 'jpeg', 'webp'];
+
+    if (!allowedMimeTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Only PNG, SVG, JPG, and WebP images are allowed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!allowedExtensions.includes(fileExt)) {
+      toast({
+        title: "Invalid file extension",
+        description: "Only .png, .svg, .jpg, and .webp files are allowed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({
+        title: "File too large",
+        description: "Logo must be under 2MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploadingLogo(true);
     try {
-      const fileExt = file.name.split('.').pop();
       const fileName = `logo-light.${fileExt}`;
       const filePath = `${organizationId}/${fileName}`;
 

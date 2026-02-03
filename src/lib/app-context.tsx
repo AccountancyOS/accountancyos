@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from "react";
 import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -474,8 +474,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, [user, loadOrganization]);
 
   // ==================== CONTEXT VALUE ====================
-  
-  const value: AppContextType = {
+
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const value = useMemo<AppContextType>(() => ({
     user,
     session,
     loading,
@@ -489,7 +490,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     signOut,
     refreshOrganization,
     checkSubscription,
-  };
+  }), [
+    user,
+    session,
+    loading,
+    organization,
+    role,
+    organizationLoading,
+    organizationError,
+    subscribed,
+    subscriptionEnd,
+    checkingSubscription,
+    signOut,
+    refreshOrganization,
+    checkSubscription,
+  ]);
 
   return (
     <AppContext.Provider value={value}>

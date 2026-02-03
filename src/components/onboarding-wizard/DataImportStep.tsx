@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import Papa from "papaparse";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +21,11 @@ export const DataImportStep = ({ organizationId, onComplete, onSkip }: DataImpor
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type === "text/csv") {
+    if (!file) return;
+
+    // Validate both MIME type and extension
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (file.type === "text/csv" && ext === "csv") {
       setUploadedFile(file);
     } else {
       toast({
@@ -35,35 +40,56 @@ export const DataImportStep = ({ organizationId, onComplete, onSkip }: DataImpor
     fileInputRef.current?.click();
   };
 
+  // Safe JSON parse helper - returns null on invalid JSON
+  const safeJsonParse = (str: string | null | undefined): unknown => {
+    if (!str) return null;
+    try {
+      return JSON.parse(str);
+    } catch {
+      console.warn("Invalid JSON in CSV field:", str);
+      return null;
+    }
+  };
+
   const handleImport = async () => {
     if (!uploadedFile) return;
 
     setImporting(true);
     try {
       const text = await uploadedFile.text();
-      const rows = text.split("\n").map(row => row.split(","));
-      const headers = rows[0].map(h => h.trim().toLowerCase());
-      
+
+      // Use PapaParse for proper CSV parsing (handles quoted fields, commas in values, etc.)
+      const parseResult = Papa.parse<Record<string, string>>(text, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (header) => header.trim().toLowerCase(),
+      });
+
+      if (parseResult.errors.length > 0) {
+        console.warn("CSV parse warnings:", parseResult.errors);
+      }
+
       let importedCount = 0;
-      
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        if (row.length < 2) continue;
-        
-        const data: any = {};
-        headers.forEach((header, index) => {
-          data[header] = row[index]?.trim() || null;
-        });
-        
+      let errorCount = 0;
+
+      for (const data of parseResult.data) {
+        // Skip rows without required fields
         if (!data.type || !data.email) continue;
-        
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(data.email)) {
+          errorCount++;
+          continue;
+        }
+
         if (data.type === "individual") {
           const { error } = await supabase.from("clients").insert({
             organization_id: organizationId,
-            first_name: data.first_name,
-            last_name: data.last_name,
+            first_name: data.first_name || null,
+            last_name: data.last_name || null,
             email: data.email,
-            phone: data.phone,
+            phone: data.phone || null,
             date_of_birth: data.date_of_birth || null,
             national_insurance_number: data.national_insurance_number || null,
             utr: data.utr || null,
@@ -73,44 +99,58 @@ export const DataImportStep = ({ organizationId, onComplete, onSkip }: DataImpor
             postcode: data.postcode || null,
             country: data.country || null,
             notes: data.notes || null,
-            tags: data.tags ? JSON.parse(data.tags) : null,
+            tags: safeJsonParse(data.tags),
           });
-          
-          if (!error) importedCount++;
+
+          if (!error) {
+            importedCount++;
+          } else {
+            console.warn("Failed to import client:", error.message);
+            errorCount++;
+          }
         } else if (data.type === "company") {
           const { error } = await supabase.from("companies").insert({
             organization_id: organizationId,
-            company_name: data.company_name,
+            company_name: data.company_name || null,
             email: data.email,
-            phone: data.phone,
+            phone: data.phone || null,
             company_number: data.company_number || null,
             incorporation_date: data.incorporation_date || null,
             vat_number: data.vat_number || null,
-            year_end_month: data.year_end_month ? parseInt(data.year_end_month) : null,
-            year_end_day: data.year_end_day ? parseInt(data.year_end_day) : null,
+            year_end_month: data.year_end_month ? parseInt(data.year_end_month, 10) : null,
+            year_end_day: data.year_end_day ? parseInt(data.year_end_day, 10) : null,
             address_line_1: data.address_line_1 || null,
             address_line_2: data.address_line_2 || null,
             city: data.city || null,
             postcode: data.postcode || null,
             country: data.country || null,
             notes: data.notes || null,
-            tags: data.tags ? JSON.parse(data.tags) : null,
+            tags: safeJsonParse(data.tags),
           });
-          
-          if (!error) importedCount++;
+
+          if (!error) {
+            importedCount++;
+          } else {
+            console.warn("Failed to import company:", error.message);
+            errorCount++;
+          }
         }
       }
-      
+
+      const description = errorCount > 0
+        ? `Successfully imported ${importedCount} clients. ${errorCount} rows had errors.`
+        : `Successfully imported ${importedCount} clients.`;
+
       toast({
         title: "Import complete",
-        description: `Successfully imported ${importedCount} clients.`,
+        description,
       });
-      
+
       onComplete();
     } catch (error: any) {
       toast({
         title: "Error importing data",
-        description: error.message,
+        description: "Failed to parse CSV file. Please check the format.",
         variant: "destructive",
       });
     } finally {

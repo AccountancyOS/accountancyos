@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from "react";
 import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -260,26 +260,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [session]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     // Reset auth flow when signing out
     setAuthFlow("normal");
     await supabase.auth.signOut();
     navigate("/auth");
-  };
+  }, [navigate]);
+
+  // Memoize checkSubscription callback to prevent unnecessary re-renders
+  const checkSubscriptionCallback = useCallback(() => checkSubscription(session), [session]);
+
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const contextValue = useMemo<AuthContextType>(() => ({
+    user,
+    session,
+    loading,
+    subscribed,
+    subscriptionEnd,
+    checkingSubscription,
+    authFlow,
+    setAuthFlow,
+    checkSubscription: checkSubscriptionCallback,
+    signOut,
+  }), [
+    user,
+    session,
+    loading,
+    subscribed,
+    subscriptionEnd,
+    checkingSubscription,
+    authFlow,
+    checkSubscriptionCallback,
+    signOut,
+  ]);
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      session, 
-      loading, 
-      subscribed, 
-      subscriptionEnd, 
-      checkingSubscription,
-      authFlow,
-      setAuthFlow,
-      checkSubscription: () => checkSubscription(session),
-      signOut 
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

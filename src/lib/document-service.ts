@@ -3,6 +3,32 @@ import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_BUCKET = "job-documents";
 
+// Maximum file size: 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+// Allowed MIME types for document uploads
+const ALLOWED_MIME_TYPES = [
+  // Documents
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+  "text/plain",
+  // Images
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+];
+
+// Allowed file extensions
+const ALLOWED_EXTENSIONS = [
+  "pdf", "doc", "docx", "xls", "xlsx", "csv", "txt",
+  "jpg", "jpeg", "png", "gif", "webp"
+];
+
 export interface UploadResult {
   success: boolean;
   filePath?: string;
@@ -27,6 +53,22 @@ export async function uploadJobDocument(
   metadata: DocumentMetadata
 ): Promise<UploadResult> {
   try {
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return { success: false, error: "File too large (max 50MB)" };
+    }
+
+    // Validate MIME type
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      return { success: false, error: "File type not allowed" };
+    }
+
+    // Validate file extension
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return { success: false, error: "File extension not allowed" };
+    }
+
     // Generate unique file path: org_id/job_id/timestamp_filename
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useApp } from "@/lib/app-context";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,12 +39,15 @@ const FILING_TYPE_OPTIONS = [
 
 export default function Filings() {
   const navigate = useNavigate();
+  const { organization } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
   const [filingTypeFilter, setFilingTypeFilter] = useState("all");
 
-  const { data: filings, isLoading } = useQuery({
-    queryKey: ["filings", searchQuery, filingTypeFilter],
+  const { data: filings, isLoading, error } = useQuery({
+    queryKey: ["filings", organization?.id, searchQuery, filingTypeFilter],
     queryFn: async () => {
+      if (!organization?.id) return [];
+
       let query = supabase
         .from("filings")
         .select(`
@@ -52,6 +56,7 @@ export default function Filings() {
           companies (company_name),
           jobs (job_name)
         `)
+        .eq("organization_id", organization.id)
         .order("created_at", { ascending: false });
 
       if (searchQuery) {
@@ -68,6 +73,7 @@ export default function Filings() {
       if (error) throw error;
       return data;
     },
+    enabled: !!organization?.id,
   });
 
   const getStatusColor = (status: string) => {

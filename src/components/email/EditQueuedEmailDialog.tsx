@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { updateQueuedEmailSafe } from "@/lib/email-safe-service";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,21 @@ interface QueuedEmail {
   status: string;
   context: string | null;
   error_message: string | null;
+}
+
+// Safe email preview component with memoized sanitization
+function SafeEmailPreview({ bodyHtml, bodyText }: { bodyHtml: string | null; bodyText: string | null }) {
+  const sanitizedContent = useMemo(() => {
+    const content = bodyHtml || bodyText || "<p>No content</p>";
+    return sanitizeEmailHtml(content);
+  }, [bodyHtml, bodyText]);
+
+  return (
+    <div
+      className="border rounded-md p-4 min-h-[200px] max-h-[300px] overflow-y-auto bg-background prose prose-sm max-w-none"
+      dangerouslySetInnerHTML={{ __html: sanitizedContent }}
+    />
+  );
 }
 
 interface EditQueuedEmailDialogProps {
@@ -195,10 +211,7 @@ export function EditQueuedEmailDialog({
             </div>
 
             {viewMode === "preview" ? (
-              <div 
-                className="border rounded-md p-4 min-h-[200px] max-h-[300px] overflow-y-auto bg-background prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: formData.body_html || formData.body_text || "<p>No content</p>" }}
-              />
+              <SafeEmailPreview bodyHtml={formData.body_html} bodyText={formData.body_text} />
             ) : (
               <Textarea
                 value={formData.body_html || formData.body_text}

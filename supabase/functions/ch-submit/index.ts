@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { ErrorCodes } from "../_shared/responses.ts";
 
 // Companies House API endpoints
 const CH_ENDPOINTS = {
@@ -14,9 +11,10 @@ const CH_ENDPOINTS = {
 
 serve(async (req: Request) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
+
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // Get environment variables
@@ -532,8 +530,14 @@ serve(async (req: Request) => {
 
   } catch (error: any) {
     console.error('Error in ch-submit:', error);
+    // Don't expose internal error messages to client
     return new Response(
-      JSON.stringify({ success: false, status: 'error', message: error.message }),
+      JSON.stringify({
+        success: false,
+        status: 'error',
+        message: 'An internal error occurred while processing your submission',
+        code: ErrorCodes.INTERNAL_ERROR
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
