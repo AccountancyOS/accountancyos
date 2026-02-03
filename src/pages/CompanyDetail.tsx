@@ -265,7 +265,7 @@ const CompanyDetail = () => {
           <TabsContent value="overview" className="mt-6 space-y-6">
             {/* Company Details Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Information */}
+              {/* Company Information */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Company Information</CardTitle>
@@ -278,6 +278,12 @@ const CompanyDetail = () => {
                         {company.company_type 
                           ? CLIENT_TYPE_LABELS[company.company_type as ClientType] || company.company_type
                           : "Limited Company"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Trading Status</p>
+                      <p className="font-medium capitalize">
+                        {company.trading_status || "Active"}
                       </p>
                     </div>
                     <div>
@@ -299,12 +305,59 @@ const CompanyDetail = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">VAT Registered</p>
-                      <p className="font-medium">{company.vat_number || "No"}</p>
+                      <p className="text-sm text-muted-foreground">UTR</p>
+                      <p className="font-medium font-mono">
+                        {company.utr || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">SIC Codes</p>
+                      <p className="font-medium">
+                        {Array.isArray(company.sic_codes) && company.sic_codes.length > 0
+                          ? (company.sic_codes as string[]).join(", ")
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Auth Code</p>
+                      <p className="font-medium font-mono">
+                        {company.auth_code || company.companies_house_auth_code || "-"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tax & VAT */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Tax & VAT</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">VAT Number</p>
+                      <p className="font-medium font-mono">
+                        {company.vat_number || "Not registered"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">VAT Scheme</p>
-                      <p className="font-medium">{company.vat_scheme || "-"}</p>
+                      <p className="font-medium capitalize">
+                        {company.vat_scheme || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">VAT Frequency</p>
+                      <p className="font-medium capitalize">
+                        {company.vat_frequency || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">VAT Stagger</p>
+                      <p className="font-medium">
+                        {company.vat_stagger_group ? `Group ${company.vat_stagger_group}` : "-"}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -332,19 +385,85 @@ const CompanyDetail = () => {
                       </a>
                     </div>
                   )}
-                  {(company.address_line_1 || company.city) && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <div>
-                        {company.address_line_1 && <p>{company.address_line_1}</p>}
-                        {company.address_line_2 && <p>{company.address_line_2}</p>}
-                        {(company.city || company.postcode) && (
-                          <p>{[company.city, company.postcode].filter(Boolean).join(", ")}</p>
-                        )}
-                        {company.country && <p>{company.country}</p>}
+                  <div className="pt-2 border-t space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Registered Address</p>
+                    {(company.address_line_1 || company.city) ? (
+                      <div className="flex items-start gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          {company.address_line_1 && <p>{company.address_line_1}</p>}
+                          {company.address_line_2 && <p>{company.address_line_2}</p>}
+                          {(company.city || company.postcode) && (
+                            <p>{[company.city, company.postcode].filter(Boolean).join(", ")}</p>
+                          )}
+                          {company.country && <p>{company.country}</p>}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Not set</p>
+                    )}
+                  </div>
+                  {company.trading_address && (
+                    <div className="pt-2 border-t space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground uppercase">Trading Address</p>
+                      <div className="flex items-start gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          {(() => {
+                            const addr = company.trading_address as Record<string, string> | null;
+                            if (!addr) return null;
+                            return (
+                              <>
+                                {addr.address_line_1 && <p>{addr.address_line_1}</p>}
+                                {addr.address_line_2 && <p>{addr.address_line_2}</p>}
+                                {(addr.city || addr.postcode) && (
+                                  <p>{[addr.city, addr.postcode].filter(Boolean).join(", ")}</p>
+                                )}
+                                {addr.country && <p>{addr.country}</p>}
+                              </>
+                            );
+                          })()}
+                        </div>
                       </div>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* Practice Management */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Practice Management</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Partner in Charge</p>
+                      <p className="font-medium">
+                        {company.partner_in_charge || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Staff in Charge</p>
+                      <p className="font-medium">
+                        {company.staff_in_charge || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Internal Reference</p>
+                      <p className="font-medium font-mono">
+                        {company.internal_reference || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Client Since</p>
+                      <p className="font-medium">
+                        {company.activated_at
+                          ? format(new Date(company.activated_at), "d MMM yyyy")
+                          : "-"}
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -369,6 +488,14 @@ const CompanyDetail = () => {
                         {company.confirmation_statement_next_due
                           ? format(new Date(company.confirmation_statement_next_due), "d MMM yyyy")
                           : "Unknown"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">CS01 Last Made Up To</p>
+                      <p className="font-medium">
+                        {company.confirmation_statement_made_up_to
+                          ? format(new Date(company.confirmation_statement_made_up_to), "d MMM yyyy")
+                          : "-"}
                       </p>
                     </div>
                   </div>
