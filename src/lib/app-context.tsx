@@ -13,6 +13,7 @@ export interface Organization {
   name: string;
   logo_url: string | null;
   onboarding_completed: boolean;
+  setup_dismissed: boolean;
   timezone: string | null;
   email_domain: string | null;
   billing_status: BillingStatus;
@@ -117,7 +118,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             id, 
             name, 
             logo_url, 
-            onboarding_completed, 
+            onboarding_completed,
+            setup_dismissed,
             timezone, 
             email_domain,
             billing_status,

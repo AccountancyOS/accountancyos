@@ -8856,6 +8856,7 @@ export type Database = {
           pending_checkout_session_id: string | null
           postcode: string | null
           practice_description: string | null
+          setup_dismissed: boolean | null
           stripe_connect_account_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -8881,6 +8882,7 @@ export type Database = {
           pending_checkout_session_id?: string | null
           postcode?: string | null
           practice_description?: string | null
+          setup_dismissed?: boolean | null
           stripe_connect_account_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -8906,6 +8908,7 @@ export type Database = {
           pending_checkout_session_id?: string | null
           postcode?: string | null
           practice_description?: string | null
+          setup_dismissed?: boolean | null
           stripe_connect_account_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null

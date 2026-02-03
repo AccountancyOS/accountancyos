@@ -7,6 +7,7 @@ export interface Organization {
   name: string;
   logo_url: string | null;
   onboarding_completed: boolean;
+  setup_dismissed: boolean;
   timezone: string | null;
   email_domain: string | null;
   billing_status: string | null;

@@ -55,8 +55,12 @@ const Index = () => {
       return;
     }
 
-    // Priority 5: All good → welcome dashboard
-    navigate("/welcome");
+    // Priority 5: Check setup_dismissed to decide landing page
+    if (organization.setup_dismissed) {
+      navigate("/overview");
+    } else {
+      navigate("/welcome");
+    }
   }, [user, organization, loading, organizationLoading, navigate]);
 
   return (
