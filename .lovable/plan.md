@@ -1,219 +1,306 @@
 
 
-# Plan: AccountancyOS Master System Specification (As-Built) - PDF Document
+# Plan: Code Refactoring for Efficiency
 
 ## Overview
 
-This plan outlines the creation of a comprehensive "Source of Truth" document that maps the entire AccountancyOS product - covering application structure, database schema, data lineage, integrations, workflows, and permissions. The document will be generated as a **downloadable PDF**.
+This plan identifies refactoring opportunities to improve code efficiency, reduce duplication, and improve maintainability across the AccountancyOS codebase. All changes are designed to be **non-breaking** and maintain full backward compatibility.
 
 ---
 
-## Deliverable Format
+## Summary of Findings
 
-### PDF Generation Approach
+After analyzing the codebase, I've identified the following categories of improvements:
 
-1. **Create specification content** as structured data/markdown in `docs/master-system-specification.md`
-2. **Create a dedicated page** at `/ops/system-specification` that renders the specification with print-optimized styling
-3. **Add PDF export functionality** using browser print-to-PDF with proper `@media print` styles
-4. **Include a "Download PDF" button** that triggers `window.print()` for clean PDF output
+| Category | Issue | Impact |
+|----------|-------|--------|
+| Duplicate Utilities | Local `formatCurrency` functions in multiple components | Medium |
+| Pattern Consolidation | Similar service patterns (invoices/bills) with repeated code | Medium |
+| Query Key Usage | queryKeys registry exists but not used consistently | Low |
+| Type Mapping | Company type mismatch (`ltd` vs `limited_company`) | Low |
+| Permission Service Duplication | Repeated auth.getUser() calls in permission checks | Low |
+| Edge Function Patterns | Consistent patterns already in place - good | N/A |
 
----
-
-## Document Structure
-
-The specification will be organized into **10 major sections**:
-
-### Section 1: Application Surface Area (Routes & Pages)
-
-Document every page/route with:
-- URL path
-- Authentication requirements  
-- Layout component used
-- Primary components rendered
-- Purpose
-
-**43 routes identified** including:
-- Core: `/overview`, `/clients`, `/jobs`, `/deadlines`
-- Bookkeeping: `/bookkeeping` (full module)
-- Payroll: `/payroll`, `/payroll/pay-runs/:id`, `/payroll/employees/:id`
-- Filing: `/filings`, `/filings/:id`
-- Settings: `/settings/*` (6 sub-routes)
+**Overall Assessment**: The codebase is already well-structured with good patterns in place. The refactoring focuses on consolidating utilities, eliminating local duplicates, and standardizing existing patterns.
 
 ---
 
-### Section 2: Page-Level Specification
+## Phase 1: Consolidate Formatting Utilities
 
-For each major page:
-- Purpose and description
-- User roles with access
-- Entry points (navigation paths)
-- Exit points (where users go next)
-- Key state management
+### Problem
+The `formatCurrency` function is defined locally in multiple components instead of using the centralized version in `src/lib/bookkeeping-utils.ts`.
 
----
+**Files with local duplicates:**
+- `src/components/bookkeeping/ReceiptsTab.tsx` (lines 235-238)
+- Several other bookkeeping components
 
-### Section 3: Database Entity Map
+### Solution
+1. Remove local `formatCurrency` definitions
+2. Import from `@/lib/bookkeeping-utils` consistently
+3. Enhance the central utility to handle edge cases (null, undefined)
 
-**100+ tables organized by domain:**
-
-| Domain | Tables | Examples |
-|--------|--------|----------|
-| Core Entities | 5 | organizations, clients, companies, leads |
-| Jobs & Workflow | 5 | jobs, job_tasks, job_documents, deadlines |
-| Bookkeeping | 25+ | ledger_entries, invoices, bills, bank_transactions |
-| Filing & Tax | 10+ | filings, filing_submissions, hmrc_authorisations |
-| Payroll | 10+ | paye_schemes, employees, pay_runs, rti_submissions |
-| CIS | 4 | cis_contractors, cis_subcontractors, cis_payments, cis_returns |
-| Company Secretary | 6 | company_officers, company_pscs, share_classes |
-| Templates & Automation | 6 | templates, automation_rules, workpaper_instances |
-| Email & Communication | 5 | connected_mailboxes, email_messages, client_messages |
-| Portal & Access | 4 | portal_access, onboardings, engagement_letters |
-
-Each table documented with: Primary key, Foreign keys, Business meaning, RLS policies
+### Files to Modify
+| File | Change |
+|------|--------|
+| `src/lib/bookkeeping-utils.ts` | Ensure handles null/undefined gracefully |
+| `src/components/bookkeeping/ReceiptsTab.tsx` | Remove local function, import centralized |
+| ~5 other bookkeeping components | Same pattern |
 
 ---
 
-### Section 4: Data Lineage
+## Phase 2: Standardize Date Formatting
 
-Field-level data provenance for key entities:
+### Problem
+Date formatting uses `date-fns` `format()` directly with varying format strings across components.
 
-**Example - Companies Table:**
-| Field | Source | Sync Method |
-|-------|--------|-------------|
-| company_name | User input OR Companies House API | CH sync |
-| company_number | User input OR CH lookup | CH sync |
-| sic_codes | Companies House API | CH sync |
-| trading_status | User input | Manual |
-| utr | User input | Manual |
-| partner_in_charge | User selection | FK to organization_users |
+### Solution
+Create a centralized date formatting utility in `src/lib/format-utils.ts`:
 
----
+```typescript
+// New file: src/lib/format-utils.ts
+import { format, formatDistanceToNow } from "date-fns";
 
-### Section 5: Integrations
+export const DATE_FORMATS = {
+  short: "dd/MM/yyyy",
+  long: "dd MMMM yyyy",
+  iso: "yyyy-MM-dd",
+  datetime: "dd/MM/yyyy HH:mm",
+} as const;
 
-| Provider | Purpose | Edge Functions | Token Storage |
-|----------|---------|----------------|---------------|
-| HMRC | VAT, CT600, RTI, CIS | 6 functions | organization_integrations_hmrc |
-| Companies House | Company sync, filings | 2 functions | organization_integrations_companies_house |
-| Gmail | Email sync & send | 5 functions | connected_mailboxes |
-| Outlook | Email sync & send | 5 functions | connected_mailboxes |
-| TrueLayer | Open Banking | 3 functions | bank_connections |
-| Stripe | Payments | 4 functions | Stripe-managed |
+export function formatDate(
+  date: string | Date | null | undefined, 
+  formatType: keyof typeof DATE_FORMATS = "short"
+): string {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  return format(d, DATE_FORMATS[formatType]);
+}
 
----
+export function formatRelativeDate(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return formatDistanceToNow(d, { addSuffix: true });
+}
 
-### Section 6: Workflows & State Machines
-
-**Job Lifecycle:**
-```
-not_started → in_progress → awaiting_info → review → complete
+// Re-export formatCurrency for convenience
+export { formatCurrency } from "./bookkeeping-utils";
 ```
 
-**Filing Lifecycle:**
-```
-not_started → draft → in_progress → awaiting_approval → ready_to_file → filed
-```
-
-**Onboarding Workflow:**
-```
-lead_created → quote_sent → quote_accepted → aml_pending → aml_verified → engagement_sent → engagement_signed → active
-```
-
-**Invoice Lifecycle:**
-```
-DRAFT → ISSUED → SENT → AWAITING_PAYMENT → PART_PAID → PAID
-```
+### Files to Modify
+| File | Change |
+|------|--------|
+| `src/lib/format-utils.ts` | Create new centralized formatting module |
+| Components using date formatting | Gradual migration to use centralized utility |
 
 ---
 
-### Section 7: Permissions & Access Control
+## Phase 3: Query Keys Consistency
 
-**Roles Hierarchy:** `viewer < staff < manager < admin < owner`
+### Problem
+The `src/lib/queryKeys.ts` registry exists and is well-designed, but some pages define query keys inline instead of using the registry.
 
-**Permission Matrix (excerpt):**
-| Permission | Owner | Admin | Manager | Staff | Viewer |
-|------------|:-----:|:-----:|:-------:|:-----:|:------:|
-| Manage practice settings | ✓ | ✓ | - | - | - |
-| Manage team | ✓ | ✓ | - | - | - |
-| Approve filings | ✓ | ✓ | ✓ | - | - |
-| Submit filings | ✓ | ✓ | ✓ | - | - |
-| Create jobs | ✓ | ✓ | ✓ | ✓ | - |
-| Issue invoices | ✓ | ✓ | ✓ | - | - |
+### Solution
+Audit and update pages to use the centralized query keys:
 
----
+```typescript
+// Before (in Jobs.tsx)
+queryKey: ["jobs", organization?.id, filters],
 
-### Section 8: Edge Functions Inventory
+// After
+import { queryKeys } from "@/lib/queryKeys";
+queryKey: queryKeys.jobs(organization?.id, filters),
+```
 
-~30 Deno-based edge functions documented with:
-- JWT requirements
-- Purpose
-- Input/output
-- Error handling
+### Files to Update
+- `src/pages/Jobs.tsx`
+- `src/pages/Clients.tsx`
+- `src/pages/Filings.tsx`
+- ~10 other page files
 
----
-
-### Section 9: Technical Architecture
-
-**Frontend:** React 18, Vite, TypeScript, Tailwind CSS, TanStack Query, React Router v6
-
-**Backend:** Supabase (PostgreSQL + Auth + Storage + Edge Functions), Deno Edge Functions, Row-Level Security
-
-**Component Organization:** 200+ components across 15+ domains
+**Note**: This is a gradual migration - no functionality change, just consistency.
 
 ---
 
-### Section 10: Known Gaps & TODOs
+## Phase 4: Permission Service Optimization
 
-**Partially Implemented:**
-- Self-Assessment Filing (UI exists, HMRC API pending)
-- MTD for Income Tax (not yet implemented)
-- Client Portal App (schema ready, separate app pending)
-- Multi-currency Bookkeeping (FX columns exist, full support incomplete)
+### Problem
+Each permission check function in `src/lib/permission-service.ts` calls `supabase.auth.getUser()` independently, causing repeated API calls when checking multiple permissions.
 
-**Stubbed/Mocked:**
-- Companies House Live Filing (sandbox only)
-- HMRC CT600 Live (sandbox mode)
-- TrueLayer Live (sandbox credentials)
+### Current Pattern (repeated 8 times):
+```typescript
+export async function checkCanModifyJobs(orgId: string): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data } = await supabase.rpc("can_modify_jobs", {...});
+  return data === true;
+}
+```
 
-**Technical Debt:**
-- Client type mismatch (`ltd` vs `limited_company`)
-- Some RLS policies need tightening
+### Solution
+Create a batched permission check or cache the user:
+
+```typescript
+// Optimized pattern
+export async function checkPermissions(
+  orgId: string, 
+  permissions: string[]
+): Promise<Record<string, boolean>> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Object.fromEntries(permissions.map(p => [p, false]));
+  
+  const results: Record<string, boolean> = {};
+  await Promise.all(
+    permissions.map(async (perm) => {
+      const { data } = await supabase.rpc(`can_${perm}`, {
+        _user_id: user.id,
+        _org_id: orgId,
+      });
+      results[perm] = data === true;
+    })
+  );
+  return results;
+}
+```
+
+### Files to Modify
+| File | Change |
+|------|--------|
+| `src/lib/permission-service.ts` | Add batched check function, maintain backward compat |
 
 ---
 
-## Implementation
+## Phase 5: Company Type Normalization
 
-### Files to Create
+### Problem
+Database contains `ltd` but code expects `limited_company`, causing display issues.
+
+### Solution
+Add a mapping utility in `src/lib/client-types.ts`:
+
+```typescript
+// Add to client-types.ts
+const DB_TYPE_MAP: Record<string, ClientType> = {
+  ltd: "limited_company",
+  limited_company: "limited_company",
+  llp: "llp",
+  charity: "charity",
+};
+
+export function normalizeClientType(dbType: string | null): ClientType {
+  if (!dbType) return "other";
+  return DB_TYPE_MAP[dbType.toLowerCase()] || (dbType as ClientType);
+}
+
+export function getClientTypeLabel(type: string | null): string {
+  const normalized = normalizeClientType(type);
+  return CLIENT_TYPE_LABELS[normalized] || type || "Other";
+}
+```
+
+### Files to Modify
+| File | Change |
+|------|--------|
+| `src/lib/client-types.ts` | Add normalization function |
+| `src/pages/Clients.tsx` | Use centralized `getClientTypeLabel` |
+
+---
+
+## Phase 6: Component Loading States
+
+### Problem
+Loading states are handled inconsistently across pages - some use skeleton components, some use simple text.
+
+### Solution
+Standardize on the existing skeleton components:
+- `TableSkeleton` for tables
+- `StatsSkeleton` for stats cards
+- `CardSkeleton` for cards
+
+### Files to Update
+| File | Current | Change to |
+|------|---------|-----------|
+| `src/pages/Clients.tsx` | Text "Loading..." | `<TableSkeleton columns={5} />` |
+| Various other pages | Mixed patterns | Consistent skeleton usage |
+
+---
+
+## Phase 7: Remove Unused Imports
+
+### Problem
+Some files have unused imports that increase bundle size marginally.
+
+### Solution
+Run through files and remove unused imports during the refactoring process.
+
+---
+
+## Implementation Order
+
+To minimize risk, implement in this order:
+
+1. **Phase 5** (Type normalization) - Fixes existing bug
+2. **Phase 1** (Format utilities) - Low risk, high impact
+3. **Phase 2** (Date formatting) - New file, no breaking changes
+4. **Phase 3** (Query keys) - Gradual, file-by-file
+5. **Phase 6** (Loading states) - Visual consistency
+6. **Phase 4** (Permission optimization) - Performance improvement
+7. **Phase 7** (Cleanup) - Final polish
+
+---
+
+## What's Already Well-Structured
+
+The codebase has several excellent patterns already in place:
+
+- **Edge Functions**: Consistent use of shared modules (`_shared/auth.ts`, `_shared/responses.ts`, etc.)
+- **Validation Schemas**: Centralized in `src/lib/validation-schemas.ts`
+- **Query Keys Registry**: Well-designed in `src/lib/queryKeys.ts`
+- **Permission System**: Clear separation between client-side hooks and server-side RPCs
+- **Context Pattern**: Unified `AppContext` with backward-compatible `useOrganization` wrapper
+- **Safe Service Pattern**: Consistent `*-safe-service.ts` pattern for RPC wrappers
+- **UI Components**: Well-organized shadcn/ui components with custom skeletons
+
+---
+
+## Estimated Impact
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Duplicate utility functions | ~10 | 0 |
+| Files with inline query keys | ~25 | 0 |
+| Inconsistent loading states | ~15 pages | 0 |
+| Company type display bugs | Yes | No |
+
+---
+
+## Risk Mitigation
+
+1. **No breaking changes**: All refactoring maintains existing function signatures
+2. **Backward compatibility**: Old patterns continue to work during migration
+3. **Incremental deployment**: Changes can be deployed file-by-file
+4. **Type safety**: TypeScript will catch any regressions
+
+---
+
+## Files to Create
 
 | File | Purpose |
 |------|---------|
-| `docs/master-system-specification.md` | Source content in markdown |
-| `src/pages/SystemSpecification.tsx` | Rendered view with print styles |
+| `src/lib/format-utils.ts` | Centralized formatting utilities |
 
-### Files to Modify
+## Files to Modify
 
-| File | Change |
-|------|--------|
-| `src/App.tsx` | Add route `/ops/system-specification` |
-
-### PDF Export Implementation
-
-The page will include:
-1. Print-optimized CSS with `@media print` rules
-2. Proper page breaks between sections
-3. Table of contents with page numbers
-4. Header/footer with document title and date
-5. "Download as PDF" button triggering `window.print()`
-
-### Estimated Document Size
-
-- **15,000-20,000 words**
-- **~50-70 pages** when rendered as PDF
-- **10 major sections** with subsections
+| File | Change Summary |
+|------|----------------|
+| `src/lib/client-types.ts` | Add normalization functions |
+| `src/lib/bookkeeping-utils.ts` | Ensure null handling |
+| `src/lib/permission-service.ts` | Add batched check |
+| `src/pages/Clients.tsx` | Use centralized utilities, skeletons |
+| `src/components/bookkeeping/ReceiptsTab.tsx` | Remove local formatCurrency |
+| ~15-20 other files | Standardize patterns |
 
 ---
 
 ## Summary
 
-This creates a professional PDF document serving as the canonical "source of truth" for the entire AccountancyOS product. The document will be accessible from the Operations menu and can be downloaded/printed as a PDF for offline reference or stakeholder sharing.
+This refactoring focuses on **consolidation over creation** - leveraging existing well-designed patterns and eliminating scattered duplicates. The codebase is already well-architected; these changes bring consistency and eliminate redundancy without introducing new complexity.
 
