@@ -24,8 +24,11 @@ import LinkToExistingClientDialog from "@/components/accountant-linking/LinkToEx
 import {
   CLIENT_TYPE_LABELS,
   COMPANY_BASED_TYPES,
+  getClientTypeLabel,
+  normalizeClientType,
   type ClientType,
 } from "@/lib/client-types";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 
 const Clients = () => {
   const navigate = useNavigate();
@@ -133,19 +136,6 @@ const Clients = () => {
     setTypeFilter(null);
   };
 
-  // Get display label for client type
-  const getClientTypeLabel = (type: string | null): string => {
-    if (!type) return "-";
-    return CLIENT_TYPE_LABELS[type as ClientType] || type;
-  };
-
-  // Get display label for company type
-  const getCompanyTypeLabel = (companyType: string | null): string => {
-    if (companyType === "llp") return CLIENT_TYPE_LABELS.llp;
-    if (companyType === "charity") return CLIENT_TYPE_LABELS.charity;
-    return CLIENT_TYPE_LABELS.limited_company;
-  };
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -198,7 +188,7 @@ const Clients = () => {
               mode="individual"
             />
             {clientsLoading ? (
-              <div className="text-center py-12">Loading clients...</div>
+              <TableSkeleton columns={5} rows={6} />
             ) : !filteredClients?.length ? (
               <div className="text-center py-12 border border-dashed rounded-lg">
                 <p className="text-muted-foreground">
@@ -253,7 +243,7 @@ const Clients = () => {
               mode="company"
             />
             {companiesLoading ? (
-              <div className="text-center py-12">Loading companies...</div>
+              <TableSkeleton columns={6} rows={6} />
             ) : !filteredCompanies?.length ? (
               <div className="text-center py-12 border border-dashed rounded-lg">
                 <p className="text-muted-foreground">
@@ -285,7 +275,7 @@ const Clients = () => {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {getCompanyTypeLabel(company.company_type)}
+                            {getClientTypeLabel(company.company_type)}
                           </Badge>
                         </TableCell>
                         <TableCell>{company.email}</TableCell>

@@ -177,12 +177,54 @@ export const CLIENT_TYPE_FIELD_CONFIG: Record<ClientType, ClientTypeFieldConfig>
   },
 };
 
-// Helper to check if a client type uses company record
+/**
+ * Mapping from legacy/database type values to canonical ClientType
+ * Handles variations like 'ltd' -> 'limited_company'
+ */
+const DB_TYPE_MAP: Record<string, ClientType> = {
+  ltd: "limited_company",
+  limited_company: "limited_company",
+  llp: "llp",
+  charity: "charity",
+  sa_non_mtd: "sa_non_mtd",
+  sa_mtd: "sa_mtd",
+  sole_trader: "sole_trader",
+  landlord: "landlord",
+  partnership: "partnership",
+  cgt: "cgt",
+  other: "other",
+};
+
+/**
+ * Normalize a database client/company type to canonical ClientType
+ * Handles legacy values and case variations
+ */
+export function normalizeClientType(dbType: string | null | undefined): ClientType {
+  if (!dbType) return "other";
+  const normalized = DB_TYPE_MAP[dbType.toLowerCase()];
+  return normalized || "other";
+}
+
+/**
+ * Get a human-readable label for any client/company type value
+ * Handles legacy database values by normalizing first
+ */
+export function getClientTypeLabel(type: string | null | undefined): string {
+  if (!type) return "Other";
+  const normalized = normalizeClientType(type);
+  return CLIENT_TYPE_LABELS[normalized] || "Other";
+}
+
+/**
+ * Check if a client type uses company record
+ */
 export function isCompanyBasedType(type: ClientType): boolean {
   return COMPANY_BASED_TYPES.includes(type);
 }
 
-// Helper to get field config
+/**
+ * Get field config for a client type
+ */
 export function getClientTypeConfig(type: ClientType): ClientTypeFieldConfig {
   return CLIENT_TYPE_FIELD_CONFIG[type];
 }

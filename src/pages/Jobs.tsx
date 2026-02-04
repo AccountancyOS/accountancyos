@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useAuth } from "@/lib/auth-context";
@@ -24,13 +24,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format, differenceInDays } from "date-fns";
+import { differenceInDays } from "date-fns";
 import CreateJobDialog from "@/components/jobs/CreateJobDialog";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { JobsQuickFilters } from "@/components/jobs/JobsQuickFilters";
 import { SavedViewsDropdown } from "@/components/jobs/SavedViewsDropdown";
 import { useJobFilters } from "@/hooks/useJobFilters";
+import { formatDate } from "@/lib/format-utils";
+import { queryKeys } from "@/lib/queryKeys";
 
 export default function Jobs() {
   const navigate = useNavigate();
@@ -55,7 +57,7 @@ export default function Jobs() {
   const [currentViewId, setCurrentViewId] = useState<string | undefined>();
 
   const { data: jobs, isLoading } = useQuery({
-    queryKey: ["jobs", organization?.id, filters],
+    queryKey: queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>),
     queryFn: async () => {
       if (!organization?.id) return [];
       
@@ -190,12 +192,12 @@ export default function Jobs() {
 
   const formatDeadline = (deadline: string | null, days: number | null) => {
     if (!deadline) return "No deadline";
-    if (days === null) return format(new Date(deadline), "dd MMM yyyy");
+    if (days === null) return formatDate(deadline, "dayMonthYear");
     
     if (days < 0) return <span className="text-destructive font-medium">{Math.abs(days)} days overdue</span>;
     if (days === 0) return <span className="text-destructive font-medium">Due today</span>;
     if (days <= 7) return <span className="text-secondary font-medium">Due in {days} days</span>;
-    return format(new Date(deadline), "dd MMM yyyy");
+    return formatDate(deadline, "dayMonthYear");
   };
 
   return (
@@ -347,7 +349,7 @@ export default function Jobs() {
                       </TableCell>
                       <TableCell>{job.service_type}</TableCell>
                       <TableCell>
-                        {job.period_label || (job.period_end ? format(new Date(job.period_end), "MMM yyyy") : "-")}
+                        {job.period_label || (job.period_end ? formatDate(job.period_end, "monthYear") : "-")}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusColor(job.status)}>
