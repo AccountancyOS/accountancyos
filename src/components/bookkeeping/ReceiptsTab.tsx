@@ -13,8 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Receipt, Image, Trash2, Link2, Eye, X } from "lucide-react";
-import { format } from "date-fns";
 import { toast } from "sonner";
+import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 
 interface ReceiptsTabProps {
   entityType: 'client' | 'company';
@@ -232,13 +233,8 @@ export function ReceiptsTab({ entityType, entityId }: ReceiptsTabProps) {
     }
   };
 
-  const formatCurrency = (amount: number | null) => {
-    if (amount === null) return '-';
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount);
-  };
-
   if (isLoading) {
-    return <div className="p-4">Loading receipts...</div>;
+    return <TableSkeleton columns={7} rows={5} />;
   }
 
   return (
@@ -288,7 +284,7 @@ export function ReceiptsTab({ entityType, entityId }: ReceiptsTabProps) {
               <TableRow key={receipt.id}>
                 <TableCell>
                   {receipt.receipt_date 
-                    ? format(new Date(receipt.receipt_date), 'dd MMM yyyy')
+                    ? formatDate(receipt.receipt_date, "dayMonthYear")
                     : <span className="text-muted-foreground">Not set</span>
                   }
                 </TableCell>

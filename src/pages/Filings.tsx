@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/lib/organization-context";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FileCheck, Search } from "lucide-react";
-import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { formatDate, formatCurrency } from "@/lib/format-utils";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { queryKeys } from "@/lib/queryKeys";
 
 const FILING_TYPE_OPTIONS = [
   { value: "all", label: "All Types" },
@@ -38,11 +41,12 @@ const FILING_TYPE_OPTIONS = [
 
 export default function Filings() {
   const navigate = useNavigate();
+  const { organization } = useOrganization();
   const [searchQuery, setSearchQuery] = useState("");
   const [filingTypeFilter, setFilingTypeFilter] = useState("all");
 
   const { data: filings, isLoading } = useQuery({
-    queryKey: ["filings", searchQuery, filingTypeFilter],
+    queryKey: queryKeys.filings(organization?.id || "", { search: searchQuery, type: filingTypeFilter }),
     queryFn: async () => {
       let query = supabase
         .from("filings")
@@ -132,7 +136,7 @@ export default function Filings() {
             </div>
 
             {isLoading ? (
-              <div className="text-center py-8">Loading filings...</div>
+              <TableSkeleton columns={7} rows={6} />
             ) : filings && filings.length > 0 ? (
               <Table>
                 <TableHeader>
@@ -175,7 +179,7 @@ export default function Filings() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {format(new Date(filing.created_at), "d MMM yyyy")}
+                        {formatDate(filing.created_at, "dayMonthYear")}
                       </TableCell>
                       <TableCell>
                         <Button

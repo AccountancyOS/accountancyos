@@ -234,3 +234,42 @@ export async function getUserPermissions(orgId: string): Promise<{
 
   return data as { role: string | null; permissions: Record<string, boolean> };
 }
+
+/**
+ * Permission check names that correspond to RPC functions
+ */
+type PermissionName = 
+  | "modify_jobs"
+  | "finalize_workpapers"
+  | "approve_filings"
+  | "submit_filings"
+  | "manage_team"
+  | "manage_automation_rules"
+  | "manage_templates";
+
+/**
+ * Batch check multiple permissions in parallel (single auth call)
+ * More efficient than calling individual check functions when multiple permissions are needed
+ */
+export async function checkPermissionsBatch(
+  orgId: string,
+  permissions: PermissionName[]
+): Promise<Record<PermissionName, boolean>> {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return Object.fromEntries(permissions.map(p => [p, false])) as Record<PermissionName, boolean>;
+  }
+
+  const results = await Promise.all(
+    permissions.map(async (perm) => {
+      const { data, error } = await supabase.rpc(`can_${perm}`, {
+        _user_id: user.id,
+        _org_id: orgId,
+      });
+      return [perm, error ? false : data === true] as const;
+    })
+  );
+
+  return Object.fromEntries(results) as Record<PermissionName, boolean>;
+}
