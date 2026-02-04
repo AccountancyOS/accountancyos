@@ -1,0 +1,3185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AccountancyOS - Project Documentation</title>
+    <style>
+        @media print {
+            body { font-size: 11pt; }
+            h1 { page-break-before: avoid; }
+            h2 { page-break-before: always; }
+            h2:first-of-type { page-break-before: avoid; }
+            table { page-break-inside: avoid; }
+            pre { page-break-inside: avoid; }
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+            background: #fff;
+        }
+        
+        h1 {
+            color: #1a1a2e;
+            border-bottom: 3px solid #4361ee;
+            padding-bottom: 15px;
+            margin-bottom: 10px;
+        }
+        
+        h2 {
+            color: #1a1a2e;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+        
+        h3 {
+            color: #4361ee;
+            margin-top: 30px;
+        }
+        
+        h4 {
+            color: #555;
+            margin-top: 25px;
+        }
+        
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        
+        th {
+            background: #4361ee;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        tr:hover {
+            background: #e8f4f8;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 13px;
+            color: #d63384;
+        }
+        
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        
+        blockquote {
+            border-left: 4px solid #4361ee;
+            margin: 20px 0;
+            padding: 10px 20px;
+            background: #f8f9fa;
+            color: #555;
+        }
+        
+        hr {
+            border: none;
+            border-top: 2px solid #e0e0e0;
+            margin: 40px 0;
+        }
+        
+        a {
+            color: #4361ee;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        ul, ol {
+            padding-left: 25px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        .status-working {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .status-partial {
+            color: #ffc107;
+            font-weight: bold;
+        }
+        
+        .status-not-working {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .toc ol {
+            margin: 0;
+        }
+        
+        .header-meta {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+<body>
+<h1>AccountancyOS - Comprehensive Project Documentation</h1>
+<p><strong>Last Updated:</strong> February 2026
+<strong>Version:</strong> 1.0
+<strong>Purpose:</strong> Complete technical and functional documentation for third-party review</p>
+<hr>
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-executive-summary">Executive Summary</a></li>
+<li><a href="#2-technology-stack">Technology Stack</a></li>
+<li><a href="#3-project-architecture">Project Architecture</a></li>
+<li><a href="#4-authentication--authorization">Authentication &amp; Authorization</a></li>
+<li><a href="#5-database-schema-overview">Database Schema Overview</a></li>
+<li><a href="#6-page-by-page-documentation">Page-by-Page Documentation</a></li>
+<li><a href="#7-data-flow-patterns">Data Flow Patterns</a></li>
+<li><a href="#8-key-business-logic-services">Key Business Logic Services</a></li>
+<li><a href="#9-status-assessment-whats-working--what-isnt">Status Assessment: What&#39;s Working &amp; What Isn&#39;t</a></li>
+<li><a href="#10-api--edge-functions">API &amp; Edge Functions</a></li>
+<li><a href="#11-third-party-integrations">Third-Party Integrations</a></li>
+</ol>
+<hr>
+<h2>1. Executive Summary</h2>
+<p><strong>AccountancyOS</strong> is a full-stack SaaS web application designed for UK accounting practices. It provides comprehensive practice management, compliance filing, bookkeeping, payroll, and client relationship management functionality.</p>
+<h3>Core Capabilities</h3>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Description</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CRM &amp; Leads</td>
+<td>Prospect management, company lookup</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Client Management</td>
+<td>Individual and company client records</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Jobs &amp; Workflow</td>
+<td>Task management, deadline tracking</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Bookkeeping</td>
+<td>Chart of accounts, invoicing, bills, bank reconciliation</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Filings &amp; Compliance</td>
+<td>CT600, VAT, SA100, CIS returns</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Payroll</td>
+<td>PAYE, RTI submissions</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Automations</td>
+<td>Rule-based workflow automation</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Client Portal</td>
+<td>External client access</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Email Management</td>
+<td>Gmail/Outlook integration</td>
+<td>Partially Working</td>
+</tr>
+</tbody></table>
+<h3>Key Metrics</h3>
+<ul>
+<li><strong>52 Pages/Routes</strong> in the application</li>
+<li><strong>255+ Components</strong> organized into 26 categories</li>
+<li><strong>80+ Service files</strong> for business logic</li>
+<li><strong>40+ Edge Functions</strong> for server-side operations</li>
+<li><strong>13,500+ lines</strong> of auto-generated database types</li>
+</ul>
+<hr>
+<h2>2. Technology Stack</h2>
+<h3>Frontend</h3>
+<table>
+<thead>
+<tr>
+<th>Technology</th>
+<th>Version</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>React</td>
+<td>18.3.1</td>
+<td>UI framework</td>
+</tr>
+<tr>
+<td>TypeScript</td>
+<td>5.8</td>
+<td>Type safety</td>
+</tr>
+<tr>
+<td>Vite</td>
+<td>5.4</td>
+<td>Build tool &amp; dev server</td>
+</tr>
+<tr>
+<td>React Router</td>
+<td>6.30</td>
+<td>Client-side routing</td>
+</tr>
+<tr>
+<td>TanStack React Query</td>
+<td>5.83</td>
+<td>Server state management</td>
+</tr>
+<tr>
+<td>Tailwind CSS</td>
+<td>3.4</td>
+<td>Styling</td>
+</tr>
+<tr>
+<td>shadcn/ui</td>
+<td>Latest</td>
+<td>Component library</td>
+</tr>
+<tr>
+<td>Radix UI</td>
+<td>1.x</td>
+<td>Headless UI primitives</td>
+</tr>
+</tbody></table>
+<h3>Backend</h3>
+<table>
+<thead>
+<tr>
+<th>Technology</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Supabase</td>
+<td>PostgreSQL database, authentication, realtime, edge functions</td>
+</tr>
+<tr>
+<td>PostgREST</td>
+<td>Auto-generated REST API</td>
+</tr>
+<tr>
+<td>Supabase Auth</td>
+<td>User authentication &amp; sessions</td>
+</tr>
+<tr>
+<td>Edge Functions (Deno)</td>
+<td>Serverless backend logic</td>
+</tr>
+</tbody></table>
+<h3>Key Libraries</h3>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>React Hook Form + Zod</td>
+<td>Form management and validation</td>
+</tr>
+<tr>
+<td>Recharts</td>
+<td>Data visualization</td>
+</tr>
+<tr>
+<td>date-fns</td>
+<td>Date manipulation</td>
+</tr>
+<tr>
+<td>Lucide React</td>
+<td>Icons</td>
+</tr>
+<tr>
+<td>DOMPurify</td>
+<td>HTML sanitization</td>
+</tr>
+<tr>
+<td>PapaParse</td>
+<td>CSV parsing</td>
+</tr>
+<tr>
+<td>@dnd-kit</td>
+<td>Drag and drop</td>
+</tr>
+<tr>
+<td>mathjs</td>
+<td>Mathematical calculations</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>3. Project Architecture</h2>
+<h3>Directory Structure</h3>
+<pre><code>/accountancyos
+├── src/
+│   ├── App.tsx                    # Main router (479 lines)
+│   ├── main.tsx                   # React entry point
+│   ├── index.css                  # Global Tailwind styles
+│   │
+│   ├── pages/                     # 52 page components
+│   │   ├── Index.tsx              # Landing/redirect page
+│   │   ├── Overview.tsx           # Main dashboard
+│   │   ├── WelcomeDashboard.tsx   # Onboarding flow
+│   │   ├── Clients.tsx            # Client list
+│   │   ├── ClientPortal.tsx       # Individual client view
+│   │   ├── CompanyDetail.tsx      # Company details
+│   │   ├── Jobs.tsx               # Jobs list
+│   │   ├── JobDetail.tsx          # Job details with tabs
+│   │   ├── Bookkeeping.tsx        # Full bookkeeping module
+│   │   ├── Filings.tsx            # Filings list
+│   │   ├── FilingDetail.tsx       # Filing details
+│   │   ├── Payroll.tsx            # Payroll module
+│   │   ├── CIS.tsx                # CIS returns
+│   │   ├── ... (38 more pages)
+│   │
+│   ├── components/                # 255+ reusable components
+│   │   ├── ui/                    # 55 shadcn/ui components
+│   │   ├── bookkeeping/           # 25+ bookkeeping components
+│   │   ├── jobs/                  # 16 job management components
+│   │   ├── client-portal/         # 12 portal components
+│   │   ├── filings/               # Filing components
+│   │   ├── payroll/               # Payroll components
+│   │   ├── ... (20 more categories)
+│   │
+│   ├── lib/                       # 80+ service files
+│   │   ├── auth-context.tsx       # Authentication state
+│   │   ├── app-context.tsx        # Global app state
+│   │   ├── permissions.ts         # RBAC system
+│   │   ├── filing-service.ts      # Filing operations
+│   │   ├── ct-computation-engine.ts # Tax calculations
+│   │   ├── ... (75 more services)
+│   │
+│   ├── hooks/                     # 8 custom React hooks
+│   │   ├── usePermissions.ts
+│   │   ├── useRealtimeSubscription.ts
+│   │   └── ...
+│   │
+│   ├── integrations/
+│   │   └── supabase/
+│   │       ├── client.ts          # Supabase client config
+│   │       └── types.ts           # Generated DB types (13,510 lines)
+│   │
+│   └── types/                     # TypeScript definitions
+│
+├── supabase/
+│   ├── migrations/                # Database migrations
+│   └── functions/                 # 40+ edge functions
+│
+└── public/                        # Static assets
+</code></pre>
+<h3>Routing Architecture</h3>
+<p><strong>File:</strong> <code>src/App.tsx</code></p>
+<p>Routes are organized into:</p>
+<ol>
+<li><p><strong>Public Routes</strong> - No authentication required</p>
+<ul>
+<li><code>/auth</code> - Login/signup</li>
+<li><code>/confirm-email</code> - Email verification</li>
+<li><code>/questionnaire/:instanceId</code> - Public questionnaire responses</li>
+</ul>
+</li>
+<li><p><strong>Protected Routes</strong> - Require authentication</p>
+<ul>
+<li>All other routes wrapped in <code>&lt;ProtectedRoute&gt;</code></li>
+<li>Wrapped by <code>AppProvider</code> for organization context</li>
+</ul>
+</li>
+</ol>
+<pre><code class="language-tsx">// Route protection pattern
+&lt;Route
+  path=&quot;/protected-page&quot;
+  element={
+    &lt;ProtectedRoute&gt;
+      &lt;ProtectedPage /&gt;
+    &lt;/ProtectedRoute&gt;
+  }
+/&gt;
+</code></pre>
+<hr>
+<h2>4. Authentication &amp; Authorization</h2>
+<h3>Authentication Flow</h3>
+<p><strong>File:</strong> <code>src/lib/auth-context.tsx</code></p>
+<ol>
+<li>User lands on <code>/auth</code> page</li>
+<li>Supabase Auth handles email/password login</li>
+<li>On success, session stored in localStorage</li>
+<li><code>AuthContext</code> provides session state to app</li>
+<li>Protected routes check session existence</li>
+</ol>
+<h3>Session Management</h3>
+<pre><code class="language-typescript">// AuthContext provides:
+{
+  session: Session | null,        // Supabase session
+  user: User | null,              // Current user
+  isLoading: boolean,             // Loading state
+  signOut: () =&gt; Promise&lt;void&gt;,   // Logout function
+}
+</code></pre>
+<h3>Role-Based Access Control (RBAC)</h3>
+<p><strong>File:</strong> <code>src/lib/permissions.ts</code></p>
+<h4>Role Hierarchy (lowest to highest)</h4>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Level</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>viewer</code></td>
+<td>1</td>
+<td>Read-only access</td>
+</tr>
+<tr>
+<td><code>staff</code></td>
+<td>2</td>
+<td>Basic operations</td>
+</tr>
+<tr>
+<td><code>manager</code></td>
+<td>3</td>
+<td>Most operations</td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>4</td>
+<td>Administrative access</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td>5</td>
+<td>Full access</td>
+</tr>
+</tbody></table>
+<h4>Permission Categories</h4>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Permissions</th>
+<th>Allowed Roles</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Practice Management</td>
+<td><code>can_manage_practice_settings</code>, <code>can_manage_integrations</code>, <code>can_manage_billing</code>, <code>can_manage_team</code></td>
+<td>owner, admin</td>
+</tr>
+<tr>
+<td>Automation</td>
+<td><code>can_manage_automation_rules</code>, <code>can_view_automation_history</code></td>
+<td>owner, admin, manager</td>
+</tr>
+<tr>
+<td>Jobs</td>
+<td><code>can_view_all_jobs</code>, <code>can_create_jobs</code>, <code>can_manage_templates</code></td>
+<td>owner, admin, manager, staff</td>
+</tr>
+<tr>
+<td>Filing</td>
+<td><code>can_finalize_workpapers</code>, <code>can_approve_filings</code>, <code>can_submit_filings</code></td>
+<td>owner, admin, manager</td>
+</tr>
+<tr>
+<td>Bookkeeping</td>
+<td><code>can_create_invoices</code>, <code>can_issue_invoices</code>, <code>can_post_journals</code>, etc.</td>
+<td>varies by action</td>
+</tr>
+<tr>
+<td>Data</td>
+<td><code>can_view_sensitive_data</code>, <code>can_delete_records</code></td>
+<td>owner, admin, manager</td>
+</tr>
+</tbody></table>
+<h4>Permission Check Usage</h4>
+<pre><code class="language-tsx">// Using the hook
+const { can_approve_filings } = usePermissions([&#39;can_approve_filings&#39;]);
+
+// Using the guard component
+&lt;RequirePermission permission=&quot;can_approve_filings&quot;&gt;
+  &lt;ApproveButton /&gt;
+&lt;/RequirePermission&gt;
+</code></pre>
+<hr>
+<h2>5. Database Schema Overview</h2>
+<p>The application uses Supabase PostgreSQL with row-level security (RLS). All tables are scoped to <code>organization_id</code> for multi-tenancy.</p>
+<h3>Core Entity Tables</h3>
+<h4>Organizations &amp; Users</h4>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>organizations</code></td>
+<td>Practice/firm records</td>
+<td><code>id</code>, <code>name</code>, <code>setup_dismissed</code></td>
+</tr>
+<tr>
+<td><code>organization_users</code></td>
+<td>Team members</td>
+<td><code>organization_id</code>, <code>user_id</code>, <code>role</code></td>
+</tr>
+<tr>
+<td><code>organization_subscription_cache</code></td>
+<td>Cached subscription status</td>
+<td><code>tier</code>, <code>is_active</code></td>
+</tr>
+<tr>
+<td><code>organization_branding</code></td>
+<td>Branding settings</td>
+<td><code>logo_light_url</code>, <code>accent_color</code></td>
+</tr>
+</tbody></table>
+<h4>Clients &amp; Companies</h4>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>clients</code></td>
+<td>Individual clients</td>
+<td><code>id</code>, <code>organization_id</code>, <code>first_name</code>, <code>last_name</code>, <code>client_type</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>client_detail_sa</code></td>
+<td>Self-assessment details</td>
+<td><code>client_id</code>, <code>utr</code>, <code>nino</code></td>
+</tr>
+<tr>
+<td><code>client_detail_cgt</code></td>
+<td>CGT client details</td>
+<td><code>client_id</code>, <code>disposal_date</code></td>
+</tr>
+<tr>
+<td><code>client_detail_partnership</code></td>
+<td>Partnership details</td>
+<td><code>client_id</code>, <code>partner_count</code></td>
+</tr>
+<tr>
+<td><code>client_detail_charity</code></td>
+<td>Charity details</td>
+<td><code>client_id</code>, <code>charity_number</code></td>
+</tr>
+<tr>
+<td><code>companies</code></td>
+<td>Limited companies, LLPs</td>
+<td><code>id</code>, <code>organization_id</code>, <code>company_name</code>, <code>company_number</code></td>
+</tr>
+<tr>
+<td><code>company_officers</code></td>
+<td>Directors/secretaries</td>
+<td><code>company_id</code>, <code>name</code>, <code>role</code></td>
+</tr>
+<tr>
+<td><code>company_shareholders</code></td>
+<td>Shareholders</td>
+<td><code>company_id</code>, <code>name</code>, <code>share_count</code></td>
+</tr>
+<tr>
+<td><code>company_pscs</code></td>
+<td>Persons with significant control</td>
+<td><code>company_id</code>, <code>name</code></td>
+</tr>
+</tbody></table>
+<h4>Client Types Mapping</h4>
+<p><strong>File:</strong> <code>src/lib/client-types.ts</code></p>
+<table>
+<thead>
+<tr>
+<th>Client Type</th>
+<th>Detail Table</th>
+<th>Uses Company Record</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sa_non_mtd</code></td>
+<td><code>client_detail_sa</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>sa_mtd</code></td>
+<td><code>client_detail_sa</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>sole_trader</code></td>
+<td><code>client_detail_sa</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>landlord</code></td>
+<td><code>client_detail_sa</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>partnership</code></td>
+<td><code>client_detail_partnership</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>llp</code></td>
+<td><code>companies</code></td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>limited_company</code></td>
+<td><code>companies</code></td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>charity</code></td>
+<td><code>client_detail_charity</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>cgt</code></td>
+<td><code>client_detail_cgt</code></td>
+<td>No</td>
+</tr>
+</tbody></table>
+<h3>Jobs &amp; Workflow Tables</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>jobs</code></td>
+<td>Work items</td>
+<td><code>id</code>, <code>job_name</code>, <code>status</code>, <code>client_id</code>, <code>company_id</code>, <code>owner_id</code></td>
+</tr>
+<tr>
+<td><code>job_templates</code></td>
+<td>Reusable job templates</td>
+<td><code>name</code>, <code>default_tasks</code>, <code>service_type</code></td>
+</tr>
+<tr>
+<td><code>client_tasks</code></td>
+<td>Tasks within jobs</td>
+<td><code>job_id</code>, <code>title</code>, <code>status</code>, <code>assigned_to</code></td>
+</tr>
+<tr>
+<td><code>client_messages</code></td>
+<td>Internal job notes</td>
+<td><code>job_id</code>, <code>message</code>, <code>created_by</code></td>
+</tr>
+<tr>
+<td><code>deadlines</code></td>
+<td>Statutory/internal deadlines</td>
+<td><code>due_date</code>, <code>entity_id</code>, <code>status</code>, <code>risk_level</code></td>
+</tr>
+</tbody></table>
+<h3>Bookkeeping Tables</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>bookkeeping_accounts</code></td>
+<td>Chart of accounts</td>
+<td><code>code</code>, <code>name</code>, <code>type</code>, <code>parent_id</code></td>
+</tr>
+<tr>
+<td><code>bank_accounts</code></td>
+<td>Bank connections</td>
+<td><code>account_name</code>, <code>account_number</code>, <code>balance</code></td>
+</tr>
+<tr>
+<td><code>bank_transactions</code></td>
+<td>Bank transactions</td>
+<td><code>amount</code>, <code>date</code>, <code>description</code>, <code>categorized</code></td>
+</tr>
+<tr>
+<td><code>bank_rules</code></td>
+<td>Auto-categorization rules</td>
+<td><code>pattern</code>, <code>account_id</code>, <code>is_active</code></td>
+</tr>
+<tr>
+<td><code>invoices</code></td>
+<td>Sales invoices</td>
+<td><code>invoice_number</code>, <code>customer_id</code>, <code>total</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>invoice_lines</code></td>
+<td>Invoice line items</td>
+<td><code>invoice_id</code>, <code>description</code>, <code>quantity</code>, <code>unit_price</code></td>
+</tr>
+<tr>
+<td><code>bills</code></td>
+<td>Purchase bills</td>
+<td><code>bill_number</code>, <code>supplier_id</code>, <code>total</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>bill_lines</code></td>
+<td>Bill line items</td>
+<td><code>bill_id</code>, <code>description</code>, <code>amount</code></td>
+</tr>
+<tr>
+<td><code>customers</code></td>
+<td>Customer/debtor records</td>
+<td><code>name</code>, <code>email</code>, <code>balance</code></td>
+</tr>
+<tr>
+<td><code>contacts</code></td>
+<td>Supplier contacts</td>
+<td><code>name</code>, <code>email</code></td>
+</tr>
+<tr>
+<td><code>vat_periods</code></td>
+<td>VAT periods</td>
+<td><code>start_date</code>, <code>end_date</code>, <code>status</code></td>
+</tr>
+</tbody></table>
+<h3>Filing Tables</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>filings</code></td>
+<td>Tax returns and filings</td>
+<td><code>filing_type</code>, <code>status</code>, <code>tax_year</code>, <code>filing_body</code></td>
+</tr>
+<tr>
+<td><code>filing_submissions</code></td>
+<td>Submission records</td>
+<td><code>filing_id</code>, <code>submitted_at</code>, <code>response</code></td>
+</tr>
+<tr>
+<td><code>filing_approvals</code></td>
+<td>Approval workflow</td>
+<td><code>filing_id</code>, <code>approved_by</code>, <code>approved_at</code></td>
+</tr>
+<tr>
+<td><code>filing_artefacts</code></td>
+<td>Generated documents</td>
+<td><code>filing_id</code>, <code>type</code>, <code>url</code></td>
+</tr>
+<tr>
+<td><code>workpaper_instances</code></td>
+<td>Engagement workpapers</td>
+<td><code>service_type</code>, <code>status</code>, <code>field_values</code></td>
+</tr>
+</tbody></table>
+<h3>Payroll Tables</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>paye_schemes</code></td>
+<td>PAYE scheme setup</td>
+<td><code>employer_ref</code>, <code>accounts_office_ref</code></td>
+</tr>
+<tr>
+<td><code>employees</code></td>
+<td>Employee records</td>
+<td><code>first_name</code>, <code>last_name</code>, <code>ni_number</code>, <code>tax_code</code></td>
+</tr>
+<tr>
+<td><code>pay_runs</code></td>
+<td>Pay run records</td>
+<td><code>period_start</code>, <code>period_end</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>rti_submissions</code></td>
+<td>RTI to HMRC</td>
+<td><code>pay_run_id</code>, <code>submission_type</code>, <code>status</code></td>
+</tr>
+</tbody></table>
+<h3>Email Tables</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>email_queue</code></td>
+<td>Outgoing email queue</td>
+<td><code>to_email</code>, <code>subject</code>, <code>status</code>, <code>context</code></td>
+</tr>
+<tr>
+<td><code>connected_mailboxes</code></td>
+<td>Gmail/Outlook connections</td>
+<td><code>provider</code>, <code>email_address</code>, <code>is_active</code></td>
+</tr>
+<tr>
+<td><code>email_messages</code></td>
+<td>Sent email history</td>
+<td><code>subject</code>, <code>sent_at</code>, <code>recipient</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>6. Page-by-Page Documentation</h2>
+<h3>6.1 Index Page (<code>/</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Index.tsx</code></p>
+<p><strong>Purpose:</strong> Landing page that redirects based on user state</p>
+<p><strong>Data Flow:</strong></p>
+<ol>
+<li>Checks if user is authenticated</li>
+<li>If not authenticated → redirects to <code>/auth</code></li>
+<li>If authenticated:<ul>
+<li>Checks <code>organization.setup_dismissed</code></li>
+<li>If setup not dismissed → redirects to <code>/welcome</code></li>
+<li>If setup dismissed → redirects to <code>/overview</code></li>
+</ul>
+</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.2 Welcome Dashboard (<code>/welcome</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/WelcomeDashboard.tsx</code></p>
+<p><strong>Purpose:</strong> Onboarding checklist for new users</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Progress bar showing setup completion</li>
+<li>Checklist of 4 items:<ol>
+<li>Confirm branding → links to <code>/settings/branding</code></li>
+<li>Import clients → links to <code>/clients</code></li>
+<li>Add first lead → links to <code>/crm</code></li>
+<li>Connect Companies House &amp; HMRC → links to <code>/settings/hmrc</code></li>
+</ol>
+</li>
+<li>Skip Setup button</li>
+<li>Quick Actions cards (Create Lead, Create Quote, Add Client, Import Data)</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source Table</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Branding completion</td>
+<td><code>organization_branding</code></td>
+<td>Checks if <code>logo_light_url</code>, <code>logo_dark_url</code>, <code>trading_name</code>, or non-default <code>accent_color</code> exists</td>
+</tr>
+<tr>
+<td>Client count</td>
+<td><code>clients</code></td>
+<td>COUNT where <code>organization_id</code> matches</td>
+</tr>
+<tr>
+<td>Lead count</td>
+<td><code>leads</code></td>
+<td>COUNT where <code>organization_id</code> matches</td>
+</tr>
+<tr>
+<td>HMRC connected</td>
+<td><code>organization_integrations_hmrc</code></td>
+<td>Checks <code>mtd_vat_connected</code></td>
+</tr>
+<tr>
+<td>CH connected</td>
+<td><code>organization_integrations_companies_house</code></td>
+<td>Checks <code>connected_at</code></td>
+</tr>
+</tbody></table>
+<p><strong>Data Flow:</strong></p>
+<ol>
+<li>On mount, fetches completion status for all checklist items</li>
+<li>When all items complete OR user clicks &quot;Skip Setup&quot;:<ul>
+<li>Updates <code>organizations.setup_dismissed = true</code></li>
+<li>Redirects to <code>/overview</code></li>
+</ul>
+</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.3 Overview Dashboard (<code>/overview</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Overview.tsx</code></p>
+<p><strong>Purpose:</strong> Main dashboard with KPIs and activity overview</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>KPI Cards row (4 cards)</li>
+<li>Upcoming Deadlines widget</li>
+<li>Jobs Pipeline widget</li>
+<li>Recent Activity feed</li>
+<li>Staff Performance widget (if manager+)</li>
+</ul>
+<p><strong>Data Sources (KPI Cards):</strong></p>
+<table>
+<thead>
+<tr>
+<th>KPI</th>
+<th>Source</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Active Clients</td>
+<td><code>clients</code></td>
+<td>COUNT where <code>status = &#39;active&#39;</code></td>
+</tr>
+<tr>
+<td>Jobs In Progress</td>
+<td><code>jobs</code></td>
+<td>COUNT where <code>status IN (&#39;in_progress&#39;, &#39;waiting_on_client&#39;, &#39;ready_for_review&#39;)</code></td>
+</tr>
+<tr>
+<td>Overdue Deadlines</td>
+<td><code>deadlines</code></td>
+<td>COUNT where <code>status = &#39;pending&#39;</code> AND <code>due_date &lt; NOW()</code></td>
+</tr>
+<tr>
+<td>Automation Success</td>
+<td><code>automation_executions</code></td>
+<td><code>completed / total * 100</code> for last 30 days</td>
+</tr>
+</tbody></table>
+<p><strong>Real-time Updates:</strong></p>
+<ul>
+<li>Uses <code>useRealtimeSubscription</code> hook for:<ul>
+<li><code>jobs</code> table</li>
+<li><code>deadlines</code> table</li>
+<li><code>clients</code> table</li>
+</ul>
+</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.4 Clients List (<code>/clients</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Clients.tsx</code></p>
+<p><strong>Purpose:</strong> List and manage all clients (individuals and companies)</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Search bar (searches name, email, company)</li>
+<li>Filter dropdowns:<ul>
+<li>Client Type (all types from <code>CLIENT_TYPES</code>)</li>
+<li>Status (active, inactive, prospect)</li>
+</ul>
+</li>
+<li>View toggle (Card/Table view)</li>
+<li>&quot;Add Client&quot; button → opens <code>CreateClientDialog</code></li>
+<li>&quot;Import&quot; button → opens <code>ImportClientsDialog</code></li>
+<li>Client cards/rows showing:<ul>
+<li>Name</li>
+<li>Client type badge</li>
+<li>Email</li>
+<li>Status badge</li>
+<li>Click → navigates to <code>/clients/:clientId</code></li>
+</ul>
+</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Client name</td>
+<td><code>clients</code></td>
+<td><code>first_name</code>, <code>last_name</code> OR <code>companies.company_name</code></td>
+</tr>
+<tr>
+<td>Client type</td>
+<td><code>clients</code></td>
+<td><code>client_type</code></td>
+</tr>
+<tr>
+<td>Email</td>
+<td><code>clients</code></td>
+<td><code>email</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>clients</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Company name</td>
+<td><code>companies</code> (joined)</td>
+<td><code>company_name</code></td>
+</tr>
+</tbody></table>
+<p><strong>Query Pattern:</strong></p>
+<pre><code class="language-typescript">supabase
+  .from(&quot;clients&quot;)
+  .select(`
+    *,
+    companies(company_name, company_number)
+  `)
+  .eq(&quot;organization_id&quot;, organization.id)
+  .order(&quot;created_at&quot;, { ascending: false })
+</code></pre>
+<p><strong>Data Flow:</strong></p>
+<ol>
+<li>Fetches clients with optional company join</li>
+<li>Client-side filtering by search term and filters</li>
+<li>Clicking client navigates to portal</li>
+<li>Creating client triggers job creation via automations</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.5 Client Portal (<code>/clients/:clientId</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/ClientPortal.tsx</code></p>
+<p><strong>Purpose:</strong> Complete view of a single client with all related data</p>
+<p><strong>UI Elements (Tabs):</strong></p>
+<ol>
+<li><strong>Overview Tab</strong> - Summary cards, quick stats</li>
+<li><strong>Engagements Tab</strong> - Active services/jobs</li>
+<li><strong>Messages Tab</strong> - Client communications</li>
+<li><strong>Deadlines Tab</strong> - Upcoming deadlines</li>
+<li><strong>Documents Tab</strong> - Uploaded files</li>
+<li><strong>Workpapers Tab</strong> - Engagement workpapers</li>
+<li><strong>Questionnaires Tab</strong> - Sent questionnaires</li>
+<li><strong>Filings Tab</strong> - Filing history</li>
+<li><strong>Bookkeeping Tab</strong> - If bookkeeping enabled</li>
+</ol>
+<p><strong>Data Sources (Overview Tab):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Client details</td>
+<td><code>clients</code></td>
+<td>WHERE <code>id = :clientId</code></td>
+</tr>
+<tr>
+<td>Company details</td>
+<td><code>companies</code></td>
+<td>If company-based type</td>
+</tr>
+<tr>
+<td>SA details</td>
+<td><code>client_detail_sa</code></td>
+<td>If SA client type</td>
+</tr>
+<tr>
+<td>Active jobs count</td>
+<td><code>jobs</code></td>
+<td>COUNT WHERE <code>client_id</code> AND <code>status != &#39;completed&#39;</code></td>
+</tr>
+<tr>
+<td>Pending deadlines</td>
+<td><code>deadlines</code></td>
+<td>COUNT WHERE <code>entity_id</code> AND <code>status = &#39;pending&#39;</code></td>
+</tr>
+<tr>
+<td>Outstanding balance</td>
+<td><code>invoices</code></td>
+<td>SUM WHERE <code>status != &#39;paid&#39;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Data Flow:</strong></p>
+<ol>
+<li>URL param <code>clientId</code> used to fetch client record</li>
+<li>Client type determines which detail table to join</li>
+<li>Each tab lazily loads its own data</li>
+<li>Real-time subscription for messages</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.6 Company Detail (<code>/companies/:companyId</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/CompanyDetail.tsx</code></p>
+<p><strong>Purpose:</strong> Detailed view for limited companies, LLPs, charities</p>
+<p><strong>UI Elements (Tabs):</strong></p>
+<ol>
+<li><strong>Overview Tab</strong> - Company info, incorporation details</li>
+<li><strong>Officers Tab</strong> - Directors, secretaries</li>
+<li><strong>Shareholders Tab</strong> - Share structure</li>
+<li><strong>PSCs Tab</strong> - Persons with significant control</li>
+<li><strong>Filings Tab</strong> - Companies House filings</li>
+<li><strong>COSEC Tab</strong> - Company secretarial actions</li>
+<li><strong>Accounts Tab</strong> - Bookkeeping access</li>
+<li><strong>Jobs Tab</strong> - Related jobs</li>
+</ol>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Company name</td>
+<td><code>companies</code></td>
+<td><code>company_name</code></td>
+</tr>
+<tr>
+<td>Company number</td>
+<td><code>companies</code></td>
+<td><code>company_number</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>companies</code></td>
+<td><code>company_status</code></td>
+</tr>
+<tr>
+<td>Incorporation date</td>
+<td><code>companies</code></td>
+<td><code>incorporated_on</code></td>
+</tr>
+<tr>
+<td>Registered address</td>
+<td><code>companies</code></td>
+<td><code>registered_office_*</code> fields</td>
+</tr>
+<tr>
+<td>SIC codes</td>
+<td><code>companies</code></td>
+<td><code>sic_codes</code> (JSON array)</td>
+</tr>
+<tr>
+<td>Officers</td>
+<td><code>company_officers</code></td>
+<td>All where <code>company_id</code></td>
+</tr>
+<tr>
+<td>Shareholders</td>
+<td><code>company_shareholders</code></td>
+<td>All where <code>company_id</code></td>
+</tr>
+<tr>
+<td>PSCs</td>
+<td><code>company_pscs</code></td>
+<td>All where <code>company_id</code></td>
+</tr>
+<tr>
+<td>Accounting ref date</td>
+<td><code>companies</code></td>
+<td><code>accounting_reference_date</code></td>
+</tr>
+</tbody></table>
+<p><strong>Companies House Sync:</strong></p>
+<ul>
+<li>&quot;Sync from Companies House&quot; button</li>
+<li>Calls <code>companies-house-sync</code> edge function</li>
+<li>Updates company data, officers, PSCs</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.7 Jobs List (<code>/jobs</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Jobs.tsx</code></p>
+<p><strong>Purpose:</strong> Practice-wide job/work item management</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Quick filter buttons (My Jobs, All Open, Waiting on Client, Due This Week)</li>
+<li>Advanced filters panel:<ul>
+<li>Service type</li>
+<li>Status</li>
+<li>Assigned to</li>
+<li>Client/Company</li>
+<li>Date range</li>
+</ul>
+</li>
+<li>Saved views dropdown</li>
+<li>&quot;Create Job&quot; button</li>
+<li>Jobs table with columns:<ul>
+<li>Job name</li>
+<li>Client/Company</li>
+<li>Service type</li>
+<li>Status</li>
+<li>Owner</li>
+<li>Due date</li>
+<li>Priority indicator</li>
+</ul>
+</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Job name</td>
+<td><code>jobs</code></td>
+<td><code>job_name</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>jobs</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Service type</td>
+<td><code>jobs</code></td>
+<td><code>service_type</code></td>
+</tr>
+<tr>
+<td>Client name</td>
+<td><code>clients</code> (joined)</td>
+<td><code>first_name</code>, <code>last_name</code></td>
+</tr>
+<tr>
+<td>Company name</td>
+<td><code>companies</code> (joined)</td>
+<td><code>company_name</code></td>
+</tr>
+<tr>
+<td>Owner</td>
+<td><code>organization_users</code> (joined)</td>
+<td>User name</td>
+</tr>
+<tr>
+<td>Due date</td>
+<td><code>jobs</code></td>
+<td><code>due_date</code></td>
+</tr>
+<tr>
+<td>Priority</td>
+<td><code>jobs</code></td>
+<td><code>priority</code></td>
+</tr>
+</tbody></table>
+<p><strong>Job Statuses:</strong></p>
+<ul>
+<li><code>not_started</code></li>
+<li><code>in_progress</code></li>
+<li><code>waiting_on_client</code></li>
+<li><code>ready_for_review</code></li>
+<li><code>in_review</code></li>
+<li><code>completed</code></li>
+<li><code>cancelled</code></li>
+</ul>
+<p><strong>Data Flow:</strong></p>
+<ol>
+<li>Initial load fetches jobs with filters</li>
+<li>Filters applied server-side via query params</li>
+<li>Saved views stored in localStorage</li>
+<li>Real-time updates via subscription</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.8 Job Detail (<code>/jobs/:jobId</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/JobDetail.tsx</code></p>
+<p><strong>Purpose:</strong> Full job management with tasks, documents, filings</p>
+<p><strong>UI Elements (Tabs):</strong></p>
+<ol>
+<li><strong>Overview Tab</strong> - Job summary, status, dates</li>
+<li><strong>Tasks Tab</strong> - Task checklist</li>
+<li><strong>Documents Tab</strong> - File attachments</li>
+<li><strong>Timeline Tab</strong> - Activity history</li>
+<li><strong>Records Request Tab</strong> - Information requests to client</li>
+<li><strong>Workpapers Tab</strong> - Related workpapers</li>
+<li><strong>Filing Tab</strong> - If filing-related job</li>
+<li><strong>Conversation Tab</strong> - Internal notes</li>
+</ol>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Job details</td>
+<td><code>jobs</code></td>
+<td>WHERE <code>id = :jobId</code></td>
+</tr>
+<tr>
+<td>Tasks</td>
+<td><code>client_tasks</code></td>
+<td>WHERE <code>job_id = :jobId</code></td>
+</tr>
+<tr>
+<td>Documents</td>
+<td><code>documents</code></td>
+<td>WHERE <code>job_id = :jobId</code></td>
+</tr>
+<tr>
+<td>Timeline events</td>
+<td><code>client_messages</code> + audit</td>
+<td>WHERE <code>job_id</code></td>
+</tr>
+<tr>
+<td>Workpapers</td>
+<td><code>workpaper_instances</code></td>
+<td>WHERE <code>job_id = :jobId</code></td>
+</tr>
+<tr>
+<td>Filing</td>
+<td><code>filings</code></td>
+<td>WHERE <code>job_id = :jobId</code></td>
+</tr>
+</tbody></table>
+<p><strong>Task Management:</strong></p>
+<ul>
+<li>Create task with title, description, assignee, due date</li>
+<li>Check/uncheck completion</li>
+<li>Task ordering via drag-and-drop</li>
+<li>Task templates from job templates</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.9 Bookkeeping Module (<code>/bookkeeping</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Bookkeeping.tsx</code></p>
+<p><strong>Purpose:</strong> Full double-entry bookkeeping system</p>
+<p><strong>UI Elements (Tabs):</strong></p>
+<ol>
+<li><strong>Overview Tab</strong> - Business KPIs, charts</li>
+<li><strong>Chart of Accounts Tab</strong> - Account tree</li>
+<li><strong>Banking Tab</strong> - Bank accounts, transactions</li>
+<li><strong>Sales Tab</strong> - Invoicing module</li>
+<li><strong>Purchases Tab</strong> - Bills module</li>
+<li><strong>Journals Tab</strong> - Manual journal entries</li>
+<li><strong>VAT Returns Tab</strong> - VAT period management</li>
+<li><strong>Reports Tab</strong> - P&amp;L, Balance Sheet, Trial Balance</li>
+<li><strong>Period Lock Tab</strong> - Period closing</li>
+</ol>
+<p><strong>Entity Selector:</strong></p>
+<ul>
+<li>Top dropdown to select client or company</li>
+<li>All data scoped to selected entity</li>
+</ul>
+<h3>Overview Tab</h3>
+<p><strong>KPIs Displayed:</strong></p>
+<table>
+<thead>
+<tr>
+<th>KPI</th>
+<th>Calculation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Revenue MTD</td>
+<td>SUM of sales invoices this month</td>
+</tr>
+<tr>
+<td>Expenses MTD</td>
+<td>SUM of bills this month</td>
+</tr>
+<tr>
+<td>Bank Balance</td>
+<td>Total across all bank accounts</td>
+</tr>
+<tr>
+<td>AR Balance</td>
+<td>Unpaid invoice total</td>
+</tr>
+<tr>
+<td>AP Balance</td>
+<td>Unpaid bills total</td>
+</tr>
+</tbody></table>
+<h3>Chart of Accounts Tab</h3>
+<p><strong>Data Source:</strong> <code>bookkeeping_accounts</code></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Account code</td>
+<td><code>code</code></td>
+</tr>
+<tr>
+<td>Account name</td>
+<td><code>name</code></td>
+</tr>
+<tr>
+<td>Type</td>
+<td><code>type</code> (asset, liability, equity, income, expense)</td>
+</tr>
+<tr>
+<td>Parent</td>
+<td><code>parent_id</code> (for hierarchy)</td>
+</tr>
+<tr>
+<td>Balance</td>
+<td>Calculated from postings</td>
+</tr>
+</tbody></table>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Hierarchical tree view</li>
+<li>Standard UK COA template seeding</li>
+<li>Custom account creation</li>
+<li>Account archiving</li>
+</ul>
+<h3>Banking Tab</h3>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Data</th>
+<th>Table</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Bank accounts</td>
+<td><code>bank_accounts</code></td>
+</tr>
+<tr>
+<td>Transactions</td>
+<td><code>bank_transactions</code></td>
+</tr>
+<tr>
+<td>Rules</td>
+<td><code>bank_rules</code></td>
+</tr>
+</tbody></table>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Manual transaction entry</li>
+<li>TrueLayer bank sync (where connected)</li>
+<li>Rule-based auto-categorization</li>
+<li>Bank reconciliation</li>
+</ul>
+<h3>Sales Tab (Invoicing)</h3>
+<p><strong>Invoice Workflow:</strong></p>
+<pre><code>Draft → Issued → Sent → Partially Paid → Paid
+                  ↘ Overdue
+                      ↘ Void
+</code></pre>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Invoice number</td>
+<td><code>invoices</code></td>
+<td><code>invoice_number</code></td>
+</tr>
+<tr>
+<td>Customer</td>
+<td><code>customers</code></td>
+<td>via <code>customer_id</code></td>
+</tr>
+<tr>
+<td>Date</td>
+<td><code>invoices</code></td>
+<td><code>invoice_date</code></td>
+</tr>
+<tr>
+<td>Due date</td>
+<td><code>invoices</code></td>
+<td><code>due_date</code></td>
+</tr>
+<tr>
+<td>Subtotal</td>
+<td><code>invoices</code></td>
+<td><code>subtotal</code></td>
+</tr>
+<tr>
+<td>VAT</td>
+<td><code>invoices</code></td>
+<td><code>vat_amount</code></td>
+</tr>
+<tr>
+<td>Total</td>
+<td><code>invoices</code></td>
+<td><code>total</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>invoices</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Line items</td>
+<td><code>invoice_lines</code></td>
+<td>linked by <code>invoice_id</code></td>
+</tr>
+</tbody></table>
+<p><strong>Line Item Fields:</strong></p>
+<ul>
+<li>Description</li>
+<li>Quantity</li>
+<li>Unit price</li>
+<li>VAT rate</li>
+<li>Account (for posting)</li>
+</ul>
+<h3>Purchases Tab (Bills)</h3>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Bill reference</td>
+<td><code>bills</code></td>
+<td><code>bill_number</code></td>
+</tr>
+<tr>
+<td>Supplier</td>
+<td><code>contacts</code></td>
+<td>via <code>supplier_id</code></td>
+</tr>
+<tr>
+<td>Date</td>
+<td><code>bills</code></td>
+<td><code>bill_date</code></td>
+</tr>
+<tr>
+<td>Due date</td>
+<td><code>bills</code></td>
+<td><code>due_date</code></td>
+</tr>
+<tr>
+<td>Total</td>
+<td><code>bills</code></td>
+<td><code>total</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>bills</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Line items</td>
+<td><code>bill_lines</code></td>
+<td>linked by <code>bill_id</code></td>
+</tr>
+</tbody></table>
+<h3>VAT Returns Tab</h3>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Period</td>
+<td><code>vat_periods</code></td>
+<td><code>start_date</code>, <code>end_date</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>vat_periods</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Box values</td>
+<td>Calculated</td>
+<td>From transactions</td>
+</tr>
+</tbody></table>
+<p><strong>VAT Boxes (UK):</strong></p>
+<ul>
+<li>Box 1: VAT due on sales</li>
+<li>Box 2: VAT due on acquisitions</li>
+<li>Box 3: Total VAT due</li>
+<li>Box 4: VAT reclaimed</li>
+<li>Box 5: Net VAT</li>
+<li>Box 6-9: Sales/purchases totals</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working - Full bookkeeping functionality operational</p>
+<hr>
+<h3>6.10 Filings List (<code>/filings</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Filings.tsx</code></p>
+<p><strong>Purpose:</strong> View all tax filings across the practice</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Filter by filing type (CT600, VAT, SA100, CIS, RTI)</li>
+<li>Filter by status</li>
+<li>Filter by client/company</li>
+<li>Filings table with:<ul>
+<li>Filing type badge</li>
+<li>Entity name</li>
+<li>Period</li>
+<li>Status</li>
+<li>Due date</li>
+<li>Actions</li>
+</ul>
+</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<pre><code class="language-typescript">supabase
+  .from(&quot;filings&quot;)
+  .select(`
+    *,
+    clients(first_name, last_name),
+    companies(company_name),
+    jobs(job_name)
+  `)
+  .eq(&quot;organization_id&quot;, organization.id)
+</code></pre>
+<p><strong>Filing Types:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Body</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ct600</code></td>
+<td>HMRC</td>
+<td>Corporation Tax return</td>
+</tr>
+<tr>
+<td><code>vat_return</code></td>
+<td>HMRC</td>
+<td>VAT return</td>
+</tr>
+<tr>
+<td><code>self_assessment</code></td>
+<td>HMRC</td>
+<td>SA100 personal tax</td>
+</tr>
+<tr>
+<td><code>cis_return</code></td>
+<td>HMRC</td>
+<td>CIS monthly return</td>
+</tr>
+<tr>
+<td><code>rti</code></td>
+<td>HMRC</td>
+<td>Real Time Information payroll</td>
+</tr>
+<tr>
+<td><code>accounts</code></td>
+<td>CH</td>
+<td>Annual accounts filing</td>
+</tr>
+<tr>
+<td><code>confirmation_statement</code></td>
+<td>CH</td>
+<td>CS01</td>
+</tr>
+</tbody></table>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.11 Filing Detail (<code>/filings/:filingId</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/FilingDetail.tsx</code></p>
+<p><strong>Purpose:</strong> Complete filing management and submission</p>
+<p><strong>UI Elements (Tabs):</strong></p>
+<ol>
+<li><strong>Summary Tab</strong> - Filing overview, tax position</li>
+<li><strong>Data Tab</strong> - Editable filing data (if draft)</li>
+<li><strong>Computation Tab</strong> - Tax calculation breakdown</li>
+<li><strong>Validation Tab</strong> - Pre-submission checks</li>
+<li><strong>Documents Tab</strong> - Generated PDFs, iXBRL</li>
+<li><strong>Submissions Tab</strong> - Submission history</li>
+</ol>
+<p><strong>Filing Workflow:</strong></p>
+<pre><code>draft → awaiting_approval → approved → ready_to_file → filed
+                              ↘ rejected (loops back)
+</code></pre>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Filing type</td>
+<td><code>filings</code></td>
+<td><code>filing_type</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>filings</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Tax year</td>
+<td><code>filings</code></td>
+<td><code>tax_year</code></td>
+</tr>
+<tr>
+<td>Period</td>
+<td><code>filings</code></td>
+<td><code>period_start</code>, <code>period_end</code></td>
+</tr>
+<tr>
+<td>Filing data</td>
+<td><code>filings</code></td>
+<td><code>filing_data</code> (JSONB)</td>
+</tr>
+<tr>
+<td>Tax due</td>
+<td><code>filings</code></td>
+<td><code>tax_due</code></td>
+</tr>
+<tr>
+<td>Approvals</td>
+<td><code>filing_approvals</code></td>
+<td>linked records</td>
+</tr>
+<tr>
+<td>Submissions</td>
+<td><code>filing_submissions</code></td>
+<td>linked records</td>
+</tr>
+<tr>
+<td>Documents</td>
+<td><code>filing_artefacts</code></td>
+<td>linked records</td>
+</tr>
+</tbody></table>
+<p><strong>Tax Calculation (CT600):</strong>
+<strong>File:</strong> <code>src/lib/ct-computation-engine.ts</code></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Trading profit</td>
+<td>Workpaper field_values</td>
+</tr>
+<tr>
+<td>Other income</td>
+<td>Workpaper field_values</td>
+</tr>
+<tr>
+<td>Total profits</td>
+<td>Calculated</td>
+</tr>
+<tr>
+<td>Losses brought forward</td>
+<td>Previous period</td>
+</tr>
+<tr>
+<td>Taxable profits</td>
+<td>Calculated</td>
+</tr>
+<tr>
+<td>Corporation tax at 25%</td>
+<td>Calculated</td>
+</tr>
+<tr>
+<td>Marginal relief</td>
+<td>Calculated if applicable</td>
+</tr>
+<tr>
+<td>CT payable</td>
+<td>Final calculation</td>
+</tr>
+</tbody></table>
+<p><strong>Approval Flow:</strong></p>
+<ol>
+<li>User with <code>can_approve_filings</code> permission reviews</li>
+<li>Clicks &quot;Approve&quot; → creates <code>filing_approvals</code> record</li>
+<li>Status changes to <code>approved</code> or <code>ready_to_file</code></li>
+<li>User with <code>can_submit_filings</code> clicks &quot;Submit&quot;</li>
+<li>Calls appropriate edge function (e.g., <code>hmrc-ct-submit</code>)</li>
+<li>Creates <code>filing_submissions</code> record</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working - Core flow operational</p>
+<hr>
+<h3>6.12 Payroll Module (<code>/payroll</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Payroll.tsx</code></p>
+<p><strong>Purpose:</strong> PAYE payroll management</p>
+<p><strong>UI Elements (Tabs):</strong></p>
+<ol>
+<li><strong>PAYE Schemes Tab</strong> - Employer schemes</li>
+<li><strong>Employees Tab</strong> - Employee records</li>
+<li><strong>Pay Runs Tab</strong> - Monthly/weekly pay runs</li>
+<li><strong>RTI History Tab</strong> - Submission history</li>
+</ol>
+<p><strong>PAYE Scheme Setup:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Employer name</td>
+<td><code>paye_schemes</code></td>
+<td><code>employer_name</code></td>
+</tr>
+<tr>
+<td>PAYE ref</td>
+<td><code>paye_schemes</code></td>
+<td><code>employer_ref</code></td>
+</tr>
+<tr>
+<td>Accounts office ref</td>
+<td><code>paye_schemes</code></td>
+<td><code>accounts_office_ref</code></td>
+</tr>
+<tr>
+<td>Tax district</td>
+<td><code>paye_schemes</code></td>
+<td><code>tax_district</code></td>
+</tr>
+</tbody></table>
+<p><strong>Employee Records:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Name</td>
+<td><code>employees</code></td>
+<td><code>first_name</code>, <code>last_name</code></td>
+</tr>
+<tr>
+<td>NI number</td>
+<td><code>employees</code></td>
+<td><code>ni_number</code></td>
+</tr>
+<tr>
+<td>Tax code</td>
+<td><code>employees</code></td>
+<td><code>tax_code</code></td>
+</tr>
+<tr>
+<td>Salary</td>
+<td><code>employees</code></td>
+<td><code>annual_salary</code> or <code>hourly_rate</code></td>
+</tr>
+<tr>
+<td>Start date</td>
+<td><code>employees</code></td>
+<td><code>start_date</code></td>
+</tr>
+<tr>
+<td>Pension enrolled</td>
+<td><code>employees</code></td>
+<td><code>pension_enrolled</code></td>
+</tr>
+</tbody></table>
+<p><strong>Pay Run Workflow:</strong></p>
+<pre><code>draft → processing → pending_rti → submitted → completed
+</code></pre>
+<p><strong>Pay Calculation Engine:</strong>
+<strong>File:</strong> <code>src/lib/payroll-calculation-engine.ts</code></p>
+<table>
+<thead>
+<tr>
+<th>Calculation</th>
+<th>Logic</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Gross pay</td>
+<td>Salary ÷ periods or hours × rate</td>
+</tr>
+<tr>
+<td>Income tax</td>
+<td>PAYE tables lookup</td>
+</tr>
+<tr>
+<td>Employee NI</td>
+<td>NI category and thresholds</td>
+</tr>
+<tr>
+<td>Employer NI</td>
+<td>NI category and thresholds</td>
+</tr>
+<tr>
+<td>Pension (employee)</td>
+<td>Percentage of qualifying earnings</td>
+</tr>
+<tr>
+<td>Pension (employer)</td>
+<td>Minimum 3%</td>
+</tr>
+<tr>
+<td>Net pay</td>
+<td>Gross - deductions</td>
+</tr>
+</tbody></table>
+<p><strong>Status:</strong> ✅ Working - Basic payroll functional</p>
+<hr>
+<h3>6.13 CIS Module (<code>/cis</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/CIS.tsx</code></p>
+<p><strong>Purpose:</strong> Construction Industry Scheme returns</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Contractors list</li>
+<li>Subcontractors list</li>
+<li>CIS Returns list</li>
+<li>Payment records</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>cis_contractors</code></td>
+<td>Contractor registration</td>
+</tr>
+<tr>
+<td><code>cis_subcontractors</code></td>
+<td>Subcontractor verification</td>
+</tr>
+<tr>
+<td><code>cis_returns</code></td>
+<td>Monthly CIS returns</td>
+</tr>
+<tr>
+<td><code>cis_payments</code></td>
+<td>Payment records for deductions</td>
+</tr>
+</tbody></table>
+<p><strong>CIS Return Flow:</strong></p>
+<ol>
+<li>Record payments to subcontractors</li>
+<li>Calculate deductions (20% or 30%)</li>
+<li>Generate return for month</li>
+<li>Submit to HMRC via edge function</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working - Basic CIS functional</p>
+<hr>
+<h3>6.14 CRM Module (<code>/crm</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/CRM.tsx</code></p>
+<p><strong>Purpose:</strong> Lead/prospect management</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Lead pipeline board (Kanban-style)</li>
+<li>Lead list view</li>
+<li>&quot;Add Lead&quot; button</li>
+<li>Companies House lookup integration</li>
+<li>Lead conversion to client</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Lead name</td>
+<td><code>leads</code></td>
+<td><code>first_name</code>, <code>last_name</code> or <code>company_name</code></td>
+</tr>
+<tr>
+<td>Lead type</td>
+<td><code>leads</code></td>
+<td><code>lead_type</code> (same as client types)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>leads</code></td>
+<td><code>status</code> (new, contacted, qualified, proposal, won, lost)</td>
+</tr>
+<tr>
+<td>Source</td>
+<td><code>leads</code></td>
+<td><code>source</code></td>
+</tr>
+<tr>
+<td>Notes</td>
+<td><code>leads</code></td>
+<td><code>notes</code></td>
+</tr>
+<tr>
+<td>Contact info</td>
+<td><code>leads</code></td>
+<td><code>email</code>, <code>phone</code></td>
+</tr>
+</tbody></table>
+<p><strong>Companies House Lookup:</strong></p>
+<ul>
+<li>Enter company number or search by name</li>
+<li>Fetches company data from CH API</li>
+<li>Pre-fills lead form with company details</li>
+</ul>
+<p><strong>Lead Conversion Flow:</strong></p>
+<ol>
+<li>Lead marked as &quot;won&quot;</li>
+<li>&quot;Convert to Client&quot; button appears</li>
+<li>Opens conversion dialog</li>
+<li>Creates client/company record</li>
+<li>Optionally creates onboarding application</li>
+<li>Archives lead</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.15 Quotes (<code>/quotes</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Quotes.tsx</code></p>
+<p><strong>Purpose:</strong> Service quotations/proposals</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Quotes table with:<ul>
+<li>Quote number</li>
+<li>Status badge</li>
+<li>Total amount</li>
+<li>Valid until date</li>
+<li>Created date</li>
+<li>View action</li>
+</ul>
+</li>
+<li>&quot;Create Quote&quot; button</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Quote number</td>
+<td><code>quotes</code></td>
+<td><code>quote_number</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>quotes</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Total</td>
+<td><code>quotes</code></td>
+<td><code>total_amount</code></td>
+</tr>
+<tr>
+<td>Valid until</td>
+<td><code>quotes</code></td>
+<td><code>valid_until</code></td>
+</tr>
+<tr>
+<td>Lead/Client link</td>
+<td><code>quotes</code></td>
+<td><code>lead_id</code>, <code>client_id</code>, <code>company_id</code></td>
+</tr>
+<tr>
+<td>Line items</td>
+<td><code>quote_lines</code></td>
+<td>Linked by <code>quote_id</code></td>
+</tr>
+</tbody></table>
+<p><strong>Quote Statuses:</strong></p>
+<ul>
+<li><code>draft</code> - Being prepared</li>
+<li><code>sent</code> - Sent to prospect</li>
+<li><code>accepted</code> - Prospect accepted</li>
+<li><code>rejected</code> - Prospect declined</li>
+<li><code>expired</code> - Past valid_until date</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.16 Onboarding (<code>/onboarding</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Onboarding.tsx</code></p>
+<p><strong>Purpose:</strong> Client onboarding and AML compliance</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Application cards showing:<ul>
+<li>Client name/company name</li>
+<li>Application type (individual/company)</li>
+<li>Status badge</li>
+<li>AML status badge</li>
+<li>Created date</li>
+</ul>
+</li>
+<li>&quot;Start Onboarding&quot; button</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Application type</td>
+<td><code>onboarding_applications</code></td>
+<td><code>application_type</code></td>
+</tr>
+<tr>
+<td>Name</td>
+<td><code>onboarding_applications</code></td>
+<td><code>first_name</code>, <code>last_name</code>, <code>company_name</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>onboarding_applications</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>AML status</td>
+<td><code>onboarding_applications</code></td>
+<td><code>aml_status</code></td>
+</tr>
+<tr>
+<td>Email</td>
+<td><code>onboarding_applications</code></td>
+<td><code>email</code></td>
+</tr>
+</tbody></table>
+<p><strong>Onboarding Statuses:</strong></p>
+<ul>
+<li><code>pending</code> - Not started</li>
+<li><code>in_progress</code> - Client completing</li>
+<li><code>aml_review</code> - Awaiting AML check</li>
+<li><code>approved</code> - Ready to become client</li>
+<li><code>rejected</code> - Application denied</li>
+</ul>
+<p><strong>AML Statuses:</strong></p>
+<ul>
+<li><code>pending</code> - Not checked</li>
+<li><code>passed</code> - AML passed</li>
+<li><code>failed</code> - AML failed</li>
+<li><code>manual_review</code> - Requires manual review</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.17 Automations (<code>/automations</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Automations.tsx</code></p>
+<p><strong>Purpose:</strong> Workflow automation rule management</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Automation rules table with:<ul>
+<li>Rule name</li>
+<li>Trigger type</li>
+<li>Action type</li>
+<li>Last run time/status</li>
+<li>Active toggle</li>
+<li>Edit/Delete actions</li>
+</ul>
+</li>
+<li>&quot;New Rule&quot; button</li>
+<li>&quot;Templates&quot; panel</li>
+<li>Filter controls (trigger, action, status)</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Rule name</td>
+<td><code>automation_rules</code></td>
+<td><code>name</code></td>
+</tr>
+<tr>
+<td>Trigger type</td>
+<td><code>automation_rules</code></td>
+<td><code>trigger_type</code></td>
+</tr>
+<tr>
+<td>Trigger config</td>
+<td><code>automation_rules</code></td>
+<td><code>trigger_config</code> (JSONB)</td>
+</tr>
+<tr>
+<td>Action type</td>
+<td><code>automation_rules</code></td>
+<td><code>action_type</code></td>
+</tr>
+<tr>
+<td>Action config</td>
+<td><code>automation_rules</code></td>
+<td><code>action_config</code> (JSONB)</td>
+</tr>
+<tr>
+<td>Is active</td>
+<td><code>automation_rules</code></td>
+<td><code>is_active</code></td>
+</tr>
+<tr>
+<td>Last execution</td>
+<td><code>automation_executions</code></td>
+<td>Latest by <code>automation_rule_id</code></td>
+</tr>
+</tbody></table>
+<p><strong>Trigger Types:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>job_status_change</code></td>
+<td>When a job changes status</td>
+</tr>
+<tr>
+<td><code>deadline_approaching</code></td>
+<td>X days before deadline</td>
+</tr>
+<tr>
+<td><code>filing_status_change</code></td>
+<td>When filing status changes</td>
+</tr>
+<tr>
+<td><code>client_onboarded</code></td>
+<td>When client is created</td>
+</tr>
+<tr>
+<td><code>onboarding_approved</code></td>
+<td>When onboarding approved</td>
+</tr>
+</tbody></table>
+<p><strong>Action Types:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>create_job</code></td>
+<td>Creates a new job</td>
+</tr>
+<tr>
+<td><code>create_task</code></td>
+<td>Adds task to a job</td>
+</tr>
+<tr>
+<td><code>send_email</code></td>
+<td>Sends email from template</td>
+</tr>
+<tr>
+<td><code>send_notification</code></td>
+<td>In-app notification</td>
+</tr>
+</tbody></table>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.18 Deadlines (<code>/deadlines</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Deadlines.tsx</code></p>
+<p><strong>Purpose:</strong> Practice-wide deadline management</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Quick filters (Overdue, This Week, This Month, High Risk)</li>
+<li>Left sidebar filters:<ul>
+<li>Search</li>
+<li>Client</li>
+<li>Deadline type</li>
+<li>Filing body</li>
+<li>Status</li>
+<li>Risk level</li>
+<li>Owner</li>
+<li>Time horizon</li>
+</ul>
+</li>
+<li>View toggle (List/Calendar)</li>
+<li>List view: DeadlinesTable</li>
+<li>Calendar view: DeadlinesCalendar</li>
+<li>&quot;Create Deadline&quot; button</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Due date</td>
+<td><code>deadlines</code></td>
+<td><code>due_date</code></td>
+</tr>
+<tr>
+<td>Type</td>
+<td><code>deadlines</code></td>
+<td><code>deadline_type</code></td>
+</tr>
+<tr>
+<td>Entity</td>
+<td><code>deadlines</code></td>
+<td><code>client_id</code>, <code>company_id</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>deadlines</code></td>
+<td><code>status</code> (pending, completed, missed)</td>
+</tr>
+<tr>
+<td>Risk level</td>
+<td><code>deadlines</code></td>
+<td><code>risk_level</code> (low, medium, high, critical)</td>
+</tr>
+<tr>
+<td>Owner</td>
+<td><code>deadlines</code></td>
+<td><code>owner_id</code></td>
+</tr>
+<tr>
+<td>Filing body</td>
+<td><code>deadlines</code></td>
+<td><code>filing_body</code> (HMRC, CH, internal)</td>
+</tr>
+</tbody></table>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.19 Templates (<code>/templates</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Templates.tsx</code></p>
+<p><strong>Purpose:</strong> Manage reusable templates</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Template grid with:<ul>
+<li>Template name</li>
+<li>Type icon</li>
+<li>Status badge</li>
+<li>Description</li>
+<li>Last updated</li>
+</ul>
+</li>
+<li>&quot;New Template&quot; dropdown:<ul>
+<li>Workpaper Template</li>
+<li>Email Template</li>
+<li>Job Template</li>
+<li>Task Template</li>
+<li>Checklist Template</li>
+<li>Automation Template</li>
+<li>Questionnaire Template</li>
+<li>Records Request Template</li>
+</ul>
+</li>
+<li>Search and filters</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Name</td>
+<td><code>templates</code></td>
+<td><code>name</code></td>
+</tr>
+<tr>
+<td>Type</td>
+<td><code>templates</code></td>
+<td><code>type</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>templates</code></td>
+<td><code>status</code> (active, draft, deprecated)</td>
+</tr>
+<tr>
+<td>Description</td>
+<td><code>templates</code></td>
+<td><code>description</code></td>
+</tr>
+<tr>
+<td>Service</td>
+<td><code>templates</code></td>
+<td><code>service</code> (e.g., SA, CT600)</td>
+</tr>
+<tr>
+<td>Content</td>
+<td><code>templates</code></td>
+<td><code>content</code> (JSONB)</td>
+</tr>
+</tbody></table>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.20 Emails (<code>/emails</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Emails.tsx</code></p>
+<p><strong>Purpose:</strong> Email queue management</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Stats cards (Drafts, Queued, Failed counts)</li>
+<li>Email queue table with:<ul>
+<li>Recipient</li>
+<li>Subject</li>
+<li>Client name</li>
+<li>Context badge</li>
+<li>Status badge</li>
+<li>Date</li>
+<li>Actions (Edit, Retry, Delete, Ignore)</li>
+</ul>
+</li>
+<li>Tabs: All, Drafts, Queued, Failed</li>
+<li>&quot;Compose&quot; button</li>
+<li>&quot;Process Queue&quot; button</li>
+<li>&quot;Retry All Failed&quot; button</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Recipient</td>
+<td><code>email_queue</code></td>
+<td><code>to_email</code>, <code>to_name</code></td>
+</tr>
+<tr>
+<td>Subject</td>
+<td><code>email_queue</code></td>
+<td><code>subject</code></td>
+</tr>
+<tr>
+<td>Body</td>
+<td><code>email_queue</code></td>
+<td><code>body_html</code>, <code>body_text</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>email_queue</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Context</td>
+<td><code>email_queue</code></td>
+<td><code>context</code> (invoice, chase, filing, etc.)</td>
+</tr>
+<tr>
+<td>Error</td>
+<td><code>email_queue</code></td>
+<td><code>error_message</code></td>
+</tr>
+<tr>
+<td>Client link</td>
+<td><code>email_queue</code></td>
+<td><code>client_id</code> → <code>clients</code></td>
+</tr>
+<tr>
+<td>Company link</td>
+<td><code>email_queue</code></td>
+<td><code>company_id</code> → <code>companies</code></td>
+</tr>
+</tbody></table>
+<p><strong>Email Statuses:</strong></p>
+<ul>
+<li><code>draft</code> - Not ready to send</li>
+<li><code>queued</code> - Ready for processing</li>
+<li><code>pending</code> - Currently being sent</li>
+<li><code>failed</code> - Send failed</li>
+<li><code>sent</code> - Successfully sent</li>
+<li><code>ignored</code> - Manually skipped</li>
+</ul>
+<p><strong>Email Contexts:</strong></p>
+<ul>
+<li><code>invoice</code> - Invoice emails</li>
+<li><code>chase</code> - Payment reminders</li>
+<li><code>onboarding</code> - Onboarding communications</li>
+<li><code>filing</code> - Filing notifications</li>
+<li><code>ad-hoc</code> - Manual emails</li>
+<li><code>portal</code> - Portal invitations</li>
+<li><code>system</code> - System notifications</li>
+</ul>
+<p><strong>Status:</strong> ⚠️ Partially Working - Email sending depends on mailbox connection</p>
+<hr>
+<h3>6.21 Workpapers (<code>/workpapers</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Workpapers.tsx</code></p>
+<p><strong>Purpose:</strong> Practice-wide workpaper view</p>
+<p><strong>UI Elements:</strong></p>
+<ul>
+<li>Filters (Search, Type, Status)</li>
+<li>Workpapers table with:<ul>
+<li>Client/Company name</li>
+<li>Type badge</li>
+<li>Period</li>
+<li>Status badge</li>
+<li>Data source badge</li>
+<li>Last updated</li>
+<li>&quot;View Job&quot; action</li>
+</ul>
+</li>
+</ul>
+<p><strong>Data Sources:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Table</th>
+<th>Column</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Name</td>
+<td><code>workpaper_instances</code></td>
+<td><code>name</code></td>
+</tr>
+<tr>
+<td>Service type</td>
+<td><code>workpaper_instances</code></td>
+<td><code>service_type</code></td>
+</tr>
+<tr>
+<td>Status</td>
+<td><code>workpaper_instances</code></td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td>Period</td>
+<td><code>workpaper_instances</code></td>
+<td><code>period_start</code>, <code>period_end</code>, <code>period_label</code></td>
+</tr>
+<tr>
+<td>Data source</td>
+<td><code>workpaper_instances</code></td>
+<td><code>data_source</code></td>
+</tr>
+<tr>
+<td>Field values</td>
+<td><code>workpaper_instances</code></td>
+<td><code>field_values</code> (JSONB)</td>
+</tr>
+<tr>
+<td>Client</td>
+<td><code>clients</code> (joined)</td>
+<td><code>first_name</code>, <code>last_name</code></td>
+</tr>
+<tr>
+<td>Company</td>
+<td><code>companies</code> (joined)</td>
+<td><code>company_name</code></td>
+</tr>
+<tr>
+<td>Job</td>
+<td><code>jobs</code> (joined)</td>
+<td><code>id</code>, <code>job_name</code></td>
+</tr>
+</tbody></table>
+<p><strong>Workpaper Types:</strong></p>
+<ul>
+<li><code>SA</code> - Self Assessment</li>
+<li><code>CT600</code> - Corporation Tax</li>
+<li><code>ACCOUNTS</code> - Annual Accounts</li>
+<li><code>VAT</code> - VAT Return</li>
+<li><code>PAYROLL</code> - Payroll</li>
+<li><code>CIS</code> - CIS</li>
+</ul>
+<p><strong>Workpaper Statuses:</strong></p>
+<ul>
+<li><code>draft</code> - Being prepared</li>
+<li><code>in_progress</code> - Work ongoing</li>
+<li><code>ready_for_review</code> - Awaiting review</li>
+<li><code>finalised</code> - Locked and complete</li>
+</ul>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h3>6.22 Settings (<code>/settings</code>)</h3>
+<p><strong>File:</strong> <code>src/pages/Settings.tsx</code></p>
+<p><strong>Purpose:</strong> Practice settings and configuration</p>
+<p><strong>Settings Sections:</strong></p>
+<ol>
+<li><p><strong>Branding</strong> (<code>/settings/branding</code>)</p>
+<ul>
+<li>Logo upload (light/dark)</li>
+<li>Trading name</li>
+<li>Accent color</li>
+<li>Preview of email, invoice, portal</li>
+</ul>
+</li>
+<li><p><strong>HMRC Integration</strong> (<code>/settings/hmrc</code>)</p>
+<ul>
+<li>MTD VAT connection status</li>
+<li>OAuth flow for HMRC</li>
+<li>Agent credentials</li>
+</ul>
+</li>
+<li><p><strong>Companies House</strong> (<code>/settings/companies-house</code>)</p>
+<ul>
+<li>API key configuration</li>
+<li>Presenter ID/Auth code</li>
+</ul>
+</li>
+<li><p><strong>Email Templates</strong> (<code>/settings/email-templates</code>)</p>
+<ul>
+<li>Template management</li>
+<li>Variable placeholders</li>
+</ul>
+</li>
+<li><p><strong>Job Templates</strong> (<code>/settings/job-templates</code>)</p>
+<ul>
+<li>Default job configurations</li>
+<li>Task templates</li>
+</ul>
+</li>
+<li><p><strong>Permissions</strong> (<code>/settings/permissions</code>)</p>
+<ul>
+<li>Role assignments</li>
+<li>Team member management</li>
+</ul>
+</li>
+</ol>
+<p><strong>Status:</strong> ✅ Working</p>
+<hr>
+<h2>7. Data Flow Patterns</h2>
+<h3>7.1 React Query Pattern</h3>
+<p>All data fetching uses TanStack React Query with centralized query keys.</p>
+<p><strong>File:</strong> <code>src/lib/queryKeys.ts</code></p>
+<pre><code class="language-typescript">// Example query
+const { data, isLoading } = useQuery({
+  queryKey: [&#39;clients&#39;, organization?.id],
+  queryFn: async () =&gt; {
+    const { data, error } = await supabase
+      .from(&#39;clients&#39;)
+      .select(&#39;*&#39;)
+      .eq(&#39;organization_id&#39;, organization.id);
+    if (error) throw error;
+    return data;
+  },
+  enabled: !!organization?.id,
+});
+</code></pre>
+<p><strong>Query Client Configuration:</strong></p>
+<ul>
+<li><code>staleTime: 5 minutes</code> - Data considered fresh</li>
+<li><code>gcTime: 30 minutes</code> - Cache retention</li>
+<li><code>retry: 3</code> with exponential backoff</li>
+</ul>
+<h3>7.2 Real-time Subscriptions</h3>
+<p><strong>File:</strong> <code>src/hooks/useRealtimeSubscription.ts</code></p>
+<pre><code class="language-typescript">// Subscribe to table changes
+useRealtimeSubscription({
+  table: &#39;jobs&#39;,
+  organizationId: organization?.id,
+  queryKeys: [[&#39;jobs&#39;, organization?.id]],
+});
+</code></pre>
+<p>Supabase Realtime provides:</p>
+<ul>
+<li>INSERT notifications</li>
+<li>UPDATE notifications</li>
+<li>DELETE notifications</li>
+</ul>
+<h3>7.3 Form Data Flow</h3>
+<p>Forms use React Hook Form with Zod validation:</p>
+<pre><code class="language-typescript">// Schema definition
+const schema = z.object({
+  name: z.string().min(1, &quot;Required&quot;),
+  email: z.string().email(),
+});
+
+// Form setup
+const form = useForm&lt;FormData&gt;({
+  resolver: zodResolver(schema),
+});
+
+// Submit handler
+const onSubmit = async (data: FormData) =&gt; {
+  const { error } = await supabase
+    .from(&#39;table&#39;)
+    .insert(data);
+};
+</code></pre>
+<h3>7.4 Multi-Tenancy Pattern</h3>
+<p>All queries scoped by <code>organization_id</code>:</p>
+<pre><code class="language-typescript">// Always include organization filter
+.eq(&#39;organization_id&#39;, organization.id)
+</code></pre>
+<p>Row-Level Security (RLS) in database enforces this at DB level.</p>
+<hr>
+<h2>8. Key Business Logic Services</h2>
+<h3>8.1 Filing Service</h3>
+<p><strong>File:</strong> <code>src/lib/filing-service.ts</code></p>
+<p>Handles:</p>
+<ul>
+<li>Creating filings from workpapers</li>
+<li>Extracting tax breakdown from field values</li>
+<li>Calculating payment deadlines</li>
+<li>Managing filing status transitions</li>
+</ul>
+<h3>8.2 CT Computation Engine</h3>
+<p><strong>File:</strong> <code>src/lib/ct-computation-engine.ts</code></p>
+<p>Calculates:</p>
+<ul>
+<li>Trading profits</li>
+<li>Total profits chargeable</li>
+<li>Corporation tax at applicable rates</li>
+<li>Marginal relief (for profits between £50k-£250k)</li>
+<li>Final CT payable</li>
+</ul>
+<h3>8.3 Payroll Calculation Engine</h3>
+<p><strong>File:</strong> <code>src/lib/payroll-calculation-engine.ts</code></p>
+<p>Calculates:</p>
+<ul>
+<li>PAYE income tax using cumulative method</li>
+<li>Employee NI contributions</li>
+<li>Employer NI contributions</li>
+<li>Pension contributions</li>
+<li>Student loan deductions</li>
+<li>Net pay</li>
+</ul>
+<h3>8.4 Automation Engine</h3>
+<p><strong>File:</strong> <code>src/lib/automation-engine.ts</code></p>
+<p>Processes:</p>
+<ul>
+<li>Trigger evaluation</li>
+<li>Action execution</li>
+<li>Rate limiting</li>
+<li>Execution logging</li>
+</ul>
+<h3>8.5 Posting Service</h3>
+<p><strong>File:</strong> <code>src/lib/posting-service.ts</code></p>
+<p>Handles:</p>
+<ul>
+<li>Double-entry journal posting</li>
+<li>Invoice posting to ledger</li>
+<li>Bill posting to ledger</li>
+<li>Payment posting</li>
+</ul>
+<hr>
+<h2>9. Status Assessment: What&#39;s Working &amp; What Isn&#39;t</h2>
+<h3>9.1 Fully Working Features ✅</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Authentication</td>
+<td>Login, logout, session management</td>
+</tr>
+<tr>
+<td>User Management</td>
+<td>Role assignment, team invites</td>
+</tr>
+<tr>
+<td>Client CRUD</td>
+<td>Create, read, update, delete clients</td>
+</tr>
+<tr>
+<td>Company CRUD</td>
+<td>Full company management</td>
+</tr>
+<tr>
+<td>Companies House Sync</td>
+<td>Fetch company data from CH</td>
+</tr>
+<tr>
+<td>Jobs Management</td>
+<td>Full workflow</td>
+</tr>
+<tr>
+<td>Task Management</td>
+<td>Create, assign, complete</td>
+</tr>
+<tr>
+<td>Deadlines</td>
+<td>Create, track, filter</td>
+</tr>
+<tr>
+<td>Bookkeeping - COA</td>
+<td>Chart of accounts setup</td>
+</tr>
+<tr>
+<td>Bookkeeping - Invoices</td>
+<td>Full invoice lifecycle</td>
+</tr>
+<tr>
+<td>Bookkeeping - Bills</td>
+<td>Full bill lifecycle</td>
+</tr>
+<tr>
+<td>Bookkeeping - Journals</td>
+<td>Manual journal entry</td>
+</tr>
+<tr>
+<td>VAT Periods</td>
+<td>Period creation and management</td>
+</tr>
+<tr>
+<td>Workpapers</td>
+<td>Create, edit, finalize</td>
+</tr>
+<tr>
+<td>Filings</td>
+<td>Basic filing workflow</td>
+</tr>
+<tr>
+<td>Automations</td>
+<td>Rule creation and execution</td>
+</tr>
+<tr>
+<td>Templates</td>
+<td>All template types</td>
+</tr>
+<tr>
+<td>CRM/Leads</td>
+<td>Lead management</td>
+</tr>
+<tr>
+<td>Quotes</td>
+<td>Quote creation and management</td>
+</tr>
+<tr>
+<td>Onboarding</td>
+<td>Application workflow</td>
+</tr>
+</tbody></table>
+<h3>9.2 Partially Working Features ⚠️</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Issue</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Email Sending</td>
+<td>Requires mailbox OAuth connection</td>
+<td>Cannot send without Gmail/Outlook connected</td>
+</tr>
+<tr>
+<td>HMRC Submission</td>
+<td>Requires HMRC OAuth credentials</td>
+<td>Production submission needs agent credentials</td>
+</tr>
+<tr>
+<td>Bank Sync</td>
+<td>TrueLayer integration needed</td>
+<td>Manual transaction entry works</td>
+</tr>
+<tr>
+<td>Client Portal (External)</td>
+<td>Portal access URL generation</td>
+<td>Internal preview works</td>
+</tr>
+</tbody></table>
+<h3>9.3 Features Requiring Configuration 🔧</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Configuration Needed</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HMRC MTD VAT</td>
+<td>HMRC developer credentials + OAuth</td>
+</tr>
+<tr>
+<td>Companies House Filing</td>
+<td>Presenter ID, Authentication Code</td>
+</tr>
+<tr>
+<td>Gmail Integration</td>
+<td>Google Cloud OAuth credentials</td>
+</tr>
+<tr>
+<td>Outlook Integration</td>
+<td>Microsoft Azure OAuth credentials</td>
+</tr>
+<tr>
+<td>Stripe Payments</td>
+<td>Stripe API keys</td>
+</tr>
+<tr>
+<td>TrueLayer Banking</td>
+<td>TrueLayer API credentials</td>
+</tr>
+</tbody></table>
+<h3>9.4 Known Limitations</h3>
+<ol>
+<li><strong>Single Organization:</strong> Users currently belong to one organization</li>
+<li><strong>No Mobile App:</strong> Web-only application</li>
+<li><strong>UK-Only Tax:</strong> Tax calculations are UK-specific</li>
+<li><strong>No Document OCR:</strong> Manual data entry for receipts/invoices</li>
+<li><strong>Limited Reporting:</strong> Basic reports only, no custom report builder</li>
+</ol>
+<hr>
+<h2>10. API &amp; Edge Functions</h2>
+<h3>10.1 Edge Functions Overview</h3>
+<p><strong>Location:</strong> <code>supabase/functions/</code></p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>hmrc-auth</code></td>
+<td>Initiate HMRC OAuth flow</td>
+</tr>
+<tr>
+<td><code>hmrc-callback</code></td>
+<td>Handle HMRC OAuth callback</td>
+</tr>
+<tr>
+<td><code>hmrc-ct-submit</code></td>
+<td>Submit CT600 to HMRC</td>
+</tr>
+<tr>
+<td><code>hmrc-vat-submit</code></td>
+<td>Submit VAT return to HMRC</td>
+</tr>
+<tr>
+<td><code>companies-house-sync</code></td>
+<td>Fetch company data from CH</td>
+</tr>
+<tr>
+<td><code>ch-submit</code></td>
+<td>Submit to Companies House</td>
+</tr>
+<tr>
+<td><code>gmail-send</code></td>
+<td>Send email via Gmail</td>
+</tr>
+<tr>
+<td><code>outlook-send</code></td>
+<td>Send email via Outlook</td>
+</tr>
+<tr>
+<td><code>process-email-queue</code></td>
+<td>Process queued emails</td>
+</tr>
+<tr>
+<td><code>stripe-checkout</code></td>
+<td>Create Stripe checkout session</td>
+</tr>
+<tr>
+<td><code>stripe-webhook</code></td>
+<td>Handle Stripe webhooks</td>
+</tr>
+<tr>
+<td><code>generate-filing-pdf</code></td>
+<td>Generate filing PDF documents</td>
+</tr>
+<tr>
+<td><code>cis-submit</code></td>
+<td>Submit CIS return</td>
+</tr>
+<tr>
+<td><code>rti-submit</code></td>
+<td>Submit RTI to HMRC</td>
+</tr>
+<tr>
+<td><code>sla-check</code></td>
+<td>Check SLA compliance</td>
+</tr>
+<tr>
+<td><code>fx-rates</code></td>
+<td>Fetch foreign exchange rates</td>
+</tr>
+</tbody></table>
+<h3>10.2 API Authentication</h3>
+<p>Edge functions authenticate via:</p>
+<ol>
+<li>Supabase JWT token (user context)</li>
+<li>Service role key (server-side operations)</li>
+</ol>
+<hr>
+<h2>11. Third-Party Integrations</h2>
+<h3>11.1 HMRC</h3>
+<p><strong>Purpose:</strong> Tax filing submissions</p>
+<p><strong>Integration Points:</strong></p>
+<ul>
+<li>MTD VAT API - VAT return submission</li>
+<li>CT600 API - Corporation tax (via XML)</li>
+<li>SA100 API - Self assessment</li>
+<li>RTI API - Payroll submissions</li>
+<li>CIS API - Construction industry scheme</li>
+</ul>
+<p><strong>Auth Flow:</strong> OAuth 2.0 with HMRC Government Gateway</p>
+<h3>11.2 Companies House</h3>
+<p><strong>Purpose:</strong> Company data and filings</p>
+<p><strong>Integration Points:</strong></p>
+<ul>
+<li>Company search and lookup</li>
+<li>Officer information</li>
+<li>PSC information</li>
+<li>Filing history</li>
+<li>WebFiling submission (CS01, accounts)</li>
+</ul>
+<p><strong>Auth:</strong> API key + WebFiling credentials</p>
+<h3>11.3 Gmail</h3>
+<p><strong>Purpose:</strong> Email sending and sync</p>
+<p><strong>Integration:</strong> OAuth 2.0 via Google Cloud</p>
+<h3>11.4 Outlook</h3>
+<p><strong>Purpose:</strong> Email sending and sync</p>
+<p><strong>Integration:</strong> OAuth 2.0 via Microsoft Azure</p>
+<h3>11.5 Stripe</h3>
+<p><strong>Purpose:</strong> Subscription billing</p>
+<p><strong>Integration:</strong> Stripe API + webhooks</p>
+<h3>11.6 TrueLayer</h3>
+<p><strong>Purpose:</strong> Open banking - bank feeds</p>
+<p><strong>Integration:</strong> OAuth 2.0 bank connection</p>
+<hr>
+<h2>Appendix A: Environment Variables</h2>
+<p>Required environment variables:</p>
+<pre><code class="language-env">VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+
+# Edge function secrets (Supabase dashboard)
+HMRC_CLIENT_ID=xxx
+HMRC_CLIENT_SECRET=xxx
+COMPANIES_HOUSE_API_KEY=xxx
+STRIPE_SECRET_KEY=xxx
+GOOGLE_CLIENT_ID=xxx
+GOOGLE_CLIENT_SECRET=xxx
+MICROSOFT_CLIENT_ID=xxx
+MICROSOFT_CLIENT_SECRET=xxx
+TRUELAYER_CLIENT_ID=xxx
+TRUELAYER_CLIENT_SECRET=xxx
+</code></pre>
+<hr>
+<h2>Appendix B: Database Migration Notes</h2>
+<p>Migrations located in <code>supabase/migrations/</code></p>
+<p>Key tables created via migrations:</p>
+<ul>
+<li>Core tables (organizations, clients, companies)</li>
+<li>Bookkeeping tables (accounts, invoices, bills)</li>
+<li>Filing tables (filings, submissions, approvals)</li>
+<li>Payroll tables (paye_schemes, employees, pay_runs)</li>
+<li>Automation tables (rules, events, executions)</li>
+</ul>
+<p>RLS policies applied to all tables for multi-tenancy.</p>
+<hr>
+<h2>Appendix C: Deployment</h2>
+<p><strong>Platform:</strong> Lovable (automated CI/CD)</p>
+<p><strong>Build Process:</strong></p>
+<ol>
+<li><code>npm run build</code> - Vite production build</li>
+<li>Deploy to Lovable hosting</li>
+<li>Supabase handles database and edge functions</li>
+</ol>
+<p><strong>Production URLs:</strong></p>
+<ul>
+<li>Frontend: Configured via Lovable</li>
+<li>API: <code>https://xxx.supabase.co</code></li>
+<li>Edge Functions: <code>https://xxx.supabase.co/functions/v1/</code></li>
+</ul>
+<hr>
+<p><em>End of Documentation</em></p>
+</body></html>
