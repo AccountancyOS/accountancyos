@@ -122,6 +122,24 @@ export default function SystemSpecification() {
     window.print();
   };
 
+  const handleDownloadMarkdown = async () => {
+    try {
+      const response = await fetch('/docs/master-system-specification.md');
+      const text = await response.text();
+      const blob = new Blob([text], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'AccountancyOS-System-Specification.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download:', error);
+    }
+  };
+
   return (
     <>
       <style>{printStyles}</style>
@@ -139,10 +157,16 @@ export default function SystemSpecification() {
                 <p className="text-sm text-muted-foreground">AccountancyOS Master Documentation</p>
               </div>
             </div>
-            <Button onClick={handleDownloadPDF} className="gap-2">
-              <Download className="h-4 w-4" />
-              Download PDF
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleDownloadMarkdown} className="gap-2">
+                <FileText className="h-4 w-4" />
+                Download .md
+              </Button>
+              <Button onClick={handleDownloadPDF} className="gap-2">
+                <Download className="h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
           </div>
         </div>
 
