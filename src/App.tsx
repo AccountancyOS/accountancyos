@@ -47,6 +47,7 @@ import CISReturnDetail from "./pages/CISReturnDetail";
 import JobTemplates from "./pages/JobTemplates";
 import Automations from "./pages/Automations";
 import OpsHealth from "./pages/OpsHealth";
+import SystemSpecification from "./pages/SystemSpecification";
 import BrandingSettings from "./pages/settings/BrandingSettings";
 import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
@@ -464,6 +465,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <OpsHealth />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ops/system-specification"
+              element={
+                <ProtectedRoute>
+                  <SystemSpecification />
                 </ProtectedRoute>
               }
             />
