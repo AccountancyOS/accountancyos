@@ -1,147 +1,219 @@
 
-# Add Week and Month View Options to Deadlines Calendar
 
-## Problem Summary
+# Plan: AccountancyOS Master System Specification (As-Built) - PDF Document
 
-The current Deadlines calendar view only allows clicking individual days to see deadlines. This is cumbersome when users want to review all deadlines for an entire week or month at a glance - a common workflow for practice managers planning workload.
+## Overview
 
-**Current Behavior:** Click a day → see that day's deadlines only
-**Desired Behavior:** Toggle between Day/Week/Month views → see aggregated deadlines
+This plan outlines the creation of a comprehensive "Source of Truth" document that maps the entire AccountancyOS product - covering application structure, database schema, data lineage, integrations, workflows, and permissions. The document will be generated as a **downloadable PDF**.
 
 ---
 
-## Solution Overview
+## Deliverable Format
 
-Add a view mode toggle (Day | Week | Month) above the calendar that changes both how the calendar displays and how deadlines are filtered in the side panel.
+### PDF Generation Approach
+
+1. **Create specification content** as structured data/markdown in `docs/master-system-specification.md`
+2. **Create a dedicated page** at `/ops/system-specification` that renders the specification with print-optimized styling
+3. **Add PDF export functionality** using browser print-to-PDF with proper `@media print` styles
+4. **Include a "Download PDF" button** that triggers `window.print()` for clean PDF output
 
 ---
 
-## UI Design
+## Document Structure
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Calendar View                                                          │
-│                                                                         │
-│  View: [Day] [Week] [Month]     ← NEW toggle group                      │
-│                                                                         │
-│  ┌─────────────────────────────────┐  ┌───────────────────────────────┐ │
-│  │                                 │  │ Week of 3 Feb 2025            │ │
-│  │     February 2025               │  │                               │ │
-│  │  [calendar with week highlight] │  │ ┌── Mon 3 Feb ─────────────┐  │ │
-│  │                                 │  │ │ SA Return - John Smith   │  │ │
-│  │                                 │  │ │ VAT Return - ABC Ltd     │  │ │
-│  │                                 │  │ └─────────────────────────-┘  │ │
-│  │                                 │  │                               │ │
-│  │                                 │  │ ┌── Thu 6 Feb ─────────────┐  │ │
-│  │                                 │  │ │ CT600 - XYZ Corp         │  │ │
-│  └─────────────────────────────────┘  │ └─────────────────────────-┘  │ │
-│                                       │                               │ │
-│                                       │ Total: 3 deadlines this week  │ │
-│                                       └───────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+The specification will be organized into **10 major sections**:
+
+### Section 1: Application Surface Area (Routes & Pages)
+
+Document every page/route with:
+- URL path
+- Authentication requirements  
+- Layout component used
+- Primary components rendered
+- Purpose
+
+**43 routes identified** including:
+- Core: `/overview`, `/clients`, `/jobs`, `/deadlines`
+- Bookkeeping: `/bookkeeping` (full module)
+- Payroll: `/payroll`, `/payroll/pay-runs/:id`, `/payroll/employees/:id`
+- Filing: `/filings`, `/filings/:id`
+- Settings: `/settings/*` (6 sub-routes)
+
+---
+
+### Section 2: Page-Level Specification
+
+For each major page:
+- Purpose and description
+- User roles with access
+- Entry points (navigation paths)
+- Exit points (where users go next)
+- Key state management
+
+---
+
+### Section 3: Database Entity Map
+
+**100+ tables organized by domain:**
+
+| Domain | Tables | Examples |
+|--------|--------|----------|
+| Core Entities | 5 | organizations, clients, companies, leads |
+| Jobs & Workflow | 5 | jobs, job_tasks, job_documents, deadlines |
+| Bookkeeping | 25+ | ledger_entries, invoices, bills, bank_transactions |
+| Filing & Tax | 10+ | filings, filing_submissions, hmrc_authorisations |
+| Payroll | 10+ | paye_schemes, employees, pay_runs, rti_submissions |
+| CIS | 4 | cis_contractors, cis_subcontractors, cis_payments, cis_returns |
+| Company Secretary | 6 | company_officers, company_pscs, share_classes |
+| Templates & Automation | 6 | templates, automation_rules, workpaper_instances |
+| Email & Communication | 5 | connected_mailboxes, email_messages, client_messages |
+| Portal & Access | 4 | portal_access, onboardings, engagement_letters |
+
+Each table documented with: Primary key, Foreign keys, Business meaning, RLS policies
+
+---
+
+### Section 4: Data Lineage
+
+Field-level data provenance for key entities:
+
+**Example - Companies Table:**
+| Field | Source | Sync Method |
+|-------|--------|-------------|
+| company_name | User input OR Companies House API | CH sync |
+| company_number | User input OR CH lookup | CH sync |
+| sic_codes | Companies House API | CH sync |
+| trading_status | User input | Manual |
+| utr | User input | Manual |
+| partner_in_charge | User selection | FK to organization_users |
+
+---
+
+### Section 5: Integrations
+
+| Provider | Purpose | Edge Functions | Token Storage |
+|----------|---------|----------------|---------------|
+| HMRC | VAT, CT600, RTI, CIS | 6 functions | organization_integrations_hmrc |
+| Companies House | Company sync, filings | 2 functions | organization_integrations_companies_house |
+| Gmail | Email sync & send | 5 functions | connected_mailboxes |
+| Outlook | Email sync & send | 5 functions | connected_mailboxes |
+| TrueLayer | Open Banking | 3 functions | bank_connections |
+| Stripe | Payments | 4 functions | Stripe-managed |
+
+---
+
+### Section 6: Workflows & State Machines
+
+**Job Lifecycle:**
+```
+not_started → in_progress → awaiting_info → review → complete
 ```
 
-For **Month** view, the right panel shows deadlines grouped by week or simply lists all deadlines for the visible month with counts.
+**Filing Lifecycle:**
+```
+not_started → draft → in_progress → awaiting_approval → ready_to_file → filed
+```
 
----
+**Onboarding Workflow:**
+```
+lead_created → quote_sent → quote_accepted → aml_pending → aml_verified → engagement_sent → engagement_signed → active
+```
 
-## Technical Implementation
-
-### File: `src/components/deadlines/DeadlinesCalendar.tsx`
-
-**Changes:**
-
-1. Add view mode state:
-   ```typescript
-   type ViewMode = "day" | "week" | "month";
-   const [viewMode, setViewMode] = useState<ViewMode>("day");
-   ```
-
-2. Add ToggleGroup for view selection (above the calendar card)
-
-3. Add date range calculation based on view mode:
-   - Day: Single selected date (current behavior)
-   - Week: `startOfWeek(selectedDate)` to `endOfWeek(selectedDate)`
-   - Month: `startOfMonth(selectedDate)` to `endOfMonth(selectedDate)`
-
-4. Update deadline filtering to use date range:
-   ```typescript
-   const deadlinesInRange = deadlines?.filter((d) => {
-     const dueDate = new Date(d.due_date);
-     return isWithinInterval(dueDate, { start: rangeStart, end: rangeEnd });
-   });
-   ```
-
-5. Update right panel display:
-   - Day view: Current behavior (list deadlines for that day)
-   - Week view: Group deadlines by day within the week
-   - Month view: Group deadlines by week or show full list with date column
-
-6. Update header text:
-   - Day: "February 3, 2025"
-   - Week: "Week of February 3, 2025"  
-   - Month: "February 2025"
-
-7. Add visual highlighting on calendar:
-   - Day: Highlight selected day (current)
-   - Week: Highlight entire week row
-   - Month: Highlight all days in month
-
----
-
-## New Imports Required
-
-```typescript
-import { 
-  startOfWeek, 
-  endOfWeek, 
-  startOfMonth, 
-  endOfMonth, 
-  isWithinInterval,
-  eachDayOfInterval,
-  isSameWeek
-} from "date-fns";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+**Invoice Lifecycle:**
+```
+DRAFT → ISSUED → SENT → AWAITING_PAYMENT → PART_PAID → PAID
 ```
 
 ---
 
-## Data Flow
+### Section 7: Permissions & Access Control
 
-```text
-┌───────────────────────────────────────────────────────────────────────┐
-│ User clicks "Week" toggle                                             │
-│     ↓                                                                 │
-│ setViewMode("week")                                                   │
-│     ↓                                                                 │
-│ rangeStart = startOfWeek(selectedDate)                                │
-│ rangeEnd = endOfWeek(selectedDate)                                    │
-│     ↓                                                                 │
-│ deadlinesInRange filters all deadlines within that week               │
-│     ↓                                                                 │
-│ Panel shows deadlines grouped by day of week                          │
-└───────────────────────────────────────────────────────────────────────┘
-```
+**Roles Hierarchy:** `viewer < staff < manager < admin < owner`
+
+**Permission Matrix (excerpt):**
+| Permission | Owner | Admin | Manager | Staff | Viewer |
+|------------|:-----:|:-----:|:-------:|:-----:|:------:|
+| Manage practice settings | ✓ | ✓ | - | - | - |
+| Manage team | ✓ | ✓ | - | - | - |
+| Approve filings | ✓ | ✓ | ✓ | - | - |
+| Submit filings | ✓ | ✓ | ✓ | - | - |
+| Create jobs | ✓ | ✓ | ✓ | ✓ | - |
+| Issue invoices | ✓ | ✓ | ✓ | - | - |
 
 ---
 
-## Files Summary
+### Section 8: Edge Functions Inventory
 
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `src/components/deadlines/DeadlinesCalendar.tsx` | Modify | Add view mode toggle, date range calculation, grouped deadline display |
+~30 Deno-based edge functions documented with:
+- JWT requirements
+- Purpose
+- Input/output
+- Error handling
 
 ---
 
-## Edge Cases
+### Section 9: Technical Architecture
 
-- Empty weeks/months show "No deadlines this week/month" message
-- Week starts on Monday (UK accountant standard) - use `{ weekStartsOn: 1 }` option
-- Clicking a day in the calendar still updates the selected date, which then determines the week/month range
-- Counts shown in each grouping (e.g., "3 deadlines" next to day header)
+**Frontend:** React 18, Vite, TypeScript, Tailwind CSS, TanStack Query, React Router v6
+
+**Backend:** Supabase (PostgreSQL + Auth + Storage + Edge Functions), Deno Edge Functions, Row-Level Security
+
+**Component Organization:** 200+ components across 15+ domains
+
+---
+
+### Section 10: Known Gaps & TODOs
+
+**Partially Implemented:**
+- Self-Assessment Filing (UI exists, HMRC API pending)
+- MTD for Income Tax (not yet implemented)
+- Client Portal App (schema ready, separate app pending)
+- Multi-currency Bookkeeping (FX columns exist, full support incomplete)
+
+**Stubbed/Mocked:**
+- Companies House Live Filing (sandbox only)
+- HMRC CT600 Live (sandbox mode)
+- TrueLayer Live (sandbox credentials)
+
+**Technical Debt:**
+- Client type mismatch (`ltd` vs `limited_company`)
+- Some RLS policies need tightening
+
+---
+
+## Implementation
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `docs/master-system-specification.md` | Source content in markdown |
+| `src/pages/SystemSpecification.tsx` | Rendered view with print styles |
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Add route `/ops/system-specification` |
+
+### PDF Export Implementation
+
+The page will include:
+1. Print-optimized CSS with `@media print` rules
+2. Proper page breaks between sections
+3. Table of contents with page numbers
+4. Header/footer with document title and date
+5. "Download as PDF" button triggering `window.print()`
+
+### Estimated Document Size
+
+- **15,000-20,000 words**
+- **~50-70 pages** when rendered as PDF
+- **10 major sections** with subsections
 
 ---
 
 ## Summary
 
-This enhancement allows users to quickly scan all deadlines for a week or month without clicking through individual days, matching how accountants typically plan their workload around weekly/monthly cycles.
+This creates a professional PDF document serving as the canonical "source of truth" for the entire AccountancyOS product. The document will be accessible from the Operations menu and can be downloaded/printed as a PDF for offline reference or stakeholder sharing.
+
