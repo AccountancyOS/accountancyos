@@ -245,16 +245,12 @@ export default function Automations() {
 
   return (
     <DashboardLayout>
-      <div className="flex-1 overflow-auto">
-        <div className="p-8 space-y-6">
+      <div className="p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold flex items-center gap-2">
-                <Zap className="h-8 w-8 text-primary" />
-                Automations
-              </h2>
-              <p className="text-muted-foreground">
+              <h1 className="text-3xl font-semibold text-foreground">Automations</h1>
+              <p className="text-muted-foreground mt-1">
                 Create rules to automate repetitive tasks
               </p>
             </div>
@@ -458,7 +454,6 @@ export default function Automations() {
               </div>
             )}
           </div>
-        </div>
       </div>
 
       <AutomationRuleEditor

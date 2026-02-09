@@ -284,8 +284,8 @@ export default function Emails() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Emails</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-3xl font-semibold text-foreground">Emails</h1>
+            <p className="text-muted-foreground mt-1">
               Manage outgoing emails across your firm
             </p>
           </div>

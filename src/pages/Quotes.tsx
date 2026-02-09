@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Eye } from "lucide-react";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import CreateQuoteDialog from "@/components/quotes/CreateQuoteDialog";
@@ -60,7 +61,7 @@ const Quotes = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Quotes</h1>
@@ -75,7 +76,7 @@ const Quotes = () => {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading quotes...</div>
+        <TableSkeleton columns={6} rows={6} />
       ) : !quotes?.length ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
           <p className="text-muted-foreground mb-4">No quotes yet</p>

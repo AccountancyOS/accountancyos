@@ -85,14 +85,13 @@ const Onboarding = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex-1 overflow-auto">
-        <div className="p-8">
-          <div className="flex items-center justify-between mb-8">
+      <div className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-semibold text-foreground mb-2">
+              <h1 className="text-3xl font-semibold text-foreground">
                 Onboarding & AML
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mt-1">
                 Manage client onboarding applications and compliance checks
               </p>
             </div>
@@ -175,7 +174,6 @@ const Onboarding = () => {
               </CardContent>
             </Card>
           )}
-        </div>
       </div>
     </DashboardLayout>
   );
