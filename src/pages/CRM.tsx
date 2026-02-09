@@ -304,17 +304,15 @@ const CRM = () => {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex-1 overflow-auto">
-          <div className="p-8">
-            <div className="flex items-center justify-between mb-8">
+        <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
               <div>
-                <Skeleton className="h-8 w-48 mb-2" />
-                <Skeleton className="h-4 w-72" />
+                <Skeleton className="h-8 w-48" />
+                <Skeleton className="h-4 w-72 mt-1" />
               </div>
               <Skeleton className="h-10 w-28" />
             </div>
             <PipelineSkeleton />
-          </div>
         </div>
       </DashboardLayout>
     );
@@ -322,18 +320,17 @@ const CRM = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex-1 overflow-auto">
-        <div className="p-8">
+      <div className="p-6 space-y-6">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-semibold text-foreground mb-2">CRM Pipeline</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-3xl font-semibold text-foreground">CRM Pipeline</h1>
+              <p className="text-muted-foreground mt-1">
                 Manage your leads and track them through the sales pipeline
               </p>
             </div>
@@ -590,7 +587,6 @@ const CRM = () => {
             }}
           />
         </div>
-      </div>
     </DashboardLayout>
   );
 };

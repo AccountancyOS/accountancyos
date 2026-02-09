@@ -32,34 +32,23 @@ const Overview = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex-1 overflow-auto">
-        <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-semibold text-foreground mb-2">
-              Welcome back
-            </h1>
-            <p className="text-muted-foreground">
-              Here is what is happening with {organization?.name || "your practice"} today.
-            </p>
+      <div className="p-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-semibold text-foreground">Welcome back</h1>
+          <p className="text-muted-foreground mt-1">
+            Here is what is happening with {organization?.name || "your practice"} today.
+          </p>
+        </div>
+
+        <DashboardKPICards />
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            <OverdueActionsPanel />
+            <DeadlineWidget />
           </div>
-
-          {/* KPI Cards */}
-          <div className="mb-8">
-            <DashboardKPICards />
-          </div>
-
-          {/* Main Grid */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Left Column */}
-            <div className="space-y-6">
-              <OverdueActionsPanel />
-              <DeadlineWidget />
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-6">
-              {isOwnerOrAdmin && <StaffVarianceTable />}
-            </div>
+          <div className="space-y-6">
+            {isOwnerOrAdmin && <StaffVarianceTable />}
           </div>
         </div>
       </div>

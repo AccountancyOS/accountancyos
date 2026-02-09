@@ -202,12 +202,12 @@ export default function Jobs() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Jobs</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-3xl font-semibold text-foreground">Jobs</h1>
+            <p className="text-muted-foreground mt-1">
               Manage all client work, deadlines, and workflows
             </p>
           </div>

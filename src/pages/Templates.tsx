@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, FileText, Mail, ListChecks, Workflow, Clock, ClipboardCheck } from "lucide-react";
+import { CardSkeleton } from "@/components/ui/card-skeleton";
 import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
@@ -78,11 +79,11 @@ export default function Templates() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold">Templates</h2>
-            <p className="text-muted-foreground">Manage firm-wide templates for workpapers, emails, jobs, and automation</p>
+            <h1 className="text-3xl font-semibold text-foreground">Templates</h1>
+            <p className="text-muted-foreground mt-1">Manage firm-wide templates for workpapers, emails, jobs, and automation</p>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -174,7 +175,11 @@ export default function Templates() {
 
         {/* Templates Grid */}
         {isLoading ? (
-          <div>Loading templates...</div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <CardSkeleton key={i} lines={2} />
+            ))}
+          </div>
         ) : filteredTemplates && filteredTemplates.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredTemplates.map((template) => {

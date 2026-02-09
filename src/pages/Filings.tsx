@@ -99,10 +99,10 @@ export default function Filings() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Filings</h1>
+            <h1 className="text-3xl font-semibold text-foreground">Filings</h1>
             <p className="text-muted-foreground mt-1">
               Manage statutory filings and submissions
             </p>

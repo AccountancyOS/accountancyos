@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { FileSpreadsheet, Search } from "lucide-react";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 
 export default function Workpapers() {
   const navigate = useNavigate();
@@ -81,11 +82,11 @@ export default function Workpapers() {
 
   return (
     <DashboardLayout>
-      <div className="p-8 space-y-6">
+      <div className="p-6 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold mb-2">Workpapers</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-semibold text-foreground">Workpapers</h1>
+          <p className="text-muted-foreground mt-1">
             Practice-wide view of all workpapers across clients
           </p>
         </div>
@@ -155,9 +156,7 @@ export default function Workpapers() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Loading workpapers...
-              </div>
+              <TableSkeleton columns={7} rows={6} />
             ) : filteredWorkpapers && filteredWorkpapers.length > 0 ? (
               <Table>
                 <TableHeader>

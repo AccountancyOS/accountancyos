@@ -35,10 +35,10 @@ const Deadlines = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-6 space-y-6 flex flex-col h-full">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-semibold">Deadlines</h1>
+            <h1 className="text-3xl font-semibold text-foreground">Deadlines</h1>
             <p className="text-muted-foreground mt-1">
               Manage statutory and internal deadlines across your practice
             </p>

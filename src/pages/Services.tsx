@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import DashboardLayout from "@/components/DashboardLayout";
 
 interface Service {
@@ -193,7 +194,7 @@ const Services = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Services Catalog</h1>
@@ -338,7 +339,7 @@ const Services = () => {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading services...</div>
+        <TableSkeleton columns={6} rows={6} />
       ) : !services?.length ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
           <p className="text-muted-foreground mb-4">No services yet</p>
