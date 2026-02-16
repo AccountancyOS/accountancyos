@@ -18,6 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send } from "lucide-react";
 import { format, differenceInDays, isFuture } from "date-fns";
+import { formatServiceType } from "@/lib/format-utils";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
@@ -243,7 +244,7 @@ export default function JobDetail() {
                 </button>
               </span>
               <span>•</span>
-              <span>{job.service_type}</span>
+              <span>{formatServiceType(job.service_type)}</span>
               <span>•</span>
               <span>{job.period_label || format(new Date(job.period_end || new Date()), "MMM yyyy")}</span>
             </div>

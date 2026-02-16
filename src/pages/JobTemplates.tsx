@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatServiceType } from "@/lib/format-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -368,7 +369,7 @@ export default function JobTemplates() {
                         <Badge variant="outline">{template.ui_category || "General"}</Badge>
                       </TableCell>
                       <TableCell>{getFrequencyBadge(template.frequency || "one_off")}</TableCell>
-                      <TableCell>{template.service_type}</TableCell>
+                      <TableCell>{formatServiceType(template.service_type)}</TableCell>
                       <TableCell>v{template.version || 1}</TableCell>
                       <TableCell>
                         {template.is_active ? (

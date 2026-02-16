@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
+import { formatServiceType } from "@/lib/format-utils";
 
 interface ClientWorkpapersTabProps {
   clientId: string;
@@ -79,7 +80,7 @@ export default function ClientWorkpapersTab({ clientId }: ClientWorkpapersTabPro
                   onClick={() => navigate(`/jobs/${wp.job_id}`)}
                 >
                   <TableCell>
-                    <div className="font-medium">{wp.service_type}</div>
+                    <div className="font-medium">{formatServiceType(wp.service_type)}</div>
                     <div className="text-sm text-muted-foreground">{wp.name}</div>
                   </TableCell>
                   <TableCell>
