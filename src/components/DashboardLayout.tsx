@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
 import { useOrganization } from "@/lib/organization-context";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { useTheme } from "next-themes";
 import {
   LayoutDashboard,
   Users,
@@ -26,6 +27,8 @@ import {
   CreditCard,
   Mail,
   Zap,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 const navigation = [
@@ -55,7 +58,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const { organization } = useOrganization();
-
+  const { theme, setTheme } = useTheme();
   return (
     <div className="h-screen flex bg-background">
       {/* Sidebar */}
@@ -125,7 +128,15 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar with notification bell */}
-        <div className="h-16 border-b border-border bg-card flex items-center justify-end px-6">
+        <div className="h-16 border-b border-border bg-card flex items-center justify-end px-6 gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
           <NotificationBell />
         </div>
         <div className="flex-1 overflow-auto">
