@@ -8,131 +8,145 @@ All colors MUST be HSL.
 */
 
 @layer base {
+  /* Light mode (default) - Teal/Green + Grey/White */
   :root {
-    /* Dark Moody Palette with Blue Glow */
-    --background: 220 30% 8%;
-    --foreground: 210 20% 95%;
+    --background: 210 20% 98%;
+    --foreground: 220 15% 15%;
 
-    --card: 220 25% 12%;
-    --card-foreground: 210 20% 95%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 15%;
 
-    --popover: 220 25% 14%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
 
-    /* Primary: Bright Blue */
-    --primary: 200 80% 50%;
-    --primary-foreground: 220 30% 8%;
-
-    /* Secondary: Dark Blue */
-    --secondary: 220 25% 18%;
-    --secondary-foreground: 210 20% 90%;
-
-    /* Muted: Dark muted */
-    --muted: 220 20% 18%;
-    --muted-foreground: 210 20% 60%;
-
-    /* Accent: Cyan/Teal */
-    --accent: 190 70% 50%;
-    --accent-foreground: 220 30% 8%;
-
-    --destructive: 0 70% 55%;
-    --destructive-foreground: 210 20% 98%;
-
-    --border: 220 20% 20%;
-    --input: 220 20% 15%;
-    --ring: 200 80% 50%;
-
-    --radius: 0.75rem;
-
-    /* Sidebar colors - Deep dark */
-    --sidebar-background: 220 30% 6%;
-    --sidebar-foreground: 210 20% 85%;
-    --sidebar-primary: 200 80% 50%;
-    --sidebar-primary-foreground: 220 30% 8%;
-    --sidebar-accent: 220 25% 15%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 20% 15%;
-    --sidebar-ring: 200 80% 50%;
-
-    /* Custom gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(200 80% 50%), hsl(190 70% 45%));
-    --gradient-subtle: linear-gradient(180deg, hsl(220 30% 10%), hsl(220 25% 8%));
-    --gradient-glow: radial-gradient(ellipse at center bottom, hsl(200 80% 20% / 0.3), transparent 60%);
-
-    /* Shadows with blue glow */
-    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 1px 2px -1px hsl(0 0% 0% / 0.2);
-    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.3), 0 2px 4px -2px hsl(0 0% 0% / 0.2);
-    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.4), 0 4px 6px -4px hsl(0 0% 0% / 0.2);
-    --shadow-glow: 0 0 20px hsl(200 80% 50% / 0.3);
-    --shadow-glow-lg: 0 0 40px hsl(200 80% 50% / 0.4);
-    
-    /* Chart colors - Blue spectrum */
-    --chart-1: 200 80% 50%;
-    --chart-2: 190 70% 50%;
-    --chart-3: 210 60% 45%;
-    --chart-4: 180 60% 45%;
-    --chart-5: 220 50% 40%;
-    
-    --sidebar: 220 30% 6%;
-    --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-    --font-serif: 'Crimson Pro', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
-    --font-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-    --shadow-2xs: 0 1px 2px 0px hsl(0 0% 0% / 0.2);
-    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
-    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 1px 2px -1px hsl(0 0% 0% / 0.2);
-    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.4), 0 8px 10px -6px hsl(0 0% 0% / 0.3);
-    --shadow-2xl: 0 25px 50px -12px hsl(0 0% 0% / 0.5);
-    --tracking-normal: 0em;
-    --spacing: 0.25rem;
-  }
-
-  /* Light mode - lighter version of dark moody */
-  .light {
-    --background: 220 20% 96%;
-    --foreground: 220 30% 12%;
-
-    --card: 220 15% 98%;
-    --card-foreground: 220 30% 12%;
-
-    --popover: 220 15% 97%;
-    --popover-foreground: 220 30% 12%;
-
-    --primary: 200 80% 45%;
+    --primary: 168 70% 42%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 90%;
-    --secondary-foreground: 220 30% 20%;
+    --secondary: 210 15% 95%;
+    --secondary-foreground: 220 15% 25%;
 
-    --muted: 220 15% 92%;
-    --muted-foreground: 220 20% 45%;
+    --muted: 210 15% 93%;
+    --muted-foreground: 215 15% 50%;
 
-    --accent: 190 70% 45%;
+    --accent: 160 60% 45%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 88%;
-    --input: 220 15% 92%;
-    --ring: 200 80% 45%;
+    --border: 214 15% 90%;
+    --input: 214 15% 92%;
+    --ring: 168 70% 42%;
 
-    --sidebar-background: 220 30% 12%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 200 80% 50%;
-    --sidebar-primary-foreground: 220 30% 8%;
-    --sidebar-accent: 220 25% 18%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 20% 18%;
-    --sidebar-ring: 200 80% 50%;
+    --radius: 0.75rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(200 80% 50%), hsl(190 70% 45%));
-    --gradient-subtle: linear-gradient(180deg, hsl(220 15% 98%), hsl(220 15% 96%));
-    --chart-1: 200 80% 50%;
-    --chart-2: 190 70% 50%;
-    --chart-3: 210 60% 45%;
-    --chart-4: 180 60% 45%;
-    --chart-5: 220 50% 40%;
-    --sidebar: 220 30% 12%;
+    /* Sidebar - dark grey with teal highlights */
+    --sidebar-background: 220 15% 14%;
+    --sidebar-foreground: 210 15% 85%;
+    --sidebar-primary: 168 70% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 12% 20%;
+    --sidebar-accent-foreground: 210 15% 90%;
+    --sidebar-border: 220 12% 20%;
+    --sidebar-ring: 168 70% 42%;
+
+    /* Gradients - teal spectrum */
+    --gradient-primary: linear-gradient(135deg, hsl(168 70% 42%), hsl(160 60% 40%));
+    --gradient-subtle: linear-gradient(180deg, hsl(210 20% 99%), hsl(210 20% 97%));
+    --gradient-glow: radial-gradient(ellipse at center bottom, hsl(168 70% 42% / 0.15), transparent 60%);
+
+    /* Shadows - neutral */
+    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.08), 0 1px 2px -1px hsl(0 0% 0% / 0.06);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.08), 0 2px 4px -2px hsl(0 0% 0% / 0.06);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.06);
+    --shadow-glow: 0 0 20px hsl(168 70% 42% / 0.2);
+    --shadow-glow-lg: 0 0 40px hsl(168 70% 42% / 0.25);
+
+    /* Chart colors - teal/green spectrum */
+    --chart-1: 168 70% 42%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 185 50% 45%;
+    --chart-4: 145 50% 45%;
+    --chart-5: 200 40% 50%;
+
+    --sidebar: 220 15% 14%;
+    --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    --font-serif: 'Crimson Pro', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+    --font-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --shadow-2xs: 0 1px 2px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.08);
+    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.08), 0 1px 2px -1px hsl(0 0% 0% / 0.06);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.1), 0 8px 10px -6px hsl(0 0% 0% / 0.06);
+    --shadow-2xl: 0 25px 50px -12px hsl(0 0% 0% / 0.15);
+    --tracking-normal: 0em;
+    --spacing: 0.25rem;
+  }
+
+  /* Dark mode - teal accents on dark grey */
+  .dark {
+    --background: 220 15% 10%;
+    --foreground: 210 15% 95%;
+
+    --card: 220 15% 13%;
+    --card-foreground: 210 15% 95%;
+
+    --popover: 220 15% 14%;
+    --popover-foreground: 210 15% 95%;
+
+    --primary: 168 65% 48%;
+    --primary-foreground: 220 15% 10%;
+
+    --secondary: 220 12% 18%;
+    --secondary-foreground: 210 15% 90%;
+
+    --muted: 220 12% 20%;
+    --muted-foreground: 210 15% 60%;
+
+    --accent: 160 55% 50%;
+    --accent-foreground: 220 15% 10%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 210 15% 98%;
+
+    --border: 220 12% 22%;
+    --input: 220 12% 18%;
+    --ring: 168 65% 48%;
+
+    /* Sidebar - deeper dark */
+    --sidebar-background: 220 15% 8%;
+    --sidebar-foreground: 210 15% 85%;
+    --sidebar-primary: 168 65% 48%;
+    --sidebar-primary-foreground: 220 15% 10%;
+    --sidebar-accent: 220 12% 15%;
+    --sidebar-accent-foreground: 210 15% 90%;
+    --sidebar-border: 220 12% 15%;
+    --sidebar-ring: 168 65% 48%;
+
+    /* Gradients - teal on dark */
+    --gradient-primary: linear-gradient(135deg, hsl(168 65% 48%), hsl(160 55% 42%));
+    --gradient-subtle: linear-gradient(180deg, hsl(220 15% 12%), hsl(220 15% 10%));
+    --gradient-glow: radial-gradient(ellipse at center bottom, hsl(168 65% 30% / 0.3), transparent 60%);
+
+    /* Shadows - dark mode */
+    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 1px 2px -1px hsl(0 0% 0% / 0.2);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.3), 0 2px 4px -2px hsl(0 0% 0% / 0.2);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.4), 0 4px 6px -4px hsl(0 0% 0% / 0.2);
+    --shadow-glow: 0 0 20px hsl(168 65% 48% / 0.3);
+    --shadow-glow-lg: 0 0 40px hsl(168 65% 48% / 0.4);
+
+    /* Chart colors - teal/green spectrum (brighter for dark bg) */
+    --chart-1: 168 65% 48%;
+    --chart-2: 160 55% 50%;
+    --chart-3: 185 50% 50%;
+    --chart-4: 145 50% 50%;
+    --chart-5: 200 40% 55%;
+
+    --sidebar: 220 15% 8%;
+    --shadow-2xs: 0 1px 2px 0px hsl(0 0% 0% / 0.2);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 1px 2px -1px hsl(0 0% 0% / 0.2);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.4), 0 8px 10px -6px hsl(0 0% 0% / 0.3);
+    --shadow-2xl: 0 25px 50px -12px hsl(0 0% 0% / 0.5);
   }
 }
 
