@@ -1,223 +1,99 @@
 
 
-# Plan: Fix UI/UX Inconsistencies Across Pages
+# Plan: Add Light/Dark Mode Toggle with Teal/Green Light Theme
 
 ## Overview
 
-After analyzing 15+ pages in the application, I've identified significant inconsistencies in layout structure, spacing, typography, and container patterns. This plan addresses these issues to create a unified, professional experience when navigating between menu items.
+Add a proper theme switching system so users can toggle between the existing dark mode and a new teal/green-accented light mode that conveys the tech-focused, automation-driven identity of the software.
 
----
+## What Changes
 
-## Identified Issues
+### 1. Wire up `next-themes` ThemeProvider
 
-### Issue 1: Inconsistent Page Container Structure
+The `next-themes` package is already installed. Wrap the app in `ThemeProvider` so the `.dark` / `.light` class on `<html>` is managed automatically.
 
-**Current State - 4 Different Patterns:**
+**File: `src/App.tsx`**
+- Import `ThemeProvider` from `next-themes`
+- Wrap the outermost content in `<ThemeProvider attribute="class" defaultTheme="dark">`
 
-| Pattern | Pages | Container |
-|---------|-------|-----------|
-| Pattern A | Overview, CRM, Onboarding, Automations | `<div className="flex-1 overflow-auto"><div className="p-8">` |
-| Pattern B | Clients, Jobs, Bookkeeping, Settings, Filings, Quotes, Services, Templates | `<div className="space-y-6">` (no padding wrapper) |
-| Pattern C | Deadlines | `<div className="flex flex-col h-full">` with `mb-6` |
-| Pattern D | Workpapers | `<div className="p-8 space-y-6">` |
-| Pattern E | Emails | `<div className="p-6 space-y-6">` |
+**File: `index.html`**
+- Remove the hardcoded `class="dark"` from `<html>` (ThemeProvider manages this)
 
-**Problem:** When switching between pages, content appears at different positions due to inconsistent padding and structure.
+### 2. Restructure CSS variables for proper light/dark
 
----
+Currently `:root` holds the dark palette and `.light` holds a blue-tinted light palette. The standard pattern for `next-themes` with Tailwind `darkMode: ["class"]` is:
 
-### Issue 2: Inconsistent Header Typography
+- `:root` = light mode (default)
+- `.dark` = dark mode
 
-| Page | H1 Class | Font Weight |
-|------|----------|-------------|
-| Overview, CRM, Onboarding | `text-3xl font-semibold` | semibold |
-| Jobs, Filings, Bookkeeping, Settings | `text-3xl font-bold` | bold |
-| Emails | `text-2xl font-semibold` | semibold (smaller) |
-| Templates | `h2` with `text-3xl font-bold` | bold (wrong tag) |
-| Automations | `h2` with `text-3xl font-bold` | bold (wrong tag) |
-| Deadlines | `text-3xl font-semibold` | semibold |
+**File: `src/index.css`**
 
-**Problem:** Headers visually jump when navigating due to different weights and sizes.
+**Light mode (`:root`)** -- new teal/green + grey/white palette:
 
----
+| Token | Value | Description |
+|-------|-------|-------------|
+| `--background` | `210 20% 98%` | Off-white |
+| `--foreground` | `220 15% 15%` | Dark grey text |
+| `--card` | `0 0% 100%` | White cards |
+| `--primary` | `168 70% 42%` | Teal |
+| `--primary-foreground` | `0 0% 100%` | White on teal |
+| `--secondary` | `210 15% 95%` | Light grey |
+| `--muted` | `210 15% 93%` | Muted grey |
+| `--muted-foreground` | `215 15% 50%` | Mid grey |
+| `--accent` | `160 60% 45%` | Green-teal |
+| `--border` | `214 15% 90%` | Light border |
+| `--ring` | `168 70% 42%` | Teal focus ring |
+| `--sidebar-background` | `220 15% 14%` | Dark grey sidebar |
+| `--sidebar-primary` | `168 70% 42%` | Teal highlights |
 
-### Issue 3: Inconsistent Header-to-Content Spacing
+**Dark mode (`.dark`)** -- current dark palette preserved, but shifted to teal primary:
 
-| Page | Spacing Below Header |
-|------|---------------------|
-| Overview, CRM, Onboarding | `mb-8` |
-| Jobs, Clients, Filings | Inside `space-y-6` container |
-| Deadlines | `mb-6` |
-| Emails | Part of `space-y-6` |
+| Token | Value | Description |
+|-------|-------|-------------|
+| `--background` | `220 15% 10%` | Dark grey |
+| `--foreground` | `210 15% 95%` | Light text |
+| `--card` | `220 15% 13%` | Dark card |
+| `--primary` | `168 65% 48%` | Teal (brighter for contrast) |
+| `--accent` | `160 55% 50%` | Green-teal |
+| `--border` | `220 12% 22%` | Dark border |
 
----
+Gradients and glow shadows will also shift from blue to teal in both modes. Chart colors move to a teal/green spectrum.
 
-### Issue 4: Inconsistent Subheader Text Color Classes
+### 3. Add Theme Toggle to Top Bar
 
-| Page | Subheader Class |
-|------|----------------|
-| Most pages | `text-muted-foreground` |
-| Some pages | `text-muted-foreground mt-1` |
-| CRM | `text-muted-foreground` (no mt) |
+**File: `src/components/DashboardLayout.tsx`**
 
----
+Add a Sun/Moon icon button next to the NotificationBell in the top bar header. Uses `useTheme()` from `next-themes` to toggle between light and dark.
 
-### Issue 5: Loading State Inconsistencies
-
-| Page | Loading State |
-|------|---------------|
-| Jobs, Clients, Filings | `<TableSkeleton />` |
-| Workpapers, Templates | `"Loading..."` text |
-| Emails | Custom `<Skeleton />` rows |
-| CRM, Onboarding | Full-page skeleton with header placeholder |
-| Quotes, Services | `"Loading..."` text |
-
----
-
-## Proposed Standard
-
-### Canonical Page Structure
-
-All pages should follow this exact structure:
-
-```tsx
-<DashboardLayout>
-  <div className="p-6 space-y-6">
-    {/* Header Section */}
-    <div className="flex items-center justify-between">
-      <div>
-        <h1 className="text-3xl font-semibold text-foreground">Page Title</h1>
-        <p className="text-muted-foreground mt-1">
-          Page description
-        </p>
-      </div>
-      {/* Action buttons */}
-      <div className="flex items-center gap-2">
-        <Button>Primary Action</Button>
-      </div>
-    </div>
-
-    {/* Page Content */}
-    {/* ... */}
-  </div>
-</DashboardLayout>
+```text
++--------------------------------------------------+
+| Top bar:                    [Sun/Moon] [Bell]     |
++--------------------------------------------------+
 ```
 
-### Standard Values
+### 4. Update Button Glow Variant
 
-| Property | Value | Rationale |
-|----------|-------|-----------|
-| Container padding | `p-6` | Consistent with Emails, not too tight (p-4) or loose (p-8) |
-| Content gap | `space-y-6` | Standard spacing between sections |
-| H1 font | `text-3xl font-semibold text-foreground` | Professional, not too heavy |
-| Subheader | `text-muted-foreground mt-1` | Consistent positioning |
-| Loading state | `<TableSkeleton />` for tables, `<CardSkeleton />` for cards | Consistent skeleton usage |
+**File: `src/components/ui/button.tsx`**
 
----
+Change the `glow` variant shadow colors from hardcoded blue HSL to use `var(--primary)` so it automatically adapts to teal in both themes.
 
-## Implementation
+## Files to Create
 
-### Files to Modify
+None.
 
-| File | Changes |
-|------|---------|
-| `src/pages/Overview.tsx` | Change `p-8` to `p-6`, standardize header |
-| `src/pages/CRM.tsx` | Change `p-8` to `p-6`, add `mt-1` to subheader |
-| `src/pages/Clients.tsx` | Add wrapper `div className="p-6"`, fix header weight |
-| `src/pages/Jobs.tsx` | Add wrapper `div className="p-6"`, fix header weight |
-| `src/pages/Bookkeeping.tsx` | Add wrapper `div className="p-6"`, fix header weight |
-| `src/pages/Settings.tsx` | Add wrapper `div className="p-6"`, fix header weight |
-| `src/pages/Filings.tsx` | Add wrapper `div className="p-6"`, fix header weight |
-| `src/pages/Deadlines.tsx` | Restructure to use standard pattern |
-| `src/pages/Workpapers.tsx` | Change `p-8` to `p-6`, use TableSkeleton |
-| `src/pages/Templates.tsx` | Add wrapper, change `h2` to `h1`, fix font weight |
-| `src/pages/Automations.tsx` | Change `p-8` to `p-6`, change `h2` to `h1` |
-| `src/pages/Onboarding.tsx` | Change `p-8` to `p-6` |
-| `src/pages/Emails.tsx` | Already at `p-6`, fix header size to `text-3xl` |
-| `src/pages/Quotes.tsx` | Add wrapper `div className="p-6"` |
-| `src/pages/Services.tsx` | Add wrapper `div className="p-6"` |
+## Files to Modify
 
-### Loading State Updates
+| File | Change |
+|------|--------|
+| `index.html` | Remove `class="dark"` from `<html>` |
+| `src/App.tsx` | Wrap in `ThemeProvider` from `next-themes` |
+| `src/index.css` | Restructure `:root` as light (teal/grey), `.dark` as dark (teal/dark grey) |
+| `src/components/DashboardLayout.tsx` | Add theme toggle button in top bar |
+| `src/components/ui/button.tsx` | Update glow variant to use CSS variable instead of hardcoded blue |
 
-| Page | Current | Updated |
-|------|---------|---------|
-| Workpapers | Text "Loading..." | `<TableSkeleton columns={7} rows={6} />` |
-| Templates | Text "Loading..." | Grid of `<CardSkeleton />` |
-| Quotes | Text "Loading..." | `<TableSkeleton columns={6} rows={6} />` |
-| Services | Text "Loading..." | `<TableSkeleton columns={6} rows={6} />` |
+## Risk
 
----
-
-## Technical Details
-
-### Example Refactor - Clients.tsx
-
-**Before (Pattern B):**
-```tsx
-<DashboardLayout>
-  <div className="space-y-6">
-    <div className="flex items-center justify-between">
-      <div>
-        <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
-```
-
-**After (Canonical):**
-```tsx
-<DashboardLayout>
-  <div className="p-6 space-y-6">
-    <div className="flex items-center justify-between">
-      <div>
-        <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
-```
-
-### Example Refactor - Jobs.tsx
-
-**Before:**
-```tsx
-<h1 className="text-3xl font-bold">Jobs</h1>
-```
-
-**After:**
-```tsx
-<h1 className="text-3xl font-semibold text-foreground">Jobs</h1>
-```
-
-### Example Refactor - Emails.tsx
-
-**Before:**
-```tsx
-<h1 className="text-2xl font-semibold text-foreground">Emails</h1>
-```
-
-**After:**
-```tsx
-<h1 className="text-3xl font-semibold text-foreground">Emails</h1>
-```
-
-### Example Refactor - Templates.tsx
-
-**Before:**
-```tsx
-<h2 className="text-3xl font-bold">Templates</h2>
-```
-
-**After:**
-```tsx
-<h1 className="text-3xl font-semibold text-foreground">Templates</h1>
-```
-
----
-
-## Impact
-
-- **15 pages** will be updated
-- **Zero functionality changes** - purely cosmetic
-- **Consistent visual experience** when navigating sidebar
-- **Aligned with professional UX standards** per project guidelines
-
----
-
-## Summary
-
-This refactoring standardizes all page layouts to use a single canonical structure with `p-6` padding, `space-y-6` content gaps, `text-3xl font-semibold` headers, and consistent loading states. The changes ensure that headers and content appear at the exact same position regardless of which page the user navigates to.
+- **Low** -- the design token architecture means all components automatically inherit the updated palette through CSS variables
+- No component logic changes, only CSS values and one new toggle button
+- Dark mode is preserved as the default so existing users see no change until they toggle
 
