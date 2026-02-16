@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { PermissionGuard } from "@/components/ui/permission-guard";
 import { getFilingSubmissions } from "@/lib/ch-filing-service";
 
@@ -297,7 +298,7 @@ export default function CompaniesHouseSettings() {
                           submission.status === 'error' ? 'destructive' :
                           'secondary'
                         }>
-                          {submission.status}
+                          {formatStatus(submission.status)}
                         </Badge>
                       </div>
                     </div>

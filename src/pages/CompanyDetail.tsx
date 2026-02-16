@@ -35,6 +35,7 @@ import {
   Pencil
 } from "lucide-react";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
 import { CS01WorkpaperTab } from "@/components/cosec/CS01WorkpaperTab";
 import { CompanyCoSecJobsTab } from "@/components/cosec/CompanyCoSecJobsTab";
@@ -201,7 +202,7 @@ const CompanyDetail = () => {
                   {company.company_name}
                 </h1>
                 <Badge variant={company.status === "active" ? "default" : "secondary"}>
-                  {company.status}
+                  {formatStatus(company.status)}
                 </Badge>
               </div>
               <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">

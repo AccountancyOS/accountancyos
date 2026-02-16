@@ -33,6 +33,7 @@ import {
 } from "@/lib/payroll-constants";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { 
   ArrowLeft, 
   Send,
@@ -348,7 +349,7 @@ const CISReturnDetail = () => {
                     ) : (
                       <AlertCircle className="h-5 w-5 text-amber-600" />
                     )}
-                    <span>Status: {relatedFiling.status}</span>
+                    <span>Status: {formatStatus(relatedFiling.status)}</span>
                   </div>
                   <Button
                     variant="outline"

@@ -48,6 +48,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 
 interface EmailTemplate {
   id: string;
@@ -182,7 +183,7 @@ export default function EmailTemplates() {
         <TableCell>{getCategoryBadge(template.content?.category)}</TableCell>
         <TableCell>
           <Badge variant={template.status === "active" ? "default" : "secondary"}>
-            {template.status}
+            {formatStatus(template.status)}
           </Badge>
         </TableCell>
         <TableCell className="text-muted-foreground">

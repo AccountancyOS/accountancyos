@@ -26,6 +26,7 @@ import { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
 import { AddEmployeeDialog } from "./AddEmployeeDialog";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Users } from "lucide-react";
+import { formatStatus } from "@/lib/format-utils";
 
 interface PayrollEmployeesTabProps {
   selectedEntity: BookkeepingEntity | null;
@@ -192,7 +193,7 @@ export function PayrollEmployeesTab({ selectedEntity, selectedSchemeId }: Payrol
                     <TableCell>{employee.nic_category || 'A'}</TableCell>
                     <TableCell>
                       <Badge variant={employee.status === 'active' ? "default" : "secondary"}>
-                        {employee.status === 'active' ? "Active" : employee.status}
+                        {employee.status === 'active' ? "Active" : formatStatus(employee.status)}
                       </Badge>
                     </TableCell>
                   </TableRow>

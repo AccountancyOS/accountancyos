@@ -45,6 +45,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { 
   ArrowLeft, 
   Calculator,
@@ -485,7 +486,7 @@ const PayRunDetail = () => {
                   {filings.map((filing) => (
                     <TableRow key={filing.id}>
                       <TableCell className="font-medium">{filing.filing_type}</TableCell>
-                      <TableCell>{filing.status}</TableCell>
+                      <TableCell>{formatStatus(filing.status)}</TableCell>
                       <TableCell>
                         {filing.filed_at ? format(new Date(filing.filed_at), "d MMM yyyy HH:mm") : '-'}
                       </TableCell>

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, FileText, Mail, ListChecks, Workflow, Clock, ClipboardCheck } from "lucide-react";
 import { CardSkeleton } from "@/components/ui/card-skeleton";
 import { useNavigate } from "react-router-dom";
+import { formatStatus } from "@/lib/format-utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -197,7 +198,7 @@ export default function Templates() {
                         <CardTitle className="text-lg">{template.name}</CardTitle>
                       </div>
                       <Badge variant={getStatusColor(template.status)}>
-                        {template.status}
+                        {formatStatus(template.status)}
                       </Badge>
                     </div>
                     {template.description && (

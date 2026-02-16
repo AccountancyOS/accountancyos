@@ -24,7 +24,7 @@ import {
 import { FileCheck, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { formatDate, formatCurrency } from "@/lib/format-utils";
+import { formatDate, formatCurrency, formatStatus } from "@/lib/format-utils";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -162,7 +162,7 @@ export default function Filings() {
                       <TableCell>{filing.tax_year}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(filing.status)}>
-                          {filing.status}
+                          {formatStatus(filing.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>

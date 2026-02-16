@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PayslipViewDialog } from "@/components/payroll/PayslipViewDialog";
 import { STUDENT_LOAN_LABELS, type StudentLoanPlan } from "@/lib/payroll-constants";
 import { format, differenceInDays } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { 
   ArrowLeft, 
   User,
@@ -187,7 +188,7 @@ const EmployeeDetail = () => {
                   {employee.first_name} {employee.last_name}
                 </h1>
                 <Badge variant={isActive ? "default" : "secondary"}>
-                  {isActive ? "Active" : employee.status}
+                  {isActive ? "Active" : formatStatus(employee.status)}
                 </Badge>
               </div>
               <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">

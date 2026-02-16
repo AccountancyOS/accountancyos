@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { Users, Calendar, FileText, AlertTriangle, ArrowRight } from "lucide-react";
 
 interface PayrollOverviewTabProps {
@@ -230,7 +231,7 @@ export function PayrollOverviewTab({
                       payRun.status === 'approved' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
                       'bg-muted text-muted-foreground'
                     }`}>
-                      {payRun.status}
+                      {formatStatus(payRun.status)}
                     </span>
                   </div>
                 </div>
