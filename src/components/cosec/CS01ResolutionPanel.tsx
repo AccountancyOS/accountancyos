@@ -32,6 +32,7 @@ import {
 import { toast } from "sonner";
 import { CHDiscrepancy } from "@/lib/ch-sync-service";
 import { createResolutionFiling, ResolutionFilingType } from "@/lib/cosec-filing-service";
+import { formatStatus } from "@/lib/format-utils";
 
 interface CS01ResolutionPanelProps {
   companyId: string;
@@ -229,7 +230,7 @@ export function CS01ResolutionPanel({
                       </p>
                     </div>
                   </div>
-                  <Badge variant="outline">{filing.status}</Badge>
+                  <Badge variant="outline">{formatStatus(filing.status)}</Badge>
                 </div>
               ))}
             </div>

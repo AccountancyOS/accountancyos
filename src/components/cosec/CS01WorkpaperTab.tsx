@@ -575,7 +575,7 @@ export function CS01WorkpaperTab({ companyId, jobId, workpaperId }: CS01Workpape
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Status</p>
-                    <Badge className="mt-1">{existingFiling.status.replace(/_/g, " ")}</Badge>
+                    <Badge className="mt-1">{formatStatus(existingFiling.status)}</Badge>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Made Up To Date</p>

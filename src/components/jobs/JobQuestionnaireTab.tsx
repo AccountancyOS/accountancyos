@@ -7,6 +7,7 @@ import { SendQuestionnaireDialog } from "@/components/client-portal/SendQuestion
 import { useState } from "react";
 import { FileText, CheckCircle, Clock, Send } from "lucide-react";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 
 interface JobQuestionnaireTabProps {
   jobId: string;
@@ -92,7 +93,7 @@ export function JobQuestionnaireTab({ jobId, clientId, companyId }: JobQuestionn
                   <Badge className={getStatusColor(questionnaire.status)}>
                     <span className="flex items-center gap-1">
                       {getStatusIcon(questionnaire.status)}
-                      {questionnaire.status}
+                      {formatStatus(questionnaire.status)}
                     </span>
                   </Badge>
                 </div>

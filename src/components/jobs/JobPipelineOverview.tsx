@@ -14,6 +14,7 @@ import {
   XCircle
 } from "lucide-react";
 import { format } from "date-fns";
+import { formatStatus, formatServiceType } from "@/lib/format-utils";
 
 interface JobPipelineOverviewProps {
   jobId: string;
@@ -118,7 +119,7 @@ export function JobPipelineOverview({ jobId, onNavigate }: JobPipelineOverviewPr
                 <div className="flex items-center gap-2">
                   {getStatusIcon(tbSnapshot.status, tbSnapshot.locked)}
                   <Badge variant="outline" className={`text-xs ${getStatusBadgeColor(tbSnapshot.status)}`}>
-                    {tbSnapshot.locked ? "Locked" : tbSnapshot.status}
+                    {tbSnapshot.locked ? "Locked" : formatStatus(tbSnapshot.status)}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -149,11 +150,11 @@ export function JobPipelineOverview({ jobId, onNavigate }: JobPipelineOverviewPr
                 <div className="flex items-center gap-2">
                   {getStatusIcon(workpaper.status, workpaper.locked)}
                   <Badge variant="outline" className={`text-xs ${getStatusBadgeColor(workpaper.status)}`}>
-                    {workpaper.locked ? "Locked" : workpaper.status?.replace(/_/g, " ")}
+                    {workpaper.locked ? "Locked" : formatStatus(workpaper.status)}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {workpaper.service_type?.replace(/_/g, " ")}
+                  {formatServiceType(workpaper.service_type)}
                 </p>
               </div>
             ) : (
@@ -177,7 +178,7 @@ export function JobPipelineOverview({ jobId, onNavigate }: JobPipelineOverviewPr
                 <div className="flex items-center gap-2">
                   {getStatusIcon(filing.status, filing.is_locked)}
                   <Badge variant="outline" className={`text-xs ${getStatusBadgeColor(filing.status)}`}>
-                    {filing.status?.replace(/_/g, " ")}
+                    {formatStatus(filing.status)}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
