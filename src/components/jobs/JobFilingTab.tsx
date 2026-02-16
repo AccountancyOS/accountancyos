@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { FileCheck, Send, CheckCircle, FileText, Download, RefreshCw, Clock, XCircle, Loader2, ExternalLink, Building, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import { useNavigate, Link } from "react-router-dom";
 import { sendFilingForApproval, markFilingAsFiled, generateFilingDocuments, getDocumentTypesForFiling } from "@/lib/filing-service";
 import { submitFilingToCompaniesHouse, validateFilingReadyForSubmission } from "@/lib/ch-filing-service";
@@ -206,7 +207,7 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
           </p>
         </div>
         <Badge className={getStatusColor(filing.status)}>
-          {filing.status.replace(/_/g, " ")}
+          {formatStatus(filing.status)}
         </Badge>
       </div>
 

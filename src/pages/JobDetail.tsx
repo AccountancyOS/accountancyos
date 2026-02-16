@@ -18,7 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send } from "lucide-react";
 import { format, differenceInDays, isFuture } from "date-fns";
-import { formatServiceType } from "@/lib/format-utils";
+import { formatServiceType, formatStatus, formatPriority } from "@/lib/format-utils";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
@@ -384,11 +384,11 @@ export default function JobDetail() {
         <div className="flex items-center gap-6 p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Status:</span>
-            <Badge>{job.status.replace(/_/g, " ")}</Badge>
+            <Badge>{formatStatus(job.status)}</Badge>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Priority:</span>
-            <Badge>{job.priority}</Badge>
+            <Badge>{formatPriority(job.priority)}</Badge>
           </div>
           {job.filing_deadline && (
             <div className="flex items-center gap-2">

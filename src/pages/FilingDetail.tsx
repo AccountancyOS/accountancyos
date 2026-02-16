@@ -22,6 +22,7 @@ import {
   Mail
 } from "lucide-react";
 import { format } from "date-fns";
+import { formatStatus } from "@/lib/format-utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -178,7 +179,7 @@ export default function FilingDetail() {
     return (
       <Badge className={`${color} flex items-center gap-1`}>
         {icon}
-        {status.replace(/_/g, " ")}
+        {formatStatus(status)}
       </Badge>
     );
   };
