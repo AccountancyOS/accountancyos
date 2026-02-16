@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatServiceType } from "@/lib/format-utils";
+import { formatServiceType, formatStatus } from "@/lib/format-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -356,13 +356,13 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusBadge(job.status)}>
-                          {job.status.replace(/_/g, " ")}
+                          {formatStatus(job.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         {filing ? (
                           <Badge variant={filing.status === "filed" ? "default" : "secondary"}>
-                            {filing.status.replace(/_/g, " ")}
+                            {formatStatus(filing.status)}
                           </Badge>
                         ) : (
                           <span className="text-muted-foreground text-sm">Not created</span>
@@ -427,16 +427,16 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
                             {formatServiceType(job.service_type)}
                           </span>
                           <Badge variant={getStatusBadge(job.status)} className="text-xs">
-                            {job.status.replace(/_/g, " ")}
+                            {formatStatus(job.status)}
                           </Badge>
                         </div>
                         <p className="font-medium text-sm truncate">{job.job_name}</p>
                         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                           <span>{format(new Date(job.created_at), "d MMM yyyy")}</span>
                           {filing && (
-                            <Badge variant={filing.status === "filed" ? "default" : "outline"} className="text-xs">
-                              {filing.status.replace(/_/g, " ")}
-                            </Badge>
+                             <Badge variant={filing.status === "filed" ? "default" : "outline"} className="text-xs">
+                               {formatStatus(filing.status)}
+                             </Badge>
                           )}
                         </div>
                       </div>

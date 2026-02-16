@@ -24,6 +24,7 @@ import {
   Loader2
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatStatus } from "@/lib/format-utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { syncCompanyWithCH, getLastCHSyncData, CHDiscrepancy, CHOfficer, CHPSC } from "@/lib/ch-sync-service";
 import { CS01DiffView } from "./CS01DiffView";
@@ -267,7 +268,7 @@ export function CS01WorkpaperTab({ companyId, jobId, workpaperId }: CS01Workpape
                     "bg-blue-500"
                   }
                 >
-                  {existingFiling.status.replace(/_/g, " ")}
+                   {formatStatus(existingFiling.status)}
                 </Badge>
               ) : (
                 <Badge variant="outline">Not Started</Badge>

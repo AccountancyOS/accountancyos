@@ -31,7 +31,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { JobsQuickFilters } from "@/components/jobs/JobsQuickFilters";
 import { SavedViewsDropdown } from "@/components/jobs/SavedViewsDropdown";
 import { useJobFilters } from "@/hooks/useJobFilters";
-import { formatDate, formatServiceType } from "@/lib/format-utils";
+import { formatDate, formatServiceType, formatStatus, formatPriority } from "@/lib/format-utils";
 import { queryKeys } from "@/lib/queryKeys";
 
 export default function Jobs() {
@@ -353,12 +353,12 @@ export default function Jobs() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusColor(job.status)}>
-                          {job.status.replace(/_/g, " ")}
+                          {formatStatus(job.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={getPriorityColor(job.priority)}>
-                          {job.priority}
+                          {formatPriority(job.priority)}
                         </Badge>
                       </TableCell>
                       <TableCell>

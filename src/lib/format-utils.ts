@@ -148,3 +148,61 @@ export function formatServiceType(serviceType: string | null | undefined): strin
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/**
+ * Job status labels
+ */
+const JOB_STATUS_LABELS: Record<string, string> = {
+  not_started: "Not Started",
+  in_progress: "In Progress",
+  waiting_on_client: "Waiting on Client",
+  ready_for_review: "Ready for Review",
+  in_review: "In Review",
+  with_reviewer: "With Reviewer",
+  completed: "Completed",
+  on_hold: "On Hold",
+  cancelled: "Cancelled",
+  filed: "Filed",
+  draft: "Draft",
+  awaiting_approval: "Awaiting Approval",
+  approved: "Approved",
+  ready_to_file: "Ready to File",
+  rejected: "Rejected",
+  submitted: "Submitted",
+  accepted: "Accepted",
+  finalised: "Finalised",
+};
+
+/**
+ * Format a raw job/filing/workpaper status into a human-readable label
+ */
+export function formatStatus(status: string | null | undefined): string {
+  if (!status) return "—";
+  if (JOB_STATUS_LABELS[status]) return JOB_STATUS_LABELS[status];
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Priority labels
+ */
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Low",
+  normal: "Normal",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+  urgent: "Urgent",
+};
+
+/**
+ * Format a raw priority value into a human-readable label
+ */
+export function formatPriority(priority: string | null | undefined): string {
+  if (!priority) return "—";
+  if (PRIORITY_LABELS[priority]) return PRIORITY_LABELS[priority];
+  return priority
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}

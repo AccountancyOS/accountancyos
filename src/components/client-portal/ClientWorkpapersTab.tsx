@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
-import { formatServiceType } from "@/lib/format-utils";
+import { formatServiceType, formatStatus } from "@/lib/format-utils";
 
 interface ClientWorkpapersTabProps {
   clientId: string;
@@ -94,7 +94,7 @@ export default function ClientWorkpapersTab({ clientId }: ClientWorkpapersTabPro
                   </TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(wp.status)}>
-                      {wp.status.replace(/_/g, " ")}
+                      {formatStatus(wp.status)}
                     </Badge>
                   </TableCell>
                   <TableCell>

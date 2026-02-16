@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { formatServiceType } from "@/lib/format-utils";
+import { formatServiceType, formatStatus } from "@/lib/format-utils";
 import { FileSpreadsheet, Search } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 
@@ -197,7 +197,7 @@ export default function Workpapers() {
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(wp.status)}>
-                          {wp.status.replace(/_/g, " ")}
+                          {formatStatus(wp.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
