@@ -103,3 +103,48 @@ export function formatNumber(value: number | null | undefined): string {
   if (value == null) return "—";
   return new Intl.NumberFormat("en-GB").format(value);
 }
+
+/**
+ * Labels for service type codes used across Jobs, Workpapers, Templates, etc.
+ */
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  accounts: "Accounts",
+  self_assessment: "Self Assessment",
+  corporation_tax: "Corporation Tax",
+  vat: "VAT",
+  bookkeeping: "Bookkeeping",
+  payroll: "Payroll",
+  advisory: "Advisory",
+  company_sec: "Company Sec",
+  cis: "CIS",
+  ct600: "CT600",
+  company_accounts: "Company Accounts",
+  vat_return: "VAT Return",
+  // Uppercase codes (used by some templates/filings)
+  Accounts: "Accounts",
+  SA: "Self Assessment",
+  CT600: "CT600",
+  VAT: "VAT",
+  Bookkeeping: "Bookkeeping",
+  Payroll: "Payroll",
+  Advisory: "Advisory",
+  "Company Sec": "Company Sec",
+  CS01: "CS01",
+  AP01: "AP01",
+  TM01: "TM01",
+  SH01: "SH01",
+};
+
+/**
+ * Format a raw service_type value into a human-readable label
+ * @param serviceType - The raw service type code from the database
+ * @returns Formatted label or title-cased fallback
+ */
+export function formatServiceType(serviceType: string | null | undefined): string {
+  if (!serviceType) return "—";
+  if (SERVICE_TYPE_LABELS[serviceType]) return SERVICE_TYPE_LABELS[serviceType];
+  // Fallback: replace underscores with spaces and title-case
+  return serviceType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}

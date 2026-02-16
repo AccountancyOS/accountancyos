@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { createWorkpaperFromSnapshot, UK_WORKPAPER_CATEGORIES } from "@/lib/workpaper-from-tb";
+import { formatServiceType } from "@/lib/format-utils";
 import {
   Dialog,
   DialogContent,
@@ -204,7 +205,7 @@ export function CreateWorkpaperFromSnapshotDialog({
                 <SelectItem value="">No job</SelectItem>
                 {jobs?.map((job) => (
                   <SelectItem key={job.id} value={job.id}>
-                    {job.job_name} ({job.period_label || job.service_type})
+                    {job.job_name} ({job.period_label || formatServiceType(job.service_type)})
                   </SelectItem>
                 ))}
               </SelectContent>

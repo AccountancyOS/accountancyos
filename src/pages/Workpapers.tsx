@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import { formatServiceType } from "@/lib/format-utils";
 import { FileSpreadsheet, Search } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 
@@ -183,7 +184,7 @@ export default function Workpapers() {
                           : wp.company?.company_name}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{wp.service_type}</Badge>
+                        <Badge variant="outline">{formatServiceType(wp.service_type)}</Badge>
                       </TableCell>
                       <TableCell>
                         {wp.period_label ||

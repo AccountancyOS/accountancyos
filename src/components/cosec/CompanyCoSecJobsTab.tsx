@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatServiceType } from "@/lib/format-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -350,7 +351,7 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
                       <TableCell className="font-medium">{job.job_name}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getFilingTypeBadge(job.service_type)}`}>
-                          {job.service_type}
+                          {formatServiceType(job.service_type)}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -423,7 +424,7 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getFilingTypeBadge(job.service_type)}`}>
-                            {job.service_type}
+                            {formatServiceType(job.service_type)}
                           </span>
                           <Badge variant={getStatusBadge(job.status)} className="text-xs">
                             {job.status.replace(/_/g, " ")}

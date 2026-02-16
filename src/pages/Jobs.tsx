@@ -31,7 +31,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { JobsQuickFilters } from "@/components/jobs/JobsQuickFilters";
 import { SavedViewsDropdown } from "@/components/jobs/SavedViewsDropdown";
 import { useJobFilters } from "@/hooks/useJobFilters";
-import { formatDate } from "@/lib/format-utils";
+import { formatDate, formatServiceType } from "@/lib/format-utils";
 import { queryKeys } from "@/lib/queryKeys";
 
 export default function Jobs() {
@@ -347,7 +347,7 @@ export default function Jobs() {
                           ? `${job.clients.first_name} ${job.clients.last_name}`
                           : job.companies?.company_name || "-"}
                       </TableCell>
-                      <TableCell>{job.service_type}</TableCell>
+                      <TableCell>{formatServiceType(job.service_type)}</TableCell>
                       <TableCell>
                         {job.period_label || (job.period_end ? formatDate(job.period_end, "monthYear") : "-")}
                       </TableCell>
