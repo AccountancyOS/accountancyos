@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SADraftScheduleData } from "@/types/filing-schemas";
+import type { SADraftScheduleData, PartnershipDraftScheduleData } from "@/types/filing-schemas";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -51,6 +51,8 @@ import { FilingUnlockDialog } from "@/components/filings/FilingUnlockDialog";
 import { FilingVersionHistory } from "@/components/filings/FilingVersionHistory";
 import { SendToClientDialog } from "@/components/filings/SendToClientDialog";
 import { SATaxReturnEditor } from "@/components/filings/sa/SATaxReturnEditor";
+import { PartnershipScheduleEditor } from "@/components/filings/partnership/PartnershipScheduleEditor";
+import { PartnerShareBanner } from "@/components/filings/partnership/PartnerShareBanner";
 
 export default function FilingDetail() {
   const { filingId } = useParams();
@@ -320,10 +322,35 @@ export default function FilingDetail() {
               </CardContent>
             </Card>
 
+            {/* Partner Share Banner (reference-based) */}
+            {filingAny.partnership_allocation_id && (
+              <PartnerShareBanner filingId={filing.id} />
+            )}
+
             {/* SA Schedule Editor */}
             {(filing.filing_type === 'self_assessment' || filing.filing_type === 'SA100' || filing.filing_type === 'SA_NON_MTD') && !isFiled && (
               <SATaxReturnEditor
                 draft={(filingAny.draft_schedule_data_json || {}) as SADraftScheduleData}
+                onSave={async (data) => {
+                  await supabase
+                    .from('filings')
+                    .update({ draft_schedule_data_json: data as any })
+                    .eq('id', filing.id);
+                  invalidateFiling();
+                }}
+                readonly={!!filing.is_locked}
+              />
+            )}
+
+            {/* Partnership Schedule Editor */}
+            {filing.filing_type === 'PARTNERSHIP' && !isFiled && (
+              <PartnershipScheduleEditor
+                draft={(filingAny.draft_schedule_data_json || {
+                  partnership: { partnership_name: '', utr: '', period_start: '', period_end: '' },
+                  turnover: 0, total_expenses: 0, net_profit: 0,
+                  disallowable_expenses: 0, capital_allowances: 0, adjusted_profit: 0,
+                  allocations: [],
+                }) as PartnershipDraftScheduleData}
                 onSave={async (data) => {
                   await supabase
                     .from('filings')
