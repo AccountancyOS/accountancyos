@@ -7351,6 +7351,112 @@ export type Database = {
           },
         ]
       }
+      job_artifacts: {
+        Row: {
+          artifact_type: string
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          job_id: string
+          locked_at: string | null
+          locked_by: string | null
+          metadata: Json | null
+          organization_id: string
+          period_label: string | null
+          source_document_id: string | null
+          source_questionnaire_id: string | null
+          status: string
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          artifact_type: string
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          job_id: string
+          locked_at?: string | null
+          locked_by?: string | null
+          metadata?: Json | null
+          organization_id: string
+          period_label?: string | null
+          source_document_id?: string | null
+          source_questionnaire_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          artifact_type?: string
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          job_id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          metadata?: Json | null
+          organization_id?: string
+          period_label?: string | null
+          source_document_id?: string | null
+          source_questionnaire_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_artifacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_artifacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_artifacts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_artifacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_artifacts_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "job_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_artifacts_source_questionnaire_id_fkey"
+            columns: ["source_questionnaire_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_conversations: {
         Row: {
           attachments: Json | null
@@ -7775,6 +7881,114 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "job_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_workpaper_instances: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          instance_data_json: Json
+          instance_schema_json: Json
+          job_id: string
+          lock_reason: string | null
+          locked_at: string | null
+          locked_by: string | null
+          name: string
+          organization_id: string
+          prepared_at: string | null
+          prepared_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          template_id: string | null
+          template_version: number | null
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instance_data_json?: Json
+          instance_schema_json?: Json
+          job_id: string
+          lock_reason?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          name: string
+          organization_id: string
+          prepared_at?: string | null
+          prepared_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          template_id?: string | null
+          template_version?: number | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instance_data_json?: Json
+          instance_schema_json?: Json
+          job_id?: string
+          lock_reason?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          name?: string
+          organization_id?: string
+          prepared_at?: string | null
+          prepared_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          template_id?: string | null
+          template_version?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_workpaper_instances_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_workpaper_instances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_workpaper_instances_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_workpaper_instances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_workpaper_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workpaper_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -13104,6 +13318,62 @@ export type Database = {
             columns: ["trial_balance_snapshot_id"]
             isOneToOne: false
             referencedRelation: "trial_balance_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workpaper_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          is_system: boolean
+          job_type: string
+          name: string
+          organization_id: string | null
+          schema_json: Json
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          is_system?: boolean
+          job_type: string
+          name: string
+          organization_id?: string | null
+          schema_json?: Json
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          is_system?: boolean
+          job_type?: string
+          name?: string
+          organization_id?: string | null
+          schema_json?: Json
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workpaper_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]

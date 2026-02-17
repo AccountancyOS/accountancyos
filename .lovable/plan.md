@@ -69,7 +69,7 @@ A minimal but functional R&D module ships at launch:
 
 ## Phase-by-Phase Build Order
 
-### Phase 1: Schema Language + DB-Driven Tax Rates + Validation Framework
+### Phase 1: Schema Language + DB-Driven Tax Rates + Validation Framework ✅ COMPLETE
 
 **Database:**
 - Create `sa_rate_tables` with columns for every SA parameter by `tax_year` and `effective_from`: personal_allowance, taper_threshold, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate, dividend_allowance, dividend_basic_rate, dividend_higher_rate, dividend_additional_rate, savings_nil_rate_basic, savings_nil_rate_higher, class2_threshold, class2_weekly_rate, class4_lower_limit, class4_upper_limit, class4_main_rate, class4_additional_rate, cgt_basic_rate, cgt_higher_rate, cgt_residential_basic, cgt_residential_higher, cgt_annual_exempt_amount, student_loan_plan1_threshold, student_loan_plan2_threshold, student_loan_plan4_threshold, student_loan_plan5_threshold, student_loan_pg_threshold, student_loan_plan1_rate, student_loan_plan2_rate, student_loan_plan4_rate, student_loan_plan5_rate, student_loan_pg_rate, marriage_allowance_amount, hicbc_threshold, hicbc_upper_threshold, pension_annual_allowance, pension_taper_threshold, pension_taper_floor, pension_mpaa
@@ -84,7 +84,7 @@ A minimal but functional R&D module ships at launch:
 - Refactor `src/lib/tax-calculation-engine.ts` to call `tax-rates-service.ts` instead of using `TAX_YEAR_CONFIGS`
 - Refactor `src/lib/capital-allowances-engine.ts` to fetch AIA/WDA/FYA rates from DB
 
-### Phase 2: Workpapers — Job Artifacts, Templates, Instances
+### Phase 2: Workpapers — Job Artifacts, Templates, Instances ✅ COMPLETE
 
 **Database:**
 - Create `job_artifacts` (id, org_id, client_id, job_id, artifact_type, source_document_id, title, period_label, created_by, created_at, locked_at, locked_by, status, version)
