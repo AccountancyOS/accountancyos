@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.session-cleanup]
 verify_jwt = false
+
+[functions.workflow-tick]
+verify_jwt = false
