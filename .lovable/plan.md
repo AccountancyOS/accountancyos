@@ -1,65 +1,80 @@
 
 
-# Plan: Fix Lowercase Status and Priority Labels Across the UI
+# Plan: Replace Job Progress Bar with Workflow Status Dropdown
 
 ## Problem
 
-Status badges ("in progress", "not started", "waiting on client") and priority badges ("high", "normal", "low") display raw database values in lowercase throughout the application. These should be properly title-cased for a professional, client-ready appearance.
+The current job detail page shows a percentage-based progress bar that has no way for accountants to update it. Progress is only set to 100% when the job is marked complete. This provides no meaningful workflow visibility.
 
 ## Solution
 
-Add two new formatter functions to the centralized `format-utils.ts` and replace all raw `.replace(/_/g, " ")` and direct `{job.priority}` usages across the codebase.
+Replace the progress bar with a **job workflow status** dropdown that reflects the real stages of an accountant's engagement lifecycle. The existing `status` field on the `jobs` table will be expanded with the new workflow values.
 
-### New Functions in `src/lib/format-utils.ts`
+### New Job Workflow Statuses
 
-**`formatJobStatus(status)`** -- maps raw status values to display labels:
+| Status Value | Display Label | Description |
+|---|---|---|
+| `blank` | -- (empty/dash) | Upcoming job, no action yet |
+| `records_requested` | Records Requested | Automation has triggered a records request |
+| `records_received` | Records Received | Accountant confirms records arrived |
+| `accountant_queries` | Accountant Queries | Accountant has raised queries |
+| `client_queries` | Client Queries | Client has raised queries |
+| `accountant_review` | Accountant Review | Work is being reviewed internally |
+| `client_review` | Client Review | Sent to client for review/approval |
+| `ready_to_file` | Ready to File | Approved and ready for submission |
+| `completed` | Completed | Job done; triggers next-year rollover |
 
-| Raw Value | Display Label |
-|-----------|--------------|
-| `not_started` | Not Started |
-| `in_progress` | In Progress |
-| `waiting_on_client` | Waiting on Client |
-| `ready_for_review` | Ready for Review |
-| `in_review` | In Review |
-| `with_reviewer` | With Reviewer |
-| `completed` | Completed |
-| `on_hold` | On Hold |
-| `cancelled` | Cancelled |
-| `filed` | Filed |
-| `draft` | Draft |
-| (fallback) | Title-cased with underscores replaced |
+These replace the existing statuses (`not_started`, `in_progress`, `waiting_on_client`, `ready_for_review`, `in_review`, `on_hold`, `cancelled`).
 
-**`formatPriority(priority)`** -- maps raw priority values to display labels:
+### Technical Changes
 
-| Raw Value | Display Label |
-|-----------|--------------|
-| `low` | Low |
-| `normal` | Normal |
-| `medium` | Medium |
-| `high` | High |
-| `critical` | Critical |
-| `urgent` | Urgent |
-| (fallback) | Title-cased |
+**1. Update `src/lib/job-status-service.ts`**
+- Replace the `JobStatus` type with the new workflow values
+- Update `validStatuses` array
+- Update status transition validation (the new statuses are a linear progression but allow jumping back)
+- Keep `completed` as the terminal status that triggers automation events
 
-### Files to Update
+**2. Update `src/lib/format-utils.ts`**
+- Update `JOB_STATUS_LABELS` map with the new status values and display labels
+- `blank` maps to "---" (em dash) to show as visually empty
 
-All instances of `.status.replace(/_/g, " ")` and raw `{job.priority}` will be replaced with the new formatters:
+**3. Update `src/pages/JobDetail.tsx`**
+- Remove the progress bar from the status bar section (lines 406-417)
+- Replace with an inline `Select` dropdown showing the current workflow status
+- Changing the dropdown fires `updateJobStatus()` from the job-status-service
+- Keep "Mark Complete" button which sets status to `completed`
 
-| File | Change |
-|------|--------|
-| `src/lib/format-utils.ts` | Add `formatJobStatus` and `formatPriority` functions |
-| `src/pages/Jobs.tsx` | Replace `job.status.replace(/_/g, " ")` and `{job.priority}` |
-| `src/pages/JobDetail.tsx` | Replace `job.status.replace(/_/g, " ")` and `{job.priority}` |
-| `src/pages/FilingDetail.tsx` | Replace `status.replace(/_/g, " ")` |
-| `src/pages/Workpapers.tsx` | Replace `wp.status.replace(/_/g, " ")` |
-| `src/components/jobs/JobFilingTab.tsx` | Replace `filing.status.replace(/_/g, " ")` |
-| `src/components/cosec/CompanyCoSecJobsTab.tsx` | Replace all `.replace(/_/g, " ")` instances |
-| `src/components/cosec/CS01WorkpaperTab.tsx` | Replace `.replace(/_/g, " ")` instances |
-| `src/components/client-portal/ClientWorkpapersTab.tsx` | Replace `wp.status.replace(/_/g, " ")` |
+**4. Update `src/pages/Jobs.tsx`**
+- Update any status filter options to use the new workflow values
+- Update the Jobs table status column to show the new labels
 
-Files already using proper title-casing (like `BillsTab.tsx` and `SalesTab.tsx` which have their own `getStatusLabel`) will be left as-is.
+**5. Update `src/components/jobs/JobsQuickFilters.tsx`**
+- Update quick filter options to match new statuses (e.g., "Records Requested", "Client Queries")
 
-## Risk
+**6. Database migration**
+- Update existing `jobs.status` values: map `not_started` to `blank`, `in_progress` to `records_received`, `waiting_on_client` to `client_queries`, `ready_for_review` to `accountant_review`
+- Update `jobs.progress` column default (keep column for backward compat but it becomes unused)
 
-Low -- purely display-level text formatting changes. No logic, data, or layout changes.
+**7. Update `src/components/jobs/JobTasksTab.tsx`**
+- Remove the done/todo checkbox toggle and the `status` display on tasks
+- Tasks remain as a simple checklist (title, description, due date, conversation) but without workflow status of their own
 
+**8. Update related components**
+- `JobPipelineOverview.tsx` - update status icon mapping for new values
+- `CompanyCoSecJobsTab.tsx` - update status badges
+- `JobPipelineChart.tsx` (dashboard) - update grouping keys
+- `JobConversationTab.tsx` - if it auto-sets status on messages, update to new values
+
+### Completion Behaviour
+
+When the accountant clicks "Mark Complete" (which sets status to `completed`):
+- The existing `completeJob()` flow runs (automation triggers, audit log)
+- Auto-rollover creates the next-year job (existing behaviour via filing flow)
+- The new job starts with status `blank`
+
+### What Stays the Same
+
+- Tasks tab remains for checklist items within a job (title, description, due date, conversation thread)
+- Job conversations, documents, timeline, settings tabs are unchanged
+- The `priority` and `filing_deadline` fields remain as-is in the status bar
+- Auto-rollover and automation trigger logic is unchanged (just triggered by different status values)
