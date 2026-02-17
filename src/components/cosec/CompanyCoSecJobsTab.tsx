@@ -110,7 +110,7 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
           company_id: companyId,
           job_name: jobName,
           service_type: filingType,
-          status: "not_started",
+          status: "blank",
           priority: "medium",
         })
         .select()
@@ -222,9 +222,14 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       completed: "default",
-      in_progress: "secondary",
-      not_started: "outline",
-      filed: "default",
+      blank: "outline",
+      records_requested: "secondary",
+      records_received: "secondary",
+      accountant_queries: "secondary",
+      client_queries: "secondary",
+      accountant_review: "default",
+      client_review: "default",
+      ready_to_file: "default",
     };
     return variants[status] || "outline";
   };

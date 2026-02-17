@@ -153,24 +153,27 @@ export function formatServiceType(serviceType: string | null | undefined): strin
  * Job status labels
  */
 const JOB_STATUS_LABELS: Record<string, string> = {
-  not_started: "Not Started",
-  in_progress: "In Progress",
-  waiting_on_client: "Waiting on Client",
-  ready_for_review: "Ready for Review",
-  in_review: "In Review",
-  with_reviewer: "With Reviewer",
+  // Job workflow statuses
+  blank: "—",
+  records_requested: "Records Requested",
+  records_received: "Records Received",
+  accountant_queries: "Accountant Queries",
+  client_queries: "Client Queries",
+  accountant_review: "Accountant Review",
+  client_review: "Client Review",
+  ready_to_file: "Ready to File",
   completed: "Completed",
-  on_hold: "On Hold",
-  cancelled: "Cancelled",
-  filed: "Filed",
+  // Filing / workpaper statuses (used by formatStatus in other contexts)
   draft: "Draft",
   awaiting_approval: "Awaiting Approval",
   approved: "Approved",
-  ready_to_file: "Ready to File",
   rejected: "Rejected",
   submitted: "Submitted",
   accepted: "Accepted",
   finalised: "Finalised",
+  filed: "Filed",
+  in_progress: "In Progress",
+  in_review: "In Review",
 };
 
 /**

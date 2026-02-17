@@ -134,8 +134,9 @@ export default function Jobs() {
       overdue: jobs.filter(j => j.filing_deadline && j.filing_deadline < today && j.status !== "completed").length,
       due_this_week: jobs.filter(j => j.filing_deadline && j.filing_deadline >= today && j.filing_deadline <= weekEnd.toISOString().split("T")[0]).length,
       unassigned: jobs.filter(j => !j.assigned_to).length,
-      waiting_on_client: jobs.filter(j => j.status === "waiting_on_client").length,
-      with_reviewer: jobs.filter(j => j.status === "with_reviewer").length,
+      records_requested: jobs.filter(j => j.status === "records_requested").length,
+      client_queries: jobs.filter(j => j.status === "client_queries").length,
+      accountant_review: jobs.filter(j => j.status === "accountant_review").length,
     };
   }, [jobs, user?.id]);
 
@@ -163,13 +164,14 @@ export default function Jobs() {
 
   const getStatusColor = (status: string): "default" | "destructive" | "outline" | "secondary" => {
     const colors: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
-      not_started: "default",
-      in_progress: "default",
-      waiting_on_client: "secondary",
-      with_reviewer: "secondary",
-      filed: "default",
-      on_hold: "destructive",
-      cancelled: "destructive",
+      blank: "outline",
+      records_requested: "secondary",
+      records_received: "secondary",
+      accountant_queries: "secondary",
+      client_queries: "secondary",
+      accountant_review: "default",
+      client_review: "default",
+      ready_to_file: "default",
       completed: "default",
     };
     return colors[status] || "default";
@@ -267,12 +269,14 @@ export default function Jobs() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="not_started">Not Started</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="waiting_on_client">Waiting on Client</SelectItem>
-              <SelectItem value="with_reviewer">With Reviewer</SelectItem>
-              <SelectItem value="filed">Filed</SelectItem>
-              <SelectItem value="on_hold">On Hold</SelectItem>
+              <SelectItem value="blank">—</SelectItem>
+              <SelectItem value="records_requested">Records Requested</SelectItem>
+              <SelectItem value="records_received">Records Received</SelectItem>
+              <SelectItem value="accountant_queries">Accountant Queries</SelectItem>
+              <SelectItem value="client_queries">Client Queries</SelectItem>
+              <SelectItem value="accountant_review">Accountant Review</SelectItem>
+              <SelectItem value="client_review">Client Review</SelectItem>
+              <SelectItem value="ready_to_file">Ready to File</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
@@ -329,7 +333,7 @@ export default function Jobs() {
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Filing Deadline</TableHead>
-                  <TableHead>Progress</TableHead>
+                  
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -363,19 +367,6 @@ export default function Jobs() {
                       </TableCell>
                       <TableCell>
                         {formatDeadline(job.filing_deadline, daysRemaining)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all"
-                              style={{ width: `${job.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-sm text-muted-foreground min-w-[3ch]">
-                            {job.progress}%
-                          </span>
-                        </div>
                       </TableCell>
                     </TableRow>
                   );

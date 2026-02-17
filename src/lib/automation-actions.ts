@@ -61,7 +61,7 @@ async function executeCreateJob(
         organization_id: context.organizationId,
         job_name: jobName || 'Auto-generated Job',
         service_type: serviceType,
-        status: 'not_started',
+        status: 'blank',
         client_id: clientId ?? null,
         company_id: companyId ?? null,
         filing_deadline: dueDate ?? null,

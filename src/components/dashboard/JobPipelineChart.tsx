@@ -10,12 +10,15 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  not_started: { label: "Not Started", color: "hsl(var(--muted-foreground))" },
-  in_progress: { label: "In Progress", color: "hsl(var(--primary))" },
-  waiting_on_client: { label: "Waiting", color: "hsl(45, 93%, 47%)" },
-  ready_for_review: { label: "Review", color: "hsl(262, 83%, 58%)" },
+  blank: { label: "—", color: "hsl(var(--muted-foreground))" },
+  records_requested: { label: "Records Req.", color: "hsl(210, 79%, 56%)" },
+  records_received: { label: "Records Rec.", color: "hsl(199, 89%, 48%)" },
+  accountant_queries: { label: "Acc. Queries", color: "hsl(45, 93%, 47%)" },
+  client_queries: { label: "Client Queries", color: "hsl(32, 95%, 50%)" },
+  accountant_review: { label: "Acc. Review", color: "hsl(262, 83%, 58%)" },
+  client_review: { label: "Client Review", color: "hsl(280, 65%, 60%)" },
+  ready_to_file: { label: "Ready to File", color: "hsl(160, 84%, 39%)" },
   completed: { label: "Completed", color: "hsl(142, 71%, 45%)" },
-  blocked: { label: "Blocked", color: "hsl(var(--destructive))" },
 };
 
 export const JobPipelineChart = () => {

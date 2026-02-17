@@ -9,14 +9,15 @@ import { emitJobStatusChange } from "./automation-triggers";
 import { logAudit } from "./audit-service";
 
 export type JobStatus = 
-  | "not_started"
-  | "in_progress"
-  | "waiting_on_client"
-  | "ready_for_review"
-  | "in_review"
-  | "completed"
-  | "on_hold"
-  | "cancelled";
+  | "blank"
+  | "records_requested"
+  | "records_received"
+  | "accountant_queries"
+  | "client_queries"
+  | "accountant_review"
+  | "client_review"
+  | "ready_to_file"
+  | "completed";
 
 interface UpdateJobStatusOptions {
   reason?: string;
@@ -45,8 +46,8 @@ export async function updateJobStatus(
   }
 
   const validStatuses: JobStatus[] = [
-    "not_started", "in_progress", "waiting_on_client", "ready_for_review",
-    "in_review", "completed", "on_hold", "cancelled"
+    "blank", "records_requested", "records_received", "accountant_queries",
+    "client_queries", "accountant_review", "client_review", "ready_to_file", "completed"
   ];
 
   if (!validStatuses.includes(newStatus)) {
@@ -77,10 +78,9 @@ export async function updateJobStatus(
       return { success: true };
     }
 
-    // Validate status transitions (prevent invalid transitions)
+    // Validate status transitions (allow flexible movement but prevent going back from completed)
     const invalidTransitions: Record<string, JobStatus[]> = {
-      completed: ["not_started"], // Can't go from completed to not_started
-      cancelled: ["in_progress", "ready_for_review"], // Can't resume cancelled jobs directly
+      completed: ["blank"], // Can't go from completed back to blank
     };
 
     if (invalidTransitions[oldStatus]?.includes(newStatus)) {
@@ -185,31 +185,11 @@ export async function completeJob(
 }
 
 /**
- * Mark a job as in progress.
+ * Mark a job as records requested.
  */
-export async function startJob(
+export async function setJobRecordsRequested(
   jobId: string,
   options: UpdateJobStatusOptions = {}
 ): Promise<UpdateJobStatusResult> {
-  return updateJobStatus(jobId, "in_progress", options);
-}
-
-/**
- * Mark a job as waiting on client.
- */
-export async function setJobWaitingOnClient(
-  jobId: string,
-  options: UpdateJobStatusOptions = {}
-): Promise<UpdateJobStatusResult> {
-  return updateJobStatus(jobId, "waiting_on_client", options);
-}
-
-/**
- * Mark a job as ready for review.
- */
-export async function submitJobForReview(
-  jobId: string,
-  options: UpdateJobStatusOptions = {}
-): Promise<UpdateJobStatusResult> {
-  return updateJobStatus(jobId, "ready_for_review", options);
+  return updateJobStatus(jobId, "records_requested", options);
 }

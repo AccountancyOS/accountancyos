@@ -145,7 +145,7 @@ export async function generateJobFromTemplate(
       organization_id: organizationId,
       name: jobName,
       service_type: template.service_type,
-      status: "not_started",
+      status: "blank",
       priority: "normal",
       template_id: templateId,
       template_version: template.version || 1,
@@ -169,7 +169,7 @@ export async function generateJobFromTemplate(
         organization_id: organizationId,
         job_name: jobName,
         service_type: template.service_type,
-        status: "not_started",
+        status: "blank",
         priority: "normal",
         template_id: templateId,
         filing_deadline: filingDeadline.toISOString().split("T")[0],
@@ -456,7 +456,7 @@ export async function publishTemplateVersion(
         .from("jobs")
         .update({ template_version: newVersion } as Record<string, unknown>)
         .eq("template_id", templateId)
-        .eq("status", "not_started");
+        .eq("status", "blank");
     }
 
     // Audit log
@@ -509,7 +509,7 @@ export async function rollbackJobGeneration(
     }
 
     // Check if job has been worked on
-    if (jobExtended.status !== "not_started") {
+    if (jobExtended.status !== "blank") {
       return { success: false, error: "Cannot undo a job that has been started" };
     }
 

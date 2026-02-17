@@ -16,6 +16,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send } from "lucide-react";
 import { format, differenceInDays, isFuture } from "date-fns";
 import { formatServiceType, formatStatus, formatPriority } from "@/lib/format-utils";
@@ -32,7 +39,7 @@ import { JobAuditTrail } from "@/components/jobs/JobAuditTrail";
 import { RecordsRequestManager } from "@/components/jobs/RecordsRequestManager";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { rollbackJobGeneration } from "@/lib/job-template-engine";
-import { completeJob } from "@/lib/job-status-service";
+import { completeJob, updateJobStatus, type JobStatus } from "@/lib/job-status-service";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -210,7 +217,7 @@ export default function JobDetail() {
   };
   const canUndo = jobExtended.can_undo_until && 
     isFuture(new Date(jobExtended.can_undo_until)) && 
-    job.status === "not_started";
+    job.status === "blank";
 
   // Check if template has been updated since job creation
   const templateUpdated = template && jobExtended.template_version && 
@@ -404,16 +411,34 @@ export default function JobDetail() {
             </div>
           )}
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-sm text-muted-foreground">Progress:</span>
-            <div className="flex items-center gap-2">
-              <div className="w-32 bg-background rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{ width: `${job.progress}%` }}
-                />
-              </div>
-              <span className="text-sm font-medium">{job.progress}%</span>
-            </div>
+            <span className="text-sm text-muted-foreground">Workflow:</span>
+            <Select
+              value={job.status}
+              onValueChange={async (value: string) => {
+                const result = await updateJobStatus(job.id, value as JobStatus);
+                if (result.success) {
+                  queryClient.invalidateQueries({ queryKey: ["job", jobId] });
+                  toast.success(`Status updated to ${formatStatus(value)}`);
+                } else {
+                  toast.error(result.error || "Failed to update status");
+                }
+              }}
+            >
+              <SelectTrigger className="w-[200px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="blank">—</SelectItem>
+                <SelectItem value="records_requested">Records Requested</SelectItem>
+                <SelectItem value="records_received">Records Received</SelectItem>
+                <SelectItem value="accountant_queries">Accountant Queries</SelectItem>
+                <SelectItem value="client_queries">Client Queries</SelectItem>
+                <SelectItem value="accountant_review">Accountant Review</SelectItem>
+                <SelectItem value="client_review">Client Review</SelectItem>
+                <SelectItem value="ready_to_file">Ready to File</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

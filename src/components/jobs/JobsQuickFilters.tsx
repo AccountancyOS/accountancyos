@@ -19,8 +19,9 @@ const QUICK_FILTERS: QuickFilter[] = [
   { id: "overdue", label: "Overdue" },
   { id: "due_this_week", label: "Due This Week" },
   { id: "unassigned", label: "Unassigned" },
-  { id: "waiting_on_client", label: "Waiting on Client" },
-  { id: "with_reviewer", label: "With Reviewer" },
+  { id: "records_requested", label: "Records Requested" },
+  { id: "client_queries", label: "Client Queries" },
+  { id: "accountant_review", label: "Accountant Review" },
 ];
 
 export function JobsQuickFilters({ 

@@ -57,7 +57,7 @@ export async function handleVATStaggerChange(
       .eq("company_id", companyId)
       .eq("organization_id", organizationId)
       .eq("service_type", "VAT")
-      .in("status", ["not_started", "in_progress"])
+      .in("status", ["blank", "records_requested", "records_received"])
       .gte("period_end", new Date().toISOString().split("T")[0]);
 
     if (jobsError) {
@@ -83,7 +83,7 @@ export async function handleVATStaggerChange(
         (date) => format(date, "yyyy-MM-dd") === format(jobPeriodEnd, "yyyy-MM-dd")
       );
 
-      if (matchesOldStagger && !matchesNewStagger && job.status === "not_started") {
+      if (matchesOldStagger && !matchesNewStagger && job.status === "blank") {
         // Close this job - it's for wrong stagger group
         await closeJobWithReason(
           job.id,
@@ -186,7 +186,7 @@ export async function handleYearEndChange(
       .eq("company_id", companyId)
       .eq("organization_id", organizationId)
       .in("service_type", ["ACCOUNTS", "CT", "CT600"])
-      .in("status", ["not_started", "in_progress"])
+      .in("status", ["blank", "records_requested", "records_received"])
       .gte("period_end", new Date().toISOString().split("T")[0]);
 
     if (jobsError) {
@@ -332,7 +332,7 @@ export async function handlePayrollScheduleChange(
       .eq("company_id", companyId)
       .eq("organization_id", organizationId)
       .eq("service_type", "PAYROLL")
-      .in("status", ["not_started"])
+      .in("status", ["blank"])
       .gte("period_end", new Date().toISOString().split("T")[0]);
 
     if (jobsError) {
