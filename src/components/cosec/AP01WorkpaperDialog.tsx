@@ -135,7 +135,7 @@ export function AP01WorkpaperDialog({
       if (jobId) {
         await supabase
           .from("jobs")
-          .update({ status: "in_progress" })
+          .update({ status: "records_received" })
           .eq("id", jobId);
       }
 

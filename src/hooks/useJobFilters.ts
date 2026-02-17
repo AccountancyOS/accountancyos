@@ -84,11 +84,14 @@ export function useJobFilters() {
       case 'due_this_week':
         setFilters({ due: 'this_week' });
         break;
-      case 'waiting_on_client':
-        setFilters({ status: ['waiting_on_client'] });
+      case 'records_requested':
+        setFilters({ status: ['records_requested'] });
         break;
-      case 'in_review':
-        setFilters({ status: ['in_review'] });
+      case 'client_queries':
+        setFilters({ status: ['client_queries'] });
+        break;
+      case 'accountant_review':
+        setFilters({ status: ['accountant_review'] });
         break;
       case 'unassigned':
         setFilters({ assignee: 'unassigned' });
