@@ -8480,7 +8480,7 @@ export type Database = {
           is_system: boolean
           key: string | null
           name: string
-          organization_id: string
+          organization_id: string | null
           source_template_id: string | null
           subject: string | null
           updated_at: string
@@ -8494,7 +8494,7 @@ export type Database = {
           is_system?: boolean
           key?: string | null
           name: string
-          organization_id: string
+          organization_id?: string | null
           source_template_id?: string | null
           subject?: string | null
           updated_at?: string
@@ -8508,7 +8508,7 @@ export type Database = {
           is_system?: boolean
           key?: string | null
           name?: string
-          organization_id?: string
+          organization_id?: string | null
           source_template_id?: string | null
           subject?: string | null
           updated_at?: string
