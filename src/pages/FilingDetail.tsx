@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { SADraftScheduleData } from "@/types/filing-schemas";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -49,6 +50,7 @@ import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { FilingUnlockDialog } from "@/components/filings/FilingUnlockDialog";
 import { FilingVersionHistory } from "@/components/filings/FilingVersionHistory";
 import { SendToClientDialog } from "@/components/filings/SendToClientDialog";
+import { SATaxReturnEditor } from "@/components/filings/sa/SATaxReturnEditor";
 
 export default function FilingDetail() {
   const { filingId } = useParams();
@@ -318,7 +320,22 @@ export default function FilingDetail() {
               </CardContent>
             </Card>
 
-            {/* Generated Documents */}
+            {/* SA Schedule Editor */}
+            {(filing.filing_type === 'self_assessment' || filing.filing_type === 'SA100' || filing.filing_type === 'SA_NON_MTD') && !isFiled && (
+              <SATaxReturnEditor
+                draft={(filingAny.draft_schedule_data_json || {}) as SADraftScheduleData}
+                onSave={async (data) => {
+                  await supabase
+                    .from('filings')
+                    .update({ draft_schedule_data_json: data as any })
+                    .eq('id', filing.id);
+                  invalidateFiling();
+                }}
+                readonly={!!filing.is_locked}
+              />
+            )}
+
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
