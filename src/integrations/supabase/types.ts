@@ -6749,6 +6749,7 @@ export type Database = {
           obligation_id: string | null
           organization_id: string
           original_filing_id: string | null
+          partnership_allocation_id: string | null
           payment_deadline: string | null
           period_end: string | null
           period_start: string | null
@@ -6814,6 +6815,7 @@ export type Database = {
           obligation_id?: string | null
           organization_id: string
           original_filing_id?: string | null
+          partnership_allocation_id?: string | null
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
@@ -6879,6 +6881,7 @@ export type Database = {
           obligation_id?: string | null
           organization_id?: string
           original_filing_id?: string | null
+          partnership_allocation_id?: string | null
           payment_deadline?: string | null
           period_end?: string | null
           period_start?: string | null
@@ -6958,6 +6961,13 @@ export type Database = {
             columns: ["original_filing_id"]
             isOneToOne: false
             referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_partnership_allocation_id_fkey"
+            columns: ["partnership_allocation_id"]
+            isOneToOne: false
+            referencedRelation: "partnership_allocations"
             referencedColumns: ["id"]
           },
           {
@@ -9950,6 +9960,76 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partnership_allocations: {
+        Row: {
+          allocation_method: string
+          computed_profit_share: number
+          computed_tax_adjustments: Json | null
+          created_at: string
+          filing_id: string
+          fixed_amount: number | null
+          id: string
+          organization_id: string
+          partner_client_id: string | null
+          partner_name: string
+          percentage: number | null
+          special_allocation_json: Json | null
+          updated_at: string
+        }
+        Insert: {
+          allocation_method?: string
+          computed_profit_share?: number
+          computed_tax_adjustments?: Json | null
+          created_at?: string
+          filing_id: string
+          fixed_amount?: number | null
+          id?: string
+          organization_id: string
+          partner_client_id?: string | null
+          partner_name: string
+          percentage?: number | null
+          special_allocation_json?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          allocation_method?: string
+          computed_profit_share?: number
+          computed_tax_adjustments?: Json | null
+          created_at?: string
+          filing_id?: string
+          fixed_amount?: number | null
+          id?: string
+          organization_id?: string
+          partner_client_id?: string | null
+          partner_name?: string
+          percentage?: number | null
+          special_allocation_json?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partnership_allocations_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partnership_allocations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partnership_allocations_partner_client_id_fkey"
+            columns: ["partner_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
