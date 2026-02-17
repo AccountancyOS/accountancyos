@@ -504,3 +504,164 @@ export function getAccountsFilingMetrics(model: AccountsModel): {
     profitBeforeTax: model.profitAndLoss?.profitBeforeTax,
   };
 }
+
+// ==================== TB + STRUCTURED COA MAPPING ====================
+
+export interface TBAccountLine {
+  account_code: string;
+  account_name: string;
+  account_type: string;
+  account_subtype?: string;
+  debit: number;
+  credit: number;
+  // Structured tax mapping columns
+  tax_allowability?: string;
+  ct_addback_category?: string | null;
+  vat_treatment?: string;
+}
+
+/**
+ * Builds an AccountsModel from trial balance lines with structured COA tax mapping.
+ * This replaces the workpaper-based mapping for TB-centric filing workflows.
+ */
+export function mapTBToAccountsModel(
+  tbLines: TBAccountLine[],
+  company: CompanyData,
+  periodStart: string,
+  periodEnd: string,
+  standard: AccountsStandard = 'FRS105'
+): MappingResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!company.company_number) errors.push('Company number is required');
+  if (!company.company_name) errors.push('Company name is required');
+
+  // Helper: sum balances for accounts matching a predicate
+  const sumBy = (pred: (l: TBAccountLine) => boolean): number =>
+    tbLines.filter(pred).reduce((s, l) => s + (l.debit - l.credit), 0);
+
+  // Balance sheet from TB
+  const tangibleAssets = sumBy(l => l.account_type === 'ASSET' && (l.account_subtype === 'FIXED' || l.account_subtype === 'TANGIBLE'));
+  const intangibleAssets = sumBy(l => l.account_type === 'ASSET' && l.account_subtype === 'INTANGIBLE');
+  const investments = sumBy(l => l.account_type === 'ASSET' && l.account_subtype === 'INVESTMENT');
+  const totalFixedAssets = tangibleAssets + intangibleAssets + investments;
+
+  const stocks = sumBy(l => l.account_type === 'ASSET' && l.account_subtype === 'STOCK');
+  const debtors = sumBy(l => l.account_type === 'ASSET' && (l.account_subtype === 'DEBTOR' || l.account_subtype === 'RECEIVABLE'));
+  const cashAtBank = sumBy(l => l.account_type === 'ASSET' && (l.account_subtype === 'BANK' || l.account_subtype === 'CASH'));
+  const currentAssetOther = sumBy(l => l.account_type === 'ASSET' && !['FIXED', 'TANGIBLE', 'INTANGIBLE', 'INVESTMENT', 'STOCK', 'DEBTOR', 'RECEIVABLE', 'BANK', 'CASH'].includes(l.account_subtype || ''));
+  const totalCurrentAssets = stocks + debtors + cashAtBank + currentAssetOther;
+
+  const creditorsWithinOneYear = Math.abs(sumBy(l => l.account_type === 'LIABILITY' && l.account_subtype !== 'LONG_TERM'));
+  const creditorsAfterOneYear = Math.abs(sumBy(l => l.account_type === 'LIABILITY' && l.account_subtype === 'LONG_TERM'));
+
+  const netCurrentAssets = totalCurrentAssets - creditorsWithinOneYear;
+  const totalAssetsLessCurrentLiabilities = totalFixedAssets + netCurrentAssets;
+  const netAssets = totalAssetsLessCurrentLiabilities - creditorsAfterOneYear;
+
+  const calledUpShareCapital = Math.abs(sumBy(l => l.account_type === 'EQUITY' && (l.account_subtype === 'SHARE_CAPITAL' || l.account_code.startsWith('30'))));
+  const sharePremiuim = Math.abs(sumBy(l => l.account_type === 'EQUITY' && l.account_subtype === 'SHARE_PREMIUM'));
+  const profitAndLossReserve = Math.abs(sumBy(l => l.account_type === 'EQUITY' && !['SHARE_CAPITAL', 'SHARE_PREMIUM'].includes(l.account_subtype || '') && !l.account_code.startsWith('30')));
+  const totalEquity = calledUpShareCapital + sharePremiuim + profitAndLossReserve;
+
+  if (Math.abs(netAssets - totalEquity) > 1) {
+    warnings.push(`Balance sheet does not balance: Net Assets (${netAssets.toFixed(2)}) != Total Equity (${totalEquity.toFixed(2)})`);
+  }
+
+  const model: AccountsModel = {
+    company: {
+      name: company.company_name,
+      number: company.company_number,
+      registeredOffice: {
+        line1: company.address_line_1 || '',
+        line2: company.address_line_2,
+        city: company.city || '',
+        postcode: company.postcode || '',
+        country: company.country || 'United Kingdom',
+      },
+    },
+    period: { start: periodStart, end: periodEnd },
+    standard,
+    balanceSheet: {
+      tangibleAssets: tangibleAssets || undefined,
+      intangibleAssets: intangibleAssets || undefined,
+      investments: investments || undefined,
+      totalFixedAssets,
+      stocks: stocks || undefined,
+      debtors: debtors || undefined,
+      cashAtBank,
+      totalCurrentAssets,
+      creditorsWithinOneYear: creditorsWithinOneYear || undefined,
+      creditorsAfterOneYear: creditorsAfterOneYear || undefined,
+      netCurrentAssets,
+      totalAssetsLessCurrentLiabilities,
+      netAssets,
+      calledUpShareCapital,
+      sharePremiuim: sharePremiuim || undefined,
+      profitAndLossReserve,
+      totalEquity,
+    },
+    notes: {
+      accountingPolicies: {
+        basisOfPreparation: standard === 'FRS105'
+          ? 'These accounts have been prepared in accordance with FRS 105 "The Financial Reporting Standard applicable to the Micro-entities Regime".'
+          : 'These accounts have been prepared in accordance with FRS 102 "The Financial Reporting Standard applicable in the UK and Republic of Ireland" Section 1A Small Entities.',
+        goingConcern: true,
+      },
+    },
+    approval: {
+      approvedByBoard: false,
+    },
+  };
+
+  // P&L for FRS 102 1A
+  if (standard === 'FRS102_1A') {
+    const turnover = Math.abs(sumBy(l => l.account_type === 'INCOME' && (l.account_subtype === 'REVENUE' || l.account_subtype === 'SALES')));
+    const costOfSales = sumBy(l => l.account_type === 'EXPENSE' && l.account_subtype === 'COST_OF_SALES');
+    const grossProfit = turnover - costOfSales;
+    const administrativeExpenses = sumBy(l => l.account_type === 'EXPENSE' && l.account_subtype !== 'COST_OF_SALES');
+    const operatingProfit = grossProfit - administrativeExpenses;
+    const interestReceivable = Math.abs(sumBy(l => l.account_type === 'INCOME' && l.account_subtype === 'INTEREST'));
+    const interestPayable = sumBy(l => l.account_type === 'EXPENSE' && l.account_subtype === 'INTEREST');
+    const profitBeforeTax = operatingProfit + interestReceivable - interestPayable;
+
+    model.profitAndLoss = {
+      turnover,
+      costOfSales: costOfSales || undefined,
+      grossProfit,
+      administrativeExpenses: administrativeExpenses || undefined,
+      operatingProfit,
+      interestReceivable: interestReceivable || undefined,
+      interestPayable: interestPayable || undefined,
+      profitBeforeTax,
+      profitAfterTax: profitBeforeTax, // Tax computed separately
+    };
+  }
+
+  if (errors.length > 0) return { success: false, errors, warnings };
+  return { success: true, model, errors: [], warnings };
+}
+
+/**
+ * Extract CT add-back items from TB lines using structured ct_addback_category column.
+ * Used by CT600 computation engine.
+ */
+export function extractCTAddBacks(tbLines: TBAccountLine[]): Array<{
+  account_code: string;
+  account_name: string;
+  amount: number;
+  category: string;
+  auto_detected: boolean;
+}> {
+  return tbLines
+    .filter((l) => l.ct_addback_category && l.ct_addback_category !== '__none__')
+    .map((l) => ({
+      account_code: l.account_code,
+      account_name: l.account_name,
+      amount: l.debit - l.credit,
+      category: l.ct_addback_category!,
+      auto_detected: true,
+    }))
+    .filter((item) => Math.abs(item.amount) > 0.01);
+}

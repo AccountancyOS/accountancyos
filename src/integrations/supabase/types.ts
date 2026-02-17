@@ -1721,6 +1721,7 @@ export type Database = {
           code: string
           company_id: string | null
           created_at: string | null
+          ct_addback_category: string | null
           id: string
           is_active: boolean | null
           is_bank_account: boolean | null
@@ -1729,8 +1730,10 @@ export type Database = {
           is_system_account: boolean | null
           name: string
           organization_id: string
+          tax_allowability: string | null
           tax_mapping: Json | null
           updated_at: string | null
+          vat_treatment: string | null
         }
         Insert: {
           account_subtype?: string | null
@@ -1739,6 +1742,7 @@ export type Database = {
           code: string
           company_id?: string | null
           created_at?: string | null
+          ct_addback_category?: string | null
           id?: string
           is_active?: boolean | null
           is_bank_account?: boolean | null
@@ -1747,8 +1751,10 @@ export type Database = {
           is_system_account?: boolean | null
           name: string
           organization_id: string
+          tax_allowability?: string | null
           tax_mapping?: Json | null
           updated_at?: string | null
+          vat_treatment?: string | null
         }
         Update: {
           account_subtype?: string | null
@@ -1757,6 +1763,7 @@ export type Database = {
           code?: string
           company_id?: string | null
           created_at?: string | null
+          ct_addback_category?: string | null
           id?: string
           is_active?: boolean | null
           is_bank_account?: boolean | null
@@ -1765,8 +1772,10 @@ export type Database = {
           is_system_account?: boolean | null
           name?: string
           organization_id?: string
+          tax_allowability?: string | null
           tax_mapping?: Json | null
           updated_at?: string | null
+          vat_treatment?: string | null
         }
         Relationships: [
           {

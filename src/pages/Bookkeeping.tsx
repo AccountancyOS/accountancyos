@@ -14,6 +14,7 @@ import { ReportsTab } from "@/components/bookkeeping/ReportsTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
+import { COATaxMappingEditor } from "@/components/bookkeeping/COATaxMappingEditor";
 import { PayrollModule } from "@/components/payroll/PayrollModule";
 import { CISModule } from "@/components/cis/CISModule";
 import { useEntityServices } from "@/hooks/useEntityServices";
@@ -86,6 +87,7 @@ export default function Bookkeeping() {
                   <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
                   <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
                   <TabsTrigger value="chart-of-accounts" className="text-xs sm:text-sm">Chart of Accounts</TabsTrigger>
+                  <TabsTrigger value="tax-mapping" className="text-xs sm:text-sm">Tax Mapping</TabsTrigger>
                   <TabsTrigger value="journals" className="text-xs sm:text-sm">Journals</TabsTrigger>
                   
                   <Separator orientation="vertical" className="mx-1 h-6" />
@@ -131,6 +133,10 @@ export default function Bookkeeping() {
 
             <TabsContent value="chart-of-accounts" className="space-y-4">
               <ChartOfAccountsTab entity={selectedEntity} />
+            </TabsContent>
+
+            <TabsContent value="tax-mapping" className="space-y-4">
+              <COATaxMappingEditor entity={selectedEntity} />
             </TabsContent>
 
             <TabsContent value="journals" className="space-y-4">
