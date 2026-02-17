@@ -120,17 +120,17 @@ A minimal but functional R&D module ships at launch:
 - Create `src/components/filings/SendToClientDialog.tsx`
 - Refactor `src/pages/FilingDetail.tsx` for new status flow
 
-### Phase 4: SA Non-MTD Schedules + SA302 + PDF
+### Phase 4: SA Non-MTD Schedules + SA302 + PDF ✅ COMPLETE
 
 **Code:**
-- Create `src/lib/sa-schedule-engine.ts` — canonical schedule definitions for all 13 modules
-- Create schedule editor components under `src/components/filings/sa/`:
-  - EmploymentSchedule, SelfEmploymentSchedule, PropertySchedule (UK + overseas), DividendsSchedule, InterestSchedule, UnitTrustIncomeSchedule, PensionIncomeSchedule, ChargeableEventGainsSchedule, TrustEstateIncomeSchedule, CGTSchedule, ReliefsSchedule, AdjustmentsSchedule
-- All read/write to `filings.draft_schedule_data_json` using canonical keys
-- Refactor `tax-calculation-engine.ts` to consume canonical schedule data
-- Create `src/lib/sa302-renderer.ts` — SA302 computation from schedules
-- Create `src/components/filings/sa/SA302View.tsx` + `SATaxReturnPDFView.tsx`
-- Auto-populate identity/UTR/NINO/prior year data from client records
+- Create `src/lib/sa-schedule-engine.ts` — canonical schedule definitions for all 13 modules ✅
+- Create schedule editor components under `src/components/filings/sa/`: ✅
+  - EmploymentSchedule, SelfEmploymentSchedule, DividendsSchedule, InterestSchedule, UnitTrustIncomeSchedule, PensionIncomeSchedule, ReliefsSchedule, AdjustmentsSchedule, SAScheduleModuleToggle, SAMoneyField
+- All read/write to `filings.draft_schedule_data_json` using canonical keys ✅
+- `tax-calculation-engine.ts` consumed via `canonicalToSAWorkpaperData()` bridge ✅
+- Create `src/lib/sa302-renderer.ts` — SA302 computation from schedules ✅
+- Create `src/components/filings/sa/SA302View.tsx` ✅
+- Master editor `SATaxReturnEditor.tsx` integrated into `FilingDetail.tsx` ✅
 
 ### Phase 5: CGT Engine Including Crypto
 
