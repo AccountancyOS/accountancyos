@@ -2,12 +2,18 @@
  * UK Tax Calculation Engine
  * All calculations are deterministic functions of the workpaper model
  * This engine is called from calculateWorkpaperFields(), never independently
+ *
+ * Tax rates are fetched from DB via tax-rates-service.ts.
+ * The synchronous getTaxYearConfig() uses in-memory fallbacks for backward compat;
+ * prefer the async getTaxYearConfigFromDB() for new code paths.
  */
 
-// ==================== TAX YEAR CONSTANTS ====================
+import { fetchSARates, saRateToTaxYearConfig } from "./tax-rates-service";
+
+// ==================== TAX YEAR CONFIG INTERFACE ====================
 
 export interface TaxYearConfig {
-  year: string; // e.g., "2024/25"
+  year: string;
   personalAllowance: number;
   personalAllowanceTaperThreshold: number;
   basicRateLimit: number;
@@ -25,7 +31,7 @@ export interface TaxYearConfig {
   class4UpperLimit: number;
   class4MainRate: number;
   class4AdditionalRate: number;
-  // CT rates
+  // CT rates (kept for backward compat — prefer ct_rate_tables for CT)
   ctSmallProfitsRate: number;
   ctMainRate: number;
   ctSmallProfitsLimit: number;
@@ -33,7 +39,9 @@ export interface TaxYearConfig {
   ctMarginalReliefFraction: number;
 }
 
-// Tax year configurations (can be extended for multiple years)
+// ==================== DEPRECATED — hardcoded configs ====================
+// Kept only as sync fallback. New code must use getTaxYearConfigFromDB().
+/** @deprecated Use getTaxYearConfigFromDB() instead */
 export const TAX_YEAR_CONFIGS: Record<string, TaxYearConfig> = {
   "2024/25": {
     year: "2024/25",
@@ -52,13 +60,13 @@ export const TAX_YEAR_CONFIGS: Record<string, TaxYearConfig> = {
     class2WeeklyRate: 3.45,
     class4LowerLimit: 12570,
     class4UpperLimit: 50270,
-    class4MainRate: 0.06, // 6% for 2024/25
+    class4MainRate: 0.06,
     class4AdditionalRate: 0.02,
     ctSmallProfitsRate: 0.19,
     ctMainRate: 0.25,
     ctSmallProfitsLimit: 50000,
     ctMarginalReliefUpperLimit: 250000,
-    ctMarginalReliefFraction: 3 / 200, // 0.015
+    ctMarginalReliefFraction: 3 / 200,
   },
   "2023/24": {
     year: "2023/24",
@@ -87,8 +95,24 @@ export const TAX_YEAR_CONFIGS: Record<string, TaxYearConfig> = {
   },
 };
 
+/** @deprecated Synchronous fallback — use getTaxYearConfigFromDB() for new code */
 export function getTaxYearConfig(taxYear?: string): TaxYearConfig {
   return TAX_YEAR_CONFIGS[taxYear || "2024/25"] || TAX_YEAR_CONFIGS["2024/25"];
+}
+
+/**
+ * Fetch tax year config from DB (preferred path).
+ * Returns DB-driven rates; falls back to hardcoded only if DB unreachable.
+ */
+export async function getTaxYearConfigFromDB(taxYear?: string): Promise<TaxYearConfig> {
+  const year = taxYear || "2024/25";
+  try {
+    const row = await fetchSARates(year);
+    return saRateToTaxYearConfig(row);
+  } catch {
+    console.warn(`DB rate fetch failed for ${year}, using sync fallback`);
+    return getTaxYearConfig(year);
+  }
 }
 
 // ==================== SELF ASSESSMENT CALCULATIONS ====================

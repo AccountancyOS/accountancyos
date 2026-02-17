@@ -276,6 +276,7 @@ export type Database = {
           new_value: string | null
           old_value: string | null
           organization_id: string
+          reason: string | null
           user_agent: string | null
           user_id: string | null
         }
@@ -294,6 +295,7 @@ export type Database = {
           new_value?: string | null
           old_value?: string | null
           organization_id: string
+          reason?: string | null
           user_agent?: string | null
           user_id?: string | null
         }
@@ -312,6 +314,7 @@ export type Database = {
           new_value?: string | null
           old_value?: string | null
           organization_id?: string
+          reason?: string | null
           user_agent?: string | null
           user_id?: string | null
         }
@@ -1788,6 +1791,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ca_rate_tables: {
+        Row: {
+          aia_limit: number
+          car_low_emission_max: number
+          car_zero_emission_threshold: number
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          full_expensing_available: boolean
+          full_expensing_rate: number
+          fya_50_rate: number
+          fya_zero_emission_rate: number
+          id: string
+          updated_at: string
+          wda_main_rate: number
+          wda_special_rate: number
+        }
+        Insert: {
+          aia_limit?: number
+          car_low_emission_max?: number
+          car_zero_emission_threshold?: number
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          full_expensing_available?: boolean
+          full_expensing_rate?: number
+          fya_50_rate?: number
+          fya_zero_emission_rate?: number
+          id?: string
+          updated_at?: string
+          wda_main_rate?: number
+          wda_special_rate?: number
+        }
+        Update: {
+          aia_limit?: number
+          car_low_emission_max?: number
+          car_zero_emission_threshold?: number
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          full_expensing_available?: boolean
+          full_expensing_rate?: number
+          fya_50_rate?: number
+          fya_zero_emission_rate?: number
+          id?: string
+          updated_at?: string
+          wda_main_rate?: number
+          wda_special_rate?: number
+        }
+        Relationships: []
       }
       capital_allowance_claims: {
         Row: {
@@ -10944,6 +10998,156 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sa_rate_tables: {
+        Row: {
+          additional_rate: number
+          basic_rate: number
+          basic_rate_limit: number
+          cgt_annual_exempt_amount: number
+          cgt_basic_rate: number
+          cgt_higher_rate: number
+          cgt_residential_basic: number
+          cgt_residential_higher: number
+          class2_threshold: number
+          class2_weekly_rate: number
+          class4_additional_rate: number
+          class4_lower_limit: number
+          class4_main_rate: number
+          class4_upper_limit: number
+          created_at: string
+          dividend_additional_rate: number
+          dividend_allowance: number
+          dividend_basic_rate: number
+          dividend_higher_rate: number
+          effective_from: string
+          effective_to: string | null
+          hicbc_threshold: number
+          hicbc_upper_threshold: number
+          higher_rate: number
+          higher_rate_limit: number
+          id: string
+          marriage_allowance_amount: number
+          pension_annual_allowance: number
+          pension_mpaa: number
+          pension_taper_floor: number
+          pension_taper_threshold: number
+          personal_allowance: number
+          savings_nil_rate_basic: number
+          savings_nil_rate_higher: number
+          student_loan_pg_rate: number
+          student_loan_pg_threshold: number
+          student_loan_plan1_rate: number
+          student_loan_plan1_threshold: number
+          student_loan_plan2_rate: number
+          student_loan_plan2_threshold: number
+          student_loan_plan4_rate: number
+          student_loan_plan4_threshold: number
+          student_loan_plan5_rate: number
+          student_loan_plan5_threshold: number
+          taper_threshold: number
+          tax_year: string
+          updated_at: string
+        }
+        Insert: {
+          additional_rate?: number
+          basic_rate?: number
+          basic_rate_limit?: number
+          cgt_annual_exempt_amount?: number
+          cgt_basic_rate?: number
+          cgt_higher_rate?: number
+          cgt_residential_basic?: number
+          cgt_residential_higher?: number
+          class2_threshold?: number
+          class2_weekly_rate?: number
+          class4_additional_rate?: number
+          class4_lower_limit?: number
+          class4_main_rate?: number
+          class4_upper_limit?: number
+          created_at?: string
+          dividend_additional_rate?: number
+          dividend_allowance?: number
+          dividend_basic_rate?: number
+          dividend_higher_rate?: number
+          effective_from: string
+          effective_to?: string | null
+          hicbc_threshold?: number
+          hicbc_upper_threshold?: number
+          higher_rate?: number
+          higher_rate_limit?: number
+          id?: string
+          marriage_allowance_amount?: number
+          pension_annual_allowance?: number
+          pension_mpaa?: number
+          pension_taper_floor?: number
+          pension_taper_threshold?: number
+          personal_allowance?: number
+          savings_nil_rate_basic?: number
+          savings_nil_rate_higher?: number
+          student_loan_pg_rate?: number
+          student_loan_pg_threshold?: number
+          student_loan_plan1_rate?: number
+          student_loan_plan1_threshold?: number
+          student_loan_plan2_rate?: number
+          student_loan_plan2_threshold?: number
+          student_loan_plan4_rate?: number
+          student_loan_plan4_threshold?: number
+          student_loan_plan5_rate?: number
+          student_loan_plan5_threshold?: number
+          taper_threshold?: number
+          tax_year: string
+          updated_at?: string
+        }
+        Update: {
+          additional_rate?: number
+          basic_rate?: number
+          basic_rate_limit?: number
+          cgt_annual_exempt_amount?: number
+          cgt_basic_rate?: number
+          cgt_higher_rate?: number
+          cgt_residential_basic?: number
+          cgt_residential_higher?: number
+          class2_threshold?: number
+          class2_weekly_rate?: number
+          class4_additional_rate?: number
+          class4_lower_limit?: number
+          class4_main_rate?: number
+          class4_upper_limit?: number
+          created_at?: string
+          dividend_additional_rate?: number
+          dividend_allowance?: number
+          dividend_basic_rate?: number
+          dividend_higher_rate?: number
+          effective_from?: string
+          effective_to?: string | null
+          hicbc_threshold?: number
+          hicbc_upper_threshold?: number
+          higher_rate?: number
+          higher_rate_limit?: number
+          id?: string
+          marriage_allowance_amount?: number
+          pension_annual_allowance?: number
+          pension_mpaa?: number
+          pension_taper_floor?: number
+          pension_taper_threshold?: number
+          personal_allowance?: number
+          savings_nil_rate_basic?: number
+          savings_nil_rate_higher?: number
+          student_loan_pg_rate?: number
+          student_loan_pg_threshold?: number
+          student_loan_plan1_rate?: number
+          student_loan_plan1_threshold?: number
+          student_loan_plan2_rate?: number
+          student_loan_plan2_threshold?: number
+          student_loan_plan4_rate?: number
+          student_loan_plan4_threshold?: number
+          student_loan_plan5_rate?: number
+          student_loan_plan5_threshold?: number
+          taper_threshold?: number
+          tax_year?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       services_catalog: {
         Row: {

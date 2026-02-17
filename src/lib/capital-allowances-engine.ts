@@ -1,28 +1,61 @@
 import { supabase } from "@/integrations/supabase/client";
+import { fetchCARates, type CARateRow } from "./tax-rates-service";
 
-// UK Capital Allowances Constants
+// ==================== DB-DRIVEN RATES (preferred) ====================
+// These mutable defaults are overridden by loadCARatesForPeriod().
+
+let _caRates: CARateRow | null = null;
+
+/**
+ * Load CA rates from DB for a given period. Call once before computeCapitalAllowances().
+ */
+export async function loadCARatesForPeriod(periodEnd: string): Promise<CARateRow> {
+  _caRates = await fetchCARates(periodEnd);
+  return _caRates;
+}
+
+function getCARates(): CARateRow {
+  if (_caRates) return _caRates;
+  // Fallback defaults (same as current hardcoded values)
+  return {
+    effective_from: '2023-04-01',
+    effective_to: null,
+    aia_limit: 1000000,
+    wda_main_rate: 0.18,
+    wda_special_rate: 0.06,
+    full_expensing_available: true,
+    full_expensing_rate: 1.0,
+    fya_50_rate: 0.5,
+    fya_zero_emission_rate: 1.0,
+    car_zero_emission_threshold: 0,
+    car_low_emission_max: 50,
+  };
+}
+
+// ==================== LEGACY CONSTANTS (kept for backward compat) ====================
+// These are now derived from getCARates() where possible.
+/** @deprecated Use getCARates().wda_main_rate etc. */
 export const WDA_RATES = {
   MAIN: 0.18,
   SPECIAL_RATE: 0.06,
   SINGLE_ASSET: 0.18,
 } as const;
 
-// Full Expensing and FYA rates (from 1 April 2023)
+/** @deprecated Use getCARates() */
 export const FULL_EXPENSING_START_DATE = new Date('2023-04-01');
-export const FULL_EXPENSING_RATE = 1.0; // 100%
-export const FYA_50_RATE = 0.5; // 50% for special rate assets
+/** @deprecated */ export const FULL_EXPENSING_RATE = 1.0;
+/** @deprecated */ export const FYA_50_RATE = 0.5;
 
-// AIA limits by date
+/** @deprecated Use getCARates().aia_limit */
 export const AIA_LIMITS = [
   { from: new Date('2016-01-01'), to: new Date('2021-01-01'), limit: 200000 },
   { from: new Date('2021-01-01'), to: null, limit: 1000000 },
 ] as const;
 
-// Car CO2 thresholds (g/km)
+/** @deprecated Use getCARates() */
 export const CAR_CO2_THRESHOLDS = {
-  ZERO_EMISSION: 0,           // 100% FYA
-  LOW_EMISSION_MAX: 50,       // Main pool (18%)
-  // Above 50 g/km = Special rate pool (6%)
+  ZERO_EMISSION: 0,
+  LOW_EMISSION_MAX: 50,
 } as const;
 
 export type PoolType = 'MAIN' | 'SPECIAL_RATE' | 'SINGLE_ASSET';
@@ -101,25 +134,18 @@ export function calculateShortPeriodFactor(periodStart: Date, periodEnd: Date): 
 // Get AIA limit for a period
 export function getAIALimitForPeriod(periodStart: Date, periodEnd: Date): number {
   const factor = calculateShortPeriodFactor(periodStart, periodEnd);
-  
-  // Find applicable AIA limit
-  let baseLimit = 1000000; // Default current limit
-  for (const range of AIA_LIMITS) {
-    if (periodEnd >= range.from && (!range.to || periodStart < range.to)) {
-      baseLimit = range.limit;
-      break;
-    }
-  }
-  
+  const rates = getCARates();
+  const baseLimit = Number(rates.aia_limit);
   return Math.round(baseLimit * factor);
 }
 
 // Determine pool type for a car based on CO2 emissions
 export function getCarPoolType(co2GKm: number | null, isElectric: boolean | null): PoolType {
+  const rates = getCARates();
   if (isElectric || co2GKm === 0) {
-    return 'MAIN'; // Zero emission cars get 100% FYA, allocated to main pool
+    return 'MAIN';
   }
-  if (co2GKm !== null && co2GKm <= CAR_CO2_THRESHOLDS.LOW_EMISSION_MAX) {
+  if (co2GKm !== null && co2GKm <= Number(rates.car_low_emission_max)) {
     return 'MAIN';
   }
   return 'SPECIAL_RATE';
@@ -127,11 +153,13 @@ export function getCarPoolType(co2GKm: number | null, isElectric: boolean | null
 
 // Check if asset qualifies for Full Expensing
 export function qualifiesForFullExpensing(asset: FixedAsset, periodEnd: Date): boolean {
-  if (asset.is_car) return false; // Cars don't qualify
-  if (new Date(periodEnd) < FULL_EXPENSING_START_DATE) return false;
-  if (new Date(asset.acquisition_date) < FULL_EXPENSING_START_DATE) return false;
+  const rates = getCARates();
+  if (asset.is_car) return false;
+  if (!rates.full_expensing_available) return false;
+  const feStart = new Date(rates.effective_from);
+  if (periodEnd < feStart) return false;
+  if (new Date(asset.acquisition_date) < feStart) return false;
   
-  // Full expensing is for main pool assets
   const poolType = asset.is_car 
     ? getCarPoolType(asset.car_co2_g_km, asset.car_is_electric)
     : asset.default_pool_type;
@@ -141,9 +169,12 @@ export function qualifiesForFullExpensing(asset: FixedAsset, periodEnd: Date): b
 
 // Check if asset qualifies for 50% FYA
 export function qualifiesFor50FYA(asset: FixedAsset, periodEnd: Date): boolean {
+  const rates = getCARates();
   if (asset.is_car) return false;
-  if (new Date(periodEnd) < FULL_EXPENSING_START_DATE) return false;
-  if (new Date(asset.acquisition_date) < FULL_EXPENSING_START_DATE) return false;
+  if (!rates.full_expensing_available) return false;
+  const feStart = new Date(rates.effective_from);
+  if (periodEnd < feStart) return false;
+  if (new Date(asset.acquisition_date) < feStart) return false;
   
   const poolType = asset.default_pool_type;
   return poolType === 'SPECIAL_RATE';
@@ -276,7 +307,8 @@ export async function computeCapitalAllowances(
     const isSingleAsset = poolKey.startsWith('SINGLE_ASSET_');
     const poolType: PoolType = isSingleAsset ? 'SINGLE_ASSET' : poolKey as PoolType;
     const poolName = isSingleAsset ? poolKey : null;
-    const wdaRate = WDA_RATES[poolType];
+    const rates = getCARates();
+    const wdaRate = poolType === 'SPECIAL_RATE' ? Number(rates.wda_special_rate) : Number(rates.wda_main_rate);
     
     // Opening WDV from prior period
     const openingWdv = priorWdvMap.get(poolName || poolType) || 0;
@@ -328,7 +360,8 @@ export async function computeCapitalAllowances(
           });
         } else if (qualifiesFor50FYA(asset, periodEndDate)) {
           // 50% FYA for special rate assets
-          const fyaAmount = businessUseCost * FYA_50_RATE;
+          const fya50Rate = Number(getCARates().fya_50_rate);
+          const fyaAmount = businessUseCost * fya50Rate;
           poolClaims.push({
             fixed_asset_id: asset.id,
             pool_id: null,
@@ -336,7 +369,7 @@ export async function computeCapitalAllowances(
             amount: fyaAmount,
             rule_basis: {
               reason: '50% FYA - Special rate asset acquired on/after 1 April 2023',
-              rate: FYA_50_RATE,
+              rate: fya50Rate,
               eligible_amount: businessUseCost,
             },
             is_manual_override: false,
