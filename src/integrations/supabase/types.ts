@@ -439,6 +439,93 @@ export type Database = {
           },
         ]
       }
+      automation_library_sets: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_default: boolean
+          name: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
+      automation_org_overrides: {
+        Row: {
+          assignment_overrides: Json
+          channel_overrides: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          message_template_overrides: Json
+          optional_step_toggles: Json
+          org_id: string
+          template_id: string
+          timing_overrides: Json
+          updated_at: string
+        }
+        Insert: {
+          assignment_overrides?: Json
+          channel_overrides?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          message_template_overrides?: Json
+          optional_step_toggles?: Json
+          org_id: string
+          template_id: string
+          timing_overrides?: Json
+          updated_at?: string
+        }
+        Update: {
+          assignment_overrides?: Json
+          channel_overrides?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          message_template_overrides?: Json
+          optional_step_toggles?: Json
+          org_id?: string
+          template_id?: string
+          timing_overrides?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_org_overrides_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_org_overrides_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_rate_limits: {
         Row: {
           action_count: number | null
@@ -602,6 +689,327 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_trigger_contracts: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          key: string
+          name: string
+          payload_schema: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          name: string
+          payload_schema?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          name?: string
+          payload_schema?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      automation_workflow_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          instance_id: string
+          org_id: string
+          payload: Json
+          step_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          instance_id: string
+          org_id: string
+          payload?: Json
+          step_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          instance_id?: string
+          org_id?: string
+          payload?: Json
+          step_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_workflow_events_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_events_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_workflow_instances: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          context: Json
+          created_at: string
+          current_step_id: string | null
+          error_message: string | null
+          id: string
+          next_run_at: string | null
+          org_id: string
+          period_key: string
+          service_id: string | null
+          status: string
+          template_id: string
+          triggering_event_id: string | null
+          triggering_event_key: string
+          updated_at: string
+          waiting_for_event_key: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          context?: Json
+          created_at?: string
+          current_step_id?: string | null
+          error_message?: string | null
+          id?: string
+          next_run_at?: string | null
+          org_id: string
+          period_key: string
+          service_id?: string | null
+          status?: string
+          template_id: string
+          triggering_event_id?: string | null
+          triggering_event_key: string
+          updated_at?: string
+          waiting_for_event_key?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          context?: Json
+          created_at?: string
+          current_step_id?: string | null
+          error_message?: string | null
+          id?: string
+          next_run_at?: string | null
+          org_id?: string
+          period_key?: string
+          service_id?: string | null
+          status?: string
+          template_id?: string
+          triggering_event_id?: string | null
+          triggering_event_key?: string
+          updated_at?: string
+          waiting_for_event_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_workflow_instances_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_instances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_instances_current_step_id_fkey"
+            columns: ["current_step_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_instances_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_workflow_steps: {
+        Row: {
+          config: Json
+          created_at: string
+          id: string
+          is_blocking: boolean
+          is_optional: boolean
+          step_order: number
+          step_type: string
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          id?: string
+          is_blocking?: boolean
+          is_optional?: boolean
+          step_order: number
+          step_type: string
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          id?: string
+          is_blocking?: boolean
+          is_optional?: boolean
+          step_order?: number
+          step_type?: string
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_workflow_steps_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_workflow_templates: {
+        Row: {
+          applies_to_client_types: string[] | null
+          created_at: string
+          default_enabled: boolean
+          description: string
+          id: string
+          key: string
+          library_set_id: string | null
+          name: string
+          org_id: string | null
+          service_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          applies_to_client_types?: string[] | null
+          created_at?: string
+          default_enabled?: boolean
+          description?: string
+          id?: string
+          key: string
+          library_set_id?: string | null
+          name: string
+          org_id?: string | null
+          service_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          applies_to_client_types?: string[] | null
+          created_at?: string
+          default_enabled?: boolean
+          description?: string
+          id?: string
+          key?: string
+          library_set_id?: string | null
+          name?: string
+          org_id?: string | null
+          service_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_workflow_templates_library_set_id_fkey"
+            columns: ["library_set_id"]
+            isOneToOne: false
+            referencedRelation: "automation_library_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_workflow_trigger_map: {
+        Row: {
+          created_at: string
+          filter_config: Json
+          id: string
+          trigger_contract_id: string
+          workflow_template_id: string
+        }
+        Insert: {
+          created_at?: string
+          filter_config?: Json
+          id?: string
+          trigger_contract_id: string
+          workflow_template_id: string
+        }
+        Update: {
+          created_at?: string
+          filter_config?: Json
+          id?: string
+          trigger_contract_id?: string
+          workflow_template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_workflow_trigger_map_trigger_contract_id_fkey"
+            columns: ["trigger_contract_id"]
+            isOneToOne: false
+            referencedRelation: "automation_trigger_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_workflow_trigger_map_workflow_template_id_fkey"
+            columns: ["workflow_template_id"]
+            isOneToOne: false
+            referencedRelation: "automation_workflow_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -8069,30 +8477,42 @@ export type Database = {
           channel: string
           created_at: string
           id: string
+          is_system: boolean
+          key: string | null
           name: string
           organization_id: string
+          source_template_id: string | null
           subject: string | null
           updated_at: string
+          variables_schema: Json
         }
         Insert: {
           body: string
           channel: string
           created_at?: string
           id?: string
+          is_system?: boolean
+          key?: string | null
           name: string
           organization_id: string
+          source_template_id?: string | null
           subject?: string | null
           updated_at?: string
+          variables_schema?: Json
         }
         Update: {
           body?: string
           channel?: string
           created_at?: string
           id?: string
+          is_system?: boolean
+          key?: string | null
           name?: string
           organization_id?: string
+          source_template_id?: string | null
           subject?: string | null
           updated_at?: string
+          variables_schema?: Json
         }
         Relationships: [
           {
@@ -8100,6 +8520,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_templates_source_template_id_fkey"
+            columns: ["source_template_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
             referencedColumns: ["id"]
           },
         ]
