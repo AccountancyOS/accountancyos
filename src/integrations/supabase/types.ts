@@ -2165,6 +2165,98 @@ export type Database = {
           },
         ]
       }
+      cgt_disposals: {
+        Row: {
+          acquisition_date: string | null
+          allowable_costs: number
+          asset_description: string
+          asset_type: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          crypto_pool_id: string | null
+          disposal_date: string
+          disposal_proceeds: number
+          filing_id: string | null
+          gain_or_loss: number
+          id: string
+          is_residential_property: boolean
+          notes: string | null
+          organization_id: string
+          token_symbol: string | null
+          updated_at: string
+        }
+        Insert: {
+          acquisition_date?: string | null
+          allowable_costs?: number
+          asset_description: string
+          asset_type?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          crypto_pool_id?: string | null
+          disposal_date: string
+          disposal_proceeds?: number
+          filing_id?: string | null
+          gain_or_loss?: number
+          id?: string
+          is_residential_property?: boolean
+          notes?: string | null
+          organization_id: string
+          token_symbol?: string | null
+          updated_at?: string
+        }
+        Update: {
+          acquisition_date?: string | null
+          allowable_costs?: number
+          asset_description?: string
+          asset_type?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          crypto_pool_id?: string | null
+          disposal_date?: string
+          disposal_proceeds?: number
+          filing_id?: string | null
+          gain_or_loss?: number
+          id?: string
+          is_residential_property?: boolean
+          notes?: string | null
+          organization_id?: string
+          token_symbol?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cgt_disposals_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cgt_disposals_crypto_pool_id_fkey"
+            columns: ["crypto_pool_id"]
+            isOneToOne: false
+            referencedRelation: "crypto_token_pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cgt_disposals_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cgt_disposals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cis_contractors: {
         Row: {
           accounts_office_reference: string | null
@@ -4270,6 +4362,164 @@ export type Database = {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crypto_token_pools: {
+        Row: {
+          average_cost_per_unit: number
+          client_id: string
+          created_at: string
+          id: string
+          last_updated_at: string
+          organization_id: string
+          tax_year: string | null
+          token_name: string | null
+          token_symbol: string
+          total_cost_gbp: number
+          total_quantity: number
+        }
+        Insert: {
+          average_cost_per_unit?: number
+          client_id: string
+          created_at?: string
+          id?: string
+          last_updated_at?: string
+          organization_id: string
+          tax_year?: string | null
+          token_name?: string | null
+          token_symbol: string
+          total_cost_gbp?: number
+          total_quantity?: number
+        }
+        Update: {
+          average_cost_per_unit?: number
+          client_id?: string
+          created_at?: string
+          id?: string
+          last_updated_at?: string
+          organization_id?: string
+          tax_year?: string | null
+          token_name?: string | null
+          token_symbol?: string
+          total_cost_gbp?: number
+          total_quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crypto_token_pools_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crypto_token_pools_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crypto_transactions: {
+        Row: {
+          classification: string | null
+          client_id: string
+          cost_gbp: number
+          counterpart_token: string | null
+          created_at: string
+          created_by: string | null
+          disposal_id: string | null
+          exchange_name: string | null
+          fee_gbp: number
+          filing_id: string | null
+          id: string
+          import_batch_id: string | null
+          notes: string | null
+          organization_id: string
+          proceeds_gbp: number
+          quantity: number
+          token_symbol: string
+          tx_date: string
+          tx_hash: string | null
+          tx_type: string
+          updated_at: string
+        }
+        Insert: {
+          classification?: string | null
+          client_id: string
+          cost_gbp?: number
+          counterpart_token?: string | null
+          created_at?: string
+          created_by?: string | null
+          disposal_id?: string | null
+          exchange_name?: string | null
+          fee_gbp?: number
+          filing_id?: string | null
+          id?: string
+          import_batch_id?: string | null
+          notes?: string | null
+          organization_id: string
+          proceeds_gbp?: number
+          quantity?: number
+          token_symbol: string
+          tx_date: string
+          tx_hash?: string | null
+          tx_type: string
+          updated_at?: string
+        }
+        Update: {
+          classification?: string | null
+          client_id?: string
+          cost_gbp?: number
+          counterpart_token?: string | null
+          created_at?: string
+          created_by?: string | null
+          disposal_id?: string | null
+          exchange_name?: string | null
+          fee_gbp?: number
+          filing_id?: string | null
+          id?: string
+          import_batch_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          proceeds_gbp?: number
+          quantity?: number
+          token_symbol?: string
+          tx_date?: string
+          tx_hash?: string | null
+          tx_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crypto_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crypto_transactions_disposal_id_fkey"
+            columns: ["disposal_id"]
+            isOneToOne: false
+            referencedRelation: "cgt_disposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crypto_transactions_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crypto_transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]

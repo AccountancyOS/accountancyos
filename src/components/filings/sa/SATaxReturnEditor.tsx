@@ -6,17 +6,21 @@
 import { useState, useMemo, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Save, Calculator } from "lucide-react";
+import { Save, Calculator, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { SADraftScheduleData } from "@/types/filing-schemas";
 import { computeSAScheduleTotals, type SAScheduleModuleKey } from "@/lib/sa-schedule-engine";
 import { renderSA302 } from "@/lib/sa302-renderer";
+import { computeCryptoDisposals, buildCGTSchedule, type CryptoTransaction } from "@/lib/cgt-crypto-engine";
 import { SAScheduleModuleToggle } from "./SAScheduleModuleToggle";
 import { EmploymentScheduleEditor } from "./EmploymentScheduleEditor";
 import { SelfEmploymentScheduleEditor } from "./SelfEmploymentScheduleEditor";
 import { DividendsScheduleEditor, InterestScheduleEditor, UnitTrustScheduleEditor, PensionScheduleEditor, ReliefsScheduleEditor } from "./SimpleScheduleEditors";
 import { AdjustmentsScheduleEditor } from "./AdjustmentsScheduleEditor";
 import { SA302View } from "./SA302View";
+import { CGTDisposalsGrid } from "./CGTDisposalsGrid";
+import { CryptoImportDialog } from "./CryptoImportDialog";
+import { CryptoPoolsView } from "./CryptoPoolsView";
 
 interface Props {
   draft: SADraftScheduleData;
@@ -29,6 +33,8 @@ export function SATaxReturnEditor({ draft, onSave, readonly }: Props) {
   const [data, setData] = useState<SADraftScheduleData>(draft);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("schedules");
+  const [cryptoTxs, setCryptoTxs] = useState<CryptoTransaction[]>([]);
+  const [showCryptoImport, setShowCryptoImport] = useState(false);
 
   // Determine which modules are enabled (have data)
   const enabledModules = useMemo<SAScheduleModuleKey[]>(() => {
@@ -78,6 +84,33 @@ export function SATaxReturnEditor({ draft, onSave, readonly }: Props) {
   // Computed totals and SA302
   const computed = useMemo(() => computeSAScheduleTotals(data), [data]);
   const sa302 = useMemo(() => renderSA302(computed), [computed]);
+
+  // Crypto computation
+  const cryptoResult = useMemo(() => {
+    if (cryptoTxs.length === 0) return null;
+    return computeCryptoDisposals(cryptoTxs);
+  }, [cryptoTxs]);
+
+  // Handle crypto import — merge computed disposals into CGT schedule
+  const handleCryptoImport = useCallback((txs: CryptoTransaction[]) => {
+    setCryptoTxs((prev) => [...prev, ...txs]);
+  }, []);
+
+  // When crypto result changes, rebuild CGT schedule
+  useMemo(() => {
+    if (!cryptoResult || !data.cgt) return;
+    const manualDisposals = (data.cgt.disposals || []).filter(d => d.asset_type !== 'crypto');
+    const updated = buildCGTSchedule(
+      cryptoResult,
+      manualDisposals,
+      data.cgt.annual_exempt_amount || 0,
+      data.cgt.losses_brought_forward_used || 0
+    );
+    // Only update if disposals changed
+    if (JSON.stringify(updated.disposals) !== JSON.stringify(data.cgt.disposals)) {
+      setData((prev) => ({ ...prev, cgt: updated }));
+    }
+  }, [cryptoResult]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -190,6 +223,26 @@ export function SATaxReturnEditor({ draft, onSave, readonly }: Props) {
                   readonly={readonly}
                 />
               )}
+
+              {enabledModules.includes('cgt') && computed.cgt && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-end">
+                    {!readonly && (
+                      <Button size="sm" variant="outline" onClick={() => setShowCryptoImport(true)}>
+                        <Upload className="h-3.5 w-3.5 mr-1" /> Import Crypto
+                      </Button>
+                    )}
+                  </div>
+                  <CGTDisposalsGrid
+                    schedule={computed.cgt}
+                    onChange={(cgt) => setData((prev) => ({ ...prev, cgt }))}
+                    readonly={readonly}
+                  />
+                  {cryptoResult && cryptoResult.final_pools.length > 0 && (
+                    <CryptoPoolsView pools={cryptoResult.final_pools} />
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="sa302" className="mt-4">
@@ -198,6 +251,12 @@ export function SATaxReturnEditor({ draft, onSave, readonly }: Props) {
           </Tabs>
         </div>
       </div>
+
+      <CryptoImportDialog
+        open={showCryptoImport}
+        onClose={() => setShowCryptoImport(false)}
+        onImport={handleCryptoImport}
+      />
     </div>
   );
 }
