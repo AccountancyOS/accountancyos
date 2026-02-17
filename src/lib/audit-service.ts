@@ -63,7 +63,9 @@ export type AuditAction =
   | "login"
   | "logout"
   | "export"
-  | "import";
+  | "import"
+  | "create_version"
+  | "send_to_client";
 
 export interface AuditLogEntry {
   id: string;
@@ -88,12 +90,14 @@ export async function logAudit(params: {
   oldValue?: any;
   newValue?: any;
   metadata?: Record<string, any>;
+  userId?: string;
+  reason?: string;
 }): Promise<{ success: boolean; auditId?: string; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
 
     // Direct insert using raw query approach
-    const insertData = {
+    const insertData: Record<string, any> = {
       organization_id: params.organizationId,
       entity_type: params.entityType,
       entity_id: params.entityId,
@@ -101,8 +105,9 @@ export async function logAudit(params: {
       field_name: params.fieldName || null,
       old_value: params.oldValue !== undefined ? String(params.oldValue) : null,
       new_value: params.newValue !== undefined ? String(params.newValue) : null,
-      user_id: user?.id || null,
+      user_id: params.userId || user?.id || null,
       metadata: params.metadata || {},
+      reason: params.reason || null,
     };
 
     // Insert audit log entry using rpc or direct query

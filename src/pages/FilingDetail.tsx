@@ -5,7 +5,6 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { 
   ArrowLeft, 
@@ -19,7 +18,9 @@ import {
   FileCheck,
   Loader2,
   RefreshCw,
-  Mail
+  Mail,
+  Lock,
+  Eye
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatStatus } from "@/lib/format-utils";
@@ -34,7 +35,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
@@ -46,6 +46,9 @@ import {
   updateFilingStatus,
 } from "@/lib/filing-service";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
+import { FilingUnlockDialog } from "@/components/filings/FilingUnlockDialog";
+import { FilingVersionHistory } from "@/components/filings/FilingVersionHistory";
+import { SendToClientDialog } from "@/components/filings/SendToClientDialog";
 
 export default function FilingDetail() {
   const { filingId } = useParams();
@@ -75,7 +78,6 @@ export default function FilingDetail() {
     enabled: !!filingId,
   });
 
-  // Fetch actual documents from filing_documents table
   const { data: filingDocuments } = useQuery({
     queryKey: ["filing-documents", filingId],
     queryFn: async () => {
@@ -91,6 +93,11 @@ export default function FilingDetail() {
     enabled: !!filingId,
   });
 
+  const invalidateFiling = () => {
+    queryClient.invalidateQueries({ queryKey: ["filing", filingId] });
+    queryClient.invalidateQueries({ queryKey: ["filing-versions", filingId] });
+  };
+
   const sendForApprovalMutation = useMutation({
     mutationFn: async () => {
       if (!filing) throw new Error("No filing");
@@ -104,7 +111,7 @@ export default function FilingDetail() {
     },
     onSuccess: (result) => {
       if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ["filing", filingId] });
+        invalidateFiling();
         toast({ title: "Filing sent for client approval" });
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" });
@@ -119,7 +126,7 @@ export default function FilingDetail() {
     },
     onSuccess: (result) => {
       if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ["filing", filingId] });
+        invalidateFiling();
         toast({ title: "Documents generated successfully" });
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" });
@@ -135,14 +142,13 @@ export default function FilingDetail() {
     },
     onSuccess: async (result) => {
       if (result.success) {
-        // Also mark the job as complete
         if (filing?.job_id) {
           await supabase
             .from("jobs")
             .update({ status: "completed", completed_at: new Date().toISOString() })
             .eq("id", filing.job_id);
         }
-        queryClient.invalidateQueries({ queryKey: ["filing", filingId] });
+        invalidateFiling();
         queryClient.invalidateQueries({ queryKey: ["job", filing?.job_id] });
         toast({ title: "Filing marked as filed. Job complete." });
       } else {
@@ -158,8 +164,21 @@ export default function FilingDetail() {
     },
     onSuccess: (result) => {
       if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ["filing", filingId] });
+        invalidateFiling();
         toast({ title: "Filing reopened for editing" });
+      }
+    },
+  });
+
+  const markReadyMutation = useMutation({
+    mutationFn: async () => {
+      if (!filing) throw new Error("No filing");
+      return updateFilingStatus(filing.id, "ready_for_review");
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        invalidateFiling();
+        toast({ title: "Filing marked as ready for review" });
       }
     },
   });
@@ -169,9 +188,14 @@ export default function FilingDetail() {
       draft: { color: "bg-muted text-muted-foreground", icon: <FileText className="h-3 w-3" /> },
       not_started: { color: "bg-muted text-muted-foreground", icon: <Clock className="h-3 w-3" /> },
       in_progress: { color: "bg-blue-500 text-white", icon: <RefreshCw className="h-3 w-3" /> },
+      ready_for_review: { color: "bg-indigo-500 text-white", icon: <Eye className="h-3 w-3" /> },
+      sent_to_client: { color: "bg-orange-500 text-white", icon: <Send className="h-3 w-3" /> },
+      client_changes_requested: { color: "bg-yellow-500 text-white", icon: <AlertTriangle className="h-3 w-3" /> },
       awaiting_approval: { color: "bg-yellow-500 text-white", icon: <Clock className="h-3 w-3" /> },
       approved: { color: "bg-emerald-500 text-white", icon: <CheckCircle className="h-3 w-3" /> },
       ready_to_file: { color: "bg-emerald-500 text-white", icon: <FileCheck className="h-3 w-3" /> },
+      submitted: { color: "bg-blue-600 text-white", icon: <Send className="h-3 w-3" /> },
+      accepted: { color: "bg-green-600 text-white", icon: <CheckCircle className="h-3 w-3" /> },
       filed: { color: "bg-green-600 text-white", icon: <CheckCircle className="h-3 w-3" /> },
       rejected: { color: "bg-destructive text-destructive-foreground", icon: <XCircle className="h-3 w-3" /> },
     };
@@ -211,10 +235,16 @@ export default function FilingDetail() {
     (filing.clients ? `${filing.clients.first_name} ${filing.clients.last_name}` : "Unknown");
   
   const documents = filingDocuments || [];
-  const canSendForApproval = ["draft", "in_progress", "rejected"].includes(filing.status);
+  const filingAny = filing as any;
+  
+  // Status-based action visibility
+  const canMarkReady = ["draft", "in_progress"].includes(filing.status);
+  const canSendToClient = ["draft", "in_progress", "ready_for_review", "client_changes_requested"].includes(filing.status);
+  const canSendForApproval = ["sent_to_client", "ready_for_review", "rejected"].includes(filing.status);
   const canMarkAsFiled = ["approved", "ready_to_file"].includes(filing.status);
   const canReopen = filing.status === "rejected" && !filing.is_locked;
-  const isFiled = filing.status === "filed";
+  const canUnlock = !!filing.is_locked && !["filed", "accepted", "submitted"].includes(filing.status);
+  const isFiled = filing.status === "filed" || filing.status === "accepted";
   const jobData = filing.jobs as any;
 
   return (
@@ -231,8 +261,12 @@ export default function FilingDetail() {
               {getStatusBadge(filing.status)}
               {filing.is_locked && (
                 <Badge variant="outline" className="text-muted-foreground">
+                  <Lock className="h-3 w-3 mr-1" />
                   Locked
                 </Badge>
+              )}
+              {filingAny.current_version > 0 && (
+                <Badge variant="secondary">v{filingAny.current_version}</Badge>
               )}
             </div>
             <p className="text-muted-foreground">
@@ -351,7 +385,6 @@ export default function FilingDetail() {
                   </div>
                 )}
 
-                {/* Rollover Info */}
                 {jobData?.is_auto_generated && (
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex items-center gap-2 text-sm">
@@ -374,12 +407,12 @@ export default function FilingDetail() {
             </Card>
 
             {/* Rejection Notice */}
-            {filing.status === "rejected" && filing.rejection_reason && (
+            {(filing.status === "rejected" || filing.status === "client_changes_requested") && filing.rejection_reason && (
               <Card className="border-destructive">
                 <CardHeader>
                   <CardTitle className="text-destructive flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5" />
-                    Client Rejected Filing
+                    {filing.status === "client_changes_requested" ? "Client Requested Changes" : "Client Rejected Filing"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -397,6 +430,32 @@ export default function FilingDetail() {
                 <CardTitle>Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {canMarkReady && (
+                  <Button 
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => markReadyMutation.mutate()}
+                    disabled={markReadyMutation.isPending}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Mark Ready for Review
+                  </Button>
+                )}
+
+                {canSendToClient && (
+                  <SendToClientDialog
+                    filingId={filing.id}
+                    entityName={entityName}
+                    onSent={invalidateFiling}
+                    trigger={
+                      <Button className="w-full justify-start">
+                        <Send className="h-4 w-4 mr-2" />
+                        Send to Client
+                      </Button>
+                    }
+                  />
+                )}
+
                 {canSendForApproval && (
                   <Button 
                     className="w-full justify-start" 
@@ -462,6 +521,19 @@ export default function FilingDetail() {
                   </Button>
                 )}
 
+                {canUnlock && (
+                  <FilingUnlockDialog
+                    filingId={filing.id}
+                    onUnlocked={invalidateFiling}
+                    trigger={
+                      <Button variant="outline" className="w-full justify-start text-destructive">
+                        <Lock className="h-4 w-4 mr-2" />
+                        Unlock Filing
+                      </Button>
+                    }
+                  />
+                )}
+
                 {filing.job_id && (
                   <Button 
                     variant="outline" 
@@ -475,6 +547,12 @@ export default function FilingDetail() {
               </CardContent>
             </Card>
 
+            {/* Version History */}
+            <FilingVersionHistory
+              filingId={filing.id}
+              currentSnapshotId={filingAny.current_snapshot_id}
+            />
+
             {/* Audit Trail */}
             <Card>
               <CardHeader>
@@ -483,7 +561,7 @@ export default function FilingDetail() {
               <CardContent className="space-y-3 text-sm">
                 <div>
                   <p className="text-muted-foreground">Created</p>
-                  <p>{format(new Date(filing.created_at), "d MMM yyyy HH:mm")}</p>
+                  <p>{format(new Date(filing.created_at!), "d MMM yyyy HH:mm")}</p>
                 </div>
                 {filing.approval_requested_at && (
                   <div>
@@ -498,6 +576,12 @@ export default function FilingDetail() {
                     {filing.approved_by && (
                       <p className="text-xs text-muted-foreground">by {filing.approved_by}</p>
                     )}
+                  </div>
+                )}
+                {filingAny.locked_at && (
+                  <div>
+                    <p className="text-muted-foreground">Locked</p>
+                    <p>{format(new Date(filingAny.locked_at), "d MMM yyyy HH:mm")}</p>
                   </div>
                 )}
                 {filing.filed_at && (

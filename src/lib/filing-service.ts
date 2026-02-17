@@ -8,9 +8,14 @@ export type FilingStatus =
   | "not_started" 
   | "draft" 
   | "in_progress" 
+  | "ready_for_review"
+  | "sent_to_client"
+  | "client_changes_requested"
   | "awaiting_approval" 
   | "approved" 
   | "ready_to_file" 
+  | "submitted"
+  | "accepted"
   | "filed" 
   | "rejected";
 

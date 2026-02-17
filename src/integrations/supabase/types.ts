@@ -5987,11 +5987,16 @@ export type Database = {
           approved_at: string
           approved_by: string | null
           client_id: string | null
+          coa_snapshot: Json | null
           company_id: string | null
+          computed_outputs: Json | null
           created_at: string
+          filing_id: string | null
           generator_version: string
           id: string
+          lock_reason: string | null
           organization_id: string
+          pdf_artifact_id: string | null
           period_end: string
           period_start: string
           snapshot_data: Json
@@ -5999,16 +6004,24 @@ export type Database = {
           snapshot_type: string
           source_ledger_version: string | null
           source_workpaper_id: string | null
+          submission_artifact_id: string | null
+          tb_snapshot: Json | null
+          version: number | null
         }
         Insert: {
           approved_at?: string
           approved_by?: string | null
           client_id?: string | null
+          coa_snapshot?: Json | null
           company_id?: string | null
+          computed_outputs?: Json | null
           created_at?: string
+          filing_id?: string | null
           generator_version?: string
           id?: string
+          lock_reason?: string | null
           organization_id: string
+          pdf_artifact_id?: string | null
           period_end: string
           period_start: string
           snapshot_data: Json
@@ -6016,16 +6029,24 @@ export type Database = {
           snapshot_type: string
           source_ledger_version?: string | null
           source_workpaper_id?: string | null
+          submission_artifact_id?: string | null
+          tb_snapshot?: Json | null
+          version?: number | null
         }
         Update: {
           approved_at?: string
           approved_by?: string | null
           client_id?: string | null
+          coa_snapshot?: Json | null
           company_id?: string | null
+          computed_outputs?: Json | null
           created_at?: string
+          filing_id?: string | null
           generator_version?: string
           id?: string
+          lock_reason?: string | null
           organization_id?: string
+          pdf_artifact_id?: string | null
           period_end?: string
           period_start?: string
           snapshot_data?: Json
@@ -6033,6 +6054,9 @@ export type Database = {
           snapshot_type?: string
           source_ledger_version?: string | null
           source_workpaper_id?: string | null
+          submission_artifact_id?: string | null
+          tb_snapshot?: Json | null
+          version?: number | null
         }
         Relationships: [
           {
@@ -6047,6 +6071,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filing_model_snapshots_filing_id_fkey"
+            columns: ["filing_id"]
+            isOneToOne: false
+            referencedRelation: "filings"
             referencedColumns: ["id"]
           },
           {
@@ -6438,6 +6469,9 @@ export type Database = {
           created_at: string | null
           ct_approval_id: string | null
           ct_snapshot_id: string | null
+          current_snapshot_id: string | null
+          current_version: number | null
+          draft_schedule_data_json: Json | null
           environment: string | null
           error_code: string | null
           error_detail: Json | null
@@ -6457,6 +6491,8 @@ export type Database = {
           job_id: string
           last_poll_at: string | null
           last_submission_error: string | null
+          locked_at: string | null
+          locked_by: string | null
           model_snapshot_id: string | null
           next_retry_at: string | null
           next_year_job_id: string | null
@@ -6498,6 +6534,9 @@ export type Database = {
           created_at?: string | null
           ct_approval_id?: string | null
           ct_snapshot_id?: string | null
+          current_snapshot_id?: string | null
+          current_version?: number | null
+          draft_schedule_data_json?: Json | null
           environment?: string | null
           error_code?: string | null
           error_detail?: Json | null
@@ -6517,6 +6556,8 @@ export type Database = {
           job_id: string
           last_poll_at?: string | null
           last_submission_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
           model_snapshot_id?: string | null
           next_retry_at?: string | null
           next_year_job_id?: string | null
@@ -6558,6 +6599,9 @@ export type Database = {
           created_at?: string | null
           ct_approval_id?: string | null
           ct_snapshot_id?: string | null
+          current_snapshot_id?: string | null
+          current_version?: number | null
+          draft_schedule_data_json?: Json | null
           environment?: string | null
           error_code?: string | null
           error_detail?: Json | null
@@ -6577,6 +6621,8 @@ export type Database = {
           job_id?: string
           last_poll_at?: string | null
           last_submission_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
           model_snapshot_id?: string | null
           next_retry_at?: string | null
           next_year_job_id?: string | null
@@ -6613,6 +6659,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filings_current_snapshot_id_fkey"
+            columns: ["current_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "filing_model_snapshots"
             referencedColumns: ["id"]
           },
           {
