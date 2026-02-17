@@ -132,17 +132,17 @@ A minimal but functional R&D module ships at launch:
 - Create `src/components/filings/sa/SA302View.tsx` ✅
 - Master editor `SATaxReturnEditor.tsx` integrated into `FilingDetail.tsx` ✅
 
-### Phase 5: CGT Engine Including Crypto
+### Phase 5: CGT Engine Including Crypto ✅ COMPLETE
 
 **Database:**
-- Create `cgt_disposals` (id, filing_id, org_id, client_id, asset_type, description, acquisition/disposal dates, proceeds, costs, gain_loss, token_symbol, is_crypto)
-- Create `crypto_token_pools` (id, org_id, client_id, token_symbol, pool_type, quantity, pooled_cost)
-- Create `crypto_transactions` (id, org_id, client_id, tx_date, tx_type, token_symbol, quantity, cost_gbp, proceeds_gbp, fee_gbp, classification, notes)
+- Create `cgt_disposals` table with RLS ✅
+- Create `crypto_token_pools` table with RLS ✅
+- Create `crypto_transactions` table with RLS ✅
 
 **Code:**
-- Create `src/lib/cgt-crypto-engine.ts` — Section 104 pooling, same-day rule, 30-day rule, fees, airdrop/fork classification
-- Create `src/components/filings/sa/CryptoImportDialog.tsx`, `CryptoPoolsView.tsx`, `CGTDisposalsGrid.tsx`
-- Integrate into CGTSchedule; annual exemption + loss carry-forward
+- Create `src/lib/cgt-crypto-engine.ts` — Section 104 pooling, same-day rule, 30-day rule, fees, airdrop/fork classification ✅
+- Create `src/components/filings/sa/CryptoImportDialog.tsx`, `CryptoPoolsView.tsx`, `CGTDisposalsGrid.tsx` ✅
+- Integrate into CGTSchedule and SATaxReturnEditor; annual exemption + loss carry-forward ✅
 
 ### Phase 6: Partnership + Reference-Based Linking
 
