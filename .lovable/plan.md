@@ -101,7 +101,7 @@ A minimal but functional R&D module ships at launch:
 - Create `src/components/workpaper/JobArtifactsPanel.tsx`
 - Update Workpapers page to use new model
 
-### Phase 3: Filing — SSOT Draft + Snapshots + Locking + Audit
+### Phase 3: Filing — SSOT Draft + Snapshots + Locking + Audit ✅ COMPLETE
 
 **Database:**
 - Add `draft_schedule_data_json JSONB DEFAULT '{}'` to `filings`
