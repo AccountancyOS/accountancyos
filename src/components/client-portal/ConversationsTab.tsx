@@ -87,7 +87,7 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
-        .from("connected_mailboxes")
+        .from("connected_mailboxes_safe")
         .select("*")
         .eq("user_id", user.id)
         .eq("status", "active");
