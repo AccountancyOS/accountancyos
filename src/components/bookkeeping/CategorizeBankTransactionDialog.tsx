@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { getVatCodeLabel } from "@/lib/vat-code-utils";
 
 interface CategorizeBankTransactionDialogProps {
   open: boolean;
@@ -97,6 +99,13 @@ export function CategorizeBankTransactionDialog({
     },
     enabled: !!organization?.id && open,
   });
+
+  const [showAllVatCodes, setShowAllVatCodes] = useState(false);
+
+  const filteredVatCodes = useMemo(() => {
+    if (!vatCodes) return [];
+    return showAllVatCodes ? vatCodes : vatCodes.filter((v) => v.is_common);
+  }, [vatCodes, showAllVatCodes]);
 
   const categorizeMutation = useMutation({
     mutationFn: async (data: CategorizeFormData) => {
@@ -201,13 +210,27 @@ export function CategorizeBankTransactionDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">No VAT</SelectItem>
-                {vatCodes?.map((code) => (
-                  <SelectItem key={code.id} value={code.id}>
-                    {code.code} - {code.description}
-                  </SelectItem>
-                ))}
+                {(() => {
+                  const selectedId = watch("vat_code_id");
+                  const selectedVat = vatCodes?.find((v) => v.id === selectedId);
+                  const opts = selectedVat && !filteredVatCodes.some((v) => v.id === selectedVat.id)
+                    ? [selectedVat, ...filteredVatCodes]
+                    : filteredVatCodes;
+                  return opts.map((code) => (
+                    <SelectItem key={code.id} value={code.id}>
+                      {getVatCodeLabel(code)}
+                    </SelectItem>
+                  ));
+                })()}
               </SelectContent>
             </Select>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:underline cursor-pointer"
+              onClick={() => setShowAllVatCodes((v) => !v)}
+            >
+              {showAllVatCodes ? "Show common only" : "Show all codes"}
+            </button>
           </div>
 
           <div className="space-y-2">

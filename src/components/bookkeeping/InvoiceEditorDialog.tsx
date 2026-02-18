@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +37,7 @@ import {
 import { Plus, Trash2, FileCheck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
+import { getVatCodeLabel } from "@/lib/vat-code-utils";
 import { CustomerSelector } from "./CustomerSelector";
 import { CreateCustomerDialog } from "./CreateCustomerDialog";
 import { useInvoiceDraft } from "@/hooks/useInvoiceDraft";
@@ -156,6 +157,13 @@ export function InvoiceEditorDialog({
     },
     enabled: !!organization?.id && open,
   });
+
+  const [showAllVatCodes, setShowAllVatCodes] = useState(false);
+
+  const filteredVatCodes = useMemo(() => {
+    if (!vatCodes) return [];
+    return showAllVatCodes ? vatCodes : vatCodes.filter((v) => v.is_common);
+  }, [vatCodes, showAllVatCodes]);
 
   // Track contact_email separately since form doesn't include it
   const [contactEmail, setContactEmail] = useState<string>("");
@@ -466,12 +474,21 @@ export function InvoiceEditorDialog({
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label>Invoice Lines</Label>
-                {isDraft && (
-                  <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Line
-                  </Button>
-                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:underline cursor-pointer"
+                    onClick={() => setShowAllVatCodes((v) => !v)}
+                  >
+                    {showAllVatCodes ? "Show common VAT only" : "Show all VAT codes"}
+                  </button>
+                  {isDraft && (
+                    <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Line
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="border rounded-lg">
@@ -554,11 +571,17 @@ export function InvoiceEditorDialog({
                               <SelectValue placeholder="VAT" />
                             </SelectTrigger>
                             <SelectContent>
-                              {vatCodes?.map((vat) => (
-                                <SelectItem key={vat.id} value={vat.id}>
-                                  {vat.code}
-                                </SelectItem>
-                              ))}
+                              {(() => {
+                                const selectedVat = vatCodes?.find((v) => v.id === line.vat_code_id);
+                                const opts = selectedVat && !filteredVatCodes.some((v) => v.id === selectedVat.id)
+                                  ? [selectedVat, ...filteredVatCodes]
+                                  : filteredVatCodes;
+                                return opts.map((vat) => (
+                                  <SelectItem key={vat.id} value={vat.id}>
+                                    {getVatCodeLabel(vat)}
+                                  </SelectItem>
+                                ));
+                              })()}
                             </SelectContent>
                           </Select>
                         </TableCell>

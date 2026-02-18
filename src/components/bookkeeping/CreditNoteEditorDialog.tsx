@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -25,6 +25,7 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
+import { getVatCodeLabel } from "@/lib/vat-code-utils";
 
 interface CreditNoteEditorDialogProps {
   open: boolean;
@@ -188,7 +189,7 @@ export function CreditNoteEditorDialog({
       if (!organization?.id) return [];
       const { data } = await supabase
         .from("vat_codes")
-        .select("id, code, description, rate")
+        .select("id, code, description, rate, is_common")
         .eq("organization_id", organization.id)
         .eq("is_active", true)
         .order("code");
@@ -197,7 +198,14 @@ export function CreditNoteEditorDialog({
     enabled: !!organization?.id,
   });
 
-  // Calculate totals
+  const [showAllVatCodes, setShowAllVatCodes] = useState(false);
+
+  const filteredVatCodes = useMemo(() => {
+    if (!vatCodes) return [];
+    return showAllVatCodes ? vatCodes : vatCodes.filter((v) => v.is_common);
+  }, [vatCodes, showAllVatCodes]);
+
+   // Calculate totals
   const calculateLineTotals = (line: LineItem) => {
     const net = line.quantity * line.unitPrice;
     const vat = net * (line.vatRate / 100);
@@ -413,12 +421,21 @@ export function CreditNoteEditorDialog({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label>Line Items</Label>
-              {isEditable && (
-                <Button variant="outline" size="sm" onClick={addLine}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Line
-                </Button>
-              )}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:underline cursor-pointer"
+                  onClick={() => setShowAllVatCodes((v) => !v)}
+                >
+                  {showAllVatCodes ? "Show common VAT only" : "Show all VAT codes"}
+                </button>
+                {isEditable && (
+                  <Button variant="outline" size="sm" onClick={addLine}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Line
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="border rounded-lg overflow-hidden">
@@ -494,11 +511,17 @@ export function CreditNoteEditorDialog({
                               <SelectValue placeholder="VAT" />
                             </SelectTrigger>
                             <SelectContent>
-                              {vatCodes?.map((v) => (
-                                <SelectItem key={v.id} value={v.id}>
-                                  {v.code} ({v.rate}%)
-                                </SelectItem>
-                              ))}
+                              {(() => {
+                                const selectedVat = vatCodes?.find((vc) => vc.id === line.vatCodeId);
+                                const opts = selectedVat && !filteredVatCodes.some((vc) => vc.id === selectedVat.id)
+                                  ? [selectedVat, ...filteredVatCodes]
+                                  : filteredVatCodes;
+                                return opts.map((v) => (
+                                  <SelectItem key={v.id} value={v.id}>
+                                    {getVatCodeLabel(v)}
+                                  </SelectItem>
+                                ));
+                              })()}
                             </SelectContent>
                           </Select>
                         </td>

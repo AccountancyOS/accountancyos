@@ -12798,6 +12798,7 @@ export type Database = {
           hmrc_box_mapping: Json | null
           id: string
           is_active: boolean | null
+          is_common: boolean
           is_reclaimable: boolean | null
           jurisdiction: string | null
           net_included_in_boxes: number[] | null
@@ -12820,6 +12821,7 @@ export type Database = {
           hmrc_box_mapping?: Json | null
           id?: string
           is_active?: boolean | null
+          is_common?: boolean
           is_reclaimable?: boolean | null
           jurisdiction?: string | null
           net_included_in_boxes?: number[] | null
@@ -12842,6 +12844,7 @@ export type Database = {
           hmrc_box_mapping?: Json | null
           id?: string
           is_active?: boolean | null
+          is_common?: boolean
           is_reclaimable?: boolean | null
           jurisdiction?: string | null
           net_included_in_boxes?: number[] | null

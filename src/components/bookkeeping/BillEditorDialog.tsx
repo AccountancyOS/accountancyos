@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { addDays, format } from "date-fns";
+import { getVatCodeLabel } from "@/lib/vat-code-utils";
 
 interface BillEditorDialogProps {
   open: boolean;
@@ -126,7 +127,7 @@ export default function BillEditorDialog({
       if (!organization?.id) return [];
       const { data } = await (supabase
         .from("vat_codes") as any)
-        .select("id, code, description, rate")
+        .select("id, code, description, rate, is_common")
         .eq("organization_id", organization.id)
         .eq("is_active", true)
         .order("code");
@@ -134,6 +135,13 @@ export default function BillEditorDialog({
     },
     enabled: open && !!organization?.id,
   });
+
+  const [showAllVatCodes, setShowAllVatCodes] = useState(false);
+
+  const filteredVatCodes = useMemo(() => {
+    if (!vatCodes) return [];
+    return showAllVatCodes ? vatCodes : vatCodes.filter((v: any) => v.is_common);
+  }, [vatCodes, showAllVatCodes]);
 
   // Fetch bill lines if editing
   const { data: billLines } = useQuery({
@@ -354,7 +362,16 @@ export default function BillEditorDialog({
 
           {/* Line Items */}
           <div className="space-y-2">
-            <Label>Line Items</Label>
+            <div className="flex items-center justify-between">
+              <Label>Line Items</Label>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:underline cursor-pointer"
+                onClick={() => setShowAllVatCodes((v) => !v)}
+              >
+                {showAllVatCodes ? "Show common VAT only" : "Show all VAT codes"}
+              </button>
+            </div>
             <div className="border rounded-md">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
@@ -409,11 +426,17 @@ export default function BillEditorDialog({
                               <SelectValue placeholder="VAT" />
                             </SelectTrigger>
                             <SelectContent>
-                              {vatCodes?.map((vat: any) => (
-                                <SelectItem key={vat.id} value={vat.id}>
-                                  {vat.code}
-                                </SelectItem>
-                              ))}
+                              {(() => {
+                                const selectedVat = vatCodes?.find((v: any) => v.id === (line?.vatCodeId || ""));
+                                const opts = selectedVat && !filteredVatCodes.some((v: any) => v.id === selectedVat.id)
+                                  ? [selectedVat, ...filteredVatCodes]
+                                  : filteredVatCodes;
+                                return opts.map((vat: any) => (
+                                  <SelectItem key={vat.id} value={vat.id}>
+                                    {getVatCodeLabel(vat)}
+                                  </SelectItem>
+                                ));
+                              })()}
                             </SelectContent>
                           </Select>
                         </td>
