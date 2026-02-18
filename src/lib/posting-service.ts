@@ -104,8 +104,6 @@ export async function postToLedger(
     }));
 
   try {
-    // Call the atomic SECURITY DEFINER RPC — single transaction for
-    // journal + journal_lines + ledger_entries with balance + period lock checks
     const { data, error } = await supabase.rpc("post_to_ledger", {
       p_organization_id: context.organizationId,
       p_client_id: context.entityType === "client" ? context.entityId : null,
@@ -126,7 +124,6 @@ export async function postToLedger(
       return { success: false, error: `Posting RPC failed: ${error.message}` };
     }
 
-    // The RPC returns jsonb: { success, journal_id, ledger_entry_ids, error }
     const result = data as { success: boolean; journal_id?: string; ledger_entry_ids?: string[]; error?: string };
 
     if (!result.success) {
@@ -151,7 +148,6 @@ export async function reverseLedgerEntries(
   context: Omit<PostingContext, "sourceId">,
   reason?: string
 ): Promise<PostingResult> {
-  // Fetch original entries - manual fetch to avoid TS2589
   const { data: originalEntries, error: fetchError } = await (supabase
     .from("ledger_entries") as any)
     .select("account_id, debit, credit, description, vat_code_id")
@@ -161,11 +157,10 @@ export async function reverseLedgerEntries(
     return { success: false, error: "Could not find original entries to reverse" };
   }
 
-  // Create reversed entries (swap debits and credits)
-  const reversedEntries: LedgerEntry[] = originalEntries.map((entry) => ({
+  const reversedEntries: LedgerEntry[] = originalEntries.map((entry: any) => ({
     accountId: entry.account_id,
-    debit: entry.credit, // Swap
-    credit: entry.debit, // Swap
+    debit: entry.credit,
+    credit: entry.debit,
     description: `REVERSAL: ${entry.description || ""}${reason ? ` - ${reason}` : ""}`,
     vatCodeId: entry.vat_code_id,
   }));
@@ -200,8 +195,21 @@ export function calculateFXGainLoss(
   };
 }
 
+// ==================== CONTROL ACCOUNT SUBTYPES ====================
+// Structured account_subtype values for control account resolution.
+// NO name-based matching. Deterministic and schema-driven.
+
+const CONTROL_ACCOUNT_SUBTYPE_MAP: Record<string, { subtypes: string[]; requireControl: boolean }> = {
+  TRADE_DEBTORS: { subtypes: ["TRADE_DEBTORS", "DEBTOR", "RECEIVABLE", "ACCOUNTS_RECEIVABLE"], requireControl: true },
+  TRADE_CREDITORS: { subtypes: ["TRADE_CREDITORS", "CREDITOR", "PAYABLE", "ACCOUNTS_PAYABLE"], requireControl: true },
+  VAT_CONTROL: { subtypes: ["VAT_CONTROL", "VAT"], requireControl: true },
+  FX_GAIN_LOSS: { subtypes: ["FX_GAIN_LOSS", "FOREIGN_EXCHANGE", "EXCHANGE_GAIN_LOSS"], requireControl: false },
+  BAD_DEBT: { subtypes: ["BAD_DEBT", "BAD_DEBTS", "DOUBTFUL_DEBTS"], requireControl: false },
+};
+
 /**
- * Get control account ID by type
+ * Get control account ID by structured taxonomy.
+ * Uses account_subtype and is_control_account flag — never name matching.
  */
 export async function getControlAccount(
   organizationId: string,
@@ -209,19 +217,12 @@ export async function getControlAccount(
   entityId: string,
   accountType: "TRADE_DEBTORS" | "TRADE_CREDITORS" | "VAT_CONTROL" | "FX_GAIN_LOSS" | "BAD_DEBT"
 ): Promise<string | null> {
-  const namePatterns: Record<string, string[]> = {
-    TRADE_DEBTORS: ["Trade Debtors", "Accounts Receivable", "Debtors"],
-    TRADE_CREDITORS: ["Trade Creditors", "Accounts Payable", "Creditors"],
-    VAT_CONTROL: ["VAT Control", "VAT Payable", "VAT"],
-    FX_GAIN_LOSS: ["FX Gain/Loss", "Foreign Exchange", "Exchange Gain"],
-    BAD_DEBT: ["Bad Debt", "Bad Debts", "Doubtful Debts"],
-  };
-
-  const patterns = namePatterns[accountType] || [];
+  const mapping = CONTROL_ACCOUNT_SUBTYPE_MAP[accountType];
+  if (!mapping) return null;
 
   let query = supabase
     .from("bookkeeping_accounts")
-    .select("id, name")
+    .select("id, account_subtype")
     .eq("organization_id", organizationId)
     .eq("is_active", true);
 
@@ -231,22 +232,17 @@ export async function getControlAccount(
     query = query.eq("company_id", entityId);
   }
 
-  // For control accounts, also check is_control_account flag
-  if (["TRADE_DEBTORS", "TRADE_CREDITORS", "VAT_CONTROL"].includes(accountType)) {
+  // Filter by is_control_account if required
+  if (mapping.requireControl) {
     query = query.eq("is_control_account", true);
   }
 
-  const { data: accounts } = await query;
+  // Filter by any of the valid subtypes
+  query = query.in("account_subtype", mapping.subtypes);
+
+  const { data: accounts } = await query.limit(1);
 
   if (!accounts?.length) return null;
 
-  // Find matching account by name pattern
-  for (const pattern of patterns) {
-    const match = accounts.find((a: { id: string; name: string }) => 
-      a.name.toLowerCase().includes(pattern.toLowerCase())
-    );
-    if (match) return match.id;
-  }
-
-  return null;
+  return accounts[0].id;
 }

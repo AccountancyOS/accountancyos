@@ -314,13 +314,10 @@ export function calculateWorkpaperFields(
       };
     });
 
-    // Apply tax calculations
-    const calculatedFieldValues = applyTaxCalculationsToWorkpaper(
-      fieldValues,
-      workpaperType,
-      taxYear,
-      periodEnd
-    );
+    // Apply tax calculations (note: applyTaxCalculationsToWorkpaper is now async
+    // but calculateWorkpaperFields is sync — tax calc deferred to createWorkpaperFromSnapshot)
+    // For sync contexts, we skip the async tax engine here.
+    // The async path is handled in createWorkpaperFromSnapshot below.
 
     // Update lines with tax calculation results
     for (const [key, value] of Object.entries(calculatedFieldValues)) {

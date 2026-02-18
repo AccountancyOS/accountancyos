@@ -5,6 +5,22 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
+// ==================== SIGN CONVENTION ====================
+// Debit-normal: ASSET, EXPENSE → balance = debit - credit
+// Credit-normal: LIABILITY, EQUITY, INCOME → balance = credit - debit
+
+const CREDIT_NORMAL_TYPES = new Set(["LIABILITY", "EQUITY", "INCOME"]);
+
+function isDebitNormal(accountType: string): boolean {
+  return !CREDIT_NORMAL_TYPES.has(accountType?.toUpperCase());
+}
+
+function naturalBalance(accountType: string, debit: number, credit: number): number {
+  return isDebitNormal(accountType) ? debit - credit : credit - debit;
+}
+
+// ==================== INTERFACES ====================
+
 export interface TBSnapshotBalance {
   accountId: string;
   accountCode: string;
@@ -54,11 +70,38 @@ export function validateTBBalances(balances: TBSnapshotBalance[]): {
   const difference = Math.abs(totalDebit - totalCredit);
   
   return {
-    isValid: difference < 0.01, // Allow tiny floating point differences
+    isValid: difference < 0.01,
     totalDebit,
     totalCredit,
     difference,
   };
+}
+
+// ==================== PAGINATION HELPER ====================
+
+const PAGE_SIZE = 1000;
+
+/**
+ * Fetch all rows from a query using cursor-based pagination
+ * to avoid Supabase's default 1000-row limit.
+ */
+async function fetchAllPaginated<T>(
+  buildQuery: (offset: number, limit: number) => any
+): Promise<T[]> {
+  const results: T[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await buildQuery(offset, PAGE_SIZE);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    results.push(...data);
+    hasMore = data.length === PAGE_SIZE;
+    offset += PAGE_SIZE;
+  }
+
+  return results;
 }
 
 /**
@@ -77,30 +120,34 @@ export async function createSnapshotFromNativeLedger(
   } = {}
 ): Promise<SnapshotResult> {
   try {
-    // Fetch ledger entries and calculate TB
-    const query = supabase
-      .from("bookkeeping_accounts")
-      .select(`
-        id, code, name, account_type, account_subtype, is_bank_account,
-        ledger_entries!inner(
-          debit, credit, transaction_date
-        )
-      `)
-      .eq("organization_id", organizationId)
-      .eq("is_active", true);
+    // Fetch all accounts with their ledger entries using pagination
+    const accounts = await fetchAllPaginated<any>((offset, limit) => {
+      const query = supabase
+        .from("bookkeeping_accounts")
+        .select(`
+          id, code, name, account_type, account_subtype, is_bank_account,
+          ledger_entries!inner(
+            debit, credit, transaction_date
+          )
+        `)
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .range(offset, offset + limit - 1);
 
-    if (entityType === "client") {
-      query.eq("client_id", entityId);
-    } else {
-      query.eq("company_id", entityId);
-    }
+      if (entityType === "client") {
+        query.eq("client_id", entityId);
+      } else {
+        query.eq("company_id", entityId);
+      }
 
-    const { data: accounts, error: accountsError } = await query;
-    if (accountsError) throw accountsError;
+      return query;
+    });
 
-    // Calculate balances for each account
-    const balances: TBSnapshotBalance[] = (accounts || []).map((account: any) => {
+    // Calculate balances for each account with correct sign conventions
+    const balances: TBSnapshotBalance[] = accounts.map((account: any) => {
       const entries = account.ledger_entries || [];
+      const accountType = account.account_type || "ASSET";
+
       const periodEntries = entries.filter((e: any) => {
         const date = new Date(e.transaction_date);
         return date >= new Date(periodStart) && date <= new Date(periodEnd);
@@ -109,23 +156,27 @@ export async function createSnapshotFromNativeLedger(
       const periodDebit = periodEntries.reduce((sum: number, e: any) => sum + (e.debit || 0), 0);
       const periodCredit = periodEntries.reduce((sum: number, e: any) => sum + (e.credit || 0), 0);
       
-      // For opening balance, calculate from entries before period start
+      // Opening balance: entries before period start, with correct sign convention
       const openingEntries = entries.filter((e: any) => new Date(e.transaction_date) < new Date(periodStart));
       const openingDebit = openingEntries.reduce((sum: number, e: any) => sum + (e.debit || 0), 0);
       const openingCredit = openingEntries.reduce((sum: number, e: any) => sum + (e.credit || 0), 0);
-      const openingBalance = openingDebit - openingCredit;
+      
+      // Apply correct sign convention based on account type
+      const openingBalance = naturalBalance(accountType, openingDebit, openingCredit);
+      const periodMovement = naturalBalance(accountType, periodDebit, periodCredit);
+      const closingBalance = openingBalance + periodMovement;
 
       return {
         accountId: account.id,
         accountCode: account.code,
         accountName: account.name,
-        accountType: account.account_type,
+        accountType: accountType,
         accountSubtype: account.account_subtype,
         isBankAccount: account.is_bank_account,
         openingBalance,
         debit: periodDebit,
         credit: periodCredit,
-        closingBalance: openingBalance + periodDebit - periodCredit,
+        closingBalance,
       };
     });
 
@@ -189,7 +240,6 @@ export async function createManualSnapshot(
  */
 export async function createSnapshot(params: CreateSnapshotParams): Promise<SnapshotResult> {
   try {
-    // Validate balances
     const validation = validateTBBalances(params.balances);
     
     const status = params.finaliseImmediately ? "finalised" : "draft";
@@ -237,7 +287,6 @@ export async function finaliseSnapshot(
   snapshotId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     
     const { error } = await supabase
@@ -249,7 +298,7 @@ export async function finaliseSnapshot(
         finalised_by: user?.id,
       })
       .eq("id", snapshotId)
-      .eq("locked", false); // Only update if not already locked
+      .eq("locked", false);
 
     if (error) throw error;
 
