@@ -6,6 +6,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
   postToLedger,
+  reverseLedgerEntries,
   isPeriodLocked,
   getControlAccount,
   calculateFXGainLoss,
@@ -363,8 +364,43 @@ export async function voidInvoice(
     return { success: false, error: "Cannot void invoice with payments. Refund first." };
   }
 
-  // If posted, we should post reversing entries
-  // For now, just mark as voided (can enhance later)
+  // If posted, create reversing ledger entries to maintain TB integrity
+  if (invoice.is_posted) {
+    // Find the journal created when this invoice was posted
+    const { data: ledgerEntries } = await supabase
+      .from("ledger_entries")
+      .select("journal_id")
+      .eq("source_type", "INVOICE")
+      .eq("source_id", invoiceId)
+      .limit(1);
+
+    const journalId = ledgerEntries?.[0]?.journal_id;
+
+    if (journalId) {
+      const entityType = invoice.client_id ? "client" : "company";
+      const entityId = invoice.client_id || invoice.company_id;
+
+      const reverseResult = await reverseLedgerEntries(
+        journalId,
+        {
+          organizationId: invoice.organization_id,
+          entityType: entityType as "client" | "company",
+          entityId,
+          transactionDate: new Date().toISOString().split("T")[0],
+          reference: `VOID-${invoice.invoice_number || invoiceId.substring(0, 8)}`,
+          sourceType: "INVOICE",
+          currency: invoice.currency || "GBP",
+          fxRate: Number(invoice.exchange_rate) || 1.0,
+          userId,
+        },
+        reason || "Invoice voided"
+      );
+
+      if (!reverseResult.success) {
+        return { success: false, error: `Failed to reverse ledger entries: ${reverseResult.error}` };
+      }
+    }
+  }
 
   const { error } = await supabase
     .from("invoices")
