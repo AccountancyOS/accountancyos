@@ -314,31 +314,8 @@ export function calculateWorkpaperFields(
       };
     });
 
-    // Apply tax calculations (note: applyTaxCalculationsToWorkpaper is now async
-    // but calculateWorkpaperFields is sync — tax calc deferred to createWorkpaperFromSnapshot)
-    // For sync contexts, we skip the async tax engine here.
-    // The async path is handled in createWorkpaperFromSnapshot below.
-
-    // Update lines with tax calculation results
-    for (const [key, value] of Object.entries(calculatedFieldValues)) {
-      if (typeof value === 'object' && value !== null && 'amount' in value) {
-        const existingLine = lines.find(l => l.category === key);
-        if (existingLine) {
-          existingLine.amount = value.amount;
-        } else {
-          // Add new calculated tax fields
-          lines.push({
-            category: key,
-            label: value.label || key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-            source: 'calculation',
-            sourceReference: 'tax_engine',
-            amount: value.amount,
-            isKeyField: true,
-            displayOrder: lines.length,
-          });
-        }
-      }
-    }
+    // Tax calculations are async and deferred to createWorkpaperFromSnapshot.
+    // This sync function only handles basic P&L/VAT/SE calculations above.
   }
 
   return lines;
