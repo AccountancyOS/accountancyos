@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SADraftScheduleData, PartnershipDraftScheduleData } from "@/types/filing-schemas";
+import type { SADraftScheduleData, PartnershipDraftScheduleData, AccountsDraftScheduleData } from "@/types/filing-schemas";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -53,6 +53,7 @@ import { SendToClientDialog } from "@/components/filings/SendToClientDialog";
 import { SATaxReturnEditor } from "@/components/filings/sa/SATaxReturnEditor";
 import { PartnershipScheduleEditor } from "@/components/filings/partnership/PartnershipScheduleEditor";
 import { PartnerShareBanner } from "@/components/filings/partnership/PartnerShareBanner";
+import { FRS105AccountsEditor } from "@/components/filings/accounts/FRS105AccountsEditor";
 
 export default function FilingDetail() {
   const { filingId } = useParams();
@@ -362,6 +363,22 @@ export default function FilingDetail() {
               />
             )}
 
+            {/* FRS105 Accounts Editor */}
+            {(filing.filing_type === 'ACCOUNTS_FRS105' || filing.filing_type === 'accounts_frs105') && !isFiled && (
+              <FRS105AccountsEditor
+                draft={(filingAny.draft_schedule_data_json || {}) as AccountsDraftScheduleData}
+                onSave={async (data) => {
+                  await supabase
+                    .from('filings')
+                    .update({ draft_schedule_data_json: data as any })
+                    .eq('id', filing.id);
+                  invalidateFiling();
+                }}
+                readonly={!!filing.is_locked}
+                filingId={filing.id}
+                organizationId={filing.organization_id}
+              />
+            )}
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">

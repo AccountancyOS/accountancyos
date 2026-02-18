@@ -394,19 +394,16 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
             </div>
           )}
 
-          {/* Accounts filing notice - iXBRL not yet implemented */}
+          {/* Accounts Editor link for CH accounts filings */}
           {isCHFiling && !isCS01Filing && canFile && (
-            <div className="p-4 border border-amber-500/30 rounded-lg bg-amber-500/5">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-amber-700">Accounts Filing Pending</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    CH accounts submission requires iXBRL generation (Phase 2). Use "Mark as Filed" for manual filing.
-                  </p>
-                </div>
-              </div>
-            </div>
+            <Button
+              className="w-full justify-start"
+              variant="outline"
+              onClick={() => navigate(`/filings/${filing.id}`)}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Open Accounts Editor
+            </Button>
           )}
 
           {isFiled && filing.filed_at && (
