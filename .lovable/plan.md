@@ -1,101 +1,76 @@
 
+# Remove Priority Column + Service-Aware Deadline Colouring
 
-# Simplify VAT Code Dropdowns
+## What Changes
 
-## Overview
+### 1. Remove the Priority column from the Jobs table
 
-Add an `is_common` flag to `vat_codes` and update all 7 bookkeeping components that render VAT code dropdowns to show only 5 common codes by default, with a "Show all codes" toggle. Also create a shared `getVatCodeLabel()` utility for friendlier display names.
+Remove the `<TableHead>Priority</TableHead>` header and the corresponding `<TableCell>` that renders a Priority badge. Also reduce the `TableSkeleton` column count from 8 to 7.
 
-## 1. Database Migration
+### 2. Service-aware "red threshold" for Filing Deadline text
 
-Add `is_common BOOLEAN NOT NULL DEFAULT false` to `vat_codes`, then set `true` for the 5 core codes:
+Currently the deadline text turns red (`text-destructive`) whenever overdue or within 7 days. This will be replaced with service-specific thresholds:
 
-| Code | Friendly Label |
-|------|---------------|
-| T1 | 20% Sales |
-| T20 | 20% Purchases |
-| T0 | Zero Rated |
-| T9 | Exempt |
-| OS | No VAT |
+| Service Type(s) | Red Threshold |
+|----------------|---------------|
+| `accounts`, `company_accounts`, `Accounts` (Ltd company accounts) | 30 days |
+| `self_assessment`, `SA` (Self Assessment) | 30 days |
+| `corporation_tax`, `CT600`, `ct600` (Partnership tax / CT) | 30 days |
+| `advisory` used for charity/LLP accounts context | 30 days |
+| `vat`, `vat_return`, `VAT` (VAT Return) | 7 days |
+| `payroll`, `Payroll` (Payroll) | 7 days |
+| `company_sec`, `CS01` (Confirmation Statement) | 7 days |
+| `cis` (CGT / CIS) | 7 days |
+| Everything else (fallback) | 14 days |
 
-All other codes (RC, EC, NB, etc.) remain `is_common = false`.
+### 3. Updated `formatDeadline` logic
 
-## 2. Shared Utility
+The function signature changes to include `service_type`. The colouring logic becomes:
 
-Create `src/lib/vat-code-utils.ts` with:
+- **Overdue (days < 0)**: always red, shows "X days overdue"
+- **Due today**: always red
+- **Within threshold**: amber/warning colour (`text-amber-600`), shows "Due in X days"
+- **Outside threshold**: plain date, no colour
 
-- `getVatCodeLabel(code, rate, description)` -- returns friendly labels for common codes, falls back to `CODE - description (rate%)` for advanced codes
-- Centralised in one place so all 7 components use the same logic
+This also applies to the JobDetail page header where the same logic is used inline.
 
-## 3. Component Updates (7 files)
+---
 
-Each file gets the same pattern:
+## Files Modified
 
-- Add `is_common` to the VAT codes query `.select(...)` (where not already using `*`)
-- Add `showAllVatCodes` local state (default `false`)
-- Compute `filteredVatCodes` via `useMemo` -- common-only or all
-- For selected-value robustness: if the currently selected VAT code is non-common, prepend it into the filtered options so it still displays correctly
-- Add a small toggle link below the Select: "Show all codes" / "Show common only"
-- Use `getVatCodeLabel()` for dropdown option text
-
-### Files and their VAT dropdown locations
-
-| File | Dropdown Context | Current Label Format |
-|------|-----------------|---------------------|
-| `InvoiceEditorDialog.tsx` | Per-line VAT in table (line 541-563) | `{vat.code}` only |
-| `CreditNoteEditorDialog.tsx` | Per-line VAT in table (line 487-501) | `{v.code} ({v.rate}%)` |
-| `BillEditorDialog.tsx` | Per-line VAT in table (line 402-418) | `{vat.code}` only |
-| `SupplierEditorDialog.tsx` | Default VAT Code field (line 236-252) | `{vat.code} - {vat.description} ({vat.rate}%)` |
-| `CustomerEditorDialog.tsx` | Default VAT Code field (line 275-289) | `{vat.code} - {vat.description} ({vat.rate}%)` |
-| `CategorizeBankTransactionDialog.tsx` | Single VAT selector (line 195-210) | `{code.code} - {code.description}` |
-| `RuleActionBuilder.tsx` | VAT code action value (line 144-155) | `{v.code} - {v.description} ({v.rate}%)` |
-
-### RuleTestRunDialog.tsx -- No Change Needed
-
-This file only uses VAT codes for display formatting in test results (resolving IDs to labels), not as a user-facing dropdown for selection. No filtering needed.
-
-## 4. Toggle UX
-
-The toggle will be a small text link styled with `text-xs text-muted-foreground hover:underline cursor-pointer`, placed directly below the Select component. For per-line table contexts (Invoice, Credit Note, Bill), a single toggle above the table controls all line VAT dropdowns.
-
-## 5. Selected-Value Robustness
-
-If an existing record has a non-common VAT code (e.g. RC_DOMESTIC), it must still display correctly even when "Show common only" is active. The filter applies to the options list only. If the selected value is not in the filtered list, it is prepended (deduplicated).
-
-## Technical Details
-
-### Migration SQL
-```sql
-ALTER TABLE vat_codes ADD COLUMN IF NOT EXISTS is_common BOOLEAN NOT NULL DEFAULT false;
-UPDATE vat_codes SET is_common = true WHERE code IN ('T1', 'T20', 'T0', 'T9', 'OS');
-```
-
-### New File
-| File | Purpose |
-|------|---------|
-| `src/lib/vat-code-utils.ts` | `getVatCodeLabel()` helper |
-
-### Modified Files
 | File | Change |
 |------|--------|
-| `InvoiceEditorDialog.tsx` | Add toggle state, filter VAT options, use friendly labels, single toggle above lines table |
-| `CreditNoteEditorDialog.tsx` | Same pattern |
-| `BillEditorDialog.tsx` | Same pattern |
-| `SupplierEditorDialog.tsx` | Add toggle state, filter options, prepend selected if missing |
-| `CustomerEditorDialog.tsx` | Same pattern |
-| `CategorizeBankTransactionDialog.tsx` | Same pattern (single select) |
-| `RuleActionBuilder.tsx` | Same pattern (per-action VAT select) |
+| `src/pages/Jobs.tsx` | Remove Priority column + header; update `formatDeadline` to accept `service_type` and use service-specific thresholds; reduce skeleton columns |
+| `src/pages/JobDetail.tsx` | Update inline deadline colouring to use the same service-specific threshold instead of hardcoded 7 days |
 
-### Query Updates
-Files currently selecting specific columns (not `*`) need `is_common` added:
-- `CreditNoteEditorDialog.tsx`: add `is_common` to `.select("id, code, description, rate")`
-- `BillEditorDialog.tsx`: same
-- `SupplierEditorDialog.tsx`: same
-- `CustomerEditorDialog.tsx`: same
-- `RuleActionBuilder.tsx`: same
-- `RuleTestRunDialog.tsx`: no change (display-only)
+## Technical Detail
 
-Files using `.select("*")` already get `is_common` automatically:
-- `InvoiceEditorDialog.tsx`
-- `CategorizeBankTransactionDialog.tsx`
+A helper function will be added to `Jobs.tsx` (or could be extracted to a shared util):
 
+```typescript
+const getDeadlineThresholdDays = (serviceType: string | null): number => {
+  if (!serviceType) return 14;
+  const st = serviceType.toLowerCase();
+  if (["accounts", "company_accounts", "self_assessment", "corporation_tax", "ct600"].includes(st)) return 30;
+  if (["vat", "vat_return", "payroll", "cis", "company_sec"].includes(st)) return 7;
+  return 14;
+};
+```
+
+The `formatDeadline` function becomes:
+
+```typescript
+const formatDeadline = (deadline: string | null, days: number | null, serviceType: string | null) => {
+  if (!deadline) return "No deadline";
+  if (days === null) return formatDate(deadline, "dayMonthYear");
+  
+  const threshold = getDeadlineThresholdDays(serviceType);
+  
+  if (days < 0) return <span className="text-destructive font-medium">{Math.abs(days)} days overdue</span>;
+  if (days === 0) return <span className="text-destructive font-medium">Due today</span>;
+  if (days <= threshold) return <span className="text-amber-600 font-medium">Due in {days} days</span>;
+  return formatDate(deadline, "dayMonthYear");
+};
+```
+
+No database changes required. No migration needed.
