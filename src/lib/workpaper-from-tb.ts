@@ -5,7 +5,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import { applyTaxCalculationsToWorkpaper } from "@/lib/tax-calculation-engine";
+
 
 /**
  * Derive tax year from period end date
@@ -33,8 +33,8 @@ export const UK_WORKPAPER_CATEGORIES = {
     cost_of_sales: { label: "Cost of Sales", accountTypes: ["EXPENSE"], subtypes: ["COST_OF_SALES"] },
     gross_profit: { label: "Gross Profit", calculated: true, formula: "turnover + other_income - cost_of_sales" },
     administrative_expenses: { label: "Administrative Expenses", accountTypes: ["EXPENSE"], subtypes: ["OVERHEAD"] },
-    directors_remuneration: { label: "Directors Remuneration", accountCodes: ["6000", "6100"] },
-    depreciation: { label: "Depreciation", accountCodes: ["7000"] },
+    directors_remuneration: { label: "Directors Remuneration", accountTypes: ["EXPENSE"], subtypes: ["DIRECTORS_REMUNERATION", "DIRECTORS_SALARY"] },
+    depreciation: { label: "Depreciation", accountTypes: ["EXPENSE"], subtypes: ["DEPRECIATION"] },
     operating_profit: { label: "Operating Profit", calculated: true },
     interest_payable: { label: "Interest Payable", accountTypes: ["EXPENSE"], subtypes: ["FINANCE"] },
     profit_before_tax: { label: "Profit Before Tax", calculated: true },
@@ -42,17 +42,17 @@ export const UK_WORKPAPER_CATEGORIES = {
     // Balance Sheet categories
     fixed_assets: { label: "Fixed Assets", accountTypes: ["ASSET"], subtypes: ["FIXED_ASSET"] },
     current_assets: { label: "Current Assets", accountTypes: ["ASSET"], subtypes: ["CURRENT_ASSET"] },
-    trade_debtors: { label: "Trade Debtors", accountCodes: ["1100"] },
+    trade_debtors: { label: "Trade Debtors", accountTypes: ["ASSET"], subtypes: ["TRADE_DEBTORS", "DEBTOR", "RECEIVABLE"] },
     bank: { label: "Bank & Cash", isBankAccount: true },
-    trade_creditors: { label: "Trade Creditors", accountCodes: ["2000"] },
+    trade_creditors: { label: "Trade Creditors", accountTypes: ["LIABILITY"], subtypes: ["TRADE_CREDITORS", "CREDITOR", "PAYABLE"] },
     other_creditors: { label: "Other Creditors", accountTypes: ["LIABILITY"], subtypes: ["CURRENT_LIABILITY"] },
     net_current_assets: { label: "Net Current Assets", calculated: true },
     long_term_liabilities: { label: "Long Term Liabilities", accountTypes: ["LIABILITY"], subtypes: ["LONG_TERM_LIABILITY"] },
     net_assets: { label: "Net Assets", calculated: true },
     
     // Equity
-    share_capital: { label: "Share Capital", accountCodes: ["3000"] },
-    retained_earnings: { label: "Retained Earnings", accountCodes: ["3100"] },
+    share_capital: { label: "Share Capital", accountTypes: ["EQUITY"], subtypes: ["SHARE_CAPITAL"] },
+    retained_earnings: { label: "Retained Earnings", accountTypes: ["EQUITY"], subtypes: ["RETAINED_EARNINGS", "PROFIT_AND_LOSS"] },
     shareholders_funds: { label: "Shareholders Funds", calculated: true },
   },
   
@@ -101,10 +101,10 @@ export const UK_WORKPAPER_CATEGORIES = {
   },
   
   vat_return: {
-    box1_vat_due_sales: { label: "Box 1: VAT due on sales", accountCodes: ["2100"], vatType: "OUTPUT" },
+    box1_vat_due_sales: { label: "Box 1: VAT due on sales", accountTypes: ["LIABILITY"], subtypes: ["VAT_CONTROL", "VAT"], vatType: "OUTPUT" },
     box2_vat_due_acquisitions: { label: "Box 2: VAT due on acquisitions", manual: true },
     box3_total_vat_due: { label: "Box 3: Total VAT due", calculated: true },
-    box4_vat_reclaimed: { label: "Box 4: VAT reclaimed", accountCodes: ["2100"], vatType: "INPUT" },
+    box4_vat_reclaimed: { label: "Box 4: VAT reclaimed", accountTypes: ["LIABILITY"], subtypes: ["VAT_CONTROL", "VAT"], vatType: "INPUT" },
     box5_net_vat: { label: "Box 5: Net VAT payable/refundable", calculated: true },
     box6_total_sales: { label: "Box 6: Total sales exc VAT", accountTypes: ["INCOME"] },
     box7_total_purchases: { label: "Box 7: Total purchases exc VAT", accountTypes: ["EXPENSE"] },
@@ -186,11 +186,7 @@ export function mapTBToWorkpaperLines(
     // Find matching accounts
     let matchingBalances: TBBalance[] = [];
 
-    if (categoryDef.accountCodes) {
-      matchingBalances = balances.filter(b => 
-        categoryDef.accountCodes.some((code: string) => b.accountCode.startsWith(code))
-      );
-    } else if (categoryDef.accountTypes) {
+    if (categoryDef.accountTypes) {
       matchingBalances = balances.filter(b => {
         const typeMatch = categoryDef.accountTypes.includes(b.accountType);
         const subtypeMatch = !categoryDef.subtypes || 
