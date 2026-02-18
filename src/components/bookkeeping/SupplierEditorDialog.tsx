@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { getVatCodeLabel } from "@/lib/vat-code-utils";
 
 interface SupplierEditorDialogProps {
   open: boolean;
@@ -103,7 +104,7 @@ export default function SupplierEditorDialog({
       if (!organization?.id) return [];
       const { data } = await (supabase
         .from("vat_codes") as any)
-        .select("id, code, description, rate")
+        .select("id, code, description, rate, is_common")
         .eq("organization_id", organization.id)
         .eq("is_active", true)
         .order("code");
@@ -111,6 +112,13 @@ export default function SupplierEditorDialog({
     },
     enabled: open && !!organization?.id,
   });
+
+  const [showAllVatCodes, setShowAllVatCodes] = useState(false);
+
+  const filteredVatCodes = useMemo(() => {
+    if (!vatCodes) return [];
+    return showAllVatCodes ? vatCodes : vatCodes.filter((v: any) => v.is_common);
+  }, [vatCodes, showAllVatCodes]);
 
   useEffect(() => {
     if (supplier) {
@@ -281,13 +289,27 @@ export default function SupplierEditorDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">None</SelectItem>
-                  {vatCodes?.map((vat: any) => (
-                    <SelectItem key={vat.id} value={vat.id}>
-                      {vat.code} - {vat.description} ({vat.rate}%)
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const selectedId = watch("defaultVatCodeId");
+                    const selectedVat = vatCodes?.find((v: any) => v.id === selectedId);
+                    const opts = selectedVat && !filteredVatCodes.some((v: any) => v.id === selectedVat.id)
+                      ? [selectedVat, ...filteredVatCodes]
+                      : filteredVatCodes;
+                    return opts.map((vat: any) => (
+                      <SelectItem key={vat.id} value={vat.id}>
+                        {getVatCodeLabel(vat)}
+                      </SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:underline cursor-pointer mt-1"
+                onClick={() => setShowAllVatCodes((v) => !v)}
+              >
+                {showAllVatCodes ? "Show common only" : "Show all codes"}
+              </button>
             </div>
 
             <div>

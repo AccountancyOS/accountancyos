@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -13,6 +14,7 @@ import {
 import { Plus, X } from "lucide-react";
 import type { RuleAction } from "@/lib/bank-rules-service";
 import type { BookkeepingEntity } from "./EntitySelector";
+import { getVatCodeLabel } from "@/lib/vat-code-utils";
 
 interface RuleActionBuilderProps {
   actions: RuleAction[];
@@ -63,7 +65,7 @@ export function RuleActionBuilder({
       if (!organization?.id) return [];
       const { data } = await supabase
         .from("vat_codes")
-        .select("id, code, description, rate")
+        .select("id, code, description, rate, is_common")
         .eq("organization_id", organization.id)
         .eq("is_active", true)
         .order("code");
@@ -71,6 +73,13 @@ export function RuleActionBuilder({
     },
     enabled: !!organization?.id,
   });
+
+  const [showAllVatCodes, setShowAllVatCodes] = useState(false);
+
+  const filteredVatCodes = useMemo(() => {
+    if (!vatCodes) return [];
+    return showAllVatCodes ? vatCodes : vatCodes.filter((v) => v.is_common);
+  }, [vatCodes, showAllVatCodes]);
 
   const addAction = () => {
     onActionsChange([...actions, { type: "set_account", value: "" }]);
@@ -163,18 +172,33 @@ export function RuleActionBuilder({
                 </SelectContent>
               </Select>
             ) : isVatCode ? (
-              <Select value={action.value} onValueChange={(value) => updateAction(index, { value })}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Select VAT code" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vatCodes?.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.code} - {v.description} ({v.rate}%)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex-1 space-y-1">
+                <Select value={action.value} onValueChange={(value) => updateAction(index, { value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select VAT code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      const selectedVat = vatCodes?.find((v) => v.id === action.value);
+                      const opts = selectedVat && !filteredVatCodes.some((v) => v.id === selectedVat.id)
+                        ? [selectedVat, ...filteredVatCodes]
+                        : filteredVatCodes;
+                      return opts.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {getVatCodeLabel(v)}
+                        </SelectItem>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:underline cursor-pointer"
+                  onClick={() => setShowAllVatCodes((v) => !v)}
+                >
+                  {showAllVatCodes ? "Show common only" : "Show all codes"}
+                </button>
+              </div>
             ) : (
               <Input
                 value={action.value}
