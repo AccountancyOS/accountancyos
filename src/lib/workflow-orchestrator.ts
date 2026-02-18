@@ -14,8 +14,21 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { resolveStepsWithOverrides } from "./workflow-override-resolver";
+import { resolveStepsWithOverrides, type ResolvedStepConfig } from "./workflow-override-resolver";
 import { executeStep } from "./workflow-step-executor";
+
+/**
+ * Skip forward from a CONDITION gate failure to the next WAIT_UNTIL step or end.
+ * Returns the index of the next WAIT_UNTIL (or steps.length if none found).
+ */
+function skipUntilNextWaitOrEnd(steps: ResolvedStepConfig[], fromIdx: number): number {
+  for (let i = fromIdx + 1; i < steps.length; i++) {
+    if (steps[i].stepType === "WAIT_UNTIL" || steps[i].stepType === "WAIT_FOR_EVENT") {
+      return i;
+    }
+  }
+  return steps.length;
+}
 
 interface WorkflowInstance {
   id: string;
@@ -91,6 +104,36 @@ async function advanceInstance(instance: WorkflowInstance): Promise<{
         .eq("id", instance.id);
 
       return { advanced: false, error: result.error };
+    }
+
+    // Handle CONDITION gate failure: skip forward to next WAIT_UNTIL or end
+    if (result.data?.skipped && result.data?.conditionFailed) {
+      const nextWaitIdx = skipUntilNextWaitOrEnd(steps, currentIdx);
+      if (nextWaitIdx >= steps.length) {
+        await completeInstance(instance.id, instance.org_id, "completed");
+        return { advanced: true };
+      }
+      const nextStep = steps[nextWaitIdx];
+      await supabase
+        .from("automation_workflow_instances")
+        .update({
+          current_step_id: nextStep.stepId,
+          next_run_at: new Date().toISOString(),
+          waiting_for_event_key: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", instance.id);
+
+      // Log the skip
+      await supabase.from("automation_workflow_events").insert({
+        instance_id: instance.id,
+        org_id: instance.org_id,
+        step_id: currentStep.stepId,
+        event_type: "condition_gate_skipped",
+        payload: { skippedTo: nextStep.stepId, reason: result.data.reason } as Json,
+      });
+
+      return { advanced: true };
     }
 
     if (result.shouldWait) {

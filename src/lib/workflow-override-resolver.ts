@@ -18,6 +18,8 @@ export interface ResolvedTimingOverride {
 
 export interface ResolvedStepConfig {
   stepId: string;
+  /** Stable semantic identifier for override lookups */
+  stepKey: string;
   stepType: string;
   stepOrder: number;
   isOptional: boolean;
@@ -83,7 +85,7 @@ export async function resolveStepsWithOverrides(
   const [stepsResult, override] = await Promise.all([
     supabase
       .from("automation_workflow_steps")
-      .select("id, step_type, step_order, config, is_optional, is_blocking")
+      .select("id, step_key, step_type, step_order, config, is_optional, is_blocking")
       .eq("template_id", templateId)
       .order("step_order", { ascending: true }),
     fetchOrgOverride(orgId, templateId),
@@ -93,13 +95,17 @@ export async function resolveStepsWithOverrides(
 
   return stepsResult.data.map((step) => {
     const stepId = step.id;
+    const stepKey = (step as any).step_key as string;
     const config = (step.config || {}) as Record<string, unknown>;
     const isOptional = step.is_optional;
+
+    // Use step_key for all override lookups (not step.id)
+    const lookupKey = stepKey || stepId;
 
     // Determine if optional step is enabled
     let isEnabled = true;
     if (isOptional && override?.optional_step_toggles) {
-      const toggle = override.optional_step_toggles[stepId];
+      const toggle = override.optional_step_toggles[lookupKey];
       if (toggle !== undefined) {
         isEnabled = toggle;
       }
@@ -107,33 +113,34 @@ export async function resolveStepsWithOverrides(
 
     // Resolve timing
     let timingOverride: ResolvedTimingOverride | undefined;
-    if (override?.timing_overrides && override.timing_overrides[stepId]) {
-      timingOverride = override.timing_overrides[stepId] as ResolvedTimingOverride;
+    if (override?.timing_overrides && override.timing_overrides[lookupKey]) {
+      timingOverride = override.timing_overrides[lookupKey] as ResolvedTimingOverride;
     }
 
     // Resolve message template
     let messageTemplateId: string | undefined;
-    if (override?.message_template_overrides && override.message_template_overrides[stepId]) {
-      messageTemplateId = override.message_template_overrides[stepId] as string;
+    if (override?.message_template_overrides && override.message_template_overrides[lookupKey]) {
+      messageTemplateId = override.message_template_overrides[lookupKey] as string;
     }
 
     // Resolve channel
     let channel: string | undefined;
-    if (override?.channel_overrides && override.channel_overrides[stepId]) {
-      channel = override.channel_overrides[stepId] as string;
+    if (override?.channel_overrides && override.channel_overrides[lookupKey]) {
+      channel = override.channel_overrides[lookupKey] as string;
     }
 
     // Resolve assignment
     let assigneeUserId: string | undefined;
     let assigneeRole: string | undefined;
-    if (override?.assignment_overrides && override.assignment_overrides[stepId]) {
-      const assignment = override.assignment_overrides[stepId] as Record<string, string>;
+    if (override?.assignment_overrides && override.assignment_overrides[lookupKey]) {
+      const assignment = override.assignment_overrides[lookupKey] as Record<string, string>;
       assigneeUserId = assignment.userId;
       assigneeRole = assignment.role;
     }
 
     return {
       stepId,
+      stepKey,
       stepType: step.step_type,
       stepOrder: step.step_order,
       isOptional,

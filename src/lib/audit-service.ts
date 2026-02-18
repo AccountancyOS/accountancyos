@@ -28,6 +28,7 @@ export type AuditEntityType =
   | "bank_transaction"
   | "vat_return"
   | "automation_rule"
+  | "automation_override"
   | "template"
   | "document"
   | "user"
@@ -65,7 +66,8 @@ export type AuditAction =
   | "export"
   | "import"
   | "create_version"
-  | "send_to_client";
+  | "send_to_client"
+  | "timing_reset";
 
 export interface AuditLogEntry {
   id: string;

@@ -884,6 +884,7 @@ export type Database = {
           id: string
           is_blocking: boolean
           is_optional: boolean
+          step_key: string
           step_order: number
           step_type: string
           template_id: string
@@ -895,6 +896,7 @@ export type Database = {
           id?: string
           is_blocking?: boolean
           is_optional?: boolean
+          step_key: string
           step_order: number
           step_type: string
           template_id: string
@@ -906,6 +908,7 @@ export type Database = {
           id?: string
           is_blocking?: boolean
           is_optional?: boolean
+          step_key?: string
           step_order?: number
           step_type?: string
           template_id?: string
@@ -2265,6 +2268,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      chaser_message_templates: {
+        Row: {
+          body_html: string
+          created_at: string
+          id: string
+          key: string
+          name: string
+          subject: string
+          updated_at: string
+          variables_schema: Json
+        }
+        Insert: {
+          body_html?: string
+          created_at?: string
+          id?: string
+          key: string
+          name: string
+          subject: string
+          updated_at?: string
+          variables_schema?: Json
+        }
+        Update: {
+          body_html?: string
+          created_at?: string
+          id?: string
+          key?: string
+          name?: string
+          subject?: string
+          updated_at?: string
+          variables_schema?: Json
+        }
+        Relationships: []
       }
       cis_contractors: {
         Row: {

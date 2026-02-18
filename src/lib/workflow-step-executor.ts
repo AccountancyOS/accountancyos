@@ -3,12 +3,18 @@
  * 
  * Executes individual workflow steps based on their type.
  * Handles: SEND_EMAIL, CREATE_JOB, CREATE_TASK, SEND_NOTIFICATION,
- *          WAIT_UNTIL, WAIT_FOR_EVENT, SET_SLA_TIMER, UPDATE_STATUS
+ *          WAIT_UNTIL, WAIT_FOR_EVENT, SET_SLA_TIMER, UPDATE_STATUS,
+ *          CONDITION
+ * 
+ * NOTE: Client-side executor is for preview rendering only.
+ * The server-side edge function (workflow-tick) is the authoritative executor.
+ * Client-side WAIT_UNTIL does NOT write to the database.
  */
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { ResolvedStepConfig } from "./workflow-override-resolver";
+import { VALID_CONDITION_REFS, CONDITION_TYPES } from "./workflow-constants";
 
 export interface StepExecutionResult {
   success: boolean;
@@ -35,8 +41,6 @@ interface ExecutionContext {
 
 /**
  * Resolve placeholder values in a string.
- * Placeholders: {{client.name}}, {{company.name}}, {{period_key}}, etc.
- * Uses the workflow context for resolution.
  */
 function resolvePlaceholders(
   template: string,
@@ -53,14 +57,65 @@ function resolvePlaceholders(
 }
 
 /**
+ * Execute a CONDITION step.
+ * Returns { skipped: true } when the condition fails (gate blocks).
+ * The orchestrator must then skip forward to the next WAIT_UNTIL or end.
+ */
+function executeCondition(
+  step: ResolvedStepConfig,
+  ctx: ExecutionContext
+): StepExecutionResult {
+  const config = step.config as {
+    condition_type?: string;
+    values_ref?: string;
+    job_context_key?: string;
+  };
+
+  if (config.condition_type !== CONDITION_TYPES.JOB_STATUS_NOT_IN) {
+    return { success: false, shouldWait: false, error: `Unsupported condition_type: ${config.condition_type}` };
+  }
+
+  // Resolve values_ref to a known constant
+  const valuesRef = config.values_ref;
+  if (!valuesRef || !VALID_CONDITION_REFS[valuesRef]) {
+    return { success: false, shouldWait: false, error: `Unknown values_ref: ${valuesRef}. Must be one of: ${Object.keys(VALID_CONDITION_REFS).join(", ")}` };
+  }
+
+  const blockedStatuses = VALID_CONDITION_REFS[valuesRef];
+
+  // Resolve current job status from context
+  const jobId = ctx.workflowContext[config.job_context_key || "jobId"] as string | undefined;
+  const jobStatus = ctx.workflowContext.jobStatus as string | undefined;
+
+  if (!jobStatus) {
+    // If we can't determine status, let it pass (don't block on missing data)
+    return { success: true, shouldWait: false, data: { conditionPassed: true, reason: "job_status_unknown" } };
+  }
+
+  if (blockedStatuses.includes(jobStatus)) {
+    // Condition FAILED — records already received or further
+    return {
+      success: true,
+      shouldWait: false,
+      data: { skipped: true, conditionFailed: true, reason: "condition_not_met", jobStatus, blockedBy: valuesRef },
+    };
+  }
+
+  // Condition passed — continue to next step
+  return { success: true, shouldWait: false, data: { conditionPassed: true, jobStatus } };
+}
+
+/**
  * Execute a WAIT_UNTIL step.
- * Calculates the target date from config and timing overrides.
+ * Uses anchor_key from config to resolve the base date from context.anchors.
+ * Falls back to legacy base_date_field for backwards compatibility.
  */
 function executeWaitUntil(
   step: ResolvedStepConfig,
   ctx: ExecutionContext
 ): StepExecutionResult {
   const config = step.config as {
+    anchor_key?: string;
     base_date_field?: string;
     offset_days?: number;
     time_of_day?: string;
@@ -69,7 +124,7 @@ function executeWaitUntil(
   let offsetDays = config.offset_days ?? 0;
   let timeOfDay = config.time_of_day ?? "09:00";
 
-  // Apply timing override
+  // Apply timing override (keyed by step_key)
   if (step.timingOverride) {
     if (step.timingOverride.offsetDays !== undefined) {
       offsetDays = step.timingOverride.offsetDays;
@@ -79,10 +134,36 @@ function executeWaitUntil(
     }
   }
 
-  // Resolve base date from context
-  const baseDateField = config.base_date_field || "period_end";
-  const baseDateStr = (ctx.workflowContext[baseDateField] as string) || new Date().toISOString();
-  
+  // Resolve base date: prefer anchor_key, fall back to legacy base_date_field
+  let baseDateStr: string | null = null;
+
+  if (config.anchor_key) {
+    const anchors = (ctx.workflowContext.anchors || {}) as Record<string, string>;
+    baseDateStr = anchors[config.anchor_key] || null;
+
+    if (!baseDateStr) {
+      // Missing anchor
+      if (step.isBlocking) {
+        return {
+          success: true,
+          shouldWait: true, // Pause the instance
+          data: { anchorMissing: true, anchorKey: config.anchor_key, reason: `Anchor '${config.anchor_key}' not resolved in workflow context` },
+        };
+      } else {
+        // Non-blocking: skip
+        return {
+          success: true,
+          shouldWait: false,
+          data: { skipped: true, anchorMissing: true, anchorKey: config.anchor_key },
+        };
+      }
+    }
+  } else {
+    // Legacy fallback
+    const legacyField = config.base_date_field || "period_end";
+    baseDateStr = (ctx.workflowContext[legacyField] as string) || new Date().toISOString();
+  }
+
   const baseDate = new Date(baseDateStr);
   baseDate.setDate(baseDate.getDate() + offsetDays);
   
@@ -406,6 +487,8 @@ export async function executeStep(
   }
 
   switch (step.stepType) {
+    case "CONDITION":
+      return executeCondition(step, ctx);
     case "WAIT_UNTIL":
       return executeWaitUntil(step, ctx);
     case "WAIT_FOR_EVENT":
