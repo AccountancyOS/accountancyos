@@ -5154,6 +5154,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "email_messages_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "connected_mailboxes_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "email_messages_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
@@ -5212,6 +5219,13 @@ export type Database = {
             columns: ["mailbox_id"]
             isOneToOne: false
             referencedRelation: "connected_mailboxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_push_subscriptions_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "connected_mailboxes_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -5343,6 +5357,13 @@ export type Database = {
             columns: ["mailbox_id"]
             isOneToOne: false
             referencedRelation: "connected_mailboxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_queue_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "connected_mailboxes_safe"
             referencedColumns: ["id"]
           },
           {
@@ -8845,16 +8866,19 @@ export type Database = {
           debit: number | null
           description: string | null
           document_id: string | null
+          entry_date: string | null
           fx_rate_to_base: number | null
           gross_amount: number | null
           id: string
           is_locked: boolean | null
+          journal_id: string | null
           jurisdiction: string | null
           net_amount: number | null
           organization_id: string
           paid_amount: number | null
           paid_at: string | null
           payment_status: string | null
+          reference: string | null
           reverse_charge: boolean | null
           source_id: string | null
           source_type: string
@@ -8881,16 +8905,19 @@ export type Database = {
           debit?: number | null
           description?: string | null
           document_id?: string | null
+          entry_date?: string | null
           fx_rate_to_base?: number | null
           gross_amount?: number | null
           id?: string
           is_locked?: boolean | null
+          journal_id?: string | null
           jurisdiction?: string | null
           net_amount?: number | null
           organization_id: string
           paid_amount?: number | null
           paid_at?: string | null
           payment_status?: string | null
+          reference?: string | null
           reverse_charge?: boolean | null
           source_id?: string | null
           source_type: string
@@ -8917,16 +8944,19 @@ export type Database = {
           debit?: number | null
           description?: string | null
           document_id?: string | null
+          entry_date?: string | null
           fx_rate_to_base?: number | null
           gross_amount?: number | null
           id?: string
           is_locked?: boolean | null
+          journal_id?: string | null
           jurisdiction?: string | null
           net_amount?: number | null
           organization_id?: string
           paid_amount?: number | null
           paid_at?: string | null
           payment_status?: string | null
+          reference?: string | null
           reverse_charge?: boolean | null
           source_id?: string | null
           source_type?: string
@@ -8976,6 +9006,13 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "job_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
             referencedColumns: ["id"]
           },
           {
@@ -13820,7 +13857,59 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      connected_mailboxes_safe: {
+        Row: {
+          created_at: string | null
+          email_address: string | null
+          error_message: string | null
+          id: string | null
+          last_sync_at: string | null
+          mailbox_type: string | null
+          organization_id: string | null
+          provider: Database["public"]["Enums"]["mailbox_provider"] | null
+          status: Database["public"]["Enums"]["mailbox_status"] | null
+          sync_enabled: boolean | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email_address?: string | null
+          error_message?: string | null
+          id?: string | null
+          last_sync_at?: string | null
+          mailbox_type?: string | null
+          organization_id?: string | null
+          provider?: Database["public"]["Enums"]["mailbox_provider"] | null
+          status?: Database["public"]["Enums"]["mailbox_status"] | null
+          sync_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email_address?: string | null
+          error_message?: string | null
+          id?: string | null
+          last_sync_at?: string | null
+          mailbox_type?: string | null
+          organization_id?: string | null
+          provider?: Database["public"]["Enums"]["mailbox_provider"] | null
+          status?: Database["public"]["Enums"]["mailbox_status"] | null
+          sync_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connected_mailboxes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _check_questionnaire_token_rate_limit: {
@@ -14417,6 +14506,24 @@ export type Database = {
       }
       override_invoice_lock_safe: {
         Args: { p_changes: Json; p_invoice_id: string; p_reason: string }
+        Returns: Json
+      }
+      post_to_ledger: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_created_by?: string
+          p_currency?: string
+          p_description: string
+          p_entries?: Json
+          p_fx_rate?: number
+          p_journal_date: string
+          p_journal_type: string
+          p_organization_id: string
+          p_reference: string
+          p_source_id: string
+          p_source_type: string
+        }
         Returns: Json
       }
       process_questionnaire_submission: {
