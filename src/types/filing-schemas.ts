@@ -342,6 +342,158 @@ export interface CT600DraftScheduleData {
 
 // ==================== FRS105 ACCOUNTS DRAFT ====================
 
+// --- Balance Sheet Line with Provenance ---
+
+export interface BalanceSheetLineValue {
+  amount: number;
+  source: 'derived' | 'manual_override';
+  override_reason?: string;
+}
+
+// --- Structured Disclosure Types (no generic blobs) ---
+
+export type DisclosureStatus = 'complete' | 'required_missing' | 'not_required' | 'locked';
+
+export interface DisclosureStatementOfCompliance {
+  text: string; // system-generated, locked
+  status: 'locked';
+}
+
+export interface DisclosureAverageEmployees {
+  count: number; // >= 0
+  source: 'payroll' | 'manual';
+  confirmed: boolean;
+  status: DisclosureStatus;
+}
+
+export interface DirectorsAdvanceEntry {
+  director_name: string;
+  opening_balance: number;
+  movement: number;
+  closing_balance: number;
+  interest_rate: number | null; // null only if zero interest
+  terms_narrative?: string; // sanitised
+}
+
+export interface DisclosureDirectorsAdvances {
+  entries: DirectorsAdvanceEntry[];
+  confirmed_none: boolean;
+  accountant_affirmation?: boolean; // required when no ledger data
+  status: DisclosureStatus;
+  requirement_reason?: string;
+}
+
+export interface DividendEntry {
+  amount: number;
+  date: string;
+  type: 'interim' | 'final' | 'special';
+}
+
+export interface DisclosureDividends {
+  entries: DividendEntry[];
+  confirmed_none: boolean;
+  status: DisclosureStatus;
+  requirement_reason?: string;
+}
+
+export interface RelatedPartyEntry {
+  relationship: string;
+  description: string;
+  amount: number;
+  balance: number;
+  terms_narrative?: string; // sanitised
+}
+
+export interface DisclosureRelatedParty {
+  entries: RelatedPartyEntry[];
+  confirmed_none: boolean;
+  status: DisclosureStatus;
+  requirement_reason?: string;
+}
+
+export interface CommitmentEntry {
+  category: 'capital_commitment' | 'lease_commitment' | 'guarantee' | 'contingent_liability' | 'other';
+  amount: number;
+  narrative?: string; // sanitised
+}
+
+export interface DisclosureCommitments {
+  entries: CommitmentEntry[];
+  confirmed_none: boolean;
+  status: DisclosureStatus;
+  requirement_reason?: string;
+}
+
+export interface DisclosureOffBalanceSheet {
+  confirmed_none: boolean;
+  narrative?: string; // sanitised
+  status: DisclosureStatus;
+}
+
+export interface DisclosureGoingConcern {
+  flagged: boolean;
+  narrative?: string; // sanitised, only if flagged
+  status: DisclosureStatus;
+}
+
+export interface DisclosurePriorPeriodAdjustments {
+  flagged: boolean;
+  description?: string; // sanitised, only if flagged
+  amount?: number;
+  status: DisclosureStatus;
+}
+
+export interface FRS105StructuredDisclosures {
+  statement_of_compliance: DisclosureStatementOfCompliance;
+  average_employees: DisclosureAverageEmployees;
+  directors_advances: DisclosureDirectorsAdvances;
+  dividends: DisclosureDividends;
+  related_party_transactions: DisclosureRelatedParty;
+  commitments: DisclosureCommitments;
+  off_balance_sheet: DisclosureOffBalanceSheet;
+  going_concern: DisclosureGoingConcern;
+  prior_period_adjustments: DisclosurePriorPeriodAdjustments;
+}
+
+// --- Prior Period Comparatives ---
+
+export interface FRS105PriorPeriod {
+  period_start: string;
+  period_end: string;
+  tangible_assets: BalanceSheetLineValue;
+  debtors: BalanceSheetLineValue;
+  cash_at_bank: BalanceSheetLineValue;
+  creditors_within_one_year: BalanceSheetLineValue;
+  creditors_after_one_year: BalanceSheetLineValue;
+  share_capital: BalanceSheetLineValue;
+  retained_earnings: BalanceSheetLineValue;
+  // Computed
+  net_current_assets: number;
+  total_assets_less_current_liabilities: number;
+  net_assets: number;
+  total_equity: number;
+}
+
+// --- FRS105 Balance Sheet with Provenance ---
+
+export interface FRS105BalanceSheetDraft {
+  tangible_assets: BalanceSheetLineValue;
+  debtors: BalanceSheetLineValue;
+  cash_at_bank: BalanceSheetLineValue;
+  creditors_within_one_year: BalanceSheetLineValue;
+  creditors_after_one_year: BalanceSheetLineValue;
+  share_capital: BalanceSheetLineValue;
+  retained_earnings: BalanceSheetLineValue;
+  // Auto-computed (not persisted as line values)
+  net_current_assets: number;
+  total_assets_less_current_liabilities: number;
+  net_assets: number;
+  total_equity: number;
+}
+
+// --- Main FRS105 Draft ---
+
+/** @deprecated Use FRS105StructuredDisclosures instead */
 export interface DisclosureEntry {
   key: string;
   title: string;
@@ -358,14 +510,27 @@ export interface AccountsDraftScheduleData {
   };
   // TB reference
   tb_source: 'ledger' | 'csv_import' | 'manual';
-  // Disclosures (per-filing editable)
-  disclosures: DisclosureEntry[];
+  // Balance sheet with line-level provenance
+  balance_sheet: FRS105BalanceSheetDraft;
+  // Prior period comparatives (first-class, own iXBRL context)
+  prior_period?: FRS105PriorPeriod;
+  // Structured disclosures (no free-text blobs)
+  disclosures: FRS105StructuredDisclosures;
   // Director info
   directors: Array<{
     name: string;
     appointed_date?: string;
     resigned_date?: string;
   }>;
+  // Approval
+  approval: {
+    approved_by_board: boolean;
+    approval_date?: string;
+    signatory_name?: string;
+    signatory_role?: string;
+  };
+  // Legacy compat
+  legacy_disclosures?: DisclosureEntry[];
 }
 
 // ==================== PARTNERSHIP DRAFT ====================

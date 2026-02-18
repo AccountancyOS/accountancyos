@@ -1,35 +1,34 @@
 import { supabase } from "@/integrations/supabase/client";
+import type {
+  FRS105StructuredDisclosures,
+  FRS105BalanceSheetDraft,
+  FRS105PriorPeriod,
+} from "@/types/filing-schemas";
 
-// FRS 105 Balance Sheet structure (micro-entity)
+// FRS 105 Balance Sheet structure (micro-entity) — flat numeric for iXBRL model
 export interface FRS105BalanceSheet {
   // Fixed Assets
   tangible_assets: number;
-  
   // Current Assets
   debtors: number;
   cash_at_bank: number;
-  
   // Creditors: amounts falling due within one year
   creditors_within_one_year: number;
-  
   // Net Current Assets / Liabilities
   net_current_assets: number;
-  
   // Total Assets Less Current Liabilities
   total_assets_less_current_liabilities: number;
-  
   // Creditors: amounts falling due after more than one year
   creditors_after_one_year: number;
-  
   // Net Assets
   net_assets: number;
-  
   // Capital and Reserves
   share_capital: number;
   retained_earnings: number;
   total_equity: number;
 }
 
+/** @deprecated Use FRS105StructuredDisclosures from filing-schemas.ts */
 export interface FRS105Notes {
   accounting_policies: string[];
   average_employees?: number;
@@ -44,27 +43,90 @@ export interface FRS105DirectorApproval {
   signatory_position: string;
 }
 
+// iXBRL context definitions
+export interface FRS105Contexts {
+  current_period_instant: string; // period_end date
+  current_period_duration_start: string;
+  current_period_duration_end: string;
+  prior_period_instant?: string;
+  prior_period_duration_start?: string;
+  prior_period_duration_end?: string;
+}
+
+// Units and decimals for iXBRL
+export interface FRS105UnitsDecimals {
+  currency: string; // ISO 4217 e.g. "GBP"
+  decimals: number; // typically 0 for accounts
+}
+
 export interface FRS105AccountsModel {
   company_id: string;
   company_name: string;
   company_number: string;
   period_start: string;
   period_end: string;
-  
+
   balance_sheet: FRS105BalanceSheet;
-  prior_period_balance_sheet?: FRS105BalanceSheet;
-  
-  notes: FRS105Notes;
+  prior_period_balance_sheet: FRS105BalanceSheet | null; // null for first-year
+
+  // Structured disclosures (replaces old FRS105Notes)
+  disclosures: FRS105StructuredDisclosures;
+  /** @deprecated Use disclosures instead */
+  notes?: FRS105Notes;
+
   director_approval: FRS105DirectorApproval;
-  
+
+  // iXBRL context definitions
+  contexts: FRS105Contexts;
+  units: FRS105UnitsDecimals;
+
   // Derived fields
   is_dormant: boolean;
   has_audit_exemption: boolean;
-  
+
   // Metadata
   taxonomy_version: string;
   generator_version: string;
   snapshot_hash: string;
+}
+
+/**
+ * Convert a provenance-tracked balance sheet draft to a flat FRS105BalanceSheet
+ * for iXBRL model consumption.
+ */
+export function draftToFlatBalanceSheet(draft: FRS105BalanceSheetDraft): FRS105BalanceSheet {
+  return {
+    tangible_assets: draft.tangible_assets.amount,
+    debtors: draft.debtors.amount,
+    cash_at_bank: draft.cash_at_bank.amount,
+    creditors_within_one_year: draft.creditors_within_one_year.amount,
+    net_current_assets: draft.net_current_assets,
+    total_assets_less_current_liabilities: draft.total_assets_less_current_liabilities,
+    creditors_after_one_year: draft.creditors_after_one_year.amount,
+    net_assets: draft.net_assets,
+    share_capital: draft.share_capital.amount,
+    retained_earnings: draft.retained_earnings.amount,
+    total_equity: draft.total_equity,
+  };
+}
+
+/**
+ * Convert prior period to flat balance sheet for iXBRL.
+ */
+export function priorPeriodToFlatBalanceSheet(pp: FRS105PriorPeriod): FRS105BalanceSheet {
+  return {
+    tangible_assets: pp.tangible_assets.amount,
+    debtors: pp.debtors.amount,
+    cash_at_bank: pp.cash_at_bank.amount,
+    creditors_within_one_year: pp.creditors_within_one_year.amount,
+    net_current_assets: pp.net_current_assets,
+    total_assets_less_current_liabilities: pp.total_assets_less_current_liabilities,
+    creditors_after_one_year: pp.creditors_after_one_year.amount,
+    net_assets: pp.net_assets,
+    share_capital: pp.share_capital.amount,
+    retained_earnings: pp.retained_earnings.amount,
+    total_equity: pp.total_equity,
+  };
 }
 
 // TB account code mappings for FRS 105
@@ -169,7 +231,7 @@ export async function createFRS105AccountsModel(
   // Map trial balance to balance sheet
   const balance_sheet = mapTrialBalanceToFRS105(trialBalance, accounts);
 
-  // Extract notes from workpaper
+  // Extract legacy notes from workpaper
   const notes: FRS105Notes = {
     accounting_policies: [
       'These accounts have been prepared in accordance with the provisions of FRS 105.',
@@ -180,6 +242,10 @@ export async function createFRS105AccountsModel(
     related_party_transactions: workpaperData.related_party_transactions,
   };
 
+  // Import disclosure engine defaults
+  const { createDefaultDisclosures } = await import("@/lib/frs105-disclosure-engine");
+  const disclosures = createDefaultDisclosures();
+
   // Director approval
   const director_approval: FRS105DirectorApproval = {
     approved_by_board: workpaperData.approved_by_board || false,
@@ -188,19 +254,30 @@ export async function createFRS105AccountsModel(
     signatory_position: workpaperData.signatory_position || 'Director',
   };
 
+  const periodEnd = workpaperData.period_end;
+  const periodStart = workpaperData.period_start;
+
   const model: Omit<FRS105AccountsModel, 'snapshot_hash'> = {
     company_id: companyId,
     company_name: company.company_name,
     company_number: company.company_number,
-    period_start: workpaperData.period_start,
-    period_end: workpaperData.period_end,
+    period_start: periodStart,
+    period_end: periodEnd,
     balance_sheet,
+    prior_period_balance_sheet: null,
+    disclosures,
     notes,
     director_approval,
+    contexts: {
+      current_period_instant: periodEnd,
+      current_period_duration_start: periodStart,
+      current_period_duration_end: periodEnd,
+    },
+    units: { currency: 'GBP', decimals: 0 },
     is_dormant: workpaperData.is_dormant || false,
     has_audit_exemption: true, // Micro-entities are exempt
     taxonomy_version: 'FRS105-2022',
-    generator_version: '1.0.0',
+    generator_version: '2.0.0',
   };
 
   const snapshot_hash = await generateHash(model);
@@ -258,6 +335,8 @@ export async function getAccountsModelSnapshot(
     throw error;
   }
 
+  const { createDefaultDisclosures } = await import("@/lib/frs105-disclosure-engine");
+
   return {
     company_id: data.company_id,
     company_name: (data.companies as any)?.company_name || '',
@@ -265,8 +344,16 @@ export async function getAccountsModelSnapshot(
     period_start: data.period_start,
     period_end: data.period_end,
     balance_sheet: data.balance_sheet as unknown as FRS105BalanceSheet,
+    prior_period_balance_sheet: null,
+    disclosures: createDefaultDisclosures(),
     notes: data.notes as unknown as FRS105Notes,
     director_approval: data.director_approval as unknown as FRS105DirectorApproval,
+    contexts: {
+      current_period_instant: data.period_end,
+      current_period_duration_start: data.period_start,
+      current_period_duration_end: data.period_end,
+    },
+    units: { currency: 'GBP', decimals: 0 },
     is_dormant: false,
     has_audit_exemption: true,
     taxonomy_version: data.taxonomy_version,

@@ -1,5 +1,6 @@
 import { FRS105AccountsModel, FRS105BalanceSheet } from "./frs105-accounts-model";
 import { CTComputationResult } from "./ct-computation-engine";
+import { sanitizeFooterHtml } from "./sanitizeHtml";
 
 // FRS 105 iXBRL Taxonomy namespaces
 const NAMESPACES = {
@@ -22,23 +23,158 @@ function generateContextId(periodType: 'instant' | 'duration', date: string, end
   return `From${date.replace(/-/g, '')}To${endDate!.replace(/-/g, '')}`;
 }
 
-// Generate iXBRL for FRS 105 Accounts
+// Sanitise narrative for safe embedding in iXBRL HTML
+function sanitiseNarrative(text: string | undefined | null): string {
+  if (!text) return '';
+  return sanitizeFooterHtml(text) || '';
+}
+
+// Escape XML entities
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatNumber(num: number): string {
+  return num.toFixed(0);
+}
+
+/**
+ * Generate iXBRL for FRS 105 Accounts.
+ * Consumes the canonical FRS105AccountsModel (NOT the balance sheet grid directly).
+ * Hard-fails if any disclosure is in required_missing state.
+ */
 export function generateFRS105iXBRL(model: FRS105AccountsModel): string {
+  // HARD GATE: Validate disclosures are complete
+  const disclosures = model.disclosures;
+  const disclosureKeys = [
+    'average_employees', 'directors_advances', 'dividends',
+    'related_party_transactions', 'commitments', 'off_balance_sheet',
+    'going_concern', 'prior_period_adjustments',
+  ] as const;
+  
+  for (const key of disclosureKeys) {
+    const d = disclosures[key];
+    if (d.status === 'required_missing') {
+      throw new Error(`Cannot generate iXBRL: disclosure '${key}' is required but incomplete`);
+    }
+  }
+
   const currentPeriodContextId = generateContextId('instant', model.period_end);
   const durationContextId = generateContextId('duration', model.period_start, model.period_end);
   
-  const escapeXml = (text: string): string => {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  // Prior period contexts
+  const hasPriorPeriod = !!model.prior_period_balance_sheet && !!model.contexts.prior_period_instant;
+  const priorPeriodContextId = hasPriorPeriod
+    ? generateContextId('instant', model.contexts.prior_period_instant!)
+    : null;
+
+  const priorHeader = hasPriorPeriod ? `<th class="amount">Prior £</th>` : '';
+  
+  const priorCell = (value: number | undefined) => {
+    if (!hasPriorPeriod) return '';
+    return `<td class="amount">${value !== undefined ? formatNumber(value) : ''}</td>`;
   };
 
-  const formatNumber = (num: number): string => {
-    return num.toFixed(0);
+  const priorTaggedCell = (value: number | undefined, tagName: string) => {
+    if (!hasPriorPeriod || value === undefined) return priorCell(value);
+    return `<td class="amount"><ix:nonFraction contextRef="${priorPeriodContextId}" name="${tagName}" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(value)}</ix:nonFraction></td>`;
   };
+
+  const pp = model.prior_period_balance_sheet;
+
+  // Build disclosure notes HTML
+  let disclosureHtml = '';
+  
+  // Statement of compliance (locked, system-generated)
+  disclosureHtml += `<p><ix:nonNumeric contextRef="${durationContextId}" name="uk-direp:StatementThatAccountsHaveBeenPreparedInAccordanceWithProvisionsSmallCompaniesRegime">${escapeXml(disclosures.statement_of_compliance.text)}</ix:nonNumeric></p>\n`;
+
+  // Average employees
+  if (disclosures.average_employees.confirmed) {
+    disclosureHtml += `<p>The average number of employees during the period was <ix:nonFraction contextRef="${durationContextId}" name="uk-bus:AverageNumberEmployeesDuringPeriod" unitRef="pure" decimals="0">${disclosures.average_employees.count}</ix:nonFraction>.</p>\n`;
+  }
+
+  // Directors' advances
+  if (disclosures.directors_advances.entries.length > 0) {
+    disclosureHtml += `<h3>Directors' Advances, Credits and Guarantees</h3>\n<table><tr><th>Director</th><th class="amount">Opening</th><th class="amount">Movement</th><th class="amount">Closing</th><th class="amount">Rate</th></tr>\n`;
+    for (const entry of disclosures.directors_advances.entries) {
+      disclosureHtml += `<tr><td>${escapeXml(entry.director_name)}</td><td class="amount">${formatNumber(entry.opening_balance)}</td><td class="amount">${formatNumber(entry.movement)}</td><td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-direp:DirectorsAdvances" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(entry.closing_balance)}</ix:nonFraction></td><td class="amount">${entry.interest_rate !== null ? entry.interest_rate + '%' : 'Interest-free'}</td></tr>\n`;
+      if (entry.terms_narrative) {
+        disclosureHtml += `<tr><td colspan="5" style="font-size:9pt;padding-left:20px;">${sanitiseNarrative(entry.terms_narrative)}</td></tr>\n`;
+      }
+    }
+    disclosureHtml += `</table>\n`;
+  } else if (disclosures.directors_advances.confirmed_none) {
+    disclosureHtml += `<p>No directors' advances, credits or guarantees existed during the period.</p>\n`;
+  }
+
+  // Dividends
+  if (disclosures.dividends.entries.length > 0) {
+    disclosureHtml += `<h3>Dividends</h3>\n`;
+    for (const d of disclosures.dividends.entries) {
+      disclosureHtml += `<p>${escapeXml(d.type)} dividend of £${formatNumber(d.amount)} declared on ${d.date}.</p>\n`;
+    }
+  }
+
+  // Related party transactions
+  if (disclosures.related_party_transactions.entries.length > 0) {
+    disclosureHtml += `<h3>Related Party Transactions</h3>\n<table><tr><th>Relationship</th><th>Description</th><th class="amount">Amount</th><th class="amount">Balance</th></tr>\n`;
+    for (const rpt of disclosures.related_party_transactions.entries) {
+      disclosureHtml += `<tr><td>${escapeXml(rpt.relationship)}</td><td>${escapeXml(rpt.description)}</td><td class="amount">${formatNumber(rpt.amount)}</td><td class="amount">${formatNumber(rpt.balance)}</td></tr>\n`;
+      if (rpt.terms_narrative) {
+        disclosureHtml += `<tr><td colspan="4" style="font-size:9pt;padding-left:20px;">${sanitiseNarrative(rpt.terms_narrative)}</td></tr>\n`;
+      }
+    }
+    disclosureHtml += `</table>\n`;
+  }
+
+  // Commitments
+  if (disclosures.commitments.entries.length > 0) {
+    disclosureHtml += `<h3>Commitments and Contingent Liabilities</h3>\n`;
+    for (const c of disclosures.commitments.entries) {
+      disclosureHtml += `<p>${escapeXml(c.category)}: £${formatNumber(c.amount)}${c.narrative ? ` — ${sanitiseNarrative(c.narrative)}` : ''}</p>\n`;
+    }
+  } else if (disclosures.commitments.confirmed_none) {
+    disclosureHtml += `<p>There were no commitments or contingent liabilities at the period end.</p>\n`;
+  }
+
+  // Off-balance sheet
+  if (disclosures.off_balance_sheet.narrative) {
+    disclosureHtml += `<h3>Off-Balance Sheet Arrangements</h3>\n<p>${sanitiseNarrative(disclosures.off_balance_sheet.narrative)}</p>\n`;
+  } else if (disclosures.off_balance_sheet.confirmed_none) {
+    disclosureHtml += `<p>There were no off-balance sheet arrangements during the period.</p>\n`;
+  }
+
+  // Going concern
+  if (disclosures.going_concern.flagged && disclosures.going_concern.narrative) {
+    disclosureHtml += `<h3>Going Concern</h3>\n<p>${sanitiseNarrative(disclosures.going_concern.narrative)}</p>\n`;
+  }
+
+  // Prior period adjustments
+  if (disclosures.prior_period_adjustments.flagged && disclosures.prior_period_adjustments.description) {
+    disclosureHtml += `<h3>Prior Period Adjustments</h3>\n<p>${sanitiseNarrative(disclosures.prior_period_adjustments.description)}${disclosures.prior_period_adjustments.amount !== undefined ? ` (£${formatNumber(disclosures.prior_period_adjustments.amount)})` : ''}</p>\n`;
+  }
+
+  // Build prior period context XML
+  let priorContextXml = '';
+  if (hasPriorPeriod && model.contexts.prior_period_instant) {
+    priorContextXml = `
+    <xbrli:context id="${priorPeriodContextId}">
+      <xbrli:entity>
+        <xbrli:identifier scheme="http://www.companieshouse.gov.uk/">${model.company_number}</xbrli:identifier>
+      </xbrli:entity>
+      <xbrli:period>
+        <xbrli:instant>${model.contexts.prior_period_instant}</xbrli:instant>
+      </xbrli:period>
+    </xbrli:context>`;
+  }
+
+  // Pure unit for employee count
+  const pureUnitXml = `<xbrli:unit id="pure"><xbrli:measure>xbrli:pure</xbrli:measure></xbrli:unit>`;
 
   const ixbrl = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
@@ -61,6 +197,7 @@ export function generateFRS105iXBRL(model: FRS105AccountsModel): string {
     body { font-family: Arial, sans-serif; margin: 40px; }
     h1 { font-size: 18pt; }
     h2 { font-size: 14pt; margin-top: 20px; }
+    h3 { font-size: 12pt; margin-top: 15px; }
     table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
     td.amount { text-align: right; }
@@ -100,10 +237,11 @@ export function generateFRS105iXBRL(model: FRS105AccountsModel): string {
         <xbrli:startDate>${model.period_start}</xbrli:startDate>
         <xbrli:endDate>${model.period_end}</xbrli:endDate>
       </xbrli:period>
-    </xbrli:context>
-    <xbrli:unit id="GBP">
-      <xbrli:measure>iso4217:GBP</xbrli:measure>
+    </xbrli:context>${priorContextXml}
+    <xbrli:unit id="${model.units.currency}">
+      <xbrli:measure>iso4217:${model.units.currency}</xbrli:measure>
     </xbrli:unit>
+    ${pureUnitXml}
   </ix:resources>
 </ix:header>
 
@@ -118,101 +256,110 @@ export function generateFRS105iXBRL(model: FRS105AccountsModel): string {
     <th></th>
     <th class="amount">£</th>
     <th class="amount">£</th>
+    ${priorHeader}
   </tr>
   
   <tr>
-    <td colspan="3"><strong>Fixed Assets</strong></td>
+    <td colspan="${hasPriorPeriod ? 4 : 3}"><strong>Fixed Assets</strong></td>
   </tr>
   <tr>
     <td>Tangible assets</td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:TangibleFixedAssets" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.tangible_assets)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:TangibleFixedAssets" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.tangible_assets)}</ix:nonFraction></td>
     <td class="amount">${formatNumber(model.balance_sheet.tangible_assets)}</td>
+    ${priorTaggedCell(pp?.tangible_assets, 'uk-gaap:TangibleFixedAssets')}
   </tr>
   
   <tr>
-    <td colspan="3"><strong>Current Assets</strong></td>
+    <td colspan="${hasPriorPeriod ? 4 : 3}"><strong>Current Assets</strong></td>
   </tr>
   <tr>
     <td>Debtors</td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:Debtors" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.debtors)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:Debtors" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.debtors)}</ix:nonFraction></td>
     <td class="amount"></td>
+    ${priorCell(pp?.debtors)}
   </tr>
   <tr>
     <td>Cash at bank and in hand</td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CashBankInHand" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.cash_at_bank)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CashBankInHand" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.cash_at_bank)}</ix:nonFraction></td>
     <td class="amount"></td>
+    ${priorCell(pp?.cash_at_bank)}
   </tr>
   <tr>
     <td></td>
     <td class="amount"></td>
     <td class="amount">${formatNumber(model.balance_sheet.debtors + model.balance_sheet.cash_at_bank)}</td>
+    ${priorCell(pp ? pp.debtors + pp.cash_at_bank : undefined)}
   </tr>
   
   <tr>
-    <td colspan="3"><strong>Creditors: amounts falling due within one year</strong></td>
+    <td colspan="${hasPriorPeriod ? 4 : 3}"><strong>Creditors: amounts falling due within one year</strong></td>
   </tr>
   <tr>
     <td></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CreditorsDueWithinOneYear" unitRef="GBP" decimals="0" sign="-">${formatNumber(model.balance_sheet.creditors_within_one_year)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CreditorsDueWithinOneYear" unitRef="${model.units.currency}" decimals="${model.units.decimals}" sign="-">${formatNumber(model.balance_sheet.creditors_within_one_year)}</ix:nonFraction></td>
     <td class="amount">(${formatNumber(model.balance_sheet.creditors_within_one_year)})</td>
+    ${priorCell(pp?.creditors_within_one_year)}
   </tr>
   
   <tr>
     <td><strong>Net Current Assets</strong></td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:NetCurrentAssetsLiabilities" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.net_current_assets)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:NetCurrentAssetsLiabilities" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.net_current_assets)}</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.net_current_assets, 'uk-gaap:NetCurrentAssetsLiabilities')}
   </tr>
   
   <tr class="total">
     <td><strong>Total Assets Less Current Liabilities</strong></td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:TotalAssetsLessCurrentLiabilities" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.total_assets_less_current_liabilities)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:TotalAssetsLessCurrentLiabilities" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.total_assets_less_current_liabilities)}</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.total_assets_less_current_liabilities, 'uk-gaap:TotalAssetsLessCurrentLiabilities')}
   </tr>
 
   ${model.balance_sheet.creditors_after_one_year > 0 ? `
   <tr>
-    <td colspan="3"><strong>Creditors: amounts falling due after more than one year</strong></td>
+    <td colspan="${hasPriorPeriod ? 4 : 3}"><strong>Creditors: amounts falling due after more than one year</strong></td>
   </tr>
   <tr>
     <td></td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CreditorsDueAfterOneYear" unitRef="GBP" decimals="0" sign="-">(${formatNumber(model.balance_sheet.creditors_after_one_year)})</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CreditorsDueAfterOneYear" unitRef="${model.units.currency}" decimals="${model.units.decimals}" sign="-">(${formatNumber(model.balance_sheet.creditors_after_one_year)})</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.creditors_after_one_year, 'uk-gaap:CreditorsDueAfterOneYear')}
   </tr>
   ` : ''}
   
   <tr class="total">
     <td><strong>Net Assets</strong></td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:NetAssetsLiabilities" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.net_assets)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:NetAssetsLiabilities" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.net_assets)}</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.net_assets, 'uk-gaap:NetAssetsLiabilities')}
   </tr>
   
   <tr>
-    <td colspan="3"><strong>Capital and Reserves</strong></td>
+    <td colspan="${hasPriorPeriod ? 4 : 3}"><strong>Capital and Reserves</strong></td>
   </tr>
   <tr>
     <td>Called up share capital</td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CalledUpShareCapital" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.share_capital)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:CalledUpShareCapital" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.share_capital)}</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.share_capital, 'uk-gaap:CalledUpShareCapital')}
   </tr>
   <tr>
     <td>Profit and loss account</td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:ProfitLossAccountReserve" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.retained_earnings)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:ProfitLossAccountReserve" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.retained_earnings)}</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.retained_earnings, 'uk-gaap:ProfitLossAccountReserve')}
   </tr>
   <tr class="total">
     <td><strong>Total Equity</strong></td>
     <td class="amount"></td>
-    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:Equity" unitRef="GBP" decimals="0">${formatNumber(model.balance_sheet.total_equity)}</ix:nonFraction></td>
+    <td class="amount"><ix:nonFraction contextRef="${currentPeriodContextId}" name="uk-gaap:Equity" unitRef="${model.units.currency}" decimals="${model.units.decimals}">${formatNumber(model.balance_sheet.total_equity)}</ix:nonFraction></td>
+    ${priorTaggedCell(pp?.total_equity, 'uk-gaap:Equity')}
   </tr>
 </table>
 
 <div class="notes">
   <h2>Notes</h2>
-  ${model.notes.accounting_policies.map(policy => `<p>${escapeXml(policy)}</p>`).join('\n')}
-  
-  ${model.notes.average_employees !== undefined ? `
-  <p>The average number of employees during the period was ${model.notes.average_employees}.</p>
-  ` : ''}
+  ${disclosureHtml}
 </div>
 
 <div class="signature">
@@ -220,12 +367,6 @@ export function generateFRS105iXBRL(model: FRS105AccountsModel): string {
   <p><strong>${escapeXml(model.director_approval.signatory_name)}</strong></p>
   <p>${escapeXml(model.director_approval.signatory_position)}</p>
 </div>
-
-<p style="margin-top: 30px; font-size: 9pt;">
-  <ix:nonNumeric contextRef="${durationContextId}" name="uk-direp:StatementThatAccountsHaveBeenPreparedInAccordanceWithProvisionsSmallCompaniesRegime">
-    These accounts have been prepared in accordance with the micro-entity provisions.
-  </ix:nonNumeric>
-</p>
 
 </body>
 </html>`;
