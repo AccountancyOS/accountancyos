@@ -380,7 +380,7 @@ async function sendApprovalEmailViaMailbox(
 
     // Get connected mailbox for organization
     const { data: mailbox } = await supabase
-      .from("connected_mailboxes")
+      .from("connected_mailboxes_safe")
       .select("*")
       .eq("organization_id", organizationId)
       .eq("status", "active")

@@ -729,7 +729,7 @@ export default function OpsHealth() {
     try {
       const start = Date.now();
       const { data, error } = await supabase
-        .from("connected_mailboxes")
+        .from("connected_mailboxes_safe")
         .select("id, email_address, provider, mailbox_type")
         .eq("organization_id", organization.id)
         .limit(1);

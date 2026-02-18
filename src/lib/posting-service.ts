@@ -83,118 +83,60 @@ export async function postToLedger(
   context: PostingContext,
   entries: LedgerEntry[]
 ): Promise<PostingResult> {
-  // Validate balance
+  // Validate balance client-side first (fast fail)
   const balance = validateBalance(entries);
   if (!balance.valid) {
     return { success: false, error: `Debits (${balance.totalDebit}) must equal credits (${balance.totalCredit})` };
   }
 
-  // Check period lock
-  const lockCheck = await isPeriodLocked(
-    context.organizationId,
-    context.entityType,
-    context.entityId,
-    context.transactionDate
-  );
-
-  if (lockCheck.locked) {
-    return { success: false, error: `Period is locked until ${lockCheck.lockDate}. ${lockCheck.reason || ""}` };
-  }
-
   const fxRate = context.fxRate || 1.0;
   const currency = context.currency || "GBP";
 
+  // Build entries payload for the atomic RPC
+  const rpcEntries = entries
+    .filter((e) => e.accountId && (e.debit || e.credit))
+    .map((entry) => ({
+      account_id: entry.accountId,
+      debit: entry.debit ? calculateBaseCurrencyAmount(entry.debit, fxRate) : null,
+      credit: entry.credit ? calculateBaseCurrencyAmount(entry.credit, fxRate) : null,
+      description: entry.description || null,
+      vat_code_id: entry.vatCodeId || null,
+    }));
+
   try {
-    // Create journal entry first
-    const journalPayload = {
-      organization_id: context.organizationId,
-      client_id: context.entityType === "client" ? context.entityId : null,
-      company_id: context.entityType === "company" ? context.entityId : null,
-      journal_date: context.transactionDate,
-      reference: context.reference || null,
-      description: `${context.sourceType} posting`,
-      journal_type: "SYSTEM",
-      total_debit: calculateBaseCurrencyAmount(balance.totalDebit, fxRate),
-      total_credit: calculateBaseCurrencyAmount(balance.totalCredit, fxRate),
-      transaction_currency: currency,
-      fx_rate_to_base: fxRate,
-      is_posted: true,
-      created_by: context.userId || null,
-    };
+    // Call the atomic SECURITY DEFINER RPC — single transaction for
+    // journal + journal_lines + ledger_entries with balance + period lock checks
+    const { data, error } = await supabase.rpc("post_to_ledger", {
+      p_organization_id: context.organizationId,
+      p_client_id: context.entityType === "client" ? context.entityId : null,
+      p_company_id: context.entityType === "company" ? context.entityId : null,
+      p_journal_date: context.transactionDate,
+      p_reference: context.reference || null,
+      p_description: `${context.sourceType} posting`,
+      p_journal_type: "SYSTEM",
+      p_source_type: context.sourceType,
+      p_source_id: context.sourceId,
+      p_currency: currency,
+      p_fx_rate: fxRate,
+      p_created_by: context.userId || null,
+      p_entries: rpcEntries,
+    });
 
-    const { data: journal, error: journalError } = await supabase
-      .from("journals")
-      .insert(journalPayload)
-      .select("id")
-      .single();
-
-    if (journalError) {
-      return { success: false, error: `Failed to create journal: ${journalError.message}` };
+    if (error) {
+      return { success: false, error: `Posting RPC failed: ${error.message}` };
     }
 
-    // Create journal lines
-    const journalLines = entries
-      .filter((e) => e.accountId && (e.debit || e.credit))
-      .map((entry, idx) => ({
-        journal_id: journal.id,
-        line_number: idx + 1,
-        account_id: entry.accountId,
-        debit: entry.debit ? calculateBaseCurrencyAmount(entry.debit, fxRate) : null,
-        credit: entry.credit ? calculateBaseCurrencyAmount(entry.credit, fxRate) : null,
-        description: entry.description || null,
-      }));
+    // The RPC returns jsonb: { success, journal_id, ledger_entry_ids, error }
+    const result = data as { success: boolean; journal_id?: string; ledger_entry_ids?: string[]; error?: string };
 
-    const { error: linesError } = await supabase
-      .from("journal_lines")
-      .insert(journalLines);
-
-    if (linesError) {
-      // Rollback journal
-      await supabase.from("journals").delete().eq("id", journal.id);
-      return { success: false, error: `Failed to create journal lines: ${linesError.message}` };
-    }
-
-    // Create ledger entries
-    const ledgerEntries = entries
-      .filter((e) => e.accountId && (e.debit || e.credit))
-      .map((entry) => ({
-        organization_id: context.organizationId,
-        client_id: context.entityType === "client" ? context.entityId : null,
-        company_id: context.entityType === "company" ? context.entityId : null,
-        entry_date: context.transactionDate,
-        transaction_date: context.transactionDate,
-        account_id: entry.accountId,
-        debit: entry.debit ? calculateBaseCurrencyAmount(entry.debit, fxRate) : null,
-        credit: entry.credit ? calculateBaseCurrencyAmount(entry.credit, fxRate) : null,
-        description: entry.description || null,
-        reference: context.reference || null,
-        vat_code_id: entry.vatCodeId || null,
-        journal_id: journal.id,
-        source_type: context.sourceType,
-        source_id: context.sourceId,
-        transaction_currency: currency,
-        transaction_debit: entry.debit,
-        transaction_credit: entry.credit,
-        fx_rate_to_base: fxRate,
-        base_currency: "GBP",
-      }));
-
-    const { data: insertedEntries, error: ledgerError } = await supabase
-      .from("ledger_entries")
-      .insert(ledgerEntries)
-      .select("id");
-
-    if (ledgerError) {
-      // Rollback
-      await supabase.from("journal_lines").delete().eq("journal_id", journal.id);
-      await supabase.from("journals").delete().eq("id", journal.id);
-      return { success: false, error: `Failed to create ledger entries: ${ledgerError.message}` };
+    if (!result.success) {
+      return { success: false, error: result.error || "Posting failed" };
     }
 
     return {
       success: true,
-      journalId: journal.id,
-      ledgerEntryIds: insertedEntries?.map((e) => e.id) || [],
+      journalId: result.journal_id,
+      ledgerEntryIds: result.ledger_entry_ids || [],
     };
   } catch (error: any) {
     return { success: false, error: error.message || "Unknown error during posting" };

@@ -65,7 +65,7 @@ const EngagementLetterSection = ({
       if (!user) return;
 
       const { data, error } = await supabase
-        .from("connected_mailboxes")
+        .from("connected_mailboxes_safe")
         .select("id")
         .eq("user_id", user.id)
         .eq("status", "active")

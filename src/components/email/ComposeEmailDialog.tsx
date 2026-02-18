@@ -87,7 +87,7 @@ export function ComposeEmailDialog({
     queryKey: ["connected-mailboxes"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("connected_mailboxes")
+        .from("connected_mailboxes_safe")
         .select("*")
         .eq("status", "active")
         .order("created_at", { ascending: false });
