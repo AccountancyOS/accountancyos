@@ -1,6 +1,6 @@
 // VAT Ledger Aggregator
-// Computes VAT boxes from ledger transactions with tax codes
-// Provides full audit trail from boxes to tax codes to transactions
+// Computes VAT boxes from ACTUAL POSTED VAT amounts — never re-derives from net.
+// Provides full audit trail from boxes to tax codes to transactions.
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,30 +41,22 @@ export interface VATReportModel {
   period_start: string;
   period_end: string;
   period_key: string;
-  
-  // The 9 VAT boxes
-  box1_vat_on_sales: number; // VAT due on sales
-  box2_vat_on_acquisitions: number; // VAT due on acquisitions from EU
-  box3_total_vat_due: number; // Total VAT due (box1 + box2)
-  box4_vat_reclaimed: number; // VAT reclaimed on purchases
-  box5_net_vat_due: number; // Net VAT due/refund |box3 - box4|
-  box6_total_sales_ex_vat: number; // Total value of sales ex VAT (whole pounds)
-  box7_total_purchases_ex_vat: number; // Total value of purchases ex VAT (whole pounds)
-  box8_goods_supplied_ex_vat: number; // Total value of goods supplied to EU ex VAT
-  box9_acquisitions_ex_vat: number; // Total value of acquisitions from EU ex VAT
-  
-  // Full audit trail
+  box1_vat_on_sales: number;
+  box2_vat_on_acquisitions: number;
+  box3_total_vat_due: number;
+  box4_vat_reclaimed: number;
+  box5_net_vat_due: number;
+  box6_total_sales_ex_vat: number;
+  box7_total_purchases_ex_vat: number;
+  box8_goods_supplied_ex_vat: number;
+  box9_acquisitions_ex_vat: number;
   box_breakdowns: VATBoxBreakdown[];
-  
-  // Metadata
   source_ledger_version: string;
   generated_at: string;
   generator_version: string;
 }
 
-// HMRC-compliant rounding rules
-// Boxes 1-5: 2 decimal places (pence)
-// Boxes 6-9: whole pounds (rounded)
+// HMRC-compliant rounding
 function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -73,21 +65,44 @@ function roundToWholePounds(value: number): number {
   return Math.round(value);
 }
 
-// VAT code to box mapping based on UK VAT return structure
+// VAT code to box mapping
 const VAT_CODE_BOX_MAPPING: Record<string, { outputBox?: number; inputBox?: number; salesBox: number; purchasesBox: number }> = {
-  'S20': { outputBox: 1, salesBox: 6, purchasesBox: 7 }, // Standard rate 20% - output
-  'S5': { outputBox: 1, salesBox: 6, purchasesBox: 7 },  // Reduced rate 5% - output
-  'Z': { salesBox: 6, purchasesBox: 7 },                  // Zero rated - no VAT but counts in totals
-  'E': { salesBox: 6, purchasesBox: 7 },                  // Exempt - counts in totals
-  'P20': { inputBox: 4, salesBox: 6, purchasesBox: 7 },  // Standard rate 20% - input
-  'P5': { inputBox: 4, salesBox: 6, purchasesBox: 7 },   // Reduced rate 5% - input
-  'NV': { salesBox: 6, purchasesBox: 7 },                  // No VAT - outside scope
-  'RC': { inputBox: 4, outputBox: 1, salesBox: 6, purchasesBox: 7 }, // Reverse charge
-  'EU_GOODS': { outputBox: 2, inputBox: 4, salesBox: 8, purchasesBox: 9 }, // EU goods (acquisition)
+  'S20': { outputBox: 1, salesBox: 6, purchasesBox: 7 },
+  'S5': { outputBox: 1, salesBox: 6, purchasesBox: 7 },
+  'Z': { salesBox: 6, purchasesBox: 7 },
+  'E': { salesBox: 6, purchasesBox: 7 },
+  'P20': { inputBox: 4, salesBox: 6, purchasesBox: 7 },
+  'P5': { inputBox: 4, salesBox: 6, purchasesBox: 7 },
+  'NV': { salesBox: 6, purchasesBox: 7 },
+  'RC': { inputBox: 4, outputBox: 1, salesBox: 6, purchasesBox: 7 },
+  'EU_GOODS': { outputBox: 2, inputBox: 4, salesBox: 8, purchasesBox: 9 },
 };
 
+// ==================== PAGINATION HELPER ====================
+const PAGE_SIZE = 1000;
+
+async function fetchAllPaginated<T>(
+  buildQuery: (offset: number, limit: number) => any
+): Promise<T[]> {
+  const results: T[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await buildQuery(offset, PAGE_SIZE);
+    if (error) throw new Error(`Paginated fetch failed: ${error.message}`);
+    if (!data || data.length === 0) break;
+    results.push(...data);
+    hasMore = data.length === PAGE_SIZE;
+    offset += PAGE_SIZE;
+  }
+
+  return results;
+}
+
 /**
- * Aggregate VAT from ledger for a given period
+ * Aggregate VAT from source documents (invoices + bills) for a given period.
+ * Uses ACTUAL VAT amounts from invoice_lines and bill_lines — never re-derives from net × rate.
  */
 export async function aggregateVATFromLedger(
   organizationId: string,
@@ -98,79 +113,97 @@ export async function aggregateVATFromLedger(
   vrn: string,
   periodKey: string
 ): Promise<VATReportModel> {
-  // Fetch all VAT-coded transactions for the period
-  const entityFilter = entityType === 'company' 
+  const entityFilter = entityType === 'company'
     ? { company_id: entityId }
     : { client_id: entityId };
 
-  // Get ledger entries with VAT information
-  const { data: entries, error } = await supabase
-    .from('ledger_entries')
-    .select(`
-      id,
-      transaction_date,
-      description,
-      debit,
-      credit,
-      vat_code_id,
-      account_id,
-      source_type,
-      source_id,
-      bookkeeping_accounts!inner(id, code, name),
-      vat_codes(code, rate, vat_type)
-    `)
-    .eq('organization_id', organizationId)
-    .gte('transaction_date', periodStart)
-    .lte('transaction_date', periodEnd)
-    .match(entityFilter)
-    .not('vat_code_id', 'is', null);
+  // 1. Fetch OUTPUT VAT from invoice lines (sales)
+  const invoiceLines = await fetchAllPaginated<any>((offset, limit) =>
+    supabase
+      .from('invoice_lines')
+      .select(`
+        id,
+        net_amount,
+        vat_amount,
+        gross_amount,
+        vat_rate,
+        vat_code_id,
+        invoice_id,
+        description,
+        invoices!inner(id, issue_date, invoice_number, organization_id, client_id, company_id, is_posted),
+        vat_codes(code, rate, vat_type)
+      `)
+      .eq('invoices.organization_id', organizationId)
+      .eq('invoices.is_posted', true)
+      .gte('invoices.issue_date', periodStart)
+      .lte('invoices.issue_date', periodEnd)
+      .match(Object.fromEntries(Object.entries(entityFilter).map(([k, v]) => [`invoices.${k}`, v])))
+      .range(offset, offset + limit - 1)
+  );
 
-  if (error) {
-    console.error('Error fetching ledger entries:', error);
-    throw new Error(`Failed to fetch ledger entries: ${error.message}`);
-  }
+  // 2. Fetch INPUT VAT from bill lines (purchases)
+  const billLines = await fetchAllPaginated<any>((offset, limit) =>
+    supabase
+      .from('bill_lines')
+      .select(`
+        id,
+        net_amount,
+        vat_amount,
+        gross_amount,
+        vat_rate,
+        vat_code_id,
+        bill_id,
+        description,
+        bills!inner(id, issue_date, bill_number, organization_id, client_id, company_id, is_posted),
+        vat_codes(code, rate, vat_type)
+      `)
+      .eq('bills.organization_id', organizationId)
+      .eq('bills.is_posted', true)
+      .gte('bills.issue_date', periodStart)
+      .lte('bills.issue_date', periodEnd)
+      .match(Object.fromEntries(Object.entries(entityFilter).map(([k, v]) => [`bills.${k}`, v])))
+      .range(offset, offset + limit - 1)
+  );
 
   // Initialize boxes
   const boxes = {
-    box1: 0, // VAT on sales
-    box2: 0, // VAT on EU acquisitions
-    box4: 0, // VAT reclaimed
-    box6: 0, // Total sales ex VAT
-    box7: 0, // Total purchases ex VAT
-    box8: 0, // EU goods supplied ex VAT
-    box9: 0, // EU acquisitions ex VAT
+    box1: 0,
+    box2: 0,
+    box4: 0,
+    box6: 0,
+    box7: 0,
+    box8: 0,
+    box9: 0,
   };
 
-  // Group by VAT code for audit trail
   const vatCodeAggregates: Record<string, VATCodeAggregate> = {};
 
-  for (const entry of (entries || []) as any[]) {
-    const vatCode = entry.vat_codes?.code || 'UNKNOWN';
-    const vatRate = entry.vat_codes?.rate || 0;
-    const vatType = entry.vat_codes?.vat_type || 'OUTPUT';
-    const account = entry.bookkeeping_accounts;
-    
-    // Calculate net amount and derive VAT from rate
-    const netAmount = entry.credit - entry.debit;
-    const vatAmount = Math.abs(netAmount) * (vatRate / 100);
-    
-    // Build transaction line
+  // Process invoice lines (OUTPUT / sales)
+  for (const line of invoiceLines) {
+    const vatCode = line.vat_codes?.code || 'UNKNOWN';
+    const vatRate = line.vat_codes?.rate || line.vat_rate || 0;
+    const vatType = (line.vat_codes?.vat_type || 'OUTPUT') as 'OUTPUT' | 'INPUT' | 'ZERO' | 'EXEMPT';
+    const invoice = line.invoices;
+
+    // Use ACTUAL posted VAT amount — never re-derive
+    const netAmount = Math.abs(line.net_amount || 0);
+    const vatAmount = Math.abs(line.vat_amount || 0);
+
     const txLine: VATTransactionLine = {
-      id: entry.id,
-      transaction_date: entry.transaction_date,
-      description: entry.description || '',
-      account_code: account?.code || '',
-      account_name: account?.name || '',
+      id: line.id,
+      transaction_date: invoice?.issue_date || '',
+      description: line.description || `Invoice ${invoice?.invoice_number || ''}`,
+      account_code: '',
+      account_name: '',
       vat_code: vatCode,
       vat_rate: vatRate,
-      net_amount: Math.abs(netAmount),
+      net_amount: netAmount,
       vat_amount: vatAmount,
-      gross_amount: Math.abs(netAmount) + vatAmount,
-      source_type: entry.source_type || 'journal',
-      source_id: entry.source_id || '',
+      gross_amount: Math.abs(line.gross_amount || netAmount + vatAmount),
+      source_type: 'invoice',
+      source_id: line.invoice_id || '',
     };
 
-    // Initialize aggregate if needed
     if (!vatCodeAggregates[vatCode]) {
       vatCodeAggregates[vatCode] = {
         vat_code: vatCode,
@@ -184,25 +217,70 @@ export async function aggregateVATFromLedger(
     }
 
     vatCodeAggregates[vatCode].transaction_count++;
-    vatCodeAggregates[vatCode].total_net += txLine.net_amount;
-    vatCodeAggregates[vatCode].total_vat += txLine.vat_amount;
+    vatCodeAggregates[vatCode].total_net += netAmount;
+    vatCodeAggregates[vatCode].total_vat += vatAmount;
     vatCodeAggregates[vatCode].transactions.push(txLine);
 
-    // Map to boxes based on VAT code and type
     const mapping = VAT_CODE_BOX_MAPPING[vatCode];
     if (mapping) {
-      if (vatType === 'OUTPUT' || vatType === 'ZERO') {
-        // Sales VAT
-        if (mapping.outputBox === 1) boxes.box1 += Math.abs(vatAmount);
-        if (mapping.outputBox === 2) boxes.box2 += Math.abs(vatAmount);
-        boxes.box6 += Math.abs(netAmount);
-        if (mapping.salesBox === 8) boxes.box8 += Math.abs(netAmount);
-      } else if (vatType === 'INPUT') {
-        // Purchase VAT
-        if (mapping.inputBox === 4) boxes.box4 += Math.abs(vatAmount);
-        boxes.box7 += Math.abs(netAmount);
-        if (mapping.purchasesBox === 9) boxes.box9 += Math.abs(netAmount);
-      }
+      if (mapping.outputBox === 1) boxes.box1 += vatAmount;
+      if (mapping.outputBox === 2) boxes.box2 += vatAmount;
+      boxes.box6 += netAmount;
+      if (mapping.salesBox === 8) boxes.box8 += netAmount;
+    }
+  }
+
+  // Process bill lines (INPUT / purchases)
+  for (const line of billLines) {
+    const vatCode = line.vat_codes?.code || 'UNKNOWN';
+    const vatRate = line.vat_codes?.rate || line.vat_rate || 0;
+    const vatType = (line.vat_codes?.vat_type || 'INPUT') as 'OUTPUT' | 'INPUT' | 'ZERO' | 'EXEMPT';
+    const bill = line.bills;
+
+    // Use ACTUAL posted VAT amount — never re-derive
+    const netAmount = Math.abs(line.net_amount || 0);
+    const vatAmount = Math.abs(line.vat_amount || 0);
+
+    const txLine: VATTransactionLine = {
+      id: line.id,
+      transaction_date: bill?.issue_date || '',
+      description: line.description || `Bill ${bill?.bill_number || ''}`,
+      account_code: '',
+      account_name: '',
+      vat_code: vatCode,
+      vat_rate: vatRate,
+      net_amount: netAmount,
+      vat_amount: vatAmount,
+      gross_amount: Math.abs(line.gross_amount || netAmount + vatAmount),
+      source_type: 'bill',
+      source_id: line.bill_id || '',
+    };
+
+    const inputVatCode = vatCode.startsWith('P') ? vatCode : `P_${vatCode}`;
+    const aggKey = vatType === 'INPUT' ? inputVatCode : vatCode;
+
+    if (!vatCodeAggregates[aggKey]) {
+      vatCodeAggregates[aggKey] = {
+        vat_code: aggKey,
+        vat_rate: vatRate,
+        vat_type: vatType,
+        transaction_count: 0,
+        total_net: 0,
+        total_vat: 0,
+        transactions: [],
+      };
+    }
+
+    vatCodeAggregates[aggKey].transaction_count++;
+    vatCodeAggregates[aggKey].total_net += netAmount;
+    vatCodeAggregates[aggKey].total_vat += vatAmount;
+    vatCodeAggregates[aggKey].transactions.push(txLine);
+
+    const mapping = VAT_CODE_BOX_MAPPING[vatCode] || VAT_CODE_BOX_MAPPING[inputVatCode];
+    if (mapping) {
+      if (mapping.inputBox === 4) boxes.box4 += vatAmount;
+      boxes.box7 += netAmount;
+      if (mapping.purchasesBox === 9) boxes.box9 += netAmount;
     }
   }
 
@@ -227,7 +305,7 @@ export async function aggregateVATFromLedger(
   for (const code in vatCodeAggregates) {
     const agg = vatCodeAggregates[code];
     const mapping = VAT_CODE_BOX_MAPPING[code];
-    
+
     if (mapping?.outputBox === 1) boxBreakdowns[0].vat_codes.push(agg);
     if (mapping?.outputBox === 2) boxBreakdowns[1].vat_codes.push(agg);
     if (mapping?.inputBox === 4) boxBreakdowns[3].vat_codes.push(agg);
@@ -242,7 +320,6 @@ export async function aggregateVATFromLedger(
     period_start: periodStart,
     period_end: periodEnd,
     period_key: periodKey,
-    
     box1_vat_on_sales: roundToTwoDecimals(boxes.box1),
     box2_vat_on_acquisitions: roundToTwoDecimals(boxes.box2),
     box3_total_vat_due: box3,
@@ -252,12 +329,10 @@ export async function aggregateVATFromLedger(
     box7_total_purchases_ex_vat: roundToWholePounds(boxes.box7),
     box8_goods_supplied_ex_vat: roundToWholePounds(boxes.box8),
     box9_acquisitions_ex_vat: roundToWholePounds(boxes.box9),
-    
     box_breakdowns: boxBreakdowns,
-    
     source_ledger_version: new Date().toISOString(),
     generated_at: new Date().toISOString(),
-    generator_version: '1.0.0',
+    generator_version: '2.0.0',
   };
 }
 

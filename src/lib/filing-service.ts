@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logAudit, checkCanFinalise } from "@/lib/audit-service";
+import { buildPortalUrl } from "@/lib/app-config";
 import { executeAutoRollover } from "@/lib/auto-rollover-service";
 import { emitFilingSubmittedEvent, emitFilingAcceptedEvent, emitFilingRejectedEvent } from "@/lib/filing-event-service";
 import { isPayrollFilingType } from "@/lib/filing-api-provider";
@@ -323,7 +324,7 @@ export async function sendFilingForApproval(
 
     // If mailbox send fails, queue via email_queue as fallback
     if (!emailSent && recipientEmail) {
-      const portalUrl = `${window.location.origin}/portal/filings/${filingId}?token=${approvalToken}`;
+      const portalUrl = buildPortalUrl(`/portal/filings/${filingId}`, { token: approvalToken });
       const taxAmount = (filing?.tax_due || 0) > 0 
         ? `Tax Due: £${(filing?.tax_due || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
         : `Tax Refund: £${(filing?.tax_refund || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`;
@@ -392,7 +393,7 @@ async function sendApprovalEmailViaMailbox(
       return false;
     }
 
-    const portalUrl = `${window.location.origin}/portal/filings/${filingId}?token=${approvalToken}`;
+    const portalUrl = buildPortalUrl(`/portal/filings/${filingId}`, { token: approvalToken });
     const taxAmount = (filing?.tax_due || 0) > 0 
       ? `Tax Due: £${(filing?.tax_due || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
       : `Tax Refund: £${(filing?.tax_refund || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`;
