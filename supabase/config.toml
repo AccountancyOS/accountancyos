@@ -116,3 +116,9 @@ verify_jwt = false
 
 [functions.workflow-tick]
 verify_jwt = false
+
+[functions.chaser-tick]
+verify_jwt = false
+
+[functions.chaser-trigger-scan]
+verify_jwt = false

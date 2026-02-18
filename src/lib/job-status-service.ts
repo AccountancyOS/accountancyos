@@ -7,6 +7,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { emitJobStatusChange } from "./automation-triggers";
 import { logAudit } from "./audit-service";
+import { stopChaserRunsForJob } from "./chaser-policy-service";
 
 export type JobStatus = 
   | "blank"
@@ -121,7 +122,17 @@ export async function updateJobStatus(
       // Don't fail the operation for audit logging issues
     }
 
-    // 4. Emit automation event (unless skipped)
+    // 4. Stop chaser runs if status is records_received
+    if (newStatus === "records_received") {
+      try {
+        await stopChaserRunsForJob(jobId);
+      } catch (chaserErr) {
+        console.warn("[JobStatusService] Failed to stop chaser runs:", chaserErr);
+        // Don't fail the operation for chaser stop issues
+      }
+    }
+
+    // 5. Emit automation event (unless skipped)
     let eventId: string | null = null;
     if (!options.skipAutomation) {
       try {

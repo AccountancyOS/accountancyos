@@ -35,8 +35,8 @@ import { useToast } from "@/hooks/use-toast";
 import { RequirePermission } from "@/components/ui/permission-guard";
 import { AutomationRuleEditor } from "@/components/automations/AutomationRuleEditor";
 import { AutomationTemplatesPanel } from "@/components/automations/AutomationTemplatesPanel";
-import { WorkflowLibraryTab } from "@/components/automations/WorkflowLibraryTab";
-import { WorkflowInstancesMonitor } from "@/components/automations/WorkflowInstancesMonitor";
+import { ChaserPoliciesTab } from "@/components/automations/ChaserPoliciesTab";
+import { ChaserRunsMonitor } from "@/components/automations/ChaserRunsMonitor";
 import {
   Zap,
   Plus,
@@ -85,7 +85,7 @@ export default function Automations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState("library");
+  const [activeTab, setActiveTab] = useState("chasers");
   const [search, setSearch] = useState("");
   const [triggerFilter, setTriggerFilter] = useState<string>("all");
   const [actionFilter, setActionFilter] = useState<string>("all");
@@ -260,13 +260,13 @@ export default function Automations() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
-            <TabsTrigger value="library" className="gap-2">
+            <TabsTrigger value="chasers" className="gap-2">
               <Library className="h-4 w-4" />
-              Workflow Library
+              Chaser Policies
             </TabsTrigger>
             <TabsTrigger value="monitor" className="gap-2">
               <Activity className="h-4 w-4" />
-              Monitor
+              Chaser Monitor
             </TabsTrigger>
             <TabsTrigger value="rules" className="gap-2">
               <Zap className="h-4 w-4" />
@@ -274,14 +274,14 @@ export default function Automations() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Workflow Library Tab */}
-          <TabsContent value="library">
-            <WorkflowLibraryTab />
+          {/* Chaser Policies Tab */}
+          <TabsContent value="chasers">
+            <ChaserPoliciesTab />
           </TabsContent>
 
-          {/* Monitor Tab */}
+          {/* Chaser Monitor Tab */}
           <TabsContent value="monitor">
-            <WorkflowInstancesMonitor />
+            <ChaserRunsMonitor />
           </TabsContent>
 
           {/* Custom Rules Tab */}
