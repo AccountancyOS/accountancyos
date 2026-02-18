@@ -177,14 +177,12 @@ export default function Jobs() {
     return colors[status] || "default";
   };
 
-  const getPriorityColor = (priority: string): "default" | "destructive" | "outline" | "secondary" => {
-    const colors: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
-      low: "default",
-      normal: "default",
-      high: "secondary",
-      critical: "destructive",
-    };
-    return colors[priority] || "default";
+  const getDeadlineThresholdDays = (serviceType: string | null): number => {
+    if (!serviceType) return 14;
+    const st = serviceType.toLowerCase();
+    if (["accounts", "company_accounts", "self_assessment", "sa", "corporation_tax", "ct600", "advisory"].includes(st)) return 30;
+    if (["vat", "vat_return", "payroll", "cis", "company_sec", "cs01"].includes(st)) return 7;
+    return 14;
   };
 
   const getDaysRemaining = (deadline: string | null) => {
@@ -192,13 +190,15 @@ export default function Jobs() {
     return differenceInDays(new Date(deadline), new Date());
   };
 
-  const formatDeadline = (deadline: string | null, days: number | null) => {
+  const formatDeadline = (deadline: string | null, days: number | null, serviceType: string | null) => {
     if (!deadline) return "No deadline";
     if (days === null) return formatDate(deadline, "dayMonthYear");
     
+    const threshold = getDeadlineThresholdDays(serviceType);
+    
     if (days < 0) return <span className="text-destructive font-medium">{Math.abs(days)} days overdue</span>;
     if (days === 0) return <span className="text-destructive font-medium">Due today</span>;
-    if (days <= 7) return <span className="text-secondary font-medium">Due in {days} days</span>;
+    if (days <= threshold) return <span className="text-amber-600 font-medium">Due in {days} days</span>;
     return formatDate(deadline, "dayMonthYear");
   };
 
@@ -320,7 +320,7 @@ export default function Jobs() {
 
         {/* Jobs Table */}
         {isLoading ? (
-          <TableSkeleton columns={8} rows={6} />
+          <TableSkeleton columns={7} rows={6} />
         ) : jobs && jobs.length > 0 ? (
           <div className="border rounded-lg animate-fade-in">
             <Table>
@@ -331,8 +331,7 @@ export default function Jobs() {
                   <TableHead>Service</TableHead>
                   <TableHead>Period</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Filing Deadline</TableHead>
+                   <TableHead>Filing Deadline</TableHead>
                   
                 </TableRow>
               </TableHeader>
@@ -361,12 +360,7 @@ export default function Jobs() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getPriorityColor(job.priority)}>
-                          {formatPriority(job.priority)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {formatDeadline(job.filing_deadline, daysRemaining)}
+                        {formatDeadline(job.filing_deadline, daysRemaining, job.service_type)}
                       </TableCell>
                     </TableRow>
                   );
