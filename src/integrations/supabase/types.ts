@@ -328,6 +328,250 @@ export type Database = {
           },
         ]
       }
+      automation_chaser_messages: {
+        Row: {
+          chaser_run_id: string
+          created_at: string
+          failure_reason: string | null
+          id: string
+          idempotency_key: string
+          job_id: string
+          organization_id: string
+          rendered_body: string
+          rendered_subject: string
+          send_at: string
+          sent_at: string | null
+          status: string
+          template_id: string | null
+          to_email: string
+        }
+        Insert: {
+          chaser_run_id: string
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key: string
+          job_id: string
+          organization_id: string
+          rendered_body?: string
+          rendered_subject?: string
+          send_at?: string
+          sent_at?: string | null
+          status?: string
+          template_id?: string | null
+          to_email: string
+        }
+        Update: {
+          chaser_run_id?: string
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string
+          job_id?: string
+          organization_id?: string
+          rendered_body?: string
+          rendered_subject?: string
+          send_at?: string
+          sent_at?: string | null
+          status?: string
+          template_id?: string | null
+          to_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_chaser_messages_chaser_run_id_fkey"
+            columns: ["chaser_run_id"]
+            isOneToOne: false
+            referencedRelation: "automation_chaser_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_messages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_messages_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_chaser_policies: {
+        Row: {
+          created_at: string
+          description: string | null
+          email_template_id: string | null
+          frequency_interval: number
+          frequency_unit: string
+          id: string
+          is_enabled: boolean
+          max_frequency_interval: number
+          min_frequency_interval: number
+          name: string
+          organization_id: string
+          service_code: string
+          stop_condition_type: string
+          stop_condition_value: string
+          trigger_offset_days: number
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          email_template_id?: string | null
+          frequency_interval?: number
+          frequency_unit?: string
+          id?: string
+          is_enabled?: boolean
+          max_frequency_interval?: number
+          min_frequency_interval?: number
+          name: string
+          organization_id: string
+          service_code: string
+          stop_condition_type?: string
+          stop_condition_value?: string
+          trigger_offset_days?: number
+          trigger_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          email_template_id?: string | null
+          frequency_interval?: number
+          frequency_unit?: string
+          id?: string
+          is_enabled?: boolean
+          max_frequency_interval?: number
+          min_frequency_interval?: number
+          name?: string
+          organization_id?: string
+          service_code?: string
+          stop_condition_type?: string
+          stop_condition_value?: string
+          trigger_offset_days?: number
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_chaser_policies_email_template_id_fkey"
+            columns: ["email_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_policies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_chaser_runs: {
+        Row: {
+          created_at: string
+          email_template_id: string | null
+          frequency_interval: number
+          frequency_unit: string
+          id: string
+          job_id: string
+          last_sent_at: string | null
+          next_send_at: string | null
+          organization_id: string
+          period_end: string | null
+          period_start: string | null
+          policy_id: string
+          send_count: number
+          status: string
+          stop_condition_value: string
+          trigger_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email_template_id?: string | null
+          frequency_interval: number
+          frequency_unit: string
+          id?: string
+          job_id: string
+          last_sent_at?: string | null
+          next_send_at?: string | null
+          organization_id: string
+          period_end?: string | null
+          period_start?: string | null
+          policy_id: string
+          send_count?: number
+          status?: string
+          stop_condition_value?: string
+          trigger_date: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email_template_id?: string | null
+          frequency_interval?: number
+          frequency_unit?: string
+          id?: string
+          job_id?: string
+          last_sent_at?: string | null
+          next_send_at?: string | null
+          organization_id?: string
+          period_end?: string | null
+          period_start?: string | null
+          policy_id?: string
+          send_count?: number
+          status?: string
+          stop_condition_value?: string
+          trigger_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_chaser_runs_email_template_id_fkey"
+            columns: ["email_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_runs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_runs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_chaser_runs_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "automation_chaser_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_events: {
         Row: {
           created_at: string
@@ -2262,6 +2506,54 @@ export type Database = {
           },
           {
             foreignKeyName: "cgt_disposals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chaser_job_periods: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          job_id: string
+          organization_id: string
+          period_end: string
+          service_code: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          job_id: string
+          organization_id: string
+          period_end: string
+          service_code: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          job_id?: string
+          organization_id?: string
+          period_end?: string
+          service_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chaser_job_periods_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chaser_job_periods_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
