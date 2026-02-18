@@ -1,238 +1,201 @@
 
-# Workpapers + Filing Restructure — Revised Implementation Plan
+# Phase 8: FRS105 Accounts Editor + Disclosure Manager + iXBRL (with corrections applied)
 
-All six mandatory corrections from the user are incorporated below. This plan supersedes the previously approved plan.
+## Overview
 
-## Corrections Applied
+Build a production-grade FRS105 micro-entity accounts editor with a legally-compliant, restriction-first Disclosure Manager, canonical model-driven iXBRL generation, line-level provenance, prior period comparatives, and enhanced snapshot integrity. FRS102 remains completely locked out.
 
-### 1. Single Source of Truth (SSOT)
-- **No `filing_versions` table.** The existing `filing_model_snapshots` table is extended to serve as the immutable snapshot store.
-- **`filings` table gets `draft_schedule_data_json` (JSONB)** for the current mutable draft. When "Send to Client" or "Submit" is triggered, the draft is frozen into a new `filing_model_snapshots` row.
-- **`filings.filing_data` is deprecated** (left in place for migration but no longer written to by new code). All new reads/writes use `draft_schedule_data_json`.
-- No `sa_schedule_data` table either. All schedule modules (Employment, Self-Employment, CGT, etc.) are stored as keyed sections inside `draft_schedule_data_json` using canonical keys.
-
-### 2. R&D Module — Real, Not Placeholder
-A minimal but functional R&D module ships at launch:
-- SME vs RDEC scheme classification per claim
-- Qualifying cost categories: staff costs, subcontractor costs, consumables, software, clinical trial volunteer costs
-- Restriction rules: subsidised expenditure flags, connected-party subcontractor cap (65%)
-- Computed outputs: qualifying expenditure total, enhancement rate applied, additional deduction / tax credit, mapped into CT600 schedules
-- Audit/evidence capture: links to `job_artifacts` for supporting workpapers (optional but structurally supported)
-
-### 3. All Tax Parameters DB-Driven
-- Create `sa_rate_tables` with all SA parameters: income tax bands, dividend rates/allowance, savings/PSA thresholds, NIC Class 2/4 rates, student loan plan thresholds (Plan 1/2/4/5 + PG), CGT rates and annual exempt amount, marriage allowance, HICBC threshold, pension annual allowance + taper + MPAA.
-- `ct_rate_tables` already exists and is already used by `ct-computation-engine.ts`.
-- `tax-calculation-engine.ts` will be refactored to fetch from `sa_rate_tables` instead of using hardcoded `TAX_YEAR_CONFIGS`.
-- `capital-allowances-engine.ts` constants (AIA limits, WDA rates, full expensing dates) moved to a `ca_rate_tables` DB table.
-
-### 4. SA Submission Pathway — HMRC-Aligned
-- SA Non-MTD: `sa-submit` edge function targeting HMRC Self Assessment Online XML API (GovTalk/IREnvelope schema)
-- MTD ITSA: separate edge functions for quarterly updates (`mtd-itsa-update`), EOPS (`mtd-itsa-eops`), and final declaration (`mtd-itsa-final-dec`) — all using HMRC MTD REST APIs per vendor guidance
-- SA800 (Partnership) follows the SA Online XML API pathway
-
-### 5. Locking Includes TB + COA Snapshots
-- "Send to Client" creates a `filing_model_snapshots` row that includes not just the schedule data but also:
-  - `tb_snapshot`: the full trial balance grid at lock time
-  - `coa_tax_mapping_snapshot`: the COA tax_allowability + ct_addback_category values at lock time
-- These are stored inside `snapshot_data` as nested objects, ensuring the locked filing is fully self-contained and reproducible.
-
-### 6. Partnership to Individual — Reference-Based
-- `partnership_allocations` rows store the computed allocation per partner.
-- Individual SA filings reference the allocation via `partnership_allocation_id` (a FK pointer), not copied values.
-- The SA schedule engine reads from the allocation record at computation time, so any correction to the partnership return automatically flows through (until the individual's filing is locked).
+All user corrections have been incorporated:
+- Narrative fields are allowed inside typed disclosure objects (sanitised + iXBRL-tagged)
+- Over-disclosure rules are facts-based, not blanket-banned
+- Average employees accepts count = 0 as valid
+- Directors' advances allows confirmed_none when no ledger/DLA tagging is available
+- mapping_rules_version is a deterministic SHA-256 hash of mapping rules content
 
 ---
 
-## Existing Infrastructure Summary
+## Database Migration
 
-**Already exists (extend, don't replace):**
-- `filings` table with 50+ columns, status workflow, snapshot refs
-- `filing_model_snapshots` table — immutable, SHA-256 hashed, RLS-locked, trigger-protected against UPDATE/DELETE
-- `filing_submissions` table — full request/response audit log per submission
-- `ct_rate_tables` — DB-driven CT rates, already consumed by `ct-computation-engine.ts`
-- `ct_computation_snapshots` — CT computation results store
-- `workpaper_instances` — existing workpaper data with field_values, overrides, locking
-- `bookkeeping_accounts` — has `tax_mapping` JSONB (to be extended with structured columns)
-- `audit_log` — entity-level audit with before/after state, IP, user agent (needs `reason` column)
-- Capital allowances engine, CT computation engine, FRS105 model, iXBRL generator, CT600 XML builder
+Add three columns to `filing_model_snapshots` for mapping provenance:
 
-**Does NOT exist yet (must create):**
-- `job_artifacts`, `workpaper_templates`, `job_workpaper_instances`
-- `sa_rate_tables`, `ca_rate_tables`
-- `cgt_disposals`, `crypto_token_pools`, `crypto_transactions`
-- `partnership_allocations`
-- R&D module tables
-- SA schedule engine, SA302 renderer, CGT/crypto engine, partnership engine
-- Submission edge functions for SA, MTD ITSA
+| Column | Type | Purpose |
+|--------|------|---------|
+| `tb_snapshot_ref` | TEXT | SHA-256 hash of the TB snapshot captured at lock time |
+| `coa_mapping_ref` | TEXT | SHA-256 hash of the COA tax mapping state at lock time |
+| `mapping_rules_version` | TEXT | Deterministic SHA-256 hash of `FRS105_ACCOUNT_MAPPINGS` content + any referenced mapping tables |
+
+These are added as nullable columns (other filing types don't need them), but the lock service will hard-fail for ACCOUNTS_FRS105 filings if any are null.
+
+Note: The table has immutability triggers that block UPDATE/DELETE. The migration only adds columns -- new snapshots will include these values at INSERT time.
 
 ---
 
-## Phase-by-Phase Build Order
+## Type System Changes
 
-### Phase 1: Schema Language + DB-Driven Tax Rates + Validation Framework ✅ COMPLETE
+### `src/types/filing-schemas.ts`
 
-**Database:**
-- Create `sa_rate_tables` with columns for every SA parameter by `tax_year` and `effective_from`: personal_allowance, taper_threshold, basic_rate_limit, higher_rate_limit, basic_rate, higher_rate, additional_rate, dividend_allowance, dividend_basic_rate, dividend_higher_rate, dividend_additional_rate, savings_nil_rate_basic, savings_nil_rate_higher, class2_threshold, class2_weekly_rate, class4_lower_limit, class4_upper_limit, class4_main_rate, class4_additional_rate, cgt_basic_rate, cgt_higher_rate, cgt_residential_basic, cgt_residential_higher, cgt_annual_exempt_amount, student_loan_plan1_threshold, student_loan_plan2_threshold, student_loan_plan4_threshold, student_loan_plan5_threshold, student_loan_pg_threshold, student_loan_plan1_rate, student_loan_plan2_rate, student_loan_plan4_rate, student_loan_plan5_rate, student_loan_pg_rate, marriage_allowance_amount, hicbc_threshold, hicbc_upper_threshold, pension_annual_allowance, pension_taper_threshold, pension_taper_floor, pension_mpaa
-- Create `ca_rate_tables` with AIA limits, WDA main/special rates, full expensing start date, FYA rates — by `effective_from`/`effective_to`
-- Seed both tables with 2023/24 and 2024/25 data
-- Add `reason` TEXT column to `audit_log`
+Replace the generic `DisclosureEntry` and `AccountsDraftScheduleData` with production-grade structured types:
 
-**Code:**
-- Create `src/lib/tax-rates-service.ts` — fetches from `sa_rate_tables` and `ca_rate_tables` by tax year
-- Create `src/lib/schema-field-engine.ts` — canonical field schema definitions (sections, fields with types: money/number/date/text/boolean/enum/table-grid, validation rules, computation mapping keys)
-- Create `src/types/filing-schemas.ts` — TypeScript interfaces for all canonical schedule keys
-- Refactor `src/lib/tax-calculation-engine.ts` to call `tax-rates-service.ts` instead of using `TAX_YEAR_CONFIGS`
-- Refactor `src/lib/capital-allowances-engine.ts` to fetch AIA/WDA/FYA rates from DB
+**Balance Sheet Line with Provenance:**
+```
+BalanceSheetLineValue {
+  amount: number;
+  source: 'derived' | 'manual_override';
+  override_reason?: string;
+}
+```
 
-### Phase 2: Workpapers — Job Artifacts, Templates, Instances ✅ COMPLETE
+**9 Structured Disclosure Types (no generic blobs):**
 
-**Database:**
-- Create `job_artifacts` (id, org_id, client_id, job_id, artifact_type, source_document_id, title, period_label, created_by, created_at, locked_at, locked_by, status, version)
-- Create `workpaper_templates` (id, org_id, job_type, name, schema_json, is_default, version, is_active)
-- Create `job_workpaper_instances` (id, org_id, job_id, template_id, template_version, instance_schema_json, instance_data_json, status, lock fields)
-- Seed default templates per job type
-- RLS policies scoped via `organization_users`
-- Migration: existing `workpaper_instances` -> `job_workpaper_instances`; existing job-linked docs -> `job_artifacts`
+| Disclosure | Typed Fields | Narrative Allowed |
+|---|---|---|
+| Statement of Compliance | System-generated text, locked | No (system text only) |
+| Average Employees | `count: number` (>= 0 valid) | No |
+| Directors' Advances | Array of `{ director_name, opening_balance, movement, closing_balance, interest_rate, terms_narrative }` or `confirmed_none` with `accountant_affirmation` | Yes: `terms_narrative` per entry (sanitised) |
+| Dividends | Array of `{ amount, date, type }` or `confirmed_none` | No |
+| Related Party Transactions | Array of `{ relationship, description, amount, balance, terms_narrative }` or `confirmed_none` | Yes: `terms_narrative` per entry (sanitised) |
+| Commitments / Contingent Liabilities | Array of `{ category, amount, narrative }` or `confirmed_none` | Yes: `narrative` per entry (sanitised) |
+| Off-Balance Sheet Arrangements | `confirmed_none` or structured entry with `narrative` | Yes: `narrative` (sanitised) |
+| Going Concern | `{ flagged: boolean, narrative }` | Yes: `narrative` (sanitised, only if flagged) |
+| Prior Period Adjustments | `{ flagged: boolean, description, amount }` | Yes: `description` (sanitised, only if flagged) |
 
-**Code:**
-- Create `src/lib/job-artifacts-service.ts`
-- Create `src/lib/workpaper-template-service.ts`
-- Create `src/components/workpaper/WorkpaperTemplateManager.tsx`
-- Create `src/components/workpaper/JobArtifactsPanel.tsx`
-- Update Workpapers page to use new model
+**Prior Period Comparatives:**
+A first-class `prior_period` object mirroring the balance sheet structure with its own iXBRL context. Default-populated from the last accepted/filed snapshot for the same company.
 
-### Phase 3: Filing — SSOT Draft + Snapshots + Locking + Audit ✅ COMPLETE
-
-**Database:**
-- Add `draft_schedule_data_json JSONB DEFAULT '{}'` to `filings`
-- Add `current_snapshot_id UUID REFERENCES filing_model_snapshots(id)` to `filings`
-- Add `current_version INT DEFAULT 0` to `filings`
-- Add `locked_at TIMESTAMPTZ`, `locked_by UUID` to `filings` (supplement existing `is_locked`)
-- Extend `filing_model_snapshots` with: `version INT`, `lock_reason TEXT`, `filing_id UUID REFERENCES filings(id)`, `tb_snapshot JSONB`, `coa_snapshot JSONB`, `computed_outputs JSONB`, `pdf_artifact_id UUID`, `submission_artifact_id UUID`
-- Update filings status CHECK to include: draft, ready_for_review, sent_to_client, client_changes_requested, approved, submitted, accepted, rejected
-- Migration: existing `filings.filing_data` -> copy to `draft_schedule_data_json`; existing linked snapshots -> create v1 `filing_model_snapshots` rows
-
-**Code:**
-- Create `src/lib/filing-version-service.ts` — creates snapshot from draft + TB + COA state, increments version
-- Create `src/lib/filing-lock-service.ts` — locks filing + workpapers + captures TB/COA snapshots; unlock with mandatory audit_log reason
-- Create `src/components/filings/FilingUnlockDialog.tsx` — warning modal, reason field (required)
-- Create `src/components/filings/FilingVersionHistory.tsx` — snapshot timeline with diff
-- Create `src/components/filings/SendToClientDialog.tsx`
-- Refactor `src/pages/FilingDetail.tsx` for new status flow
-
-### Phase 4: SA Non-MTD Schedules + SA302 + PDF ✅ COMPLETE
-
-**Code:**
-- Create `src/lib/sa-schedule-engine.ts` — canonical schedule definitions for all 13 modules ✅
-- Create schedule editor components under `src/components/filings/sa/`: ✅
-  - EmploymentSchedule, SelfEmploymentSchedule, DividendsSchedule, InterestSchedule, UnitTrustIncomeSchedule, PensionIncomeSchedule, ReliefsSchedule, AdjustmentsSchedule, SAScheduleModuleToggle, SAMoneyField
-- All read/write to `filings.draft_schedule_data_json` using canonical keys ✅
-- `tax-calculation-engine.ts` consumed via `canonicalToSAWorkpaperData()` bridge ✅
-- Create `src/lib/sa302-renderer.ts` — SA302 computation from schedules ✅
-- Create `src/components/filings/sa/SA302View.tsx` ✅
-- Master editor `SATaxReturnEditor.tsx` integrated into `FilingDetail.tsx` ✅
-
-### Phase 5: CGT Engine Including Crypto ✅ COMPLETE
-
-**Database:**
-- Create `cgt_disposals` table with RLS ✅
-- Create `crypto_token_pools` table with RLS ✅
-- Create `crypto_transactions` table with RLS ✅
-
-**Code:**
-- Create `src/lib/cgt-crypto-engine.ts` — Section 104 pooling, same-day rule, 30-day rule, fees, airdrop/fork classification ✅
-- Create `src/components/filings/sa/CryptoImportDialog.tsx`, `CryptoPoolsView.tsx`, `CGTDisposalsGrid.tsx` ✅
-- Integrate into CGTSchedule and SATaxReturnEditor; annual exemption + loss carry-forward ✅
-
-### Phase 6: Partnership + Reference-Based Linking
-
-**Database:**
-- Create `partnership_allocations` (id, filing_id, partner_client_id, allocation_method, percentage, fixed_amount, special_allocation_json, computed_profit_share, computed_tax_adjustments)
-- Add `partnership_allocation_id UUID REFERENCES partnership_allocations(id)` to `filings` for individual SA filings that receive a partner share
-
-**Code:**
-- Create `src/lib/partnership-engine.ts` — profit allocation, export partner shares as references
-- Create partnership schedule components
-- Individual SA schedule engine reads partner share via FK reference (not copied values)
-
-### Phase 7: TB Grid + COA Tax Mapping
-
-**Database:**
-- Add to `bookkeeping_accounts`: `tax_allowability TEXT`, `ct_addback_category TEXT`, `vat_treatment TEXT`
-
-**Code:**
-- Create `src/components/bookkeeping/TBGridEditor.tsx` — manual entry + CSV import + ledger pull
-- Create `src/components/bookkeeping/COATaxMappingEditor.tsx`
-- Refactor `accounts-model-mapper.ts` to use structured COA mappings
-
-### Phase 8: FRS105 Accounts + iXBRL
-
-**Code:**
-- Refactor `frs105-accounts-model.ts` to generate from TB with COA mappings
-- Create `src/components/filings/accounts/AccountsScheduleEditor.tsx`
-- Create `src/components/filings/accounts/DisclosureEditor.tsx` — per-filing editable
-- Extend `ixbrl-generator.ts` for TB-line-level tagging + disclosure tagging
-- Create `src/components/filings/accounts/AccountsPDFView.tsx`
-
-### Phase 9: CT600 Engine — Add-backs + CA + Losses + R&D
-
-**Code:**
-- Refactor `ct-computation-engine.ts` for auto add-backs from COA `ct_addback_category`
-- Create `src/components/filings/ct/CTAddBacksReview.tsx` — auto-detected vs manual overrides
-- Create `src/components/filings/ct/CTLossesSchedule.tsx` — B/F, C/F, carry back
-- Create `src/lib/rd-module-engine.ts`:
-  - SME vs RDEC classification
-  - Qualifying cost categories: staff, subcontractors, consumables, software, clinical trials
-  - Restrictions: subsidised expenditure, connected-party 65% cap
-  - Computed outputs: qualifying expenditure, enhancement, additional deduction / tax credit
-  - Evidence links to job_artifacts
-- Create `src/components/filings/ct/RDClaimEditor.tsx`
-- Create `src/components/filings/ct/CTComputationView.tsx`
-- "Create CT600 from Accounts" button linking to accounts filing + TB version
-
-### Phase 10: CT Journal Posting
-
-**Code:**
-- Create `src/lib/ct-journal-service.ts` — propose CT journal, approval flow, references CT snapshot version
-- Create `src/components/filings/ct/CTJournalProposal.tsx`
-- Integrate with `posting-service.ts`
-
-### Phase 11: Submission Payloads + Readiness Gates
-
-**Code:**
-- Create `src/lib/submission-readiness-service.ts` — pre-submission validation, error list with field links, override with audit + reason
-- Extend `ct600-xml-builder.ts` for structured schedule data consumption
-- Create `src/lib/sa-submission-builder.ts` — SA Online XML API payload (IREnvelope schema)
-- Create `src/lib/accounts-submission-builder.ts` — iXBRL payload for CH
-
-**Edge functions:**
-- Create `supabase/functions/sa-submit/index.ts` — targets HMRC SA Online XML API
-- Create `supabase/functions/mtd-itsa-update/index.ts` — quarterly update via MTD REST API
-- Create `supabase/functions/mtd-itsa-eops/index.ts` — EOPS via MTD REST API  
-- Create `supabase/functions/mtd-itsa-final-dec/index.ts` — final declaration via MTD REST API
-- Create `src/components/filings/SubmissionReadinessPanel.tsx`
+**Directors List:**
+Array of `{ name, appointed_date?, resigned_date? }` -- validated as non-empty.
 
 ---
 
-## Data Flow Summary
+## Disclosure Determination Engine
+
+### `src/lib/frs105-disclosure-engine.ts` (new)
+
+A pure-function engine that:
+
+1. Accepts: company profile, ledger account data (DLA tags, RPT flags), payroll data, commitment flags, current disclosure state
+2. Returns: for each of the 9 disclosure types, whether it is `required`, `not_required`, or `locked`, plus the reason string
+3. Validates: blocks `confirmed_none` for directors' advances ONLY if ledger/DLA tagging exists AND balances are non-zero. If no ledger or tagging is unavailable, `confirmed_none` is allowed with explicit accountant affirmation.
+4. Validates completeness: returns `all_complete: boolean` as a hard gate for iXBRL generation
+
+Disclosure inclusion is rules-based (facts-driven), not blanket-banned:
+- Fixed asset notes: only if tangible assets > 0
+- Share capital movements: only if share capital changed from prior period
+- Dividends: only if dividends declared/detected
+- Director loans: always required (either entries or confirmed_none)
+- RPTs: only if RPT-tagged transactions detected
+- Over-disclosure is prevented by only showing disclosures that are factually relevant
+
+---
+
+## Canonical FRS105 Accounts Model Update
+
+### `src/lib/frs105-accounts-model.ts` (update)
+
+Extend `FRS105AccountsModel` to include:
+
+- `prior_period_balance_sheet` as a required field (nullable for first-year companies) with its own context ID
+- Structured `disclosures` object replacing the old `FRS105Notes` string array
+- `units` and `decimals` metadata for iXBRL
+- `contexts` object defining current period instant, current period duration, prior period instant, prior period duration
+
+---
+
+## iXBRL Generator Update
+
+### `src/lib/ixbrl-generator.ts` (update)
+
+Refactor `generateFRS105iXBRL()` to:
+
+1. Accept the canonical `FRS105AccountsModel` (with structured disclosures and prior period contexts)
+2. Generate prior period comparative column with its own `xbrli:context`
+3. Include disclosure sections mapped to proper iXBRL tags (e.g., `uk-direp:DirectorsAdvances`, `uk-bus:AverageNumberEmployees`)
+4. Sanitise all narrative fields through `sanitizeFooterHtml()` before embedding
+5. Hard-fail if any disclosure is in `required_missing` state (not a warning)
+
+---
+
+## UI Components
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `src/components/filings/accounts/FRS105AccountsEditor.tsx` | Main orchestrator with tabs: Balance Sheet, Comparatives, Disclosures, Directors, Approval, Validation |
+| `src/components/filings/accounts/BalanceSheetGrid.tsx` | Editable grid with provenance badges (derived/override) per line, auto-computed subtotals, balance check indicator |
+| `src/components/filings/accounts/TBImportButton.tsx` | TB data import with override-aware re-import (does not blindly overwrite manual_override lines; shows selection dialog) |
+| `src/components/filings/accounts/DisclosureManager.tsx` | Fixed checklist of system-determined disclosures. No add/remove/hide. Status badges: Complete, Required and Missing, Not Required, Locked. Click-through to structured editors. |
+| `src/components/filings/accounts/disclosure-editors/AverageEmployeesEditor.tsx` | Integer input >= 0, auto-populated from payroll |
+| `src/components/filings/accounts/disclosure-editors/DirectorsAdvancesEditor.tsx` | Table of directors with opening/movement/closing/rate/terms_narrative; confirmed_none with accountant affirmation when no ledger data |
+| `src/components/filings/accounts/disclosure-editors/DividendsEditor.tsx` | Entries with amount/date/type |
+| `src/components/filings/accounts/disclosure-editors/RelatedPartyEditor.tsx` | Entries with relationship/description/amount/balance/terms_narrative |
+| `src/components/filings/accounts/disclosure-editors/CommitmentsEditor.tsx` | Entries with category/amount/narrative; confirmed_none |
+| `src/components/filings/accounts/disclosure-editors/OffBalanceSheetEditor.tsx` | Confirmed_none or structured entry with narrative |
+| `src/components/filings/accounts/disclosure-editors/GoingConcernEditor.tsx` | Flag + structured narrative (only shown if flagged) |
+| `src/components/filings/accounts/disclosure-editors/PriorPeriodAdjustmentsEditor.tsx` | Flag + description + amount (only shown if flagged) |
+| `src/components/filings/accounts/IXBRLPreviewPanel.tsx` | Sandboxed iframe preview (`sandbox="allow-same-origin"`), download, integrity hash |
+| `src/components/filings/accounts/ApprovalSection.tsx` | Board approval fields |
+| `src/components/filings/accounts/DirectorsEditor.tsx` | Director list management |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/types/filing-schemas.ts` | Replace `DisclosureEntry` + `AccountsDraftScheduleData` with structured types |
+| `src/lib/frs105-accounts-model.ts` | Add prior period contexts, structured disclosures, units/decimals |
+| `src/lib/ixbrl-generator.ts` | Prior period comparatives, disclosure iXBRL tags, narrative sanitisation, hard validation gate |
+| `src/lib/filing-version-service.ts` | Capture `tb_snapshot_ref`, `coa_mapping_ref`, `mapping_rules_version` hashes on lock for ACCOUNTS_FRS105 |
+| `src/lib/filing-lock-service.ts` | Pre-lock validation: disclosures complete, balance sheet balances, provenance hashes non-null |
+| `src/pages/FilingDetail.tsx` | Add ACCOUNTS_FRS105 branch rendering `FRS105AccountsEditor` |
+| `src/components/jobs/JobFilingTab.tsx` | Replace amber placeholder with real "Open Filing Editor" action |
+
+---
+
+## Snapshot Integrity on Lock
+
+When locking an ACCOUNTS_FRS105 filing:
+
+1. Capture TB snapshot data and compute SHA-256 hash -> `tb_snapshot_ref`
+2. Capture COA mapping state and compute SHA-256 hash -> `coa_mapping_ref`
+3. Compute deterministic SHA-256 hash of `FRS105_ACCOUNT_MAPPINGS` object content (the actual mapping rules, not a human version string) -> `mapping_rules_version`
+4. All three must be non-null; locking hard-fails otherwise
+5. All mandatory disclosures must be in `complete` or `locked` state
+6. Balance sheet must balance (net_assets === total_equity within tolerance)
+
+---
+
+## FRS102 Lockout
+
+- No UI path to create ACCOUNTS_FRS102_1A filings
+- No filing type selector option for FRS102
+- Internal code in `accounts-model-mapper.ts` (FRS102 branch) remains but is unreachable from any UI
+
+---
+
+## Validation Chain (Hard Gates)
 
 ```text
-Accountant edits schedules
-       |
-       v
-filings.draft_schedule_data_json  (mutable, canonical keys)
-       |
-       v  [Send to Client / Submit]
-filing_model_snapshots row created (immutable)
-  - snapshot_data: schedule data
-  - tb_snapshot: trial balance at lock time
-  - coa_snapshot: COA tax mappings at lock time  
-  - computed_outputs: SA302 / CT computation
-  - snapshot_hash: SHA-256 integrity
-       |
-       v
-Submission edge function reads from snapshot
-       |
-       v
-filing_submissions (request/response audit)
+TB Import --> Balance Sheet Grid (provenance tracked per line)
+                    |
+                    v
+Disclosure Engine (auto-determines requirements from ledger/profile)
+                    |
+                    v
+Disclosure Manager UI (system-determined, no user override)
+         |                        |
+         | Any Required+Missing   | All complete
+         v                        v
+  BLOCK iXBRL              Build Canonical FRS105AccountsModel
+  BLOCK Send to Client     (with contexts, comparatives, units)
+  BLOCK Lock                      |
+                                  v
+                          generateFRS105iXBRL()
+                          (sanitise narratives, map disclosure tags)
+                                  |
+                                  v
+                          Sandboxed iframe Preview
+                                  |
+                                  v
+                          Save Artefact + Lock
+                          (tb_snapshot_ref + coa_mapping_ref + mapping_rules_version)
 ```
