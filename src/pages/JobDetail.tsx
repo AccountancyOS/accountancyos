@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send } from "lucide-react";
 import { format, differenceInDays, isFuture } from "date-fns";
-import { formatServiceType, formatStatus, formatPriority } from "@/lib/format-utils";
+import { formatServiceType, formatStatus } from "@/lib/format-utils";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
@@ -393,23 +393,32 @@ export default function JobDetail() {
             <span className="text-sm text-muted-foreground">Status:</span>
             <Badge>{formatStatus(job.status)}</Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Priority:</span>
-            <Badge>{formatPriority(job.priority)}</Badge>
-          </div>
-          {job.filing_deadline && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filing Deadline:</span>
-              <span className="font-medium">
-                {format(new Date(job.filing_deadline), "dd MMM yyyy")}
-                {daysRemaining !== null && (
-                  <span className={daysRemaining < 7 ? "text-destructive ml-2" : "text-muted-foreground ml-2"}>
-                    ({daysRemaining < 0 ? `${Math.abs(daysRemaining)} days overdue` : `${daysRemaining} days remaining`})
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
+          {job.filing_deadline && (() => {
+            const getThreshold = (st: string | null): number => {
+              if (!st) return 14;
+              const s = st.toLowerCase();
+              if (["accounts", "company_accounts", "self_assessment", "sa", "corporation_tax", "ct600", "advisory"].includes(s)) return 30;
+              if (["vat", "vat_return", "payroll", "cis", "company_sec", "cs01"].includes(s)) return 7;
+              return 14;
+            };
+            const threshold = getThreshold(job.service_type);
+            const deadlineColor = daysRemaining !== null && daysRemaining < 0 ? "text-destructive"
+              : daysRemaining !== null && daysRemaining <= threshold ? "text-amber-600"
+              : "text-muted-foreground";
+            return (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Filing Deadline:</span>
+                <span className="font-medium">
+                  {format(new Date(job.filing_deadline), "dd MMM yyyy")}
+                  {daysRemaining !== null && (
+                    <span className={`${deadlineColor} ml-2`}>
+                      ({daysRemaining < 0 ? `${Math.abs(daysRemaining)} days overdue` : `${daysRemaining} days remaining`})
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-2 ml-auto">
             <span className="text-sm text-muted-foreground">Workflow:</span>
             <Select
