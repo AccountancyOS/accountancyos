@@ -39,7 +39,7 @@ export async function lockFiling(params: LockFilingParams): Promise<LockResult> 
     // Check filing exists and is not already locked
     const { data: filing, error: fetchErr } = await supabase
       .from("filings")
-      .select("id, status, is_locked, organization_id")
+      .select("id, status, is_locked, organization_id, filing_type")
       .eq("id", params.filingId)
       .single();
 
@@ -49,6 +49,39 @@ export async function lockFiling(params: LockFilingParams): Promise<LockResult> 
 
     if (filing.is_locked) {
       return { success: false, error: "Filing is already locked" };
+    }
+
+    // Pre-lock validation for ACCOUNTS_FRS105
+    const filingType = (filing as any).filing_type;
+    if (filingType === 'ACCOUNTS_FRS105' || filingType === 'accounts_frs105') {
+      // Fetch draft data to validate disclosures and balance sheet
+      const { data: filingFull } = await supabase
+        .from("filings")
+        .select("draft_schedule_data_json")
+        .eq("id", params.filingId)
+        .single();
+
+      const draftData = (filingFull as any)?.draft_schedule_data_json;
+      if (draftData?.disclosures) {
+        const { validateDisclosures, computeDisclosureRequirements } = await import("@/lib/frs105-disclosure-engine");
+        const emptyLedger = { dla_balances: [], has_dla_tagging: false, rpt_transactions: [], has_rpt_tagging: false, dividends_detected: [], commitments_exist: false };
+        const emptyCompany = { company_name: '', company_number: '' };
+        const emptyPayroll = { available: false };
+        const result = validateDisclosures(draftData.disclosures, emptyLedger, emptyCompany, emptyPayroll);
+        if (!result.all_complete) {
+          return { success: false, error: `Cannot lock: ${result.missing_count} disclosure(s) incomplete. ${result.errors.join('; ')}` };
+        }
+      }
+
+      // Validate balance sheet balances
+      if (draftData?.balance_sheet) {
+        const bs = draftData.balance_sheet;
+        const netAssets = bs.net_assets ?? 0;
+        const totalEquity = bs.total_equity ?? 0;
+        if (Math.abs(netAssets - totalEquity) > 0.01) {
+          return { success: false, error: `Cannot lock: balance sheet does not balance (net assets ${netAssets} ≠ total equity ${totalEquity})` };
+        }
+      }
     }
 
     // Create version snapshot with TB + COA

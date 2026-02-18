@@ -85,7 +85,27 @@ export async function createFilingVersion(params: CreateVersionParams): Promise<
     // 7. Determine snapshot type from filing_type
     const snapshotType = mapFilingTypeToSnapshotType(filing.filing_type);
 
-    // 8. Insert snapshot
+    // 8. Compute mapping provenance hashes for ACCOUNTS_FRS105
+    let tbSnapshotRef: string | null = null;
+    let coaMappingRef: string | null = null;
+    let mappingRulesVersion: string | null = null;
+
+    if (filing.filing_type === 'ACCOUNTS_FRS105' || filing.filing_type === 'accounts_frs105') {
+      if (tbSnapshot) {
+        tbSnapshotRef = await computeSnapshotHash(tbSnapshot as Record<string, unknown>);
+      }
+      if (coaSnapshot) {
+        coaMappingRef = await computeSnapshotHash(coaSnapshot as Record<string, unknown>);
+      }
+      // Deterministic hash of the mapping rules content
+      const { FRS105_ACCOUNT_MAPPINGS } = await import("@/lib/frs105-accounts-model");
+      const mappingContent = JSON.stringify(FRS105_ACCOUNT_MAPPINGS, Object.keys(FRS105_ACCOUNT_MAPPINGS).sort());
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(mappingContent));
+      mappingRulesVersion = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // 9. Insert snapshot
     const { data: snapshot, error: insertErr } = await supabase
       .from("filing_model_snapshots")
       .insert({
@@ -108,6 +128,9 @@ export async function createFilingVersion(params: CreateVersionParams): Promise<
           tax_due: filing.tax_due,
           tax_refund: filing.tax_refund,
         } as any,
+        tb_snapshot_ref: tbSnapshotRef,
+        coa_mapping_ref: coaMappingRef,
+        mapping_rules_version: mappingRulesVersion,
       } as any)
       .select("id, version")
       .single();

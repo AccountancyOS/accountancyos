@@ -6246,6 +6246,7 @@ export type Database = {
           approved_at: string
           approved_by: string | null
           client_id: string | null
+          coa_mapping_ref: string | null
           coa_snapshot: Json | null
           company_id: string | null
           computed_outputs: Json | null
@@ -6254,6 +6255,7 @@ export type Database = {
           generator_version: string
           id: string
           lock_reason: string | null
+          mapping_rules_version: string | null
           organization_id: string
           pdf_artifact_id: string | null
           period_end: string
@@ -6265,12 +6267,14 @@ export type Database = {
           source_workpaper_id: string | null
           submission_artifact_id: string | null
           tb_snapshot: Json | null
+          tb_snapshot_ref: string | null
           version: number | null
         }
         Insert: {
           approved_at?: string
           approved_by?: string | null
           client_id?: string | null
+          coa_mapping_ref?: string | null
           coa_snapshot?: Json | null
           company_id?: string | null
           computed_outputs?: Json | null
@@ -6279,6 +6283,7 @@ export type Database = {
           generator_version?: string
           id?: string
           lock_reason?: string | null
+          mapping_rules_version?: string | null
           organization_id: string
           pdf_artifact_id?: string | null
           period_end: string
@@ -6290,12 +6295,14 @@ export type Database = {
           source_workpaper_id?: string | null
           submission_artifact_id?: string | null
           tb_snapshot?: Json | null
+          tb_snapshot_ref?: string | null
           version?: number | null
         }
         Update: {
           approved_at?: string
           approved_by?: string | null
           client_id?: string | null
+          coa_mapping_ref?: string | null
           coa_snapshot?: Json | null
           company_id?: string | null
           computed_outputs?: Json | null
@@ -6304,6 +6311,7 @@ export type Database = {
           generator_version?: string
           id?: string
           lock_reason?: string | null
+          mapping_rules_version?: string | null
           organization_id?: string
           pdf_artifact_id?: string | null
           period_end?: string
@@ -6315,6 +6323,7 @@ export type Database = {
           source_workpaper_id?: string | null
           submission_artifact_id?: string | null
           tb_snapshot?: Json | null
+          tb_snapshot_ref?: string | null
           version?: number | null
         }
         Relationships: [
