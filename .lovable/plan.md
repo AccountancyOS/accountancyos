@@ -1,370 +1,290 @@
 
+# AccountancyOS Gap Closure — Full Implementation Plan
 
-# Chaser Policies v2: Full Revised Plan
+## Wave 1: Security and Role Model (Items 1, 2, 3, 4, 5, 6, 7, 10, 20)
 
-## Key Changes from v1
+### 1A. Collapse to 3-role model: owner > staff > admin
 
-1. **Auto-job creation on trigger** -- chasers start even if no job exists yet. A `trigger-scan` edge function finds entities whose period triggers have passed and calls `ensureJobExistsForPeriod` before starting chasers.
-2. **`service_code` as primary discriminator** -- uses `services_catalog.code` (e.g. `CT600`, `SA-RETURN`, `VAT-RETURN`) rather than inventing a new `job_template_key`. Policies are keyed by `(organization_id, service_code)`.
-3. **Idempotent job-per-period creation** -- unique constraint on `(organization_id, service_code, entity_id, period_end)` in a new `chaser_job_periods` tracking table.
-4. **Idempotency based on scheduled slot** -- `idempotency_key` uses the run's `next_send_at` ISO timestamp (full precision, no rounding) captured before advancing.
-5. **Legacy workflow deprecation** -- records-chaser workflow templates are marked deprecated and their instances stopped via migration. They cannot be created/edited/enabled in the UI.
-6. **Two separate scheduled functions** -- `chaser-trigger-scan` (finds triggers, ensures jobs, starts runs) and `chaser-tick` (sends due reminders). Both use service role with explicit org scoping.
+The current codebase has `AppRole = 'owner' | 'admin' | 'manager' | 'staff' | 'viewer'` with a hierarchy of viewer < staff < manager < admin < owner. The user requires a strict 3-role model with a NON-STANDARD hierarchy: **owner > staff > admin** (admin is LOWEST).
 
----
+**Database migration:**
+- Update `organization_users` role CHECK constraint to `('owner', 'staff', 'admin')`
+- Migrate any existing `manager` rows to `staff`, any `viewer` rows to `admin`
+- Update edge function `_shared/permissions.ts` to 3 roles with correct hierarchy
 
-## Phase 1: Database Schema
+**Frontend changes:**
+- Rewrite `src/lib/permissions.ts`: `AppRole = 'owner' | 'staff' | 'admin'`, `ROLE_HIERARCHY = ['admin', 'staff', 'owner']`
+- Rewrite ALL permission mappings per the matrix:
+  - **Owner**: everything (integrations, billing, team, HMRC/CH connections, all operational, all bookkeeping, all filing, all automation)
+  - **Staff**: operational work (clients, jobs, deadlines, workpapers, questionnaires, documents, conversations, filings, emails, upload, job status updates, bookkeeping day-to-day). Cannot: manage users/roles/billing/org settings, connect HMRC/CH
+  - **Admin**: read-only + basic non-sensitive admin tasks. Narrower than staff. Cannot: manage users/roles/billing/services/fees/automations/templates/filings authority/firm settings, connect HMRC/CH
+- Update `organization-context.tsx` type to `'owner' | 'staff' | 'admin'`
+- Update `usePermissions.ts`, `permission-guard.tsx`, `getRoleLabel()`
+- Remove all `manager` and `viewer` references across entire codebase
 
-### Table A: `automation_chaser_policies`
+**RLS rewrite:**
+- All RLS policies referencing role must use the 3-role model
+- `organization_users` INSERT: only via SECURITY DEFINER function `accept_invitation(token)` or `add_org_member(org_id, user_id, role)` callable only by owner
+- Block self-enrolment, block role escalation (staff/admin cannot change roles)
+- Provide test cases proving: non-member cannot join org, staff cannot escalate, cross-org access blocked
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK default gen_random_uuid() | |
-| organization_id | uuid FK organizations | RLS scoped |
-| service_code | text NOT NULL | Matches `services_catalog.code` (e.g. `CT600`, `SA-RETURN`) |
-| name | text NOT NULL | Display name |
-| description | text | |
-| trigger_type | text NOT NULL | `COMPANY_YEAR_END`, `TAX_YEAR_END`, `MTD_QUARTER_END`, `VAT_PERIOD_END`, `MANUAL`, `JOB_CREATED` |
-| trigger_offset_days | int default 0 | Start X days after trigger date |
-| frequency_unit | text default 'MONTH' | `DAY`, `WEEK`, `MONTH` |
-| frequency_interval | int default 1 | e.g. 2 for fortnightly |
-| min_frequency_interval | int default 1 | Guardrail |
-| max_frequency_interval | int default 12 | Guardrail |
-| email_template_id | uuid nullable FK templates | Required when enabled |
-| stop_condition_type | text default 'JOB_STATUS_EQUALS' | |
-| stop_condition_value | text default 'records_received' | |
-| is_enabled | bool default false | |
-| created_at | timestamptz default now() | |
-| updated_at | timestamptz default now() | |
+### 1B. Session security (Items 1, 2)
 
-**Unique constraint**: `(organization_id, service_code)` -- one chaser policy per service per org.
+**10-minute inactivity timeout:**
+- Add idle timer in `auth-context.tsx` using mouse/keyboard/touch event listeners
+- On 10 minutes of inactivity, call `signOut()` automatically
+- Applies to both accountant and client portal users
 
-### Table B: `automation_chaser_runs`
+**Concurrent session restriction by plan:**
+- Solo plan: 1 user max
+- Studio plan (renamed from Team): 4 users max  
+- Firm plan (renamed from Scale): 10 users max
+- On login, count active sessions for the org. If at plan limit, reject login with clear message
+- Use `user_sessions` table (already has the right columns)
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| organization_id | uuid FK | |
-| job_id | uuid FK jobs | |
-| policy_id | uuid FK automation_chaser_policies | |
-| status | text default 'ACTIVE' | `ACTIVE`, `STOPPED`, `PAUSED` |
-| trigger_date | timestamptz NOT NULL | The resolved trigger date |
-| period_start | date nullable | For audit/correctness |
-| period_end | date nullable | For audit/correctness |
-| next_send_at | timestamptz | When next reminder fires |
-| frequency_unit | text | Copied from policy |
-| frequency_interval | int | Copied from policy |
-| email_template_id | uuid nullable | Copied from policy; overridable |
-| stop_condition_value | text | Copied from policy |
-| last_sent_at | timestamptz nullable | |
-| send_count | int default 0 | |
-| created_at | timestamptz default now() | |
-| updated_at | timestamptz default now() | |
+### 1C. Audit trail enhancements (Items 3, 4)
 
-**Unique constraint**: `(job_id, policy_id)` -- one run per job per policy.
+**Session audit:** `user_sessions` already has `last_activity_at`, `ip_address`, `user_agent`. Confirmed sufficient.
 
-### Table C: `automation_chaser_messages`
+**Bookkeeping detailed audit:**
+- Add `bookkeeping_audit_log` table: `id, organization_id, entity_type (bank_transaction|invoice|bill|journal|payment), entity_id, action (categorized|uncategorized|created|voided|posted|reversed), performed_by, performed_at, details JSONB`
+- Wire into all bookkeeping mutation functions: bank categorization, invoice create/issue/void, journal post/reverse, payment record/reverse
+- Track who categorized each bank transaction and when; who undid it and when
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| organization_id | uuid FK | |
-| job_id | uuid FK | |
-| chaser_run_id | uuid FK | |
-| to_email | text | |
-| template_id | uuid nullable | |
-| rendered_subject | text | |
-| rendered_body | text | |
-| status | text default 'QUEUED' | `QUEUED`, `SENT`, `FAILED`, `CANCELLED` |
-| send_at | timestamptz | |
-| sent_at | timestamptz nullable | |
-| failure_reason | text nullable | |
-| idempotency_key | text UNIQUE | `{org_id}:{run_id}:{next_send_at_iso}` -- full ISO, no rounding |
-| created_at | timestamptz default now() | |
+**Sensitive event auditing (Item 4):**
+- Ensure `logAudit()` is called for: login, password reset, invitation accepted, role change, mailbox connection, HMRC/CH connection, document signature, filing submission
+- Track user ID, date, time for all
+- Client-side updates (portal) also audited with timestamp
 
-### Table D: `chaser_job_periods` (idempotent job creation tracking)
+### 1D. GDPR data export/deletion (Item 5)
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| organization_id | uuid FK | |
-| service_code | text | |
-| entity_type | text | 'company' or 'client' |
-| entity_id | uuid | company_id or client_id |
-| period_end | date | |
-| job_id | uuid FK jobs | The created/found job |
-| created_at | timestamptz default now() | |
-
-**Unique constraint**: `(organization_id, service_code, entity_id, period_end)` -- prevents duplicate job creation per entity per period.
-
-### RLS Policies (all 4 tables)
-
-Standard org-scoped pattern:
-- SELECT: `organization_id IN (SELECT organization_id FROM organization_users WHERE user_id = auth.uid())`
-- INSERT/UPDATE/DELETE: same filter plus role check for manager+ via existing `has_role` or `can_manage_automation_rules` function
-
-### Indexes
-
-- `automation_chaser_runs(status, next_send_at)` -- scheduler hot path
-- `automation_chaser_runs(job_id)` -- stop-condition lookups
-- `automation_chaser_messages(chaser_run_id, status)` -- cancellation queries
-- `chaser_job_periods(organization_id, service_code, entity_id, period_end)` -- unique constraint covers this
-
-### Migration: Deprecate legacy chaser workflows
-
-```sql
--- Mark records-chaser workflow templates as deprecated
-UPDATE automation_workflow_templates
-SET default_enabled = false
-WHERE key IN (
-  'LTD_ACCOUNTS_CT_ANNUAL', 'SA_NON_MTD_ANNUAL', 'SA_MTD_QUARTERLY',
-  'SA_MTD_ANNUAL_EOPS', 'VAT_QUARTERLY'
-);
-
--- Stop active workflow instances for these templates
-UPDATE automation_workflow_instances
-SET status = 'stopped'
-WHERE workflow_template_id IN (
-  SELECT id FROM automation_workflow_templates
-  WHERE key IN ('LTD_ACCOUNTS_CT_ANNUAL', 'SA_NON_MTD_ANNUAL', 'SA_MTD_QUARTERLY', 'SA_MTD_ANNUAL_EOPS', 'VAT_QUARTERLY')
-)
-AND status IN ('active', 'waiting');
-```
+- Build edge function `gdpr-data-export` that exports all data for a client/user as JSON/ZIP
+- Build edge function `gdpr-data-deletion` that anonymizes/deletes client PII with audit trail
+- Add UI in Settings for owner to trigger export or deletion request
+- Comply with UK GDPR: 30-day response window, right to erasure, right to data portability
 
 ---
 
-## Phase 2: Domain Service (`src/lib/chaser-policy-service.ts`)
+## Wave 2: Core Operational Spine (Items 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21-30, 31-36)
 
-### Core Functions
+### 2A. Dashboard updates (Items 8, 9, 11, 12)
 
-**`resolveTriggerDate(triggerType, job, company)`**:
-- `COMPANY_YEAR_END`: Uses `companies.year_end_month` + `year_end_day`. Computes the most recent accounting period end <= today by constructing `YYYY-MM-DD` from year_end fields and walking back if needed. Falls back to `jobs.period_end` if year_end fields are null.
-- `TAX_YEAR_END`: If today >= April 6 of current year, trigger = April 5 of current year. Otherwise April 5 of previous year. Constrained by job's tax year context from `period_end`.
-- `MTD_QUARTER_END`: Uses `jobs.period_end` directly (the quarter end date). Standard quarters: Q1=Apr 5, Q2=Jul 5, Q3=Oct 5, Q4=Jan 5. If no bespoke schedule stored, uses these defaults.
-- `VAT_PERIOD_END`: Uses `jobs.period_end`. Derives from `companies.vat_frequency` + `vat_stagger_group` if no job exists yet.
-- `JOB_CREATED`: `jobs.created_at`
-- `MANUAL`: Returns null (set manually by accountant)
+**KPI cards update (Item 8):**
+- Add "Total Leads" card (count from `leads` table where status not lost)
+- Add "Current Firm Revenue" card (sum of active engagement fees from `engagements` + `services_catalog` pricing)
+- Keep existing active clients, jobs in progress, overdue deadlines
 
-Returns `{ triggerDate: Date | null, error?: string }`. If data is missing, returns error string for UI display.
+**Revenue cards (Item 11):**
+- Monthly recurring fees total (engagements with frequency = 'monthly')
+- One-off fees total (engagements with frequency = 'one_off')
+- Pipeline revenue (quotes in proposal_sent or chasing status)
+- Top revenue service breakdown (group engagements by service, show top 5)
 
-**`ensureJobExistsForPeriod(orgId, entityType, entityId, serviceCode, periodStart, periodEnd)`**:
-1. Check `chaser_job_periods` for existing record (unique constraint)
-2. If exists, return the `job_id`
-3. If not, find the org's `job_templates` matching `service_type` mapped from `service_code`
-4. Call `generateJobFromTemplate()` (existing idempotent function)
-5. Insert into `chaser_job_periods` with ON CONFLICT DO NOTHING
-6. Return job_id
+**Overdue actions tied to SLA (Item 9):**
+- Verify `OverdueActionsPanel` reads from `sla_instances`
+- SLA instances created on: inbound email, portal message, task creation, job status change
+- Accountant can manually update/resolve SLA instances
 
-**Service code to service_type mapping**:
-```
-CT600 -> corporation_tax
-SA-RETURN -> self_assessment
-VAT-RETURN -> vat
-CONFIRM-STMT -> confirmation_statement
-PAYROLL -> payroll
-BK-MONTHLY / BK-ANNUAL -> bookkeeping
-```
+**Role-scoped dashboard (Item 12):**
+- Owner: sees everything including staff variance, full revenue
+- Staff: sees their assigned jobs, their overdue items, their deadlines
+- Admin: sees read-only summary only
 
-**`computeNextSendAt(fromDate, frequencyUnit, frequencyInterval)`**: Adds interval using date-fns.
+### 2B. CRM changes (Items 13, 14, 15, 16, 17)
 
-**`startChaserRun(jobId, policyId, triggerDate, periodStart, periodEnd)`**: Creates run with computed first `next_send_at = triggerDate + offset_days`.
+**Remove sole_trader and landlord (Item 13):**
+- Remove from `CLIENT_TYPES` array in `client-types.ts`
+- Migration to update existing leads/clients with `sole_trader` → `sa_non_mtd`, `landlord` → `sa_non_mtd`
+- Remove from `CLIENT_TYPE_FIELD_CONFIG`, labels, descriptions, DB_TYPE_MAP
 
-**`stopChaserRunsForJob(jobId)`**: Sets all ACTIVE runs to STOPPED, cancels QUEUED messages.
+**CRM as hub for quotes (Item 14):**
+- Move quote creation/management into `LeadDetailPanel`
+- Remove standalone Quotes page route or make it redirect to CRM
+- Quote pipeline visible within CRM stages
 
-**`renderChaserEmail(templateId, job, client, company)`**: Loads template from `templates` table, resolves placeholders using existing `placeholder-resolver.ts`.
+**Activity logging like Pipedrive (Item 15):**
+- Add `lead_activities` table: `id, lead_id, org_id, activity_type (call|email|meeting|note), description, performed_by, performed_at`
+- Show last contact date on lead cards
+- Activity logging triggers reminder scheduling via automation engine
 
----
+**Auto-won on client portal signup (Item 16):**
+- Client completes: sign terms/EL + create portal login → lead auto-moves to Won
+- Conversion happens on these steps completing, not on manual drag
 
-## Phase 3: Trigger Scanner (`supabase/functions/chaser-trigger-scan/index.ts`)
+**Double conversion protection (Item 17):**
+- Add `converted_at` check before conversion
+- Lead can only move to Won when: EL signed + portal login created
+- Idempotent guard on `convertLeadToClient`
 
-A new edge function that runs on a cron schedule (every 6 hours) to detect triggers that have fired.
+### 2C. Client creation & uniqueness (Items 18, 19)
 
-### Logic
+**Compliance warning on manual add (Item 18):**
+- Show modal warning when using "Add Client" directly
+- Require acknowledgment that EL/AML/onboarding will need to be completed
+- Log this bypass in audit trail
 
-1. Fetch all enabled `automation_chaser_policies` across all orgs (service role, batched by org)
-2. For each policy:
-   a. Fetch entities (companies or clients) with active engagements matching the `service_code`
-   b. For each entity, compute the current period's `period_end` based on trigger_type:
-      - `COMPANY_YEAR_END`: compute from `year_end_month`/`year_end_day`
-      - `TAX_YEAR_END`: April 5 of relevant year
-      - `MTD_QUARTER_END`: most recent standard quarter end <= today
-      - `VAT_PERIOD_END`: compute from `vat_frequency` + `vat_stagger_group`
-   c. Check if `period_end + trigger_offset_days <= today`
-   d. If yes, call `ensureJobExistsForPeriod` (idempotent)
-   e. Then ensure a chaser run exists for this job+policy (idempotent via unique constraint)
-3. Uses LIMIT-based batching (100 entities per batch) to handle large orgs
+**Unique email enforcement (Item 19):**
+- Add UNIQUE constraint on `clients(email, organization_id)`
+- Prevent same email appearing twice within an org
+- Show clear error message on duplicate attempt
 
-### Safety
+### 2D. Client detail fields (Items 21-29)
 
-- `verify_jwt = false` in config.toml (cron-invoked)
-- Uses service role key only -- no user context
-- All DB operations explicitly scoped by `organization_id`
-- No elevated privileges exposed -- function is not callable with meaningful side effects without service role
+**Limited company SIC code + director contacts (Item 21):**
+- `companies.sic_codes` already exists (JSONB). Surface in CompanyDetail UI
+- Director contacts: add UI to link existing clients as directors or add manual director contacts
+- When director is an existing SA client, pull NINO/UTR/DOB/address from their client record
 
----
+**LLP Companies House + partnership UTR + partners (Item 22):**
+- LLP uses `companies` table. CH lookup already works
+- Add `partnership_utr` field to companies table for LLP type
+- Add partner contacts UI (same pattern as directors)
 
-## Phase 4: Reminder Sender (`supabase/functions/chaser-tick/index.ts`)
+**Director/partner contact fields (Items 23, 25):**
+- Add columns to `contacts` table: `nino, utr, date_of_birth, address JSONB, nationality, ch_personal_code`
+- Migration to add these columns
+- Update contact forms to show these fields for Director/Partner roles
 
-Runs every 15 minutes via cron.
+**Partnership details (Item 24):**
+- `client_detail_partnership` already has `partnership_utr`, `partners JSONB`
+- Add `partnership_year_end` and `tax_year` fields
+- Add minimum 2 contacts validation in UI
+- Year end triggers automation for partnership tax return jobs
 
-### Logic
+**CGT deadline auto-calculation (Item 26):**
+- `client_detail_cgt` already has `disposal_date`
+- Add `completion_date` column if not same as `disposal_date`
+- Auto-calculate deadline = completion_date + 60 days
+- One-off service: mark as completed when done
+- Fees persist in firm earnings even when client/service inactive
 
-1. Query `automation_chaser_runs WHERE status = 'ACTIVE' AND next_send_at <= now()` with LIMIT 100
-2. For each run:
-   a. Fetch job status. If matches `stop_condition_value` -> set run STOPPED, cancel QUEUED messages, continue
-   b. Compute `idempotency_key = {org_id}:{run_id}:{next_send_at_iso}` (captured BEFORE updating next_send_at)
-   c. INSERT INTO `automation_chaser_messages` with ON CONFLICT (idempotency_key) DO NOTHING
-   d. If insert succeeded (not a conflict):
-      - Resolve recipient email from job's client primary contact
-      - Render template via placeholder resolver
-      - INSERT INTO `email_queue` for actual sending
-      - Update message status to SENT or FAILED
-   e. Update run: `last_sent_at = now()`, `send_count++`, compute `next_send_at = last_sent_at + frequency`
+**Charity missing fields (Item 27):**
+- `client_detail_charity` already has: charity_number, charity_status, trading_as, charity_year_end, gift_aid_claim_expiry
+- Add: `incorporation_date`, `charity_commission_submission_due`
 
-### Security
+**Engagement letter last signed date (Item 28):**
+- Surface on all client profile pages from onboarding/engagement letter records
+- Query latest signed EL and show date prominently
 
-- `verify_jwt = false` (cron-invoked)
-- Service role only, explicit org scoping on every query
-- Idempotency key prevents double-sends even under retries
+**Partner/staff in charge on all clients (Item 29):**
+- Add `partner_in_charge UUID` and `staff_in_charge UUID` to `clients` table
+- Companies already have these. Now individuals get them too
+- Show on all client detail views
 
----
+### 2E. HMRC authorisation UI (Item 30)
 
-## Phase 5: Job Status Change Hook
+- Build `HmrcAuthorisationPanel` component
+- `hmrc_authorisations` table already exists with: auth_type, status, authorised_at, expires_at
+- Add `requested_at DATE` and `code_entered_at DATE` columns
+- Supported auth types: self_assessment, corporation_tax, paye, cis
+- Accountant requests via UI → `requested_at` set
+- Accountant manually enters date code was entered → `code_entered_at` set
+- Per-client tracking visible on client detail and company detail pages
+- Statuses: not_started, requested, authorised, expired
 
-Modify `src/lib/job-status-service.ts`:
-- After successful status update, if `newStatus === 'records_received'`:
-  - Call `stopChaserRunsForJob(jobId)` which:
-    - Updates all ACTIVE runs for that job to STOPPED
-    - Cancels all QUEUED messages for those runs
+### 2F. Services verification and features (Items 31-35)
 
-This is immediate -- does not wait for the next scheduler tick.
+**Verify 14 services (Item 31):**
+Current seeded: CT600, SA-RETURN, VAT-RETURN, BK-MONTHLY, BK-ANNUAL, PAYROLL, CONFIRM-STMT, ANNUAL-ACC, TAX-PLAN, COMPANY-SETUP
+Missing from required 14: CIS, MTD-QUARTERLY, MTD-FINAL-DEC, REGISTERED-ADDR, ADVISORY, SOFTWARE, CGT-RETURN
+- Add missing services via INSERT
 
----
+**Quote-to-service mapping verification (Item 32):**
+- Verify quote acceptance populates engagements with correct service_id and fee
+- Test end-to-end flow
 
-## Phase 6: UI Changes
+**Service-specific fields toggle (Item 33):**
+- When service toggled OFF: clear associated data, stop reminders/automations
+- When toggled ON: show relevant fields (PAYE: employer ref, accounts office ref; VAT: VAT number, quarters; Pension: provider, auto-enrolment staging)
+- Clearing on toggle-off must be confirmed by user
 
-### A. Replace Workflow Library tab with Chaser Policies tab
+**EL re-sign on fee/service change (Item 34):**
+- Detect changes to engagements (fee amount, service added/removed)
+- Auto-create draft engagement letter
+- Queue signature request to client
+- Record old vs new scope
 
-**New file: `src/components/automations/ChaserPoliciesTab.tsx`**
+**Aggregated fee totals (Item 35):**
+- Show total monthly recurring, total one-off fees on client services section
+- Show firm-wide totals on dashboard
 
-Displays cards grouped by service code:
-- Each card: policy name, trigger description (read-only text), frequency selector (unit + interval dropdowns within guardrails), email template dropdown (from `templates WHERE type='email'`), stop condition (read-only "Stops when Records Received"), enabled toggle
-- No steps, no accordion, no WAIT_UNTIL/CONDITION
-- If `email_template_id` is null when toggling on, show validation error "Select an email template first"
-- Warning banner if trigger data is missing (e.g. no year_end_month on company)
+### 2G. Jobs status alignment (Item 36)
 
-### B. Update `Automations.tsx`
+Current statuses match the canonical list exactly: blank, records_requested, records_received, accountant_queries, client_queries, accountant_review, client_review, ready_to_file, completed. **Already aligned — no change needed.**
 
-- Rename "Workflow Library" tab to "Chaser Policies", render `ChaserPoliciesTab`
-- Rename "Monitor" tab to "Chaser Monitor", render new `ChaserRunsMonitor.tsx`
-- Keep "Custom Rules" tab unchanged
-- Remove imports of `WorkflowLibraryTab` and `WorkflowInstancesMonitor` from tab rendering (files kept but not rendered)
+### 2H. Questionnaire → job status (Item 37)
 
-### C. New `ChaserRunsMonitor.tsx`
+- When questionnaire is completed, update linked job status to `records_received`
+- Wire into `questionnaire-workpaper-service.ts`
 
-Shows active/stopped/paused chaser runs with:
-- Job name, client/company, service, status, next send date, send count, last sent
-- Filter by status, service code
+### 2I. Payroll journal mapping (Item 38)
 
-### D. Job Detail: `JobChasersPanel.tsx`
-
-On job detail page:
-- Active/stopped status per policy
-- Next send date
-- Pause/Resume button (toggles status ACTIVE <-> PAUSED)
-- "Start Chaser" button for MANUAL trigger policies
-- Timeline of sent messages from `automation_chaser_messages`
-
----
-
-## Phase 7: Default Policy Seeding
-
-Insert default policies per organization. Seeded via migration for existing orgs and via application code on new org creation.
-
-| Service Code | Trigger Type | Default Frequency | Stop Condition |
-|---|---|---|---|
-| CT600 | COMPANY_YEAR_END | Monthly (MONTH/1) | records_received |
-| SA-RETURN | TAX_YEAR_END | Monthly (MONTH/1) | records_received |
-| SA-MTD-QUARTERLY* | MTD_QUARTER_END | Monthly (MONTH/1) | records_received |
-| SA-MTD-ANNUAL* | TAX_YEAR_END | Monthly (MONTH/1) | records_received |
-| VAT-RETURN | VAT_PERIOD_END | Weekly (WEEK/1) | records_received |
-| CGT* | MANUAL | Fortnightly (WEEK/2) | records_received |
-| PAYROLL | JOB_CREATED | Monthly (MONTH/1) | records_received |
-| BK-MONTHLY | JOB_CREATED | Monthly (MONTH/1) | records_received |
-| BK-ANNUAL | JOB_CREATED | Monthly (MONTH/1) | records_received |
-| CONFIRM-STMT | COMPANY_YEAR_END | Monthly (MONTH/1) | records_received |
-| ANNUAL-ACC | COMPANY_YEAR_END | Monthly (MONTH/1) | records_received |
-
-*Service codes `SA-MTD-QUARTERLY`, `SA-MTD-ANNUAL`, and `CGT` do not yet exist in `services_catalog`. The migration will INSERT them.
-
-All policies are seeded with `is_enabled = false` -- the accountant must choose a template and enable.
+- On payroll setup, accountant maps payroll items to CoA accounts
+- Store mapping in `payroll_journal_mapping` table: `org_id, company_id, payroll_item (gross_wages|employer_nic|employee_nic|paye|pension_employee|pension_employer|net_pay), debit_account_id, credit_account_id`
+- When pay run is approved, auto-generate journal using this mapping
+- Journal created as DRAFT for accountant approval before posting
+- Default CoA should be AOS standard chart
 
 ---
 
-## Phase 8: Legacy Workflow Deprecation
+## Wave 3: Filing Completion (separate wave)
 
-### What changes
-- The 5 records-chaser workflow templates (`LTD_ACCOUNTS_CT_ANNUAL`, `SA_NON_MTD_ANNUAL`, `SA_MTD_QUARTERLY`, `SA_MTD_ANNUAL_EOPS`, `VAT_QUARTERLY`) are set to `default_enabled = false` via migration
-- Their active instances are stopped
-- `WorkflowLibraryTab.tsx` and `WorkflowInstancesMonitor.tsx` files are kept but NOT rendered in any tab
-- The "Chaser Policies" tab fully replaces chaser functionality
-- Non-chaser workflows (e.g. `CRM_PROPOSAL_CHASER`, `ONBOARDING_NEW_CLIENT`) remain functional via the internal engine but are not shown in the primary UI (they can be managed via Custom Rules)
-
-### What does NOT change
-- `workflow-tick` edge function stays deployed (processes non-chaser workflow instances)
-- `automation_workflow_*` tables stay intact
-- `workflow-step-executor.ts`, `workflow-trigger-router.ts` stay intact
+Items not covered above (CT600 completion, MTD ITSA) remain as previously planned — verified and completed in a separate wave after Waves 1-2.
 
 ---
 
-## Files Summary
+## Migration Summary
 
-### New Files
-- `src/lib/chaser-policy-service.ts` -- domain logic (trigger resolution, job creation, run management)
-- `src/components/automations/ChaserPoliciesTab.tsx` -- policy management UI
-- `src/components/automations/ChaserRunsMonitor.tsx` -- run monitoring UI
-- `src/components/jobs/JobChasersPanel.tsx` -- job detail chaser section
-- `supabase/functions/chaser-trigger-scan/index.ts` -- trigger scanner edge function
-- `supabase/functions/chaser-tick/index.ts` -- reminder sender edge function
+### Schema changes needed:
+1. `organization_users` role constraint → `('owner', 'staff', 'admin')`
+2. `contacts` table: add `nino, utr, date_of_birth DATE, address JSONB, nationality, ch_personal_code`
+3. `clients` table: add `partner_in_charge UUID, staff_in_charge UUID`
+4. `client_detail_charity`: add `incorporation_date DATE, charity_commission_submission_due DATE`
+5. `client_detail_partnership`: add `partnership_year_end INTEGER, tax_year TEXT`
+6. `client_detail_cgt`: add `completion_date DATE, deadline_date DATE`
+7. `companies`: add `partnership_utr TEXT` (for LLP)
+8. `hmrc_authorisations`: add `requested_at DATE, code_entered_at DATE`
+9. New table: `bookkeeping_audit_log`
+10. New table: `lead_activities`
+11. New table: `payroll_journal_mapping`
+12. Migrate `sole_trader`/`landlord` values to `sa_non_mtd` in leads and clients
+13. Migrate `manager`/`viewer` roles to `staff`/`admin` in organization_users
+14. INSERT missing services into `services_catalog`
+15. Add UNIQUE constraint on `clients(email, organization_id)`
+16. Rewrite all RLS policies for 3-role model
+17. Create SECURITY DEFINER functions for org membership management
 
-### Modified Files
-- `src/pages/Automations.tsx` -- swap tabs
-- `src/lib/job-status-service.ts` -- add stop-chaser hook
-- `supabase/config.toml` -- add `[functions.chaser-trigger-scan]` and `[functions.chaser-tick]`
+### Files changed (major):
+- `src/lib/permissions.ts` — full rewrite
+- `src/lib/client-types.ts` — remove sole_trader/landlord
+- `src/lib/auth-context.tsx` — add idle timer
+- `src/lib/organization-context.tsx` — update role type
+- `src/hooks/usePermissions.ts` — update types
+- `src/components/ui/permission-guard.tsx` — update types
+- `src/pages/Overview.tsx` — role-scoped dashboard
+- `src/components/dashboard/DashboardKPICards.tsx` — add leads + revenue cards
+- `src/components/dashboard/RevenueCards.tsx` — new component
+- `src/components/crm/LeadDetailPanel.tsx` — quote management, activity log
+- `src/components/clients/HmrcAuthorisationPanel.tsx` — new component
+- `src/components/clients/AddClientDialog.tsx` — compliance warning
+- `src/components/contacts/ContactForm.tsx` — new fields
+- `src/lib/lead-conversion-service.ts` — auto-won logic, double conversion guard
+- `src/lib/job-status-service.ts` — questionnaire completion hook
+- `supabase/functions/_shared/permissions.ts` — 3-role rewrite
+- `supabase/functions/_shared/auth.ts` — role validation update
+- New: `supabase/functions/gdpr-data-export/index.ts`
+- New: `supabase/functions/gdpr-data-deletion/index.ts`
 
-### Database Migration
-- CREATE 4 tables with RLS, unique constraints, indexes
-- INSERT new service codes (`SA-MTD-QUARTERLY`, `SA-MTD-ANNUAL`, `CGT`) into `services_catalog` for existing orgs
-- INSERT default chaser policies for all existing organizations
-- Deprecate/stop legacy chaser workflow templates and instances
-- `pg_cron` schedules for both edge functions
-
-### Not Changed / Not Deleted
-- `WorkflowLibraryTab.tsx` -- kept, not rendered
-- `WorkflowInstancesMonitor.tsx` -- kept, not rendered
-- `workflow-tick` edge function -- kept for non-chaser workflows
-- All `automation_workflow_*` tables -- kept
-
----
-
-## Acceptance Criteria
-
-1. For each service type, an accountant enables a chaser in under 1 minute: pick template, set frequency, toggle on
-2. When a company's year end passes (or tax year end, or VAT period end), the trigger scanner automatically creates the job and starts the chaser -- even if no job existed
-3. Reminders queue and send on the configured frequency
-4. Reminders stop immediately when job status becomes `records_received`
-5. `idempotency_key` based on `next_send_at` ISO timestamp prevents duplicates under retries
-6. No workflow-step UI visible for chaser functionality
-7. Legacy chaser workflow instances are stopped; templates marked as deprecated
-
-## Regression Checks
-
-1. `records_received` status change -> all active chasers for that job stop, QUEUED messages cancelled
-2. Frequency change -> only affects future `next_send_at`, past messages untouched
-3. Missing trigger data (no `year_end_month` on company) -> chaser start blocked with clear error message
-4. Large org (1000+ entities) -> trigger scanner uses batched queries with LIMIT, no timeouts
-5. RLS blocks cross-org access on all 4 new tables
-6. Email templates render correctly with client/job merge fields via existing placeholder resolver
-7. Rerunning trigger scanner is idempotent (unique constraint on `chaser_job_periods`)
-8. Rerunning chaser-tick is idempotent (unique `idempotency_key` on messages)
-
+### Delivery order:
+1. Role model migration + RLS rewrite + permission rewrite (foundational — everything depends on this)
+2. Session security (idle timeout + concurrent session limits)
+3. Audit trail enhancements (bookkeeping audit, sensitive events)
+4. Client type cleanup (remove sole_trader/landlord)
+5. Client detail field additions (contacts, partnerships, charity, CGT, HMRC auth)
+6. CRM consolidation (quotes in CRM, activity logging, auto-won, double conversion)
+7. Dashboard updates (KPI cards, revenue, role-scoped views)
+8. Services verification and fee engine (missing services, toggle logic, EL re-sign)
+9. Questionnaire → job status wiring
+10. Payroll journal mapping
+11. GDPR export/deletion
+12. Manual client add compliance warning + email uniqueness
