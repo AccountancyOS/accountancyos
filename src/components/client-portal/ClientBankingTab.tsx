@@ -84,7 +84,7 @@ export default function ClientBankingTab({ clientId, companyId }: ClientBankingT
 
       let query = supabase
         .from("bank_connections")
-        .select("*")
+        .select("id, bank_name, bank_logo_url, provider, status, organization_id, client_id, company_id, consent_expires_at, last_synced_at, last_error, scope, provider_connection_id, created_at, updated_at")
         .eq("organization_id", organization.id)
         .eq("status", "ACTIVE");
 

@@ -50,7 +50,7 @@ export default function HMRCSettings() {
 
       const { data, error } = await supabase
         .from("organization_integrations_hmrc")
-        .select("*")
+        .select("organization_id, mtd_vat_connected, mtd_vat_connected_at, mtd_vat_expires_at, mtd_vat_vrn, paye_connected, sa_connected, ct_connected, test_mode, created_at, updated_at")
         .eq("organization_id", organization.id)
         .maybeSingle();
 
