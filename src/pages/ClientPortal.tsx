@@ -160,9 +160,6 @@ export default function ClientPortal() {
               <ClientDeadlinesTab clientId={client.id} />
             </TabsContent>
 
-            <TabsContent value="services">
-              <ClientServicesTab clientId={client.id} />
-            </TabsContent>
 
             <TabsContent value="services">
               <ClientServicesTab clientId={client.id} />
