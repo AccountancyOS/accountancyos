@@ -44,7 +44,9 @@ import {
   Plus,
   Send,
   Eye,
+  Activity,
 } from "lucide-react";
+import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import {
   CLIENT_TYPES,
   CLIENT_TYPE_LABELS,
