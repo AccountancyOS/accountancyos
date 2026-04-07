@@ -63,13 +63,14 @@ export const OverdueActionsPanel = () => {
         }
       }
 
-      // Get overdue tasks directly
-      const { data: overdueTasks, error: taskError } = await supabase
+      // Get overdue tasks — staff sees only their assigned tasks
+      let taskQuery = supabase
         .from("job_tasks")
         .select(`
           id, 
           title, 
           due_date, 
+          assigned_to,
           jobs!inner(name, clients(first_name, last_name), companies(company_name))
         `)
         .eq("organization_id", organization.id)
@@ -77,6 +78,12 @@ export const OverdueActionsPanel = () => {
         .lt("due_date", now)
         .order("due_date", { ascending: true })
         .limit(10);
+
+      if (!isOwnerOrAdmin && user?.id) {
+        taskQuery = taskQuery.eq("assigned_to", user.id);
+      }
+
+      const { data: overdueTasks, error: taskError } = await taskQuery;
 
       if (!taskError && overdueTasks) {
         for (const task of overdueTasks) {
