@@ -14937,7 +14937,7 @@ export type Database = {
         Returns: boolean
       }
       has_organization_role: {
-        Args: { required_role: string }
+        Args: { _org_id: string; _role: string }
         Returns: boolean
       }
       has_portal_role: {
@@ -14973,7 +14973,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_rpc_context: { Args: never; Returns: boolean }
       issue_invoice_safe: { Args: { p_invoice_id: string }; Returns: Json }
       lifecycle_accept_portal_invitation: {
         Args: { p_token: string }
