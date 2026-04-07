@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, useCallback, ReactNode } from "react";
 import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
 
 type AuthFlow = "normal" | "recovery";
 
@@ -260,12 +261,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [session]);
 
-  const signOut = async () => {
-    // Reset auth flow when signing out
+  const signOut = useCallback(async () => {
     setAuthFlow("normal");
     await supabase.auth.signOut();
     navigate("/auth");
-  };
+  }, [navigate]);
+
+  // 10-minute inactivity timeout
+  useInactivityTimeout(!!user, signOut);
 
   return (
     <AuthContext.Provider value={{ 

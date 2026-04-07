@@ -1,9 +1,9 @@
 /**
  * Role-based permission system for edge functions
- * Mirrors frontend permissions but for server-side enforcement
+ * Strict 3-role model: owner > admin > staff
  */
 
-export type AppRole = 'owner' | 'admin' | 'manager' | 'staff' | 'viewer';
+export type AppRole = 'owner' | 'admin' | 'staff';
 
 export type Permission =
   // Organization
@@ -56,12 +56,13 @@ export type Permission =
   | 'settings.write';
 
 /**
- * Role to permissions mapping
- * Higher roles inherit permissions from lower roles
+ * Role to permissions mapping — 3-role model
+ * owner: everything
+ * admin: operational + approvals + management (no billing.admin, no org.delete)
+ * staff: day-to-day operational work
  */
 const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   owner: [
-    // All permissions
     'org.read', 'org.write', 'org.delete',
     'billing.read', 'billing.admin',
     'clients.read', 'clients.write', 'clients.delete',
@@ -89,19 +90,6 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     'automations.read', 'automations.write',
     'settings.read', 'settings.write',
   ],
-  manager: [
-    'org.read',
-    'clients.read', 'clients.write',
-    'companies.read', 'companies.write',
-    'jobs.read', 'jobs.write', 'jobs.assign',
-    'bookkeeping.read', 'bookkeeping.write',
-    'filings.read', 'filings.write', 'filings.submit', 'filings.poll',
-    'templates.read', 'templates.write',
-    'emails.read', 'emails.send',
-    'team.read',
-    'automations.read', 'automations.write',
-    'settings.read',
-  ],
   staff: [
     'org.read',
     'clients.read', 'clients.write',
@@ -115,25 +103,12 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     'automations.read',
     'settings.read',
   ],
-  viewer: [
-    'org.read',
-    'clients.read',
-    'companies.read',
-    'jobs.read',
-    'bookkeeping.read',
-    'filings.read',
-    'templates.read',
-    'emails.read',
-    'team.read',
-    'automations.read',
-    'settings.read',
-  ],
 };
 
 /**
  * Role hierarchy - higher index = more permissions
  */
-export const ROLE_HIERARCHY: AppRole[] = ['viewer', 'staff', 'manager', 'admin', 'owner'];
+export const ROLE_HIERARCHY: AppRole[] = ['staff', 'admin', 'owner'];
 
 /**
  * Check if a role has a specific permission

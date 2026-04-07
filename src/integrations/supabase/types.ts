@@ -14226,6 +14226,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      accept_org_invitation: {
+        Args: { invitation_id: string }
+        Returns: string
+      }
       acknowledge_failed_email_safe: {
         Args: { p_email_id: string }
         Returns: Json
@@ -14233,6 +14237,14 @@ export type Database = {
       acknowledge_vat_reconciliation: {
         Args: { p_note?: string; p_reconciliation_id: string }
         Returns: Json
+      }
+      add_org_member: {
+        Args: {
+          target_org_id: string
+          target_role: string
+          target_user_id: string
+        }
+        Returns: string
       }
       approve_bill_safe: { Args: { p_bill_id: string }; Returns: Json }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
@@ -14909,6 +14921,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      role_level: { Args: { r: string }; Returns: number }
       save_questionnaire_answer_by_token: {
         Args: {
           p_answer_array?: string[]
@@ -15032,6 +15045,10 @@ export type Database = {
       }
       user_in_organization: {
         Args: { check_org_id: string; check_user_id: string }
+        Returns: boolean
+      }
+      user_role_is_at_least: {
+        Args: { check_org_id: string; check_user_id: string; min_role: string }
         Returns: boolean
       }
       validate_filing_approval_token: {
