@@ -19,7 +19,7 @@ interface DynamicPlaceholdersPreviewProps {
   periodEnd?: Date;
 }
 
-type PreviewContext = "vat_company" | "non_vat_company" | "sole_trader";
+type PreviewContext = "vat_company" | "non_vat_company" | "individual_client";
 
 const SAMPLE_CONTEXTS: Record<PreviewContext, EntityContext> = {
   vat_company: {
@@ -54,7 +54,7 @@ const SAMPLE_CONTEXTS: Record<PreviewContext, EntityContext> = {
       status: "active",
     },
   },
-  sole_trader: {
+  individual_client: {
     entityType: "client",
     entityId: "sample-client-1",
     organizationId: "sample-org",
@@ -258,7 +258,7 @@ export function DynamicPlaceholdersPreview({
           <SelectContent>
             <SelectItem value="vat_company">VAT Registered Company</SelectItem>
             <SelectItem value="non_vat_company">Non-VAT Company</SelectItem>
-            <SelectItem value="sole_trader">Sole Trader (Client)</SelectItem>
+            <SelectItem value="individual_client">Individual (Client)</SelectItem>
           </SelectContent>
         </Select>
       </div>

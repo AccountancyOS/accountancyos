@@ -4,6 +4,7 @@ import { DashboardKPICards } from "@/components/dashboard/DashboardKPICards";
 import { DeadlineWidget } from "@/components/dashboard/DeadlineWidget";
 import { OverdueActionsPanel } from "@/components/dashboard/OverdueActionsPanel";
 import { StaffVarianceTable } from "@/components/dashboard/StaffVarianceTable";
+import { FeeAggregationPanel } from "@/components/dashboard/FeeAggregationPanel";
 import { useCurrentUserRole } from "@/hooks/usePermissions";
 import { roleIsAtLeast } from "@/lib/permissions";
 
@@ -30,6 +31,7 @@ const Overview = () => {
             <DeadlineWidget />
           </div>
           <div className="space-y-6">
+            {isOwnerOrAdmin && <FeeAggregationPanel />}
             {isOwnerOrAdmin && <StaffVarianceTable />}
           </div>
         </div>
