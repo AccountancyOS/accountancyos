@@ -13,12 +13,20 @@ export function EngagementLetterStatus({ clientId, companyId }: EngagementLetter
   const { data: lastSignedDate } = useQuery({
     queryKey: ["el-last-signed", clientId, companyId],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_last_el_signed_date", {
-        p_client_id: clientId || null,
-        p_company_id: companyId || null,
-      });
+      // Query engagement_letters directly since RPC may not be in types yet
+      const query = supabase
+        .from("engagement_letters")
+        .select("signed_at")
+        .not("signed_at", "is", null)
+        .order("signed_at", { ascending: false })
+        .limit(1);
+
+      if (clientId) query.eq("client_id", clientId);
+      if (companyId) query.eq("company_id", companyId);
+
+      const { data, error } = await query;
       if (error) throw error;
-      return data as string | null;
+      return data?.[0]?.signed_at || null;
     },
     enabled: !!(clientId || companyId),
   });

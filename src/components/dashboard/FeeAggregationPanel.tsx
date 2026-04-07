@@ -25,9 +25,9 @@ export function FeeAggregationPanel() {
       const { data: engagements, error } = await supabase
         .from("engagements")
         .select(`
-          fee_amount,
-          fee_frequency,
-          services_catalog!inner(name, code, billing_model)
+          frequency,
+          service_config,
+          services_catalog!inner(name, code, billing_model, default_price)
         `)
         .eq("organization_id", organization.id)
         .eq("status", "active");
@@ -39,21 +39,19 @@ export function FeeAggregationPanel() {
       const serviceMap = new Map<string, { name: string; code: string; total: number; count: number }>();
 
       for (const eng of engagements || []) {
-        const fee = eng.fee_amount || 0;
         const service = eng.services_catalog as any;
-        const freq = eng.fee_frequency || service?.billing_model || "fixed";
+        // Fee may be overridden in service_config, otherwise use default_price
+        const config = eng.service_config as Record<string, any> | null;
+        const fee = config?.fee_amount ?? config?.price ?? service?.default_price ?? 0;
+        const freq = eng.frequency || service?.billing_model || "fixed";
 
-        // Normalize to monthly for recurring
-        let monthlyEquivalent = 0;
         if (freq === "monthly") {
           monthly += fee;
-          monthlyEquivalent = fee;
         } else if (freq === "quarterly") {
           monthly += fee / 3;
-          monthlyEquivalent = fee / 3;
-        } else if (freq === "annually" || freq === "fixed") {
+        } else {
+          // fixed, annually, one-off
           oneOff += fee;
-          monthlyEquivalent = 0;
         }
 
         // Aggregate by service
@@ -85,7 +83,6 @@ export function FeeAggregationPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Fee breakdown */}
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
             <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs mb-1">
@@ -113,7 +110,6 @@ export function FeeAggregationPanel() {
           </div>
         </div>
 
-        {/* Revenue by service */}
         {feeData?.byService && feeData.byService.length > 0 && (
           <>
             <Separator />
