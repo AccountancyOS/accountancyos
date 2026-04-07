@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
+import { useAuth } from "@/lib/auth-context";
+import { useCurrentUserRole } from "@/hooks/usePermissions";
+import { roleIsAtLeast } from "@/lib/permissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,9 +24,12 @@ interface OverdueItem {
 
 export const OverdueActionsPanel = () => {
   const { organization } = useOrganization();
+  const { user } = useAuth();
+  const role = useCurrentUserRole();
+  const isOwnerOrAdmin = roleIsAtLeast(role, 'admin');
 
   const { data: overdueItems, isLoading } = useQuery({
-    queryKey: ["overdue-actions", organization?.id],
+    queryKey: ["overdue-actions", organization?.id, user?.id, role],
     queryFn: async () => {
       if (!organization?.id) return [];
 
@@ -57,13 +63,14 @@ export const OverdueActionsPanel = () => {
         }
       }
 
-      // Get overdue tasks directly
-      const { data: overdueTasks, error: taskError } = await supabase
+      // Get overdue tasks — staff sees only their assigned tasks
+      let taskQuery = supabase
         .from("job_tasks")
         .select(`
           id, 
           title, 
           due_date, 
+          assigned_to,
           jobs!inner(name, clients(first_name, last_name), companies(company_name))
         `)
         .eq("organization_id", organization.id)
@@ -71,6 +78,12 @@ export const OverdueActionsPanel = () => {
         .lt("due_date", now)
         .order("due_date", { ascending: true })
         .limit(10);
+
+      if (!isOwnerOrAdmin && user?.id) {
+        taskQuery = taskQuery.eq("assigned_to", user.id);
+      }
+
+      const { data: overdueTasks, error: taskError } = await taskQuery;
 
       if (!taskError && overdueTasks) {
         for (const task of overdueTasks) {
