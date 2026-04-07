@@ -24,9 +24,12 @@ interface OverdueItem {
 
 export const OverdueActionsPanel = () => {
   const { organization } = useOrganization();
+  const { user } = useAuth();
+  const role = useCurrentUserRole();
+  const isOwnerOrAdmin = roleIsAtLeast(role, 'admin');
 
   const { data: overdueItems, isLoading } = useQuery({
-    queryKey: ["overdue-actions", organization?.id],
+    queryKey: ["overdue-actions", organization?.id, user?.id, role],
     queryFn: async () => {
       if (!organization?.id) return [];
 
