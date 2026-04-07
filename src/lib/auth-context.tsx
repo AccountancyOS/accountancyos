@@ -261,12 +261,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [session]);
 
-  const signOut = async () => {
-    // Reset auth flow when signing out
+  const signOut = useCallback(async () => {
     setAuthFlow("normal");
     await supabase.auth.signOut();
     navigate("/auth");
-  };
+  }, [navigate]);
+
+  // 10-minute inactivity timeout
+  useInactivityTimeout(!!user, signOut);
 
   return (
     <AuthContext.Provider value={{ 
