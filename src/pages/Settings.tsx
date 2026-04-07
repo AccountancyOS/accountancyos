@@ -725,6 +725,11 @@ export default function Settings() {
 
         {/* Password Change Section */}
         <PasswordChangeSection />
+
+        {/* GDPR & Data Protection */}
+        <div id="gdpr-section">
+          <GdprCompliancePanel />
+        </div>
       </div>
     </DashboardLayout>
   );
