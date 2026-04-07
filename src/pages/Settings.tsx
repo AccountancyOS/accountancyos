@@ -378,6 +378,29 @@ export default function Settings() {
               </Card>
             </div>
           </div>
+
+
+          {/* Security & Compliance */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">Security & Compliance</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => {
+                  const el = document.getElementById('gdpr-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Shield className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">GDPR & Data Protection</CardTitle>
+                    <CardDescription className="text-sm">Data export, deletion, and retention policies</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </div>
+          </div>
         </div>
 
         <Separator />
