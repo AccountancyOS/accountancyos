@@ -555,6 +555,11 @@ export const LeadDetailPanel = ({
               </form>
             </TabsContent>
 
+            {/* Activity Tab */}
+            <TabsContent value="activity" className="m-0">
+              <ActivityTimeline leadId={lead.id} />
+            </TabsContent>
+
             {/* Quotes Tab */}
             <TabsContent value="quotes" className="m-0 space-y-4">
               <div className="flex items-center justify-between">
