@@ -45,6 +45,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEntityServices } from "@/hooks/useEntityServices";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { YearEndEditor } from "@/components/company/YearEndEditor";
+import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 
 const CompanyDetail = () => {
