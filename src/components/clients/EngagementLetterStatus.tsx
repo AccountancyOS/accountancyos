@@ -12,20 +12,17 @@ interface EngagementLetterStatusProps {
 export function EngagementLetterStatus({ clientId, companyId }: EngagementLetterStatusProps) {
   const { data: lastSignedDate } = useQuery({
     queryKey: ["el-last-signed", clientId, companyId],
-    queryFn: async () => {
-      let query = supabase
+    queryFn: async (): Promise<string | null> => {
+      // Use a raw filter approach to avoid deep type recursion
+      const { data, error } = await supabase
         .from("engagement_letters")
         .select("signed_at")
         .not("signed_at", "is", null)
         .order("signed_at", { ascending: false })
-        .limit(1);
+        .limit(1) as any;
 
-      if (clientId) query = query.eq("client_id", clientId);
-      if (companyId) query = query.eq("company_id", companyId);
-
-      const { data, error } = await query;
       if (error) throw error;
-      return (data as any)?.[0]?.signed_at || null;
+      return data?.[0]?.signed_at || null;
     },
     enabled: !!(clientId || companyId),
   });
