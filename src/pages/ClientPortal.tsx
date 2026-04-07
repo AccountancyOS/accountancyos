@@ -20,6 +20,7 @@ import { ContactsList } from "@/components/contacts/ContactsList";
 import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab";
 import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
 import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPanel";
+import { EngagementLetterStatus } from "@/components/clients/EngagementLetterStatus";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -96,6 +97,7 @@ export default function ClientPortal() {
                   </div>
                 )}
               </div>
+              <EngagementLetterStatus clientId={clientId} />
             </div>
             <div className="flex gap-2">
               <Button variant="outline" disabled>
