@@ -126,7 +126,10 @@ export default function ClientPortal() {
             </TabsList>
 
             <TabsContent value="portal">
-              <ClientPortalTab clientId={client.id} onViewConversations={() => setActiveTab("conversations")} />
+              <div className="space-y-6">
+                <ClientPortalTab clientId={client.id} onViewConversations={() => setActiveTab("conversations")} />
+                <HmrcAuthorisationPanel clientId={client.id} />
+              </div>
             </TabsContent>
 
             <TabsContent value="conversations">
