@@ -14339,6 +14339,82 @@ export type Database = {
       }
     }
     Views: {
+      bank_connections_safe: {
+        Row: {
+          bank_logo_url: string | null
+          bank_name: string | null
+          client_id: string | null
+          company_id: string | null
+          consent_expires_at: string | null
+          created_at: string | null
+          id: string | null
+          last_error: string | null
+          last_synced_at: string | null
+          organization_id: string | null
+          provider: string | null
+          provider_connection_id: string | null
+          scope: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bank_logo_url?: string | null
+          bank_name?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          consent_expires_at?: string | null
+          created_at?: string | null
+          id?: string | null
+          last_error?: string | null
+          last_synced_at?: string | null
+          organization_id?: string | null
+          provider?: string | null
+          provider_connection_id?: string | null
+          scope?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bank_logo_url?: string | null
+          bank_name?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          consent_expires_at?: string | null
+          created_at?: string | null
+          id?: string | null
+          last_error?: string | null
+          last_synced_at?: string | null
+          organization_id?: string | null
+          provider?: string | null
+          provider_connection_id?: string | null
+          scope?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_connections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       connected_mailboxes_safe: {
         Row: {
           created_at: string | null
@@ -14387,6 +14463,53 @@ export type Database = {
             foreignKeyName: "connected_mailboxes_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_integrations_hmrc_safe: {
+        Row: {
+          created_at: string | null
+          ct_connected: boolean | null
+          mtd_vat_connected: boolean | null
+          mtd_vat_connected_at: string | null
+          mtd_vat_expires_at: string | null
+          organization_id: string | null
+          paye_connected: boolean | null
+          sa_connected: boolean | null
+          test_mode: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          ct_connected?: boolean | null
+          mtd_vat_connected?: boolean | null
+          mtd_vat_connected_at?: string | null
+          mtd_vat_expires_at?: string | null
+          organization_id?: string | null
+          paye_connected?: boolean | null
+          sa_connected?: boolean | null
+          test_mode?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          ct_connected?: boolean | null
+          mtd_vat_connected?: boolean | null
+          mtd_vat_connected_at?: string | null
+          mtd_vat_expires_at?: string | null
+          organization_id?: string | null
+          paye_connected?: boolean | null
+          sa_connected?: boolean | null
+          test_mode?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_integrations_hmrc_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
