@@ -54,7 +54,7 @@ export default function Filings() {
           *,
           clients (first_name, last_name),
           companies (company_name),
-          jobs (job_name)
+          jobs!filings_job_id_fkey (job_name)
         `)
         .order("created_at", { ascending: false });
 
