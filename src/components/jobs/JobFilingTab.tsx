@@ -29,7 +29,7 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("filings")
-        .select("*, jobs!inner(is_auto_generated, source_job_id)")
+        .select("*, jobs!filings_job_id_fkey!inner(is_auto_generated, source_job_id)")
         .eq("job_id", jobId)
         .maybeSingle();
 
