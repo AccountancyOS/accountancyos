@@ -19,6 +19,7 @@ import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab"
 import { ContactsList } from "@/components/contacts/ContactsList";
 import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab";
 import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
+import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPanel";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
