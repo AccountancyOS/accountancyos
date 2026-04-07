@@ -45,6 +45,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEntityServices } from "@/hooks/useEntityServices";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { YearEndEditor } from "@/components/company/YearEndEditor";
+import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 
 const CompanyDetail = () => {
@@ -438,18 +439,18 @@ const CompanyDetail = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Partner in Charge</p>
-                      <p className="font-medium">
-                        {company.partner_in_charge || "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Staff in Charge</p>
-                      <p className="font-medium">
-                        {company.staff_in_charge || "-"}
-                      </p>
-                    </div>
+                    <StaffAssignmentField
+                      companyId={company.id}
+                      field="partner_in_charge"
+                      currentValue={company.partner_in_charge}
+                      label="Partner in Charge"
+                    />
+                    <StaffAssignmentField
+                      companyId={company.id}
+                      field="staff_in_charge"
+                      currentValue={company.staff_in_charge}
+                      label="Staff in Charge"
+                    />
                     <div>
                       <p className="text-sm text-muted-foreground">Internal Reference</p>
                       <p className="font-medium font-mono">

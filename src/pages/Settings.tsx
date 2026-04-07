@@ -9,7 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText, Palette, Building2, ShieldCheck, Users } from "lucide-react";
+import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText, Palette, Building2, ShieldCheck, Users, Shield } from "lucide-react";
+import { GdprCompliancePanel } from "@/components/settings/GdprCompliancePanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
@@ -377,6 +378,29 @@ export default function Settings() {
               </Card>
             </div>
           </div>
+
+
+          {/* Security & Compliance */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">Security & Compliance</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card 
+                className="cursor-pointer hover:border-primary transition-colors" 
+                onClick={() => {
+                  const el = document.getElementById('gdpr-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Shield className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">GDPR & Data Protection</CardTitle>
+                    <CardDescription className="text-sm">Data export, deletion, and retention policies</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </div>
+          </div>
         </div>
 
         <Separator />
@@ -701,6 +725,11 @@ export default function Settings() {
 
         {/* Password Change Section */}
         <PasswordChangeSection />
+
+        {/* GDPR & Data Protection */}
+        <div id="gdpr-section">
+          <GdprCompliancePanel />
+        </div>
       </div>
     </DashboardLayout>
   );
