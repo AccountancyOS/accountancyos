@@ -63,7 +63,7 @@ export const DashboardKPICards = () => {
         isOwnerOrAdmin
           ? supabase
               .from("engagements")
-              .select("billing_frequency, fee_amount")
+              .select("frequency, service_config, services_catalog!inner(billing_model, default_price)")
               .eq("organization_id", organization.id)
               .eq("status", "active")
           : Promise.resolve({ data: [] }),
