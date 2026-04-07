@@ -72,7 +72,7 @@ export default function FilingDetail() {
           *,
           clients(first_name, last_name, email),
           companies(company_name, email),
-          jobs(job_name, service_type, is_auto_generated, source_job_id)
+          jobs!filings_job_id_fkey(job_name, service_type, is_auto_generated, source_job_id)
         `)
         .eq("id", filingId)
         .single();
