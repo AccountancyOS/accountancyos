@@ -348,8 +348,9 @@ export const LeadDetailPanel = ({
         </SheetHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden mt-4">
-          <TabsList className="flex-shrink-0 grid w-full grid-cols-4">
+          <TabsList className="flex-shrink-0 grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="quotes">
               Quotes
               {quotes && quotes.length > 0 && (
