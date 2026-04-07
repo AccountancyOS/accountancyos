@@ -2048,6 +2048,59 @@ export type Database = {
           },
         ]
       }
+      bookkeeping_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_role: string | null
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json | null
+          organization_id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_role?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          organization_id: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_role?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          organization_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookkeeping_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ca_rate_tables: {
         Row: {
           aia_limit: number
@@ -4329,45 +4382,57 @@ export type Database = {
       contacts: {
         Row: {
           can_sign: boolean | null
+          ch_personal_code: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
+          dob: string | null
           email: string
           id: string
           is_primary: boolean | null
           name: string
+          nino: string | null
           organization_id: string
           phone: string | null
           role: string | null
           updated_at: string | null
+          utr: string | null
         }
         Insert: {
           can_sign?: boolean | null
+          ch_personal_code?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          dob?: string | null
           email: string
           id?: string
           is_primary?: boolean | null
           name: string
+          nino?: string | null
           organization_id: string
           phone?: string | null
           role?: string | null
           updated_at?: string | null
+          utr?: string | null
         }
         Update: {
           can_sign?: boolean | null
+          ch_personal_code?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          dob?: string | null
           email?: string
           id?: string
           is_primary?: boolean | null
           name?: string
+          nino?: string | null
           organization_id?: string
           phone?: string | null
           role?: string | null
           updated_at?: string | null
+          utr?: string | null
         }
         Relationships: [
           {
@@ -4699,6 +4764,73 @@ export type Database = {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_activities: {
+        Row: {
+          activity_type: string
+          client_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          due_date: string | null
+          id: string
+          lead_id: string | null
+          organization_id: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          activity_type: string
+          client_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          lead_id?: string | null
+          organization_id: string
+          subject?: string
+          updated_at?: string
+        }
+        Update: {
+          activity_type?: string
+          client_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          lead_id?: string | null
+          organization_id?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_activities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -10617,6 +10749,64 @@ export type Database = {
           },
           {
             foreignKeyName: "paye_schemes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_journal_mapping: {
+        Row: {
+          created_at: string
+          credit_account_id: string | null
+          debit_account_id: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          organization_id: string
+          payroll_category: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credit_account_id?: string | null
+          debit_account_id?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          payroll_category: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credit_account_id?: string | null
+          debit_account_id?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          payroll_category?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_journal_mapping_credit_account_id_fkey"
+            columns: ["credit_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_journal_mapping_debit_account_id_fkey"
+            columns: ["debit_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_journal_mapping_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
