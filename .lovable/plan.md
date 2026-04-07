@@ -1,290 +1,257 @@
 
-# AccountancyOS Gap Closure — Full Implementation Plan
+# AccountancyOS — Full Implementation Plan (38 Points)
 
-## Wave 1: Security and Role Model (Items 1, 2, 3, 4, 5, 6, 7, 10, 20)
+## Wave 1 — Hard Blockers (Security & Role Model)
 
-### 1A. Collapse to 3-role model: owner > staff > admin
+### Step 1: Collapse to 3-Role Model (Points 7, 10, 20)
+**Migration:**
+- Drop CHECK constraint `organization_users_role_check`
+- UPDATE any `manager` or `viewer` rows to `staff` (currently only `owner` exists, so no data change)
+- Add new CHECK: `role IN ('owner', 'admin', 'staff')`
+- Drop `app_role` enum if it exists, recreate with only 3 values
 
-The current codebase has `AppRole = 'owner' | 'admin' | 'manager' | 'staff' | 'viewer'` with a hierarchy of viewer < staff < manager < admin < owner. The user requires a strict 3-role model with a NON-STANDARD hierarchy: **owner > staff > admin** (admin is LOWEST).
+**Frontend (`src/lib/permissions.ts`):**
+- Change `AppRole` to `'owner' | 'staff' | 'admin'`
+- Rewrite `PERMISSIONS` mapping with privilege order: owner > staff > admin
+  - **Owner**: all permissions
+  - **Staff**: all operational permissions (jobs, clients, filings, emails, bookkeeping, workpapers, documents, conversations, deadlines, questionnaires)
+  - **Admin**: read-only + basic admin tasks only. NO manage_team, billing, services, fees, automations, templates, filings authority, integrations, or firm settings
+- Change `ROLE_HIERARCHY` to `['admin', 'staff', 'owner']`
+- Update `getRoleLabel`: owner=Owner, staff=Staff, admin=Admin
+- Remove all `manager` and `viewer` references
 
-**Database migration:**
-- Update `organization_users` role CHECK constraint to `('owner', 'staff', 'admin')`
-- Migrate any existing `manager` rows to `staff`, any `viewer` rows to `admin`
-- Update edge function `_shared/permissions.ts` to 3 roles with correct hierarchy
+**Other files to update:**
+- `src/pages/settings/PermissionsSettings.tsx` — remove manager/viewer from ROLE_CONFIG
+- `supabase/functions/_shared/permissions.ts` — mirror 3-role model
+- `src/hooks/usePermissions.ts` — no structural change needed, just type alignment
+- `src/components/ui/permission-guard.tsx` — type alignment
+- `src/lib/permission-service.ts` — type alignment
 
-**Frontend changes:**
-- Rewrite `src/lib/permissions.ts`: `AppRole = 'owner' | 'staff' | 'admin'`, `ROLE_HIERARCHY = ['admin', 'staff', 'owner']`
-- Rewrite ALL permission mappings per the matrix:
-  - **Owner**: everything (integrations, billing, team, HMRC/CH connections, all operational, all bookkeeping, all filing, all automation)
-  - **Staff**: operational work (clients, jobs, deadlines, workpapers, questionnaires, documents, conversations, filings, emails, upload, job status updates, bookkeeping day-to-day). Cannot: manage users/roles/billing/org settings, connect HMRC/CH
-  - **Admin**: read-only + basic non-sensitive admin tasks. Narrower than staff. Cannot: manage users/roles/billing/services/fees/automations/templates/filings authority/firm settings, connect HMRC/CH
-- Update `organization-context.tsx` type to `'owner' | 'staff' | 'admin'`
-- Update `usePermissions.ts`, `permission-guard.tsx`, `getRoleLabel()`
-- Remove all `manager` and `viewer` references across entire codebase
+### Step 2: Lock Down organization_users (Point 6)
+**Migration:**
+- Drop existing INSERT policy `Safe org membership insert`
+- Create SECURITY DEFINER function `accept_org_invitation(invitation_id UUID)` that:
+  - Validates invitation exists, is pending, and matches `auth.uid()` email
+  - Inserts into `organization_users` with the invited role
+  - Marks invitation as accepted
+- Create SECURITY DEFINER function `add_org_member(org_id UUID, target_user_id UUID, target_role TEXT)` that:
+  - Validates caller is owner/admin of the org
+  - Validates target_role is valid and not higher than caller's role
+  - Inserts into organization_users
+- New INSERT RLS policy: `USING (false)` — block ALL direct inserts
+- Keep existing UPDATE policy but add: staff cannot change roles (only owner can)
+- Add trigger: prevent role escalation — cannot set role higher than own role
 
-**RLS rewrite:**
-- All RLS policies referencing role must use the 3-role model
-- `organization_users` INSERT: only via SECURITY DEFINER function `accept_invitation(token)` or `add_org_member(org_id, user_id, role)` callable only by owner
-- Block self-enrolment, block role escalation (staff/admin cannot change roles)
-- Provide test cases proving: non-member cannot join org, staff cannot escalate, cross-org access blocked
+### Step 3: 10-Minute Inactivity Timeout (Point 1)
+**`src/lib/auth-context.tsx`:**
+- Add idle timer (10 minutes = 600,000ms)
+- Track mouse, keyboard, scroll, touch events
+- On timeout: call `signOut()`, redirect to `/auth`
+- Reset timer on any activity
+- Works for both accountant and client users
 
-### 1B. Session security (Items 1, 2)
+### Step 4: Concurrent Session Limits (Point 2)
+**Migration:**
+- Add `max_sessions` column to `organizations` or use subscription plan lookup
+- Plan-based limits: Solo=1, Studio=4, Firm=10
 
-**10-minute inactivity timeout:**
-- Add idle timer in `auth-context.tsx` using mouse/keyboard/touch event listeners
-- On 10 minutes of inactivity, call `signOut()` automatically
-- Applies to both accountant and client portal users
+**`src/lib/auth-context.tsx`:**
+- On login, register session in `user_sessions` table
+- Check active session count for org against plan limit
+- If at limit, reject login with clear message OR invalidate oldest session
 
-**Concurrent session restriction by plan:**
-- Solo plan: 1 user max
-- Studio plan (renamed from Team): 4 users max  
-- Firm plan (renamed from Scale): 10 users max
-- On login, count active sessions for the org. If at plan limit, reject login with clear message
-- Use `user_sessions` table (already has the right columns)
+### Step 5: Session Audit History (Point 3)
+- `user_sessions` table already has: ip_address, user_agent, last_activity_at, invalidated_at, invalidated_reason — confirmed sufficient
+- **Bookkeeping audit**: Create `bookkeeping_audit_log` table with columns: id, organization_id, user_id, entity_type (transaction/invoice/bill/journal/payment), entity_id, action (categorize/uncategorize/create/void/approve/reverse), details (JSONB), created_at
+- Add audit logging calls in all bookkeeping mutation functions
 
-### 1C. Audit trail enhancements (Items 3, 4)
+### Step 6: Sensitive Event Auditing (Point 4)
+- Extend existing `audit_log` usage to explicitly track: login, password_reset, invitation_accepted, role_change, mailbox_connect, hmrc_connect, document_signed, filing_submitted
+- Each entry: user_id, timestamp, action, details JSONB
+- Client-side updates also tracked with client user_id and timestamp
 
-**Session audit:** `user_sessions` already has `last_activity_at`, `ip_address`, `user_agent`. Confirmed sufficient.
-
-**Bookkeeping detailed audit:**
-- Add `bookkeeping_audit_log` table: `id, organization_id, entity_type (bank_transaction|invoice|bill|journal|payment), entity_id, action (categorized|uncategorized|created|voided|posted|reversed), performed_by, performed_at, details JSONB`
-- Wire into all bookkeeping mutation functions: bank categorization, invoice create/issue/void, journal post/reverse, payment record/reverse
-- Track who categorized each bank transaction and when; who undid it and when
-
-**Sensitive event auditing (Item 4):**
-- Ensure `logAudit()` is called for: login, password reset, invitation accepted, role change, mailbox connection, HMRC/CH connection, document signature, filing submission
-- Track user ID, date, time for all
-- Client-side updates (portal) also audited with timestamp
-
-### 1D. GDPR data export/deletion (Item 5)
-
-- Build edge function `gdpr-data-export` that exports all data for a client/user as JSON/ZIP
-- Build edge function `gdpr-data-deletion` that anonymizes/deletes client PII with audit trail
-- Add UI in Settings for owner to trigger export or deletion request
-- Comply with UK GDPR: 30-day response window, right to erasure, right to data portability
+### Step 7: GDPR Export & Deletion (Point 5)
+- Create edge function `gdpr-export` — exports all PII for a given client as JSON
+- Create edge function `gdpr-delete` — anonymizes/deletes client PII across all tables
+- Both require owner role
+- Add UI button in client settings
 
 ---
 
-## Wave 2: Core Operational Spine (Items 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21-30, 31-36)
+## Wave 2 — Core Operational Spine
 
-### 2A. Dashboard updates (Items 8, 9, 11, 12)
+### Step 8: Remove sole_trader and landlord (Point 13)
+- Update `src/lib/client-types.ts`: remove `sole_trader` and `landlord` from CLIENT_TYPES array
+- Migration: UPDATE clients SET client_type = 'sa_non_mtd' WHERE client_type IN ('sole_trader', 'landlord')
+- Same for leads table
 
-**KPI cards update (Item 8):**
-- Add "Total Leads" card (count from `leads` table where status not lost)
-- Add "Current Firm Revenue" card (sum of active engagement fees from `engagements` + `services_catalog` pricing)
-- Keep existing active clients, jobs in progress, overdue deadlines
+### Step 9: CRM — Quote/Pipeline in CRM (Point 14)
+- Move "Send Quote" button into CRM lead detail panel
+- Quote creation/tracking accessible directly from lead detail
+- Keep Quotes page as secondary read-only view
 
-**Revenue cards (Item 11):**
-- Monthly recurring fees total (engagements with frequency = 'monthly')
-- One-off fees total (engagements with frequency = 'one_off')
-- Pipeline revenue (quotes in proposal_sent or chasing status)
-- Top revenue service breakdown (group engagements by service, show top 5)
+### Step 10: CRM — Pipedrive-style Activity Logging (Point 15)
+- Add `lead_activities` table: id, lead_id, organization_id, user_id, activity_type (call/email/meeting/note), description, created_at
+- Show activity timeline on lead detail
+- Last activity date drives reminders and automation triggers
 
-**Overdue actions tied to SLA (Item 9):**
-- Verify `OverdueActionsPanel` reads from `sla_instances`
-- SLA instances created on: inbound email, portal message, task creation, job status change
-- Accountant can manually update/resolve SLA instances
+### Step 11: Auto-conversion on Portal Signup (Points 16, 17)
+- Lead moves to "Won" automatically when: engagement letter signed AND portal login created
+- Guard against double conversion: check `converted_at` before converting
+- Conversion is idempotent — second trigger is a no-op
 
-**Role-scoped dashboard (Item 12):**
-- Owner: sees everything including staff variance, full revenue
-- Staff: sees their assigned jobs, their overdue items, their deadlines
-- Admin: sees read-only summary only
+### Step 12: Manual Add Client Compliance Warning (Point 18)
+- Show warning dialog when using "Add Client" directly
+- Warn that this bypasses engagement letter and onboarding workflow
+- Require confirmation and log the bypass in audit_log
 
-### 2B. CRM changes (Items 13, 14, 15, 16, 17)
+### Step 13: Unique Email Enforcement (Point 19)
+- Add UNIQUE constraint on client email within organization
+- Check on client creation and lead conversion
+- Show clear error if duplicate detected
 
-**Remove sole_trader and landlord (Item 13):**
-- Remove from `CLIENT_TYPES` array in `client-types.ts`
-- Migration to update existing leads/clients with `sole_trader` → `sa_non_mtd`, `landlord` → `sa_non_mtd`
-- Remove from `CLIENT_TYPE_FIELD_CONFIG`, labels, descriptions, DB_TYPE_MAP
+### Step 14: Client Detail Fields (Points 21-29)
+**Contacts table migration:**
+- Add columns: nino, utr, dob (date), address (text), nationality, ch_personal_code
 
-**CRM as hub for quotes (Item 14):**
-- Move quote creation/management into `LeadDetailPanel`
-- Remove standalone Quotes page route or make it redirect to CRM
-- Quote pipeline visible within CRM stages
+**Limited company (Point 21):**
+- Show SIC code field (from CH data or manual)
+- Director contacts linked — if director is existing client, allow selection and data pull
 
-**Activity logging like Pipedrive (Item 15):**
-- Add `lead_activities` table: `id, lead_id, org_id, activity_type (call|email|meeting|note), description, performed_by, performed_at`
-- Show last contact date on lead cards
-- Activity logging triggers reminder scheduling via automation engine
+**LLP (Point 22):**
+- Pull data from CH API (already wired)
+- Add partnership_utr field to companies
+- Partner contacts linked — same client-selection logic as directors
 
-**Auto-won on client portal signup (Item 16):**
-- Client completes: sign terms/EL + create portal login → lead auto-moves to Won
-- Conversion happens on these steps completing, not on manual drag
+**Partnership (Points 24, 25):**
+- Add partnership_utr to client_detail_partnership
+- Add partnership_year_end, tax_year fields (trigger automations)
+- Minimum 2 contacts validation
+- Partner contacts: name, address, DOB, NINO, UTR
 
-**Double conversion protection (Item 17):**
-- Add `converted_at` check before conversion
-- Lead can only move to Won when: EL signed + portal login created
-- Idempotent guard on `convertLeadToClient`
-
-### 2C. Client creation & uniqueness (Items 18, 19)
-
-**Compliance warning on manual add (Item 18):**
-- Show modal warning when using "Add Client" directly
-- Require acknowledgment that EL/AML/onboarding will need to be completed
-- Log this bypass in audit trail
-
-**Unique email enforcement (Item 19):**
-- Add UNIQUE constraint on `clients(email, organization_id)`
-- Prevent same email appearing twice within an org
-- Show clear error message on duplicate attempt
-
-### 2D. Client detail fields (Items 21-29)
-
-**Limited company SIC code + director contacts (Item 21):**
-- `companies.sic_codes` already exists (JSONB). Surface in CompanyDetail UI
-- Director contacts: add UI to link existing clients as directors or add manual director contacts
-- When director is an existing SA client, pull NINO/UTR/DOB/address from their client record
-
-**LLP Companies House + partnership UTR + partners (Item 22):**
-- LLP uses `companies` table. CH lookup already works
-- Add `partnership_utr` field to companies table for LLP type
-- Add partner contacts UI (same pattern as directors)
-
-**Director/partner contact fields (Items 23, 25):**
-- Add columns to `contacts` table: `nino, utr, date_of_birth, address JSONB, nationality, ch_personal_code`
-- Migration to add these columns
-- Update contact forms to show these fields for Director/Partner roles
-
-**Partnership details (Item 24):**
-- `client_detail_partnership` already has `partnership_utr`, `partners JSONB`
-- Add `partnership_year_end` and `tax_year` fields
-- Add minimum 2 contacts validation in UI
-- Year end triggers automation for partnership tax return jobs
-
-**CGT deadline auto-calculation (Item 26):**
-- `client_detail_cgt` already has `disposal_date`
-- Add `completion_date` column if not same as `disposal_date`
+**CGT (Point 26):**
+- Add cgt_number, completion_date to client_detail_cgt
 - Auto-calculate deadline = completion_date + 60 days
-- One-off service: mark as completed when done
-- Fees persist in firm earnings even when client/service inactive
+- Mark as one-off — switch off when completed
+- Fees remain in firm earnings even when inactive
 
-**Charity missing fields (Item 27):**
-- `client_detail_charity` already has: charity_number, charity_status, trading_as, charity_year_end, gift_aid_claim_expiry
-- Add: `incorporation_date`, `charity_commission_submission_due`
+**Charity (Point 27):**
+- Add charity_status, incorporation_date, charity_commission_due to client_detail_charity
 
-**Engagement letter last signed date (Item 28):**
-- Surface on all client profile pages from onboarding/engagement letter records
-- Query latest signed EL and show date prominently
+**Engagement letter date (Point 28):**
+- Surface last EL signed date on all client profiles
 
-**Partner/staff in charge on all clients (Item 29):**
-- Add `partner_in_charge UUID` and `staff_in_charge UUID` to `clients` table
-- Companies already have these. Now individuals get them too
-- Show on all client detail views
+**Partner/staff in charge (Point 29):**
+- Add partner_in_charge, staff_in_charge to clients table
+- Display on all client detail views
 
-### 2E. HMRC authorisation UI (Item 30)
-
+### Step 15: HMRC Authorisation UI (Point 30)
 - Build `HmrcAuthorisationPanel` component
-- `hmrc_authorisations` table already exists with: auth_type, status, authorised_at, expires_at
-- Add `requested_at DATE` and `code_entered_at DATE` columns
-- Supported auth types: self_assessment, corporation_tax, paye, cis
-- Accountant requests via UI → `requested_at` set
-- Accountant manually enters date code was entered → `code_entered_at` set
-- Per-client tracking visible on client detail and company detail pages
-- Statuses: not_started, requested, authorised, expired
+- Shows per-client: SA, CT, PAYE, CIS auth status
+- Fields: application_date (auto-set on submit), code_entered_date (manual input)
+- Track on per-client/per-service basis
+- Surface on client detail page
 
-### 2F. Services verification and features (Items 31-35)
+### Step 16: Verify/Seed 14 Services (Point 31)
+Required services vs current:
+- Accounts ✓ (ANNUAL-ACC)
+- CT600 ✓
+- Confirmation Statement ✓ (CONFIRM-STMT)
+- Bookkeeping ✓ (BK-MONTHLY/BK-ANNUAL)
+- VAT Return ✓ (VAT-RETURN)
+- Payroll ✓ (PAYROLL)
+- **CIS** — MISSING, add
+- **MTD Quarterly Filing** — MISSING, add
+- **MTD Final Declaration** — MISSING, add
+- **Registered Address** — MISSING, add
+- **Advisory** — MISSING, add
+- **Software** — MISSING, add
+- **CGT Return** — MISSING, add
+- SA Return ✓ (SA-RETURN)
+- Remove duplicates (code 6930)
 
-**Verify 14 services (Item 31):**
-Current seeded: CT600, SA-RETURN, VAT-RETURN, BK-MONTHLY, BK-ANNUAL, PAYROLL, CONFIRM-STMT, ANNUAL-ACC, TAX-PLAN, COMPANY-SETUP
-Missing from required 14: CIS, MTD-QUARTERLY, MTD-FINAL-DEC, REGISTERED-ADDR, ADVISORY, SOFTWARE, CGT-RETURN
-- Add missing services via INSERT
+### Step 17: Quote-to-Service Mapping Verification (Point 32)
+- Trace quote acceptance → engagement creation → service assignment
+- Verify fees flow through correctly
+- Fix any gaps
 
-**Quote-to-service mapping verification (Item 32):**
-- Verify quote acceptance populates engagements with correct service_id and fee
-- Test end-to-end flow
+### Step 18: Service-Specific Conditional Fields (Point 33)
+- When service toggled on: show PAYE/VAT/Pension fields
+- When toggled off: clear data, stop reminders
+- PAYE: employer_ref, accounts_office_ref, tax_year, rti_deadline, pension_declaration_date
+- VAT: vat_number, vat_quarters, member_state, registration_date, effective_date
+- Pension: provider, number, auto_enrolment_staging
 
-**Service-specific fields toggle (Item 33):**
-- When service toggled OFF: clear associated data, stop reminders/automations
-- When toggled ON: show relevant fields (PAYE: employer ref, accounts office ref; VAT: VAT number, quarters; Pension: provider, auto-enrolment staging)
-- Clearing on toggle-off must be confirmed by user
-
-**EL re-sign on fee/service change (Item 34):**
-- Detect changes to engagements (fee amount, service added/removed)
-- Auto-create draft engagement letter
-- Queue signature request to client
+### Step 19: EL Re-sign on Fee/Service Change (Point 34)
+- Detect fee or service scope changes
+- Auto-draft updated engagement letter
+- Queue signature request
 - Record old vs new scope
 
-**Aggregated fee totals (Item 35):**
-- Show total monthly recurring, total one-off fees on client services section
-- Show firm-wide totals on dashboard
+### Step 20: Fee Totals UI (Point 35)
+- Show aggregated: total monthly recurring, total one-off, by service type
+- Display on client services tab
 
-### 2G. Jobs status alignment (Item 36)
+### Step 21: Job Status Alignment (Point 36)
+- Canonical statuses: Blank, Records Requested, Records Received, Accountant Queries, Client Queries, Accountant Review, Client Review, Ready to File, Completed
+- This matches current DB — confirm alignment and update any UI labels
 
-Current statuses match the canonical list exactly: blank, records_requested, records_received, accountant_queries, client_queries, accountant_review, client_review, ready_to_file, completed. **Already aligned — no change needed.**
+### Step 22: Questionnaire → Job Status (Point 37)
+- On questionnaire completion, auto-update linked job to "Records Received"
+- Verify `questionnaire-workpaper-service.ts` handles this
 
-### 2H. Questionnaire → job status (Item 37)
-
-- When questionnaire is completed, update linked job status to `records_received`
-- Wire into `questionnaire-workpaper-service.ts`
-
-### 2I. Payroll journal mapping (Item 38)
-
-- On payroll setup, accountant maps payroll items to CoA accounts
-- Store mapping in `payroll_journal_mapping` table: `org_id, company_id, payroll_item (gross_wages|employer_nic|employee_nic|paye|pension_employee|pension_employer|net_pay), debit_account_id, credit_account_id`
-- When pay run is approved, auto-generate journal using this mapping
-- Journal created as DRAFT for accountant approval before posting
-- Default CoA should be AOS standard chart
+### Step 23: Auto-Generated Payroll Journals (Point 38)
+- Create `payroll_journal_mapping` table: org_id, payroll_component (gross_pay, employer_ni, pension, paye, net_pay), debit_account_id, credit_account_id
+- On payroll setup, accountant maps components to CoA accounts
+- On pay run completion, auto-draft journal for accountant approval
+- Default CoA is AOS standard chart
 
 ---
 
-## Wave 3: Filing Completion (separate wave)
+## Wave 3 — Practice Usability
 
-Items not covered above (CT600 completion, MTD ITSA) remain as previously planned — verified and completed in a separate wave after Waves 1-2.
+### Step 24: Dashboard KPI Cards (Points 8, 11)
+- Add "Total Leads" count card
+- Add "Current Firm Revenue" card (sum of active service fees)
+- Add monthly/one-off fee split
+- Add pipeline revenue (from active quotes)
+- Add "Top Revenue Service" indicator
+
+### Step 25: Role-Scoped Dashboard (Point 12)
+- Owner: full firm view, all KPIs, staff variance
+- Staff: "My Jobs", "My Clients", "My Overdue" filtered view
+- Admin: read-only summary view
+
+### Step 26: SLA-tied Overdue Actions (Point 9)
+- Verify SLA instances created for email response, message response, job updates
+- Accountant can manually update SLA status
+- Practice-wide SLA settings drive auto-creation
+- Feed overdue counts to dashboard
 
 ---
 
-## Migration Summary
+## Wave 4 — Filing Completion
+- CT600 end-to-end verification
+- MTD ITSA REST pathway build
+- VAT/payroll filing verification
 
-### Schema changes needed:
-1. `organization_users` role constraint → `('owner', 'staff', 'admin')`
-2. `contacts` table: add `nino, utr, date_of_birth DATE, address JSONB, nationality, ch_personal_code`
-3. `clients` table: add `partner_in_charge UUID, staff_in_charge UUID`
-4. `client_detail_charity`: add `incorporation_date DATE, charity_commission_submission_due DATE`
-5. `client_detail_partnership`: add `partnership_year_end INTEGER, tax_year TEXT`
-6. `client_detail_cgt`: add `completion_date DATE, deadline_date DATE`
-7. `companies`: add `partnership_utr TEXT` (for LLP)
-8. `hmrc_authorisations`: add `requested_at DATE, code_entered_at DATE`
-9. New table: `bookkeeping_audit_log`
-10. New table: `lead_activities`
-11. New table: `payroll_journal_mapping`
-12. Migrate `sole_trader`/`landlord` values to `sa_non_mtd` in leads and clients
-13. Migrate `manager`/`viewer` roles to `staff`/`admin` in organization_users
-14. INSERT missing services into `services_catalog`
-15. Add UNIQUE constraint on `clients(email, organization_id)`
-16. Rewrite all RLS policies for 3-role model
-17. Create SECURITY DEFINER functions for org membership management
+## Wave 5 — Final Hardening
+- Billing tab rationalisation
+- Settings/automation controls
+- Full regression pack
 
-### Files changed (major):
-- `src/lib/permissions.ts` — full rewrite
-- `src/lib/client-types.ts` — remove sole_trader/landlord
-- `src/lib/auth-context.tsx` — add idle timer
-- `src/lib/organization-context.tsx` — update role type
-- `src/hooks/usePermissions.ts` — update types
-- `src/components/ui/permission-guard.tsx` — update types
-- `src/pages/Overview.tsx` — role-scoped dashboard
-- `src/components/dashboard/DashboardKPICards.tsx` — add leads + revenue cards
-- `src/components/dashboard/RevenueCards.tsx` — new component
-- `src/components/crm/LeadDetailPanel.tsx` — quote management, activity log
-- `src/components/clients/HmrcAuthorisationPanel.tsx` — new component
-- `src/components/clients/AddClientDialog.tsx` — compliance warning
-- `src/components/contacts/ContactForm.tsx` — new fields
-- `src/lib/lead-conversion-service.ts` — auto-won logic, double conversion guard
-- `src/lib/job-status-service.ts` — questionnaire completion hook
-- `supabase/functions/_shared/permissions.ts` — 3-role rewrite
-- `supabase/functions/_shared/auth.ts` — role validation update
-- New: `supabase/functions/gdpr-data-export/index.ts`
-- New: `supabase/functions/gdpr-data-deletion/index.ts`
+---
 
-### Delivery order:
-1. Role model migration + RLS rewrite + permission rewrite (foundational — everything depends on this)
-2. Session security (idle timeout + concurrent session limits)
-3. Audit trail enhancements (bookkeeping audit, sensitive events)
-4. Client type cleanup (remove sole_trader/landlord)
-5. Client detail field additions (contacts, partnerships, charity, CGT, HMRC auth)
-6. CRM consolidation (quotes in CRM, activity logging, auto-won, double conversion)
-7. Dashboard updates (KPI cards, revenue, role-scoped views)
-8. Services verification and fee engine (missing services, toggle logic, EL re-sign)
-9. Questionnaire → job status wiring
-10. Payroll journal mapping
-11. GDPR export/deletion
-12. Manual client add compliance warning + email uniqueness
+## Execution Order
+1. Migration: 3-role collapse + org_users lockdown + contacts fields + new tables
+2. Frontend: permissions.ts rewrite + all role references
+3. Auth: idle timeout + concurrent sessions
+4. Audit: bookkeeping audit log + sensitive event tracking
+5. GDPR edge functions
+6. Client types cleanup + CRM consolidation
+7. Client detail fields UI
+8. Services seeding + conditional fields
+9. Job status + questionnaire wiring + payroll journals
+10. Dashboard cards + role scoping
+11. Filing verification
+12. Regression testing
