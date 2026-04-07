@@ -19,6 +19,7 @@ import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab"
 import { ContactsList } from "@/components/contacts/ContactsList";
 import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab";
 import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
+import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPanel";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -125,7 +126,10 @@ export default function ClientPortal() {
             </TabsList>
 
             <TabsContent value="portal">
-              <ClientPortalTab clientId={client.id} onViewConversations={() => setActiveTab("conversations")} />
+              <div className="space-y-6">
+                <ClientPortalTab clientId={client.id} onViewConversations={() => setActiveTab("conversations")} />
+                <HmrcAuthorisationPanel clientId={client.id} />
+              </div>
             </TabsContent>
 
             <TabsContent value="conversations">
@@ -156,9 +160,6 @@ export default function ClientPortal() {
               <ClientDeadlinesTab clientId={client.id} />
             </TabsContent>
 
-            <TabsContent value="services">
-              <ClientServicesTab clientId={client.id} />
-            </TabsContent>
 
             <TabsContent value="services">
               <ClientServicesTab clientId={client.id} />

@@ -44,7 +44,9 @@ import {
   Plus,
   Send,
   Eye,
+  Activity,
 } from "lucide-react";
+import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import {
   CLIENT_TYPES,
   CLIENT_TYPE_LABELS,
@@ -346,8 +348,9 @@ export const LeadDetailPanel = ({
         </SheetHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden mt-4">
-          <TabsList className="flex-shrink-0 grid w-full grid-cols-4">
+          <TabsList className="flex-shrink-0 grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="quotes">
               Quotes
               {quotes && quotes.length > 0 && (
@@ -550,6 +553,11 @@ export const LeadDetailPanel = ({
                   </Button>
                 </div>
               </form>
+            </TabsContent>
+
+            {/* Activity Tab */}
+            <TabsContent value="activity" className="m-0">
+              <ActivityTimeline leadId={lead.id} />
             </TabsContent>
 
             {/* Quotes Tab */}
