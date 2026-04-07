@@ -74,14 +74,17 @@ export const DashboardKPICards = () => {
       let oneOffRevenue = 0;
       if (revenueRes.data) {
         for (const eng of revenueRes.data as any[]) {
-          const fee = Number(eng.fee_amount) || 0;
-          if (eng.billing_frequency === 'monthly') {
+          const config = eng.service_config as Record<string, any> | null;
+          const service = eng.services_catalog as any;
+          const fee = Number(config?.fee_amount ?? config?.price ?? service?.default_price ?? 0);
+          const freq = eng.frequency || service?.billing_model || 'fixed';
+          if (freq === 'monthly') {
             monthlyRevenue += fee;
-          } else if (eng.billing_frequency === 'one_off' || eng.billing_frequency === 'fixed') {
+          } else if (freq === 'one_off' || freq === 'fixed') {
             oneOffRevenue += fee;
-          } else if (eng.billing_frequency === 'quarterly') {
+          } else if (freq === 'quarterly') {
             monthlyRevenue += fee / 3;
-          } else if (eng.billing_frequency === 'annually' || eng.billing_frequency === 'yearly') {
+          } else if (freq === 'annually' || freq === 'yearly') {
             monthlyRevenue += fee / 12;
           } else {
             monthlyRevenue += fee;
