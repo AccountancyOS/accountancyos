@@ -131,6 +131,56 @@ export async function downloadDocument(
 }
 
 /**
+ * Create a versioned signed copy of a document.
+ * Increments the version number and records signature metadata.
+ */
+export async function createSignedDocumentVersion(
+  documentId: string,
+  signatureData: {
+    signedBy: string;
+    signatureIp?: string;
+    typedName?: string;
+    scrollVerified?: boolean;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get current document
+    const { data: doc, error: fetchError } = await supabase
+      .from("job_documents")
+      .select("id, version, file_name, file_path")
+      .eq("id", documentId)
+      .single();
+
+    if (fetchError || !doc) {
+      return { success: false, error: fetchError?.message || "Document not found" };
+    }
+
+    const newVersion = (doc.version || 1) + 1;
+
+    // Update existing document with signature and increment version
+    const { error: updateError } = await supabase
+      .from("job_documents")
+      .update({
+        signed_at: new Date().toISOString(),
+        signed_by: signatureData.signedBy,
+        signature_ip: signatureData.signatureIp || null,
+        signature_typed_name: signatureData.typedName || null,
+        scroll_verified: signatureData.scrollVerified ?? false,
+        version: newVersion,
+      })
+      .eq("id", documentId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to create signed version" };
+  }
+}
+
+/**
  * Delete a document from storage and database
  */
 export async function deleteJobDocument(

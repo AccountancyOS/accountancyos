@@ -6361,6 +6361,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           end_date: string | null
+          engagement_letter_required: boolean
           frequency: string
           id: string
           organization_id: string
@@ -6382,6 +6383,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           end_date?: string | null
+          engagement_letter_required?: boolean
           frequency: string
           id?: string
           organization_id: string
@@ -6403,6 +6405,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           end_date?: string | null
+          engagement_letter_required?: boolean
           frequency?: string
           id?: string
           organization_id?: string

@@ -79,17 +79,8 @@ export async function updateJobStatus(
       return { success: true };
     }
 
-    // Validate status transitions (allow flexible movement but prevent going back from completed)
-    const invalidTransitions: Record<string, JobStatus[]> = {
-      completed: ["blank"], // Can't go from completed back to blank
-    };
-
-    if (invalidTransitions[oldStatus]?.includes(newStatus)) {
-      return { 
-        success: false, 
-        error: `Invalid status transition from '${oldStatus}' to '${newStatus}'` 
-      };
-    }
+    // Status transitions are enforced by the DB trigger validate_job_status_transition
+    // The trigger maintains the canonical transition map; no need to duplicate here
 
     // 2. Update the job status
     const { error: updateError } = await supabase

@@ -19,16 +19,78 @@ interface ConversionResult {
   clientId?: string;
   companyId?: string;
   error?: string;
+  skipped?: boolean;
 }
 
 /**
- * Convert a lead to a client or company record
+ * Check if a lead has already been converted (idempotency guard)
+ */
+async function isAlreadyConverted(leadId: string): Promise<{ converted: boolean }> {
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("converted_at")
+    .eq("id", leadId)
+    .single();
+
+  if (lead?.converted_at) {
+    return { converted: true };
+  }
+  return { converted: false };
+}
+
+/**
+ * Check if an engagement letter has been signed for a lead's onboarding application
+ */
+async function hasSignedEngagementLetter(leadId: string, organizationId: string): Promise<boolean> {
+  // Check if there's an onboarding application linked to this lead with a signed EL
+  const { data: applications } = await supabase
+    .from("onboarding_applications")
+    .select("id, engagement_letters(signed_at)")
+    .eq("lead_id", leadId)
+    .eq("organization_id", organizationId)
+    .limit(1);
+
+  if (!applications || applications.length === 0) return false;
+
+  const app = applications[0];
+  const letters = app.engagement_letters as any[];
+  return letters?.some((l: any) => l.signed_at != null) ?? false;
+}
+
+/**
+ * Convert a lead to a client or company record.
+ * 
+ * Guards:
+ * - Idempotency: prevents duplicate conversion
+ * - EL gate: requires signed engagement letter (can be bypassed with force flag)
  */
 export async function convertLeadToClient(
   lead: Lead,
-  organizationId: string
+  organizationId: string,
+  options: { force?: boolean } = {}
 ): Promise<ConversionResult> {
   try {
+    // 1. Idempotency check — prevent duplicate conversions
+    const existing = await isAlreadyConverted(lead.id);
+    if (existing.converted) {
+      return {
+        success: true,
+        skipped: true,
+        error: "Lead has already been converted",
+      };
+    }
+
+    // 2. Engagement letter gate — unless force-bypassed
+    if (!options.force) {
+      const elSigned = await hasSignedEngagementLetter(lead.id, organizationId);
+      if (!elSigned) {
+        return {
+          success: false,
+          error: "Engagement letter must be signed before converting a lead to a client. Send and sign the engagement letter first.",
+        };
+      }
+    }
+
     const isCompanyType = isCompanyBasedType(lead.lead_type);
     const config = getClientTypeConfig(lead.lead_type);
 
@@ -39,7 +101,7 @@ export async function convertLeadToClient(
         .from("companies")
         .insert({
           organization_id: organizationId,
-          company_name: lead.first_name, // Company name stored in first_name
+          company_name: lead.first_name,
           email: lead.email,
           phone: lead.phone || null,
           company_number: chProfile?.company_number || null,
@@ -67,6 +129,7 @@ export async function convertLeadToClient(
         .update({
           converted_at: new Date().toISOString(),
           converted_to_company_id: company.id,
+          status: "won",
         })
         .eq("id", lead.id);
 
@@ -118,6 +181,7 @@ export async function convertLeadToClient(
         .update({
           converted_at: new Date().toISOString(),
           converted_to_client_id: client.id,
+          status: "won",
         })
         .eq("id", lead.id);
 
