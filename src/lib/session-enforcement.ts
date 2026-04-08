@@ -25,14 +25,16 @@ export async function enforceSessionLimits(
   organizationId: string
 ): Promise<{ invalidated: number; error?: string }> {
   try {
-    // 1. Get org subscription tier
+    // 1. Get org billing status to determine tier
     const { data: org } = await supabase
       .from("organizations")
-      .select("subscription_tier")
+      .select("billing_status")
       .eq("id", organizationId)
       .single();
 
-    const tier = org?.subscription_tier || "free";
+    // Map billing_status to session tier — default to solo limits
+    const billingStatus = org?.billing_status || "free";
+    const tier = billingStatus === "active" ? "studio" : "solo";
     const maxSessions = TIER_SESSION_LIMITS[tier] || DEFAULT_SESSION_LIMIT;
 
     // 2. Get active sessions for this user, ordered by most recent

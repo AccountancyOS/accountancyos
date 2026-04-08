@@ -25,19 +25,15 @@ interface ConversionResult {
 /**
  * Check if a lead has already been converted (idempotency guard)
  */
-async function isAlreadyConverted(leadId: string): Promise<{ converted: boolean; clientId?: string; companyId?: string }> {
+async function isAlreadyConverted(leadId: string): Promise<{ converted: boolean }> {
   const { data: lead } = await supabase
     .from("leads")
-    .select("converted_at, converted_to_client_id, converted_to_company_id")
+    .select("converted_at")
     .eq("id", leadId)
     .single();
 
   if (lead?.converted_at) {
-    return {
-      converted: true,
-      clientId: lead.converted_to_client_id || undefined,
-      companyId: lead.converted_to_company_id || undefined,
-    };
+    return { converted: true };
   }
   return { converted: false };
 }
@@ -80,8 +76,6 @@ export async function convertLeadToClient(
       return {
         success: true,
         skipped: true,
-        clientId: existing.clientId,
-        companyId: existing.companyId,
         error: "Lead has already been converted",
       };
     }
