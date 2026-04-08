@@ -397,6 +397,176 @@ export async function generateCISDeadlines(
   }
 }
 
+// ==================== CGT 60-DAY DEADLINES ====================
+
+/**
+ * Generate CGT 60-day reporting deadline from a disposal date.
+ * UK CGT on residential property must be reported within 60 days of completion.
+ */
+export async function generateCGT60DayDeadline(
+  organizationId: string,
+  clientId: string,
+  disposalDate: string,
+  propertyDescription?: string
+): Promise<DeadlineGenerationResult> {
+  try {
+    const disposal = new Date(disposalDate);
+    const dueDate = new Date(disposal);
+    dueDate.setDate(dueDate.getDate() + 60);
+
+    const warningDate = new Date(dueDate);
+    warningDate.setDate(warningDate.getDate() - 14);
+
+    // Idempotency check
+    const { data: existing } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .eq("service_code", "CGT_60DAY")
+      .eq("period_end", disposalDate)
+      .maybeSingle();
+
+    if (existing) {
+      return { success: true, skipped: true, reason: "CGT 60-day deadline already exists", deadlineId: existing.id };
+    }
+
+    const name = propertyDescription
+      ? `CGT 60-Day Report — ${propertyDescription}`
+      : `CGT 60-Day Report — Disposal ${disposal.toLocaleDateString("en-GB")}`;
+
+    const { data: deadline, error } = await supabase
+      .from("deadlines")
+      .insert({
+        organization_id: organizationId,
+        client_id: clientId,
+        name,
+        deadline_type: "statutory",
+        filing_body: "HMRC",
+        service_code: "CGT_60DAY",
+        due_date: dueDate.toISOString().split("T")[0],
+        period_end: disposalDate,
+        warning_date: warningDate.toISOString().split("T")[0],
+        active_window_start: disposalDate,
+        status: "pending",
+        risk_score: 0,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    console.log(`[Deadline Engine] Created CGT 60-day deadline ${deadline.id} for client ${clientId}`);
+    return { success: true, deadlineId: deadline.id };
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating CGT 60-day deadline:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+// ==================== CHARITY DEADLINES ====================
+
+/**
+ * Generate charity-specific deadlines:
+ * - Annual Return (due 10 months after financial year end)
+ * - Accounts filing (due 10 months after financial year end for charities > £25k income)
+ */
+export async function generateCharityDeadlines(
+  organizationId: string,
+  companyId: string,
+  yearEndDate: string,
+  charityNumber?: string
+): Promise<DeadlineGenerationResult[]> {
+  const results: DeadlineGenerationResult[] = [];
+
+  try {
+    const yearEnd = new Date(yearEndDate);
+
+    // Annual Return — due 10 months after financial year end
+    const annualReturnDue = new Date(yearEnd);
+    annualReturnDue.setMonth(annualReturnDue.getMonth() + 10);
+
+    const arWarning = new Date(annualReturnDue);
+    arWarning.setDate(arWarning.getDate() - 30);
+
+    // Idempotency
+    const { data: existingAR } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "CHARITY_AR")
+      .eq("period_end", yearEndDate)
+      .maybeSingle();
+
+    if (!existingAR) {
+      const refNum = charityNumber ? ` (${charityNumber})` : "";
+      const { data: arDeadline, error: arError } = await supabase
+        .from("deadlines")
+        .insert({
+          organization_id: organizationId,
+          company_id: companyId,
+          name: `Charity Annual Return${refNum}`,
+          deadline_type: "statutory",
+          filing_body: "CHARITY_COMMISSION",
+          service_code: "CHARITY_AR",
+          due_date: annualReturnDue.toISOString().split("T")[0],
+          period_end: yearEndDate,
+          warning_date: arWarning.toISOString().split("T")[0],
+          status: "pending",
+          risk_score: 0,
+        })
+        .select()
+        .single();
+
+      results.push(arError ? { success: false, error: arError.message } : { success: true, deadlineId: arDeadline.id });
+    } else {
+      results.push({ success: true, skipped: true, reason: "Already exists", deadlineId: existingAR.id });
+    }
+
+    // Charity Accounts — same deadline as annual return for simplicity
+    const { data: existingAccounts } = await supabase
+      .from("deadlines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("company_id", companyId)
+      .eq("service_code", "CHARITY_ACCOUNTS")
+      .eq("period_end", yearEndDate)
+      .maybeSingle();
+
+    if (!existingAccounts) {
+      const { data: accDeadline, error: accError } = await supabase
+        .from("deadlines")
+        .insert({
+          organization_id: organizationId,
+          company_id: companyId,
+          name: `Charity Accounts Filing`,
+          deadline_type: "statutory",
+          filing_body: "CHARITY_COMMISSION",
+          service_code: "CHARITY_ACCOUNTS",
+          due_date: annualReturnDue.toISOString().split("T")[0],
+          period_end: yearEndDate,
+          warning_date: arWarning.toISOString().split("T")[0],
+          status: "pending",
+          risk_score: 0,
+        })
+        .select()
+        .single();
+
+      results.push(accError ? { success: false, error: accError.message } : { success: true, deadlineId: accDeadline.id });
+    } else {
+      results.push({ success: true, skipped: true, reason: "Already exists", deadlineId: existingAccounts.id });
+    }
+
+    return results;
+  } catch (err: any) {
+    console.error("[Deadline Engine] Error generating charity deadlines:", err);
+    return [{ success: false, error: err.message }];
+  }
+}
+
 // ==================== VAT DEADLINES ====================
 
 /**
