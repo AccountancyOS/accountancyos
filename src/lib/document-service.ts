@@ -188,6 +188,21 @@ export async function deleteJobDocument(
   filePath: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Guard: check if document is signed before allowing deletion
+    const { data: doc, error: fetchError } = await supabase
+      .from("job_documents")
+      .select("signed_at")
+      .eq("id", documentId)
+      .single();
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message };
+    }
+
+    if (doc?.signed_at) {
+      return { success: false, error: "Cannot delete a signed document. Signed documents must be retained for compliance." };
+    }
+
     // Delete from storage first
     const { error: storageError } = await supabase.storage
       .from(STORAGE_BUCKET)
