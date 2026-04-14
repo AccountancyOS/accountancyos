@@ -3,6 +3,7 @@ import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
+import { enforceSessionLimits } from "@/lib/session-enforcement";
 
 type AuthFlow = "normal" | "recovery";
 
@@ -210,8 +211,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         // Defer Supabase calls with setTimeout to prevent deadlock
         if (newSession) {
-          setTimeout(() => {
+          setTimeout(async () => {
             checkSubscription(newSession);
+            // Enforce concurrent session limits after sign-in
+            if (_event === 'SIGNED_IN' && newSession.user) {
+              const orgId = await fetchOrganizationId(newSession.user.id);
+              if (orgId) {
+                enforceSessionLimits(newSession.user.id, orgId);
+              }
+            }
           }, 0);
         } else {
           setSubscribed(false);
