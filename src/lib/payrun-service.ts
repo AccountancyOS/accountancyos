@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logAudit } from "@/lib/audit-service";
 import { PAY_RUN_STATUSES, type PayRunStatus, type PayFrequency } from "@/lib/payroll-constants";
 import { calculatePayslip, type PayslipInput } from "@/lib/payroll-calculation-engine";
+import { postToLedger, type LedgerEntry, type PostingContext } from "@/lib/posting-service";
 
 // Valid status transitions
 export const PAY_RUN_TRANSITIONS: Record<PayRunStatus, PayRunStatus[]> = {
@@ -301,13 +302,13 @@ async function createPayrollLedgerEntries(
 ): Promise<void> {
   // Get chart of accounts to find appropriate accounts
   const entityId = payRun.paye_schemes?.company_id || payRun.paye_schemes?.client_id;
-  const entityType = payRun.paye_schemes?.company_id ? 'company_id' : 'client_id';
+  const entityType: "client" | "company" = payRun.paye_schemes?.company_id ? 'company' : 'client';
 
   const { data: accounts } = await supabase
     .from("bookkeeping_accounts")
     .select("id, code, name, account_type")
     .eq("organization_id", organizationId)
-    .eq(entityType, entityId);
+    .eq(entityType === 'company' ? 'company_id' : 'client_id', entityId);
 
   // Find or use default accounts
   const findAccount = (codePrefix: string, fallbackType: string) => {
@@ -315,18 +316,18 @@ async function createPayrollLedgerEntries(
       || accounts?.find(a => a.account_type === fallbackType);
   };
 
-  const wagesAccount = findAccount("7", "expense"); // Wages expense
-  const payeAccount = findAccount("2210", "liability"); // PAYE liability
-  const nicAccount = findAccount("2220", "liability"); // NIC liability  
-  const pensionAccount = findAccount("2230", "liability"); // Pension liability
-  const netPayAccount = findAccount("2200", "liability"); // Net pay liability (wages payable)
+  const wagesAccount = findAccount("7", "expense");
+  const payeAccount = findAccount("2210", "liability");
+  const nicAccount = findAccount("2220", "liability");
+  const pensionAccount = findAccount("2230", "liability");
+  const netPayAccount = findAccount("2200", "liability");
 
   if (!wagesAccount || !netPayAccount) {
     console.warn("Could not find required accounts for payroll journal");
     return;
   }
 
-  const entries: any[] = [];
+  const entries: LedgerEntry[] = [];
   const paymentDate = payRun.payment_date;
 
   // DR: Wages Expense (Gross Pay + Employer NIC + Employer Pension)
@@ -337,30 +338,20 @@ async function createPayrollLedgerEntries(
 
   if (totalWagesExpense > 0) {
     entries.push({
-      journal_id: journalId,
-      organization_id: organizationId,
-      account_id: wagesAccount.id,
-      entry_date: paymentDate,
+      accountId: wagesAccount.id,
       debit: totalWagesExpense,
-      credit: 0,
+      credit: null,
       description: `Wages expense - Period ${payRun.tax_period}`,
-      source: "payroll",
-      source_id: payRun.id,
     });
   }
 
   // CR: PAYE Liability
   if ((payRun.total_paye || 0) > 0 && payeAccount) {
     entries.push({
-      journal_id: journalId,
-      organization_id: organizationId,
-      account_id: payeAccount.id,
-      entry_date: paymentDate,
-      debit: 0,
+      accountId: payeAccount.id,
+      debit: null,
       credit: payRun.total_paye,
       description: `PAYE liability - Period ${payRun.tax_period}`,
-      source: "payroll",
-      source_id: payRun.id,
     });
   }
 
@@ -368,15 +359,10 @@ async function createPayrollLedgerEntries(
   const totalNic = (payRun.total_employee_nic || 0) + (payRun.total_employer_nic || 0);
   if (totalNic > 0 && nicAccount) {
     entries.push({
-      journal_id: journalId,
-      organization_id: organizationId,
-      account_id: nicAccount.id,
-      entry_date: paymentDate,
-      debit: 0,
+      accountId: nicAccount.id,
+      debit: null,
       credit: totalNic,
       description: `NIC liability - Period ${payRun.tax_period}`,
-      source: "payroll",
-      source_id: payRun.id,
     });
   }
 
@@ -384,38 +370,39 @@ async function createPayrollLedgerEntries(
   const totalPension = (payRun.total_employee_pension || 0) + (payRun.total_employer_pension || 0);
   if (totalPension > 0 && pensionAccount) {
     entries.push({
-      journal_id: journalId,
-      organization_id: organizationId,
-      account_id: pensionAccount.id,
-      entry_date: paymentDate,
-      debit: 0,
+      accountId: pensionAccount.id,
+      debit: null,
       credit: totalPension,
       description: `Pension liability - Period ${payRun.tax_period}`,
-      source: "payroll",
-      source_id: payRun.id,
     });
   }
 
-  // CR: Net Pay Liability (what's owed to employees)
+  // CR: Net Pay Liability
   if ((payRun.total_net_pay || 0) > 0) {
     entries.push({
-      journal_id: journalId,
-      organization_id: organizationId,
-      account_id: netPayAccount.id,
-      entry_date: paymentDate,
-      debit: 0,
+      accountId: netPayAccount.id,
+      debit: null,
       credit: payRun.total_net_pay,
       description: `Net wages payable - Period ${payRun.tax_period}`,
-      source: "payroll",
-      source_id: payRun.id,
     });
   }
 
-  // Insert all entries
+  // Post via canonical postToLedger RPC
   if (entries.length > 0) {
-    const { error } = await supabase.from("ledger_entries").insert(entries);
-    if (error) {
-      console.error("Failed to create payroll ledger entries:", error);
+    const postingContext: PostingContext = {
+      organizationId,
+      entityType,
+      entityId,
+      transactionDate: paymentDate,
+      reference: `PAYROLL-${payRun.tax_year}-P${payRun.tax_period}`,
+      sourceType: "JOURNAL",
+      sourceId: payRun.id,
+      userId: payRun.approved_by || undefined,
+    };
+
+    const result = await postToLedger(postingContext, entries);
+    if (!result.success) {
+      console.error("Failed to create payroll ledger entries via postToLedger:", result.error);
     }
   }
 }

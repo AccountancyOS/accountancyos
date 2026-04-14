@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useAuth } from "@/lib/auth-context";
-import { createDraftBill, updateDraftBill, approveBill } from "@/lib/bills-service";
+import { createBillDraftSafe, updateBillDraftSafe } from "@/lib/bill-draft-service";
+import { approveBill } from "@/lib/bills-service";
 import {
   Dialog,
   DialogContent,
@@ -215,34 +216,41 @@ export default function BillEditorDialog({
 
   const saveMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const billInput = {
-        supplierId: data.supplierId,
-        billNumber: data.billNumber || undefined,
-        reference: data.reference || undefined,
-        issueDate: data.issueDate,
-        dueDate: data.dueDate,
-        currency: data.currency,
-        notes: data.notes || undefined,
-        lines: data.lines.map((line) => ({
-          description: line.description || undefined,
-          accountId: line.accountId || undefined,
-          vatCodeId: line.vatCodeId || undefined,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          vatRate: line.vatRate,
-        })),
-      };
+      const billLines = data.lines.map((line) => ({
+        description: line.description || '',
+        quantity: line.quantity,
+        unit_price: line.unitPrice,
+        vat_rate: line.vatRate,
+        account_id: line.accountId || '',
+        vat_code_id: line.vatCodeId || '',
+      }));
 
       if (isEditing) {
-        const result = await updateDraftBill(bill.id, billInput, user?.id);
+        const result = await updateBillDraftSafe(bill.id, {
+          supplierId: data.supplierId,
+          billNumber: data.billNumber || undefined,
+          reference: data.reference || undefined,
+          issueDate: data.issueDate,
+          dueDate: data.dueDate,
+          notes: data.notes || undefined,
+          lines: billLines,
+        });
         if (!result.success) throw new Error(result.error);
       } else {
-        const result = await createDraftBill(
+        const result = await createBillDraftSafe(
           organization!.id,
-          entity.type,
-          entity.id,
-          billInput,
-          user?.id
+          {
+            entityType: entity.type,
+            entityId: entity.id,
+            supplierId: data.supplierId,
+            billNumber: data.billNumber || undefined,
+            reference: data.reference || undefined,
+            issueDate: data.issueDate,
+            dueDate: data.dueDate,
+            currency: data.currency,
+            notes: data.notes || undefined,
+            lines: billLines,
+          }
         );
         if (!result.success) throw new Error(result.error);
       }

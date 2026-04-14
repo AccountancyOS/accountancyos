@@ -41,7 +41,7 @@ serve(async (req) => {
     }
 
     // In sandbox mode, simulate HMRC response
-    const isSandbox = true; // Would be config-driven in production
+    const isSandbox = Deno.env.get('HMRC_MODE') !== 'production';
     
     let hmrcResponse: {
       success: boolean;
