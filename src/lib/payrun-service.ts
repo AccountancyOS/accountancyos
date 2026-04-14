@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logAudit } from "@/lib/audit-service";
 import { PAY_RUN_STATUSES, type PayRunStatus, type PayFrequency } from "@/lib/payroll-constants";
 import { calculatePayslip, type PayslipInput } from "@/lib/payroll-calculation-engine";
+import { postToLedger, type LedgerEntry, type PostingContext } from "@/lib/posting-service";
 
 // Valid status transitions
 export const PAY_RUN_TRANSITIONS: Record<PayRunStatus, PayRunStatus[]> = {

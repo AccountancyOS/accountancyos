@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useAuth } from "@/lib/auth-context";
-import { createDraftBill, updateDraftBill, approveBill } from "@/lib/bills-service";
+import { createBillDraftSafe, updateBillDraftSafe } from "@/lib/bill-draft-service";
+import { approveBill } from "@/lib/bills-service";
 import {
   Dialog,
   DialogContent,
