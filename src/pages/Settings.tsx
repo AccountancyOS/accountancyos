@@ -218,9 +218,7 @@ export default function Settings() {
   const processQueueMutation = useMutation({
     mutationFn: async () => {
       setIsProcessing(true);
-      const { data, error } = await supabase.functions.invoke("send-email", {
-        body: { mode: "process_queue" },
-      });
+      const { data, error } = await supabase.functions.invoke("process-email-queue");
 
       if (error) throw error;
       return data;
