@@ -395,7 +395,7 @@ async function createPayrollLedgerEntries(
       entityId,
       transactionDate: paymentDate,
       reference: `PAYROLL-${payRun.tax_year}-P${payRun.tax_period}`,
-      sourceType: "PAYROLL",
+      sourceType: "JOURNAL",
       sourceId: payRun.id,
       userId: payRun.approved_by || undefined,
     };
