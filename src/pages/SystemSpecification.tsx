@@ -514,7 +514,7 @@ export default function SystemSpecification() {
                     <tr className="border-b"><td className="p-2 font-semibold">Stripe</td><td className="p-2 text-xs">stripe-checkout, stripe-webhook, stripe-connect-onboard, stripe-connect-charge, customer-portal, check-subscription</td></tr>
                     <tr className="border-b"><td className="p-2 font-semibold">Filing</td><td className="p-2 text-xs">rti-submit, cis-submit, generate-filing-pdf</td></tr>
                     <tr className="border-b"><td className="p-2 font-semibold">Background</td><td className="p-2 text-xs">process-automation-events, process-email-queue, sla-check, session-cleanup</td></tr>
-                    <tr className="border-b"><td className="p-2 font-semibold">Other</td><td className="p-2 text-xs">send-email, send-engagement-letter, fx-rates</td></tr>
+                    <tr className="border-b"><td className="p-2 font-semibold">Other</td><td className="p-2 text-xs">send-engagement-letter, fx-rates</td></tr>
                   </tbody>
                 </TableWrapper>
               </CardContent>
