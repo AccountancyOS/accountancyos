@@ -1,129 +1,57 @@
 
 
-# AccountancyOS Production-Readiness Architecture Audit — Remediation Plan
+# Fix: Remove send-email Open Relay and Dead Code
 
-The comprehensive audit has been completed and the full report was already delivered as `accountancyos-architecture-audit.md`. This plan summarises all findings and proposes the phased implementation.
+## Diagnosis Summary
 
----
+The `send-email` edge function has JWT verification enabled (gateway-level auth), so it is **not** an unauthenticated open relay. However, it performs **zero authorization** inside the function — any authenticated user (including portal clients) can send arbitrary emails to arbitrary recipients via Postmark, with spoofable sender addresses. All three modes (`direct`, `queue`, `process_queue`) are dead code or redundant with the canonical email system.
 
-## Executive Summary
+## Finding Correction
 
-**17 issues found:** 4 Critical, 5 High, 5 Medium, 3 Low
+The original security finding overstated the risk ("unauthenticated open relay"). The actual risk is: **any authenticated user can send arbitrary emails without authorization checks**. This is still a serious vulnerability — a portal client could send phishing emails through your Postmark account — but it is not unauthenticated.
 
-**Overall assessment:** Not production-ready. Strong architectural foundations (posting-service RPC, filing SSOT model, org-scoped storage) but critical "last mile" wiring failures across bills, email queue, notifications, and session enforcement.
+## Required Fix
 
-**Top launch blockers:**
-1. Bills/bill_lines/bill_payments — SELECT-only RLS, all writes fail
-2. email_queue — SELECT-only RLS, all email sending fails
-3. notifications — no INSERT policy, all notifications fail
-4. Session enforcement — fully built but never called
-5. Parallel bill creation code paths (bills-service vs bill-draft-service)
+### Step 1: Delete the send-email edge function entirely
 
----
+All three modes are dead or redundant:
+- `direct` mode — `sendEmailDirect()` is never imported or called anywhere in the codebase
+- `queue` mode — `sendQueuedEmail()` is never imported or called anywhere
+- `process_queue` mode — redundant with the dedicated `process-email-queue` edge function
 
-## Phase 1: Critical Launch Blockers (Migration + Code)
+**Action:** Delete `supabase/functions/send-email/` directory and remove `[functions.send-email]` from `supabase/config.toml`.
 
-### 1A. Database Migration — Add Missing RLS Policies
+### Step 2: Remove dead client code
 
-Single migration to fix all SELECT-only tables where code performs writes:
+**File: `src/lib/email-service.ts`** — Delete `sendEmailDirect()`, `sendQueuedEmail()`, `processEmailQueue()`, and `queueAndSendEmail()` functions. These are never imported. The canonical email path is `email-safe-service.ts` (RPCs) + `process-email-queue` (cron).
 
-```sql
--- bills: INSERT, UPDATE, DELETE (org-scoped)
-CREATE POLICY "Org members can insert bills" ON public.bills
-  FOR INSERT WITH CHECK (user_has_organization_access(organization_id));
-CREATE POLICY "Org members can update bills" ON public.bills
-  FOR UPDATE USING (user_has_organization_access(organization_id));
-CREATE POLICY "Org members can delete bills" ON public.bills
-  FOR DELETE USING (user_has_organization_access(organization_id));
+### Step 3: Fix Settings.tsx process_queue call
 
--- bill_lines: INSERT, UPDATE, DELETE
--- bill_payments: INSERT, UPDATE, DELETE
--- invoice_lines: INSERT, UPDATE, DELETE
--- invoice_payments: INSERT, UPDATE, DELETE
--- (all org-scoped via join to parent table)
+**File: `src/pages/Settings.tsx`** — The manual "Process Email Queue" button currently calls `send-email` with `mode: "process_queue"`. Change this to invoke `process-email-queue` instead (the canonical cron function).
 
--- email_queue: INSERT
-CREATE POLICY "Org members can insert email queue" ON public.email_queue
-  FOR INSERT WITH CHECK (user_has_organization_access(organization_id));
+### Step 4: Update security finding
 
--- notifications: INSERT
-CREATE POLICY "Org members can insert notifications" ON public.notifications
-  FOR INSERT WITH CHECK (user_has_organization_access(organization_id));
+Mark the `send_email_open_relay` finding as fixed with explanation that the function was removed entirely.
 
--- Drop duplicate policies
-DROP POLICY "View ledger entries" ON public.ledger_entries;
--- Drop duplicate user_saved_views policies (4 duplicates)
-```
+## Regression Risks
 
-### 1B. Wire Session Enforcement
+- **None from deletion** — no code imports or calls the removed functions
+- **Settings.tsx** — the manual queue processing button must be re-pointed to `process-email-queue`
+- The canonical email flow (`email-safe-service.ts` → `queue_email_safe` RPC → `process-email-queue` cron) is completely unaffected
 
-**File:** `src/contexts/auth-context.tsx` or equivalent auth handler
-- Import and call `enforceSessionLimits(userId, orgId)` after successful `SIGNED_IN` events
-- This is a 5-line code change
+## Test Cases
 
----
+1. Verify `process-email-queue` still processes queued emails correctly after `send-email` is deleted
+2. Verify the Settings page "Process Queue" button works after re-pointing to `process-email-queue`
+3. Verify no TypeScript compilation errors after removing dead exports
+4. Confirm no other files import from `email-service.ts` functions that are being removed
 
-## Phase 2: Architectural Corrections (Code Refactoring)
+## Files Changed
 
-### 2A. Eliminate Parallel Bill Creation Paths
-
-- Refactor `BillEditorDialog.tsx` to use `bill-draft-service.ts` (which uses the safe RPC) instead of `bills-service.ts` direct inserts
-- Deprecate `createDraftBill`/`updateDraftBill` from `bills-service.ts`
-
-### 2B. Fix Payroll Ledger Posting
-
-- Refactor `payrun-service.ts` to use `postToLedger()` from `posting-service.ts` instead of direct `ledger_entries` insert
-
-### 2C. Add Org-Scoping to connected_mailboxes
-
-- Update all 4 RLS policies to include `user_has_organization_access(organization_id)` in addition to `user_id = auth.uid()`
-
-### 2D. Fix gmail_auth_states INSERT Policy
-
-- Add `WITH CHECK (user_id = auth.uid())` to prevent users inserting auth states for other users
-
----
-
-## Phase 3: Integration Hardening
-
-### 3A. Companies House Sync — Environment-Driven Toggle
-
-- Replace hardcoded mock data in `companies-house-sync/index.ts` with config check: `const isSandbox = Deno.env.get('CH_MODE') !== 'production'`
-- Implement real CH API call path for production mode
-
-### 3B. RTI/CIS Submit — Environment-Driven Toggle
-
-- Replace `const isSandbox = true` in `rti-submit/index.ts` and `cis-submit/index.ts` with `const isSandbox = Deno.env.get('HMRC_MODE') !== 'production'`
-
----
-
-## Phase 4: Clean-Up
-
-- Remove duplicate `user_saved_views` policies
-- Remove duplicate `ledger_entries` SELECT policy
-- Resolve `api_rate_limits` zero-policy state
-- Audit all SECURITY DEFINER functions for `search_path` settings
-
----
-
-## Cross-Cutting Patterns Found
-
-1. **RPC vs Direct Insert Inconsistency** — Safe RPCs built but legacy direct-insert code never migrated
-2. **SELECT-Only RLS on Write Tables** — 8+ tables missing INSERT/UPDATE/DELETE policies
-3. **Dead Code / Unwired Features** — Functions built but never called (session enforcement)
-4. **Sandbox-Hardcoded Integrations** — No environment-driven production toggle
-5. **Duplicate Policies / Migration Drift** — Iterative migrations adding duplicates
-
----
-
-## Technical Scope
-
-| Phase | Migration SQL | Code Files | Risk |
-|-------|-------------|------------|------|
-| 1 | 1 migration (~40 statements) | 1 file (auth context) | Low — enables broken features |
-| 2 | 1 migration (policy updates) | 3 files (bills, payrun, mailbox) | Low — current paths broken |
-| 3 | 0 migrations | 3 edge functions | None — sandbox still default |
-| 4 | 1 migration (drop duplicates) | 0 files | None — cleanup only |
-
-**Total: 3 migrations, ~7 code files changed.** No data backfill needed (zero rows in affected tables). No breaking changes to working features.
+| File | Action |
+|---|---|
+| `supabase/functions/send-email/` | Delete directory |
+| `supabase/config.toml` | Remove `[functions.send-email]` block |
+| `src/lib/email-service.ts` | Remove dead functions (`sendEmailDirect`, `sendQueuedEmail`, `processEmailQueue`, `queueAndSendEmail`) |
+| `src/pages/Settings.tsx` | Re-point queue processing to `process-email-queue` |
 
