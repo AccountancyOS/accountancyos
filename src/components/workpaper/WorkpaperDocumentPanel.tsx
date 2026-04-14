@@ -27,6 +27,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { format } from "date-fns";
+import { downloadDocument } from "@/lib/document-service";
 
 interface WorkpaperDocumentPanelProps {
   isOpen: boolean;
@@ -117,23 +118,8 @@ export function WorkpaperDocumentPanel({
   });
 
   const handleDownload = async (doc: LinkedDocument) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from("job-documents")
-        .download(doc.file_path);
-
-      if (error) throw error;
-
-      // Create download link
-      const url = URL.createObjectURL(data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = doc.file_name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
+    const { success, error } = await downloadDocument(doc.file_path, doc.file_name);
+    if (!success) {
       console.error("Download failed:", error);
     }
   };

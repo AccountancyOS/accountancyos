@@ -171,6 +171,17 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
 
   const deleteMutation = useMutation({
     mutationFn: async (docIds: string[]) => {
+      // Guard: check for signed documents before deletion
+      const { data: docs } = await supabase
+        .from("job_documents")
+        .select("id, signed_at")
+        .in("id", docIds);
+
+      const signedDocs = docs?.filter(d => d.signed_at) || [];
+      if (signedDocs.length > 0) {
+        throw new Error(`Cannot delete ${signedDocs.length} signed document(s). Signed documents must be retained for compliance.`);
+      }
+
       const { error } = await supabase
         .from("job_documents")
         .delete()
