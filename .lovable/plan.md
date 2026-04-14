@@ -1,140 +1,178 @@
 
 
-# Test Accountancy Firm — Implementation Plan
-
-## Login Credentials
-
-A new auth user will be created as the permanent test account:
-
-- **Email:** `test@greenfield-accountants.co.uk`
-- **Password:** `Greenfield2026!`
-- **Auto-confirm:** Yes (immediate login)
-
-This user will be the **owner** of the new organization. The existing `+1` and `+2` accounts will be added as admin and staff respectively.
+# Document Storage Architecture — Root Cause Analysis and Production Fix
 
 ---
 
-## Organization & Team
+## 1. Root Cause
 
-| User | Email | Role |
-|------|-------|------|
-| Test Owner | test@greenfield-accountants.co.uk | owner |
-| Admin User | jamiebshaw1095+1@gmail.com (f6faf632) | admin |
-| Staff User | jamiebshaw1095+2@gmail.com (69c80a39) | staff |
+The `job_documents` table and `document-service.ts` reference a storage bucket called `job-documents` that was never created. There are also storage policies referencing a `client-documents` bucket that also does not exist. Neither bucket was ever created via migration.
 
-Created via `create_organization_with_owner` RPC + `add_org_member` RPC.
+This is not a simple missing-bucket problem. It is an architectural gap: the document storage layer was designed at the metadata level (DB tables, RLS policies, service code) but the physical storage layer was never instantiated.
 
 ---
 
-## Clients (8 — consolidated, no single-purpose clients)
+## 2. Current State Audit
 
-| # | Name | Type | Status | Services Covered |
-|---|------|------|--------|-----------------|
-| 1 | Margaret Thompson | sa_non_mtd | active | SA Return, Tax Planning |
-| 2 | Ravi Patel | sa_mtd | active | SA MTD Quarterly, Tax Planning |
-| 3 | Ahmed Hassan | partnership | active | Partnership Return, SA Return |
-| 4 | Claire Dubois | cgt | active | CGT 60-day, SA Return |
-| 5 | David Wright | sa_non_mtd | active | SA Return, Bookkeeping |
-| 6 | Priya Sharma | sa_mtd | pending | SA MTD (onboarding test) |
-| 7 | Tom Richards | sa_non_mtd | disengaged | SA Return (disengaged flow) |
-| 8 | Robert Kumar | sa_non_mtd | archived | SA Return (archived state) |
+### A. Storage Buckets (what exists)
 
-Detail records: `client_detail_sa` for SA clients, `client_detail_cgt` for Claire, `client_detail_partnership` for Ahmed.
+| Bucket | Purpose | Has Policies |
+|--------|---------|-------------|
+| `branding` | Org logos/branding | Yes, org-scoped |
+| `filing-documents` | Filing attachments | Yes, org-scoped |
+| `onboarding-documents` | Client onboarding docs | Yes, org-scoped |
+| `questionnaire-files` | Questionnaire uploads | Yes, org-scoped |
+| `receipts` | Bookkeeping receipts | Yes, org-scoped |
+| `job-documents` | **MISSING** — referenced by code | No bucket exists |
+| `client-documents` | **MISSING** — referenced by policies | No bucket exists |
 
----
+### B. Code referencing `job-documents` bucket
 
-## Companies (4 — consolidated)
+| File | Usage |
+|------|-------|
+| `src/lib/document-service.ts` | Upload, download (signed URL), delete |
+| `src/components/workpaper/WorkpaperDocumentPanel.tsx` | Direct `.download()` |
+| `src/components/client-portal/ClientDocumentsTab.tsx` | Uses `document-service.ts` |
+| `src/components/jobs/JobDocumentsTab.tsx` | DB query only (no storage call yet) |
 
-| # | Name | Type | Status | Services Covered |
-|---|------|------|--------|-----------------|
-| 1 | Oakwood Digital Ltd | limited_company | active | CT600, VAT, Annual Accounts, CS01, Payroll, CIS |
-| 2 | Riverside Partners LLP | llp | active | LLP Accounts, CS01, VAT |
-| 3 | Hope Foundation CIO | charity | active | Charity Accounts, Gift Aid |
-| 4 | Nova Tech Solutions Ltd | limited_company | pending | CT600 (onboarding test) |
+### C. Metadata Tables
 
-Oakwood covers VAT + Payroll + CIS in one entity. `client_detail_charity` for Hope Foundation.
+- **`job_documents`** — canonical table for job-scoped documents. Has `organization_id`, `job_id`, `client_visible`, `signature_required`, `signed_at/by`, `version`, `archived`, etc. **RLS is correct**: org-scoped for accountants, portal-scoped for clients.
+- **`filing_documents`** — filing-specific, uses `filing-documents` bucket. Separate concern.
+- **`onboarding_documents`** — onboarding-specific, uses `onboarding-documents` bucket. Separate concern.
+- **`job_artifacts`** — unified artifact registry (references documents, questionnaires, workpapers). Has `source_document_id` FK.
 
----
+### D. Path Convention
 
-## Contacts (directors/bookkeepers on companies)
+`document-service.ts` generates: `{org_id}/{job_id}/{timestamp}_{sanitized_filename}`. This is correct and consistent with every other bucket's convention (org_id as first path segment for RLS enforcement).
 
-6 contacts across the 4 companies — directors, company secretaries, bookkeepers.
+### E. Existing Data Risk
 
----
+Zero rows in `job_documents`. No orphaned storage objects. No backfill needed.
 
-## Engagements
+### F. The `client-documents` bucket question
 
-~15 engagements linking clients/companies to services with varying frequencies (monthly, quarterly, annually, fixed).
-
----
-
-## Jobs (12 — spread across all statuses)
-
-| Status | Count | Purpose |
-|--------|-------|---------|
-| blank | 1 | New job test |
-| records_requested | 1 | Waiting for records |
-| records_received | 1 | Ready to start |
-| accountant_queries | 1 | Query raised |
-| client_queries | 1 | Client responding |
-| accountant_review | 2 | Review stage |
-| client_review | 1 | Client sign-off |
-| ready_to_file | 1 | Filing queue |
-| completed | 3 | Historical |
-
-Assigned to owner/admin/staff to test assignment views.
+Storage policies exist for a `client-documents` bucket that does not exist either. However, the actual code for client documents (`ClientDocumentsTab.tsx`) reads from the `job_documents` **table** and downloads from the `job-documents` **bucket**. The `client-documents` policies are orphaned remnants from an earlier migration. They should be removed.
 
 ---
 
-## Leads (6 — one per pipeline stage)
+## 3. Target Architecture
 
-| Name | Stage | Source | Type |
-|------|-------|--------|------|
-| James Fletcher | new | website | limited_company |
-| Sarah Okonkwo | qualified | referral | sa_non_mtd |
-| Mark Davidson | proposal_sent | direct | partnership |
-| Hannah Lee | won | referral | sa_mtd |
-| Oliver Grant | chasing | ad | limited_company |
-| Emily Stone | lost | other | other |
+### Decision: Single canonical bucket for job documents
+
+**One bucket: `job-documents`**. Rationale:
+- All job-related documents (accountant uploads, client uploads, questionnaire outputs, signature documents) are already tracked in a single `job_documents` table
+- The path convention `{org_id}/{job_id}/{timestamp}_{filename}` already provides the necessary hierarchy
+- Visibility (client-visible vs internal) is a metadata attribute, not a bucket separation concern
+- Filing documents remain in `filing-documents` (different lifecycle, different table)
+- Onboarding documents remain in `onboarding-documents` (different lifecycle)
+
+### Path Convention (confirmed)
+
+```text
+{org_id}/{job_id}/{timestamp}_{sanitized_filename}
+```
+
+- First segment = org_id (enforced by storage RLS)
+- Second segment = job_id (enables per-job listing)
+- Timestamp prefix prevents collisions
+
+### Visibility Model
+
+All handled via `job_documents` table columns (already exist):
+
+| Column | Purpose |
+|--------|---------|
+| `client_visible` | Whether client portal users can see this document |
+| `signature_required` | Whether document needs client signature |
+| `signed_at` / `signed_by` / `signature_ip` / `signature_typed_name` / `scroll_verified` | Signature audit trail |
+| `version` | Incremented on signature events |
+| `archived` / `archived_at` | Soft archive (7-year retention) |
+| `uploaded_by` | Who uploaded |
+| `uploaded_at` | When uploaded |
+
+No hard deletes of signed documents — code must check `signed_at IS NOT NULL` before allowing delete.
+
+### Audit and Retention
+
+- `uploaded_by` + `uploaded_at` tracks creation
+- Signature metadata is immutable once captured (existing `createSignedDocumentVersion` increments version)
+- `archived` for soft archive; `auto_archive_at` for 7-year compliance
+- Deletes of signed documents must be blocked in code (and ideally via trigger)
 
 ---
 
-## HMRC Authorisations (4)
+## 4. Implementation Plan
 
-| Entity | Auth Type | Status |
-|--------|-----------|--------|
-| Oakwood Digital | vat | active (expires 2027) |
-| Oakwood Digital | ct | pending |
-| Riverside Partners | vat | active (expiring in 20 days) |
-| Margaret Thompson | personal | expired |
+### A. Migration SQL
+
+1. **Create the `job-documents` bucket** (private, 20MB limit)
+2. **Add org-scoped storage policies** — INSERT, SELECT, DELETE — all scoped to org membership via `organization_users` table check on `storage.foldername(name)[1]`
+3. **Add UPDATE policy** for the bucket (document-service uses `upsert: false`, but workpaper panel or future flows may need it)
+4. **Add a trigger on `job_documents`** to block deletion of signed documents (`signed_at IS NOT NULL`)
+5. **Drop orphaned `client-documents` storage policies** that reference the non-existent bucket
+6. No portal-specific storage policies needed — portal users access documents via signed URLs generated by the `document-service.ts` (which uses `createSignedUrl`, not direct storage access)
+
+### B. Code Changes
+
+1. **`src/components/jobs/JobDocumentsTab.tsx`** — Wire up the Upload button to use `document-service.ts` `uploadJobDocument()` with a file input, and wire the Download button to use `downloadDocument()`
+2. **`src/components/workpaper/WorkpaperDocumentPanel.tsx`** — Replace direct `supabase.storage.from("job-documents").download()` with `downloadDocument()` from `document-service.ts` for consistency and error handling
+3. **`src/lib/document-service.ts`** — Add a guard in `deleteJobDocument()` to check `signed_at` before allowing deletion
+4. **`src/components/client-portal/ClientDocumentsTab.tsx`** — Add signed-document deletion guard (check `signed_at` before calling delete mutation)
+
+### C. Backfill / Repair
+
+None required. Zero existing rows in `job_documents`. Zero objects in the bucket.
+
+### D. Security Impact
+
+- Storage access is org-scoped via `organization_users` membership check on the first path segment
+- Portal clients do not directly access storage — they go through signed URLs generated server-side
+- `job_documents` table RLS already correctly uses `user_has_organization_access(organization_id)` for accountants and `client_has_portal_access` for portal users
+- Signed documents cannot be deleted (new trigger)
+
+### E. Regression Checklist
+
+- Accountant can upload a document from the Job Documents tab
+- Accountant can upload a document from the Client Documents tab
+- Accountant can download any document in their org
+- Accountant from a different org cannot access documents
+- Portal client can see only `client_visible = true` documents
+- Portal client cannot see `client_visible = false` documents
+- Signature flow works (scroll-to-sign, version increment)
+- Signed documents cannot be deleted
+- Workpaper document panel download works
+- Existing filing-documents, onboarding-documents, questionnaire-files buckets unaffected
+- Orphaned client-documents policies removed without side effects
+
+### F. Test Plan
+
+| # | Test Case | Expected Result |
+|---|-----------|----------------|
+| 1 | Accountant uploads internal-only document to job | Upload succeeds, `client_visible = false`, file in `job-documents/{org_id}/{job_id}/...` |
+| 2 | Accountant uploads client-visible document | Upload succeeds, `client_visible = true` |
+| 3 | Accountant uploads signature-required document | Upload succeeds, `signature_required = true` |
+| 4 | Portal client views documents for their entity | Only sees `client_visible = true` documents |
+| 5 | User from different org tries to access storage | Blocked by storage RLS |
+| 6 | Accountant deletes unsigned document | Succeeds |
+| 7 | Accountant attempts to delete signed document | Blocked by trigger + code guard |
+| 8 | Client signs document via scroll-to-sign flow | Version incremented, signature metadata recorded |
+| 9 | Download from workpaper panel | Works correctly |
+| 10 | Download from job documents tab | Works correctly |
 
 ---
 
-## Deadlines (8 — mix of states)
+## Technical Details
 
-Upcoming, overdue, and completed deadlines for SA, VAT, CT600, and CGT across the client/company base.
+### Storage policies pattern (matching existing conventions)
 
----
+All existing buckets use the same pattern: check `organization_users` where `organization_id::text = storage.foldername(objects.name)[1]`. The `job-documents` policies will follow this exact pattern.
 
-## Invoices (6)
+### Files to modify
 
-Draft, issued, sent, paid, overdue, and voided — linked to clients/companies.
-
----
-
-## Filings (5)
-
-Draft, awaiting_approval, approved, submitted, and filed — linked to jobs.
-
----
-
-## Implementation Steps
-
-1. Create auth user `test@greenfield-accountants.co.uk` with auto-confirm
-2. Call `create_organization_with_owner` RPC to create "Greenfield & Co Accountants"
-3. Call `add_org_member` RPC twice for admin and staff
-4. Insert all seed data via SQL (clients, companies, client_detail_*, contacts, engagements, jobs, leads, HMRC authorisations, deadlines, invoices, filings)
-5. All data scoped to the new organization ID
-
-No schema changes needed. Pure data insertion.
+- `src/components/jobs/JobDocumentsTab.tsx` — add upload/download wiring
+- `src/components/workpaper/WorkpaperDocumentPanel.tsx` — use `document-service.ts`
+- `src/lib/document-service.ts` — add signed-document delete guard
+- `src/components/client-portal/ClientDocumentsTab.tsx` — add signed-document delete guard
+- 1 new migration for bucket creation, policies, trigger, and orphaned policy cleanup
 
