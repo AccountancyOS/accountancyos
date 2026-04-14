@@ -2,8 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-  INDIVIDUAL_BASED_TYPES,
-  COMPANY_BASED_TYPES,
+  CLIENT_TYPES,
   CLIENT_TYPE_LABELS,
   type ClientType,
 } from "@/lib/client-types";
@@ -12,16 +11,13 @@ interface ClientTypeFiltersProps {
   activeType: ClientType | null;
   onTypeChange: (type: ClientType | null) => void;
   typeCounts: Record<string, number>;
-  mode: "individual" | "company";
 }
 
 export function ClientTypeFilters({
   activeType,
   onTypeChange,
   typeCounts,
-  mode,
 }: ClientTypeFiltersProps) {
-  const types = mode === "individual" ? INDIVIDUAL_BASED_TYPES : COMPANY_BASED_TYPES;
   const totalCount = Object.values(typeCounts).reduce((sum, count) => sum + count, 0);
 
   return (
@@ -46,7 +42,7 @@ export function ClientTypeFilters({
           </Badge>
         )}
       </Button>
-      {types.map((type) => {
+      {CLIENT_TYPES.map((type) => {
         const count = typeCounts[type] || 0;
         return (
           <Button
