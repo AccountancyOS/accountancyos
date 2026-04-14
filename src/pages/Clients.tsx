@@ -78,7 +78,7 @@ const Clients = () => {
   const individualTypeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     clients?.forEach((c) => {
-      const type = c.client_type || "other";
+      const type = normalizeClientType(c.client_type);
       counts[type] = (counts[type] || 0) + 1;
     });
     return counts;
@@ -105,7 +105,7 @@ const Clients = () => {
       const matchesSearch = `${client.first_name} ${client.last_name} ${client.email}`
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-      const matchesType = !typeFilter || client.client_type === typeFilter;
+      const matchesType = !typeFilter || normalizeClientType(client.client_type) === typeFilter;
       return matchesSearch && matchesType;
     });
   }, [clients, searchTerm, typeFilter]);
