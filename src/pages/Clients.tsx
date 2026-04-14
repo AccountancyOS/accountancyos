@@ -22,20 +22,29 @@ import DashboardLayout from "@/components/DashboardLayout";
 import LinkedClientsTab from "@/components/accountant-linking/LinkedClientsTab";
 import LinkToExistingClientDialog from "@/components/accountant-linking/LinkToExistingClientDialog";
 import {
-  CLIENT_TYPE_LABELS,
-  COMPANY_BASED_TYPES,
   getClientTypeLabel,
   normalizeClientType,
   type ClientType,
 } from "@/lib/client-types";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 
+interface UnifiedClient {
+  id: string;
+  name: string;
+  type: ClientType;
+  email: string | null;
+  phone: string | null;
+  location: string;
+  kind: "individual" | "company";
+  companyNumber?: string | null;
+}
+
 const Clients = () => {
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const [searchTerm, setSearchTerm] = useState("");
   const [showLinkDialog, setShowLinkDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState("individuals");
+  const [activeTab, setActiveTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState<ClientType | null>(null);
 
   const { data: clients, isLoading: clientsLoading } = useQuery({
@@ -74,67 +83,60 @@ const Clients = () => {
     enabled: !!organization?.id,
   });
 
-  // Compute type counts for individuals
-  const individualTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
+  const unifiedList = useMemo<UnifiedClient[]>(() => {
+    const items: UnifiedClient[] = [];
+
     clients?.forEach((c) => {
-      const type = normalizeClientType(c.client_type);
-      counts[type] = (counts[type] || 0) + 1;
+      items.push({
+        id: c.id,
+        name: `${c.first_name} ${c.last_name}`,
+        type: normalizeClientType(c.client_type),
+        email: c.email,
+        phone: c.phone,
+        location: c.city ? `${c.city}, ${c.country}` : "-",
+        kind: "individual",
+      });
     });
-    return counts;
-  }, [clients]);
 
-  // Compute type counts for companies
-  const companyTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
     companies?.forEach((c) => {
-      // Map company_type to our ClientType enum
       let type: ClientType = "limited_company";
-      if (c.company_type === "llp") {
-        type = "llp";
-      } else if (c.company_type === "charity") {
-        type = "charity";
-      }
-      counts[type] = (counts[type] || 0) + 1;
+      if (c.company_type === "llp") type = "llp";
+      else if (c.company_type === "charity") type = "charity";
+
+      items.push({
+        id: c.id,
+        name: c.company_name,
+        type,
+        email: c.email,
+        phone: c.phone,
+        location: c.city ? `${c.city}, ${c.country}` : "-",
+        kind: "company",
+        companyNumber: c.company_number,
+      });
+    });
+
+    return items;
+  }, [clients, companies]);
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    unifiedList.forEach((item) => {
+      counts[item.type] = (counts[item.type] || 0) + 1;
     });
     return counts;
-  }, [companies]);
+  }, [unifiedList]);
 
-  const filteredClients = useMemo(() => {
-    return clients?.filter((client) => {
-      const matchesSearch = `${client.first_name} ${client.last_name} ${client.email}`
+  const filteredList = useMemo(() => {
+    return unifiedList.filter((item) => {
+      const matchesSearch = `${item.name} ${item.email || ""}`
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-      const matchesType = !typeFilter || normalizeClientType(client.client_type) === typeFilter;
+      const matchesType = !typeFilter || item.type === typeFilter;
       return matchesSearch && matchesType;
     });
-  }, [clients, searchTerm, typeFilter]);
+  }, [unifiedList, searchTerm, typeFilter]);
 
-  const filteredCompanies = useMemo(() => {
-    return companies?.filter((company) => {
-      const matchesSearch = `${company.company_name} ${company.email}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-      
-      if (!typeFilter) return matchesSearch;
-      
-      // Map company_type to ClientType for filtering
-      let companyType: ClientType = "limited_company";
-      if (company.company_type === "llp") {
-        companyType = "llp";
-      } else if (company.company_type === "charity") {
-        companyType = "charity";
-      }
-      
-      return matchesSearch && companyType === typeFilter;
-    });
-  }, [companies, searchTerm, typeFilter]);
-
-  // Reset type filter when switching tabs
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    setTypeFilter(null);
-  };
+  const isLoading = clientsLoading || companiesLoading;
 
   return (
     <DashboardLayout>
@@ -155,44 +157,41 @@ const Clients = () => {
           </div>
         </div>
 
-        <div className="flex gap-4">
-          <Input
-            placeholder="Search clients and companies..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <TabsList>
+              <TabsTrigger value="all">
+                All Clients ({unifiedList.length})
+              </TabsTrigger>
+              <TabsTrigger value="linked">
+                <Link2 className="h-4 w-4 mr-2" />
+                Portal Links
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="individuals">
-              <User className="h-4 w-4 mr-2" />
-              Individuals ({clients?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="companies">
-              <Building2 className="h-4 w-4 mr-2" />
-              Companies ({companies?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="linked">
-              <Link2 className="h-4 w-4 mr-2" />
-              Portal Links
-            </TabsTrigger>
-          </TabsList>
+          <TabsContent value="all" className="space-y-4">
+            <div className="flex gap-4">
+              <Input
+                placeholder="Search clients and companies..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-sm"
+              />
+            </div>
 
-          <TabsContent value="individuals" className="space-y-4">
             <ClientTypeFilters
               activeType={typeFilter}
               onTypeChange={setTypeFilter}
-              typeCounts={individualTypeCounts}
-              mode="individual"
+              typeCounts={typeCounts}
             />
-            {clientsLoading ? (
+
+            {isLoading ? (
               <TableSkeleton columns={5} rows={6} />
-            ) : !filteredClients?.length ? (
+            ) : !filteredList.length ? (
               <div className="text-center py-12 border border-dashed rounded-lg">
                 <p className="text-muted-foreground">
-                  {typeFilter ? "No clients match this filter" : "No individual clients yet"}
+                  {typeFilter ? "No clients match this filter" : "No clients yet"}
                 </p>
               </div>
             ) : (
@@ -208,88 +207,36 @@ const Clients = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredClients.map((client) => (
+                    {filteredList.map((item) => (
                       <TableRow
-                        key={client.id}
+                        key={`${item.kind}-${item.id}`}
                         className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/clients/${client.id}`)}
+                        onClick={() =>
+                          navigate(
+                            item.kind === "company"
+                              ? `/companies/${item.id}`
+                              : `/clients/${item.id}`
+                          )
+                        }
                       >
                         <TableCell className="font-medium">
-                          {client.first_name} {client.last_name}
+                          <div className="flex items-center gap-2">
+                            {item.kind === "company" ? (
+                              <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                            ) : (
+                              <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                            )}
+                            {item.name}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {getClientTypeLabel(client.client_type)}
+                            {getClientTypeLabel(item.type)}
                           </Badge>
                         </TableCell>
-                        <TableCell>{client.email}</TableCell>
-                        <TableCell>{client.phone || "-"}</TableCell>
-                        <TableCell>
-                          {client.city ? `${client.city}, ${client.country}` : "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="companies" className="space-y-4">
-            <ClientTypeFilters
-              activeType={typeFilter}
-              onTypeChange={setTypeFilter}
-              typeCounts={companyTypeCounts}
-              mode="company"
-            />
-            {companiesLoading ? (
-              <TableSkeleton columns={6} rows={6} />
-            ) : !filteredCompanies?.length ? (
-              <div className="text-center py-12 border border-dashed rounded-lg">
-                <p className="text-muted-foreground">
-                  {typeFilter ? "No companies match this filter" : "No company clients yet"}
-                </p>
-              </div>
-            ) : (
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Company Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Company Number</TableHead>
-                      <TableHead>Location</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredCompanies.map((company) => (
-                      <TableRow
-                        key={company.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/companies/${company.id}`)}
-                      >
-                        <TableCell className="font-medium">
-                          {company.company_name}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {getClientTypeLabel(company.company_type)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{company.email}</TableCell>
-                        <TableCell>{company.phone || "-"}</TableCell>
-                        <TableCell>
-                          {company.company_number ? (
-                            <Badge variant="outline">{company.company_number}</Badge>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {company.city ? `${company.city}, ${company.country}` : "-"}
-                        </TableCell>
+                        <TableCell>{item.email || "-"}</TableCell>
+                        <TableCell>{item.phone || "-"}</TableCell>
+                        <TableCell>{item.location}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
