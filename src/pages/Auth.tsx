@@ -636,6 +636,23 @@ const Auth = () => {
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-confirm-password">Confirm Password</Label>
+                    <Input
+                      id="signup-confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={signupConfirmPassword}
+                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                      required
+                      disabled={loading}
+                      minLength={6}
+                    />
+                    {signupConfirmPassword.length > 0 && password !== signupConfirmPassword && (
+                      <p className="text-sm text-destructive">Passwords don't match</p>
+                    )}
+                  </div>
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
