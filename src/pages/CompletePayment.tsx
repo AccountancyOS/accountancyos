@@ -137,7 +137,8 @@ const CompletePayment = () => {
             setIsVerifying(false);
             localStorage.removeItem("stripe_return_ts");
             localStorage.removeItem("stripe_return_session_id");
-            navigate('/onboarding-wizard');
+            localStorage.removeItem("pending_org_id");
+            navigate(organization?.onboarding_completed ? '/welcome' : '/overview');
             return;
           }
           
@@ -173,7 +174,8 @@ const CompletePayment = () => {
               setIsVerifying(false);
               localStorage.removeItem("stripe_return_ts");
               localStorage.removeItem("stripe_return_session_id");
-              navigate('/onboarding-wizard');
+              localStorage.removeItem("pending_org_id");
+              navigate(organization?.onboarding_completed ? '/welcome' : '/overview');
               return;
             }
             
@@ -240,7 +242,7 @@ const CompletePayment = () => {
         if (organization.onboarding_completed) {
           navigate('/welcome');
         } else {
-          navigate('/onboarding-wizard');
+          navigate('/overview');
         }
       }
     }
