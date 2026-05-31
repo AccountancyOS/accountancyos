@@ -356,7 +356,7 @@ const OnboardingWizard = () => {
               <Progress value={progress} className="h-2" />
               
               {/* Steps indicator */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-2 pt-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 pt-4">
                 {STEPS.map((step) => (
                   <div
                     key={step.id}
