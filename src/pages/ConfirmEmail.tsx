@@ -52,11 +52,12 @@ const ConfirmEmail = () => {
     setResending(true);
 
     try {
+      const { getAppUrl } = await import("@/lib/app-config");
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: `${getAppUrl()}/complete-payment`,
         },
       });
 

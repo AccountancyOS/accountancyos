@@ -12,6 +12,34 @@ const logStep = (step: string, details?: any) => {
   console.log(`[STRIPE-CHECKOUT] ${step}${detailsStr}`);
 };
 
+/**
+ * Resolve the canonical app base URL for success/cancel URLs.
+ * Prefers APP_PUBLIC_URL env var (set to https://app.accountancyos.com in prod).
+ * Falls back to the request `origin` header ONLY for dev/preview hostnames so
+ * Lovable preview testing still works. Production NEVER falls back to the
+ * preview URL.
+ */
+function resolveAppBaseUrl(req: Request): string {
+  const envUrl = Deno.env.get("APP_PUBLIC_URL");
+  if (envUrl) return envUrl.replace(/\/$/, "");
+
+  const origin = req.headers.get("origin") || "";
+  try {
+    const host = new URL(origin).hostname;
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.endsWith(".lovable.app") ||
+      host.endsWith(".lovableproject.com")
+    ) {
+      return origin.replace(/\/$/, "");
+    }
+  } catch {
+    // ignore
+  }
+  return "https://app.accountancyos.com";
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -129,14 +157,20 @@ serve(async (req) => {
     }
 
     // Create a checkout session
+    const appBaseUrl = resolveAppBaseUrl(req);
+    const successUrl = `${appBaseUrl}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appBaseUrl}/complete-payment?canceled=true`;
+    logStep('Resolved app URLs', { appBaseUrl, successUrl, cancelUrl });
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: lineItems,
       subscription_data: subscriptionData,
       client_reference_id: organizationId,
-      success_url: `${req.headers.get('origin')}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/complete-payment?canceled=true`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      allow_promotion_codes: true,
       metadata: {
         organization_id: organizationId,
         organization_name: organizationName,

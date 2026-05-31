@@ -287,6 +287,7 @@ const CompletePayment = () => {
     // Self-heal: if we have a signed-in user but no organization, create one
     // now (handles users who signed up before org-after-confirm was wired).
     if (!orgId && user) {
+      console.log("[CompletePayment] No org id — self-healing via ensureOrganization");
       const createdId = await ensureOrganization(user);
       if (createdId) {
         orgId = createdId;
@@ -297,7 +298,8 @@ const CompletePayment = () => {
     if (!orgId) {
       toast({
         title: "Error",
-        description: "Organization not found. Please sign out and sign up again.",
+        description:
+          "We couldn't finish setting up your practice. Please try signing in again or contact support.",
         variant: "destructive",
       });
       return;
