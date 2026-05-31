@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, ShieldCheck, Building, ExternalLink } from "lucide-react";
+import {
+  clearWizardDraft,
+  loadWizardDraft,
+  useWizardDraft,
+} from "./useWizardDraft";
 
 interface ComplianceSetupStepProps {
   organizationId: string;
@@ -14,12 +19,50 @@ interface ComplianceSetupStepProps {
   onSkip: () => void;
 }
 
+const STEP_KEY = "compliance_setup";
+
+type ComplianceForm = {
+  hmrcLabel: string;
+  companiesHouseLabel: string;
+};
+
+const DEFAULT_FORM: ComplianceForm = { hmrcLabel: "", companiesHouseLabel: "" };
+
 export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: ComplianceSetupStepProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [hmrcLabel, setHmrcLabel] = useState("");
-  const [companiesHouseLabel, setCompaniesHouseLabel] = useState("");
+  const initial =
+    loadWizardDraft<ComplianceForm>(STEP_KEY, organizationId) ?? DEFAULT_FORM;
+  const [hmrcLabel, setHmrcLabel] = useState(initial.hmrcLabel);
+  const [companiesHouseLabel, setCompaniesHouseLabel] = useState(
+    initial.companiesHouseLabel,
+  );
+
+  useEffect(() => {
+    if (!organizationId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("external_credentials")
+        .select("service_type, credential_label")
+        .eq("organization_id", organizationId)
+        .in("service_type", ["hmrc_gateway", "companies_house"]);
+      if (cancelled || !data) return;
+      const hmrc = data.find((r) => r.service_type === "hmrc_gateway");
+      const ch = data.find((r) => r.service_type === "companies_house");
+      setHmrcLabel((curr) => curr || hmrc?.credential_label || "");
+      setCompaniesHouseLabel((curr) => curr || ch?.credential_label || "");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
+
+  useWizardDraft<ComplianceForm>(STEP_KEY, organizationId, {
+    hmrcLabel,
+    companiesHouseLabel,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +102,7 @@ export const ComplianceSetupStep = ({ organizationId, onComplete, onSkip }: Comp
         });
       }
 
+      clearWizardDraft(STEP_KEY, organizationId);
       onComplete();
     } catch (error: any) {
       toast({
