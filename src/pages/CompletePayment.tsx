@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Building2, CreditCard, Loader2, RefreshCw, AlertCircle, Settings, LogOut, Check, Users, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ensureOrganization } from "@/lib/ensure-organization";
 
 type PaymentMode = 'new_trial' | 'reactivate' | 'past_due' | 'canceled' | 'verifying' | 'unknown';
 type PrimaryAction = 'checkout' | 'billing_portal';
@@ -280,8 +281,18 @@ const CompletePayment = () => {
   };
 
   const handleCheckout = async () => {
-    const orgId = getOrganizationId();
+    let orgId = getOrganizationId();
     const orgName = getOrganizationName();
+
+    // Self-heal: if we have a signed-in user but no organization, create one
+    // now (handles users who signed up before org-after-confirm was wired).
+    if (!orgId && user) {
+      const createdId = await ensureOrganization(user);
+      if (createdId) {
+        orgId = createdId;
+        await refreshOrganization();
+      }
+    }
 
     if (!orgId) {
       toast({
