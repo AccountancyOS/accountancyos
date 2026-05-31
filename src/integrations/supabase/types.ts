@@ -15518,6 +15518,28 @@ export type Database = {
         }
         Returns: string
       }
+      apply_client_override: {
+        Args: {
+          p_chaser_policy_id: string
+          p_client_id: string
+          p_config?: Json
+          p_enabled: boolean
+          p_org_id: string
+          p_rule_id: string
+        }
+        Returns: string
+      }
+      apply_job_override: {
+        Args: {
+          p_chaser_policy_id: string
+          p_config?: Json
+          p_enabled: boolean
+          p_job_id: string
+          p_org_id: string
+          p_rule_id: string
+        }
+        Returns: string
+      }
       approve_bill_safe: { Args: { p_bill_id: string }; Returns: Json }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       automation_dry_run: {
@@ -15658,6 +15680,20 @@ export type Database = {
         Args: { p_organization_id: string; p_rule_id?: string }
         Returns: Json
       }
+      check_suppression: {
+        Args: { p_category: string; p_email: string; p_org_id: string }
+        Returns: boolean
+      }
+      claim_idempotency_key: {
+        Args: {
+          p_chaser_policy_id?: string
+          p_key: string
+          p_org_id: string
+          p_rule_id?: string
+          p_workflow_instance_id?: string
+        }
+        Returns: boolean
+      }
       cleanup_expired_gmail_auth_states: { Args: never; Returns: undefined }
       cleanup_expired_outlook_auth_states: { Args: never; Returns: undefined }
       cleanup_old_rate_limits: { Args: never; Returns: undefined }
@@ -15668,6 +15704,10 @@ export type Database = {
           check_user_id: string
         }
         Returns: boolean
+      }
+      consume_unsubscribe_token: {
+        Args: { p_category?: string; p_token: string }
+        Returns: Json
       }
       create_automation_rule_safe: {
         Args: {
@@ -15790,6 +15830,10 @@ export type Database = {
           p_old_value?: Json
           p_organization_id: string
         }
+        Returns: string
+      }
+      enqueue_unsubscribe_token: {
+        Args: { p_category?: string; p_email: string; p_org_id: string }
         Returns: string
       }
       ensure_org_settings: {
@@ -16083,6 +16127,17 @@ export type Database = {
         Args: { p_changes: Json; p_invoice_id: string; p_reason: string }
         Returns: Json
       }
+      pause_automation: {
+        Args: {
+          p_expires_at: string
+          p_org_id: string
+          p_reason: string
+          p_rule_id: string
+          p_scope: string
+          p_target_id: string
+        }
+        Returns: string
+      }
       post_to_ledger: {
         Args: {
           p_client_id: string
@@ -16124,6 +16179,18 @@ export type Database = {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
         Returns: Json
       }
+      record_automation_audit: {
+        Args: {
+          p_action: string
+          p_after: Json
+          p_before: Json
+          p_entity_id: string
+          p_entity_type: string
+          p_metadata?: Json
+          p_org_id: string
+        }
+        Returns: string
+      }
       record_automation_execution: {
         Args: {
           p_action_result?: Json
@@ -16163,6 +16230,7 @@ export type Database = {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
       }
+      resume_automation: { Args: { p_pause_id: string }; Returns: boolean }
       retry_failed_email_safe: { Args: { p_email_id: string }; Returns: Json }
       reverse_bill_payment_safe: {
         Args: { p_payment_id: string; p_reason: string }
@@ -16217,6 +16285,10 @@ export type Database = {
       seed_default_vat_codes: {
         Args: { p_organization_id: string }
         Returns: undefined
+      }
+      seed_org_automation_defaults: {
+        Args: { p_dry_run?: boolean; p_org_id: string }
+        Returns: Json
       }
       send_onboarding_questionnaire: {
         Args: { p_onboarding_id: string; p_template_id: string }
@@ -16336,6 +16408,10 @@ export type Database = {
       }
       validate_submission_integrity: {
         Args: { p_filing_id: string; p_filing_type: string }
+        Returns: Json
+      }
+      validate_template: {
+        Args: { p_context?: Json; p_template_id: string }
         Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
