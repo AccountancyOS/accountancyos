@@ -328,6 +328,53 @@ export type Database = {
           },
         ]
       }
+      automation_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json
+          organization_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json
+          organization_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_audit_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_chaser_messages: {
         Row: {
           chaser_run_id: string
@@ -410,6 +457,8 @@ export type Database = {
       }
       automation_chaser_policies: {
         Row: {
+          applies_to_records_created_after: string | null
+          category: string | null
           created_at: string
           description: string | null
           email_template_id: string | null
@@ -417,18 +466,27 @@ export type Database = {
           frequency_unit: string
           id: string
           is_enabled: boolean
+          is_sales: boolean
           max_frequency_interval: number
           min_frequency_interval: number
           name: string
           organization_id: string
+          paused_at: string | null
+          recipient_resolver: string | null
+          scope: string
+          send_mode: string
           service_code: string
           stop_condition_type: string
           stop_condition_value: string
+          stop_on_unsubscribe: boolean
+          suppression_category: string | null
           trigger_offset_days: number
           trigger_type: string
           updated_at: string
         }
         Insert: {
+          applies_to_records_created_after?: string | null
+          category?: string | null
           created_at?: string
           description?: string | null
           email_template_id?: string | null
@@ -436,18 +494,27 @@ export type Database = {
           frequency_unit?: string
           id?: string
           is_enabled?: boolean
+          is_sales?: boolean
           max_frequency_interval?: number
           min_frequency_interval?: number
           name: string
           organization_id: string
+          paused_at?: string | null
+          recipient_resolver?: string | null
+          scope?: string
+          send_mode?: string
           service_code: string
           stop_condition_type?: string
           stop_condition_value?: string
+          stop_on_unsubscribe?: boolean
+          suppression_category?: string | null
           trigger_offset_days?: number
           trigger_type: string
           updated_at?: string
         }
         Update: {
+          applies_to_records_created_after?: string | null
+          category?: string | null
           created_at?: string
           description?: string | null
           email_template_id?: string | null
@@ -455,13 +522,20 @@ export type Database = {
           frequency_unit?: string
           id?: string
           is_enabled?: boolean
+          is_sales?: boolean
           max_frequency_interval?: number
           min_frequency_interval?: number
           name?: string
           organization_id?: string
+          paused_at?: string | null
+          recipient_resolver?: string | null
+          scope?: string
+          send_mode?: string
           service_code?: string
           stop_condition_type?: string
           stop_condition_value?: string
+          stop_on_unsubscribe?: boolean
+          suppression_category?: string | null
           trigger_offset_days?: number
           trigger_type?: string
           updated_at?: string
@@ -568,6 +642,126 @@ export type Database = {
             columns: ["policy_id"]
             isOneToOne: false
             referencedRelation: "automation_chaser_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_client_overrides: {
+        Row: {
+          chaser_policy_id: string | null
+          client_id: string
+          config_overrides: Json
+          created_at: string
+          enabled: boolean | null
+          id: string
+          organization_id: string
+          rule_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          chaser_policy_id?: string | null
+          client_id: string
+          config_overrides?: Json
+          created_at?: string
+          enabled?: boolean | null
+          id?: string
+          organization_id: string
+          rule_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chaser_policy_id?: string | null
+          client_id?: string
+          config_overrides?: Json
+          created_at?: string
+          enabled?: boolean | null
+          id?: string
+          organization_id?: string
+          rule_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_client_overrides_chaser_policy_id_fkey"
+            columns: ["chaser_policy_id"]
+            isOneToOne: false
+            referencedRelation: "automation_chaser_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_client_overrides_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_client_overrides_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_entity_link_suggestions: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          confidence_score: number
+          created_at: string
+          id: string
+          metadata: Json
+          organization_id: string
+          rejected_at: string | null
+          rejected_by: string | null
+          source_entity_id: string
+          source_entity_type: string
+          suggested_entity_id: string
+          suggested_entity_type: string
+          suggestion_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          metadata?: Json
+          organization_id: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          source_entity_id: string
+          source_entity_type: string
+          suggested_entity_id: string
+          suggested_entity_type: string
+          suggestion_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          metadata?: Json
+          organization_id?: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          source_entity_id?: string
+          source_entity_type?: string
+          suggested_entity_id?: string
+          suggested_entity_type?: string
+          suggestion_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_entity_link_suggestions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -686,6 +880,105 @@ export type Database = {
           },
         ]
       }
+      automation_idempotency_keys: {
+        Row: {
+          chaser_policy_id: string | null
+          created_at: string
+          id: string
+          key: string
+          metadata: Json
+          organization_id: string
+          rule_id: string | null
+          workflow_instance_id: string | null
+        }
+        Insert: {
+          chaser_policy_id?: string | null
+          created_at?: string
+          id?: string
+          key: string
+          metadata?: Json
+          organization_id: string
+          rule_id?: string | null
+          workflow_instance_id?: string | null
+        }
+        Update: {
+          chaser_policy_id?: string | null
+          created_at?: string
+          id?: string
+          key?: string
+          metadata?: Json
+          organization_id?: string
+          rule_id?: string | null
+          workflow_instance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_idempotency_keys_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_job_overrides: {
+        Row: {
+          chaser_policy_id: string | null
+          config_overrides: Json
+          created_at: string
+          enabled: boolean | null
+          id: string
+          job_id: string
+          organization_id: string
+          rule_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          chaser_policy_id?: string | null
+          config_overrides?: Json
+          created_at?: string
+          enabled?: boolean | null
+          id?: string
+          job_id: string
+          organization_id: string
+          rule_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chaser_policy_id?: string | null
+          config_overrides?: Json
+          created_at?: string
+          enabled?: boolean | null
+          id?: string
+          job_id?: string
+          organization_id?: string
+          rule_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_job_overrides_chaser_policy_id_fkey"
+            columns: ["chaser_policy_id"]
+            isOneToOne: false
+            referencedRelation: "automation_chaser_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_job_overrides_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_job_overrides_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_library_sets: {
         Row: {
           created_at: string
@@ -773,6 +1066,53 @@ export type Database = {
           },
         ]
       }
+      automation_pauses: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          organization_id: string
+          paused_by: string | null
+          reason: string | null
+          rule_id: string | null
+          scope: string
+          target_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          organization_id: string
+          paused_by?: string | null
+          reason?: string | null
+          rule_id?: string | null
+          scope: string
+          target_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          organization_id?: string
+          paused_by?: string | null
+          reason?: string | null
+          rule_id?: string | null
+          scope?: string
+          target_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_pauses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_rate_limits: {
         Row: {
           action_count: number | null
@@ -825,8 +1165,14 @@ export type Database = {
           category: string | null
           created_at: string | null
           created_by: string | null
+          default_frequency: Json | null
+          default_recipient_resolver: string | null
+          default_scope: string | null
+          default_send_mode: string | null
+          default_template_id: string | null
           description: string | null
           id: string
+          is_sales_category: boolean
           is_system: boolean | null
           name: string
           organization_id: string | null
@@ -841,8 +1187,14 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           created_by?: string | null
+          default_frequency?: Json | null
+          default_recipient_resolver?: string | null
+          default_scope?: string | null
+          default_send_mode?: string | null
+          default_template_id?: string | null
           description?: string | null
           id?: string
+          is_sales_category?: boolean
           is_system?: boolean | null
           name: string
           organization_id?: string | null
@@ -857,8 +1209,14 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           created_by?: string | null
+          default_frequency?: Json | null
+          default_recipient_resolver?: string | null
+          default_scope?: string | null
+          default_send_mode?: string | null
+          default_template_id?: string | null
           description?: string | null
           id?: string
+          is_sales_category?: boolean
           is_system?: boolean | null
           name?: string
           organization_id?: string | null
@@ -881,13 +1239,21 @@ export type Database = {
         Row: {
           action_config: Json
           action_type: string
+          applies_to_records_created_after: string | null
+          category: string | null
           created_at: string
           email_mode: string | null
           id: string
+          idempotency_template: string | null
           is_active: boolean | null
+          is_sales: boolean
           name: string
           organization_id: string
+          paused_at: string | null
+          recipient_resolver: string | null
+          scope: string
           send_immediately_override: boolean | null
+          send_mode: string
           template_id: string | null
           trigger_config: Json | null
           trigger_type: string
@@ -896,13 +1262,21 @@ export type Database = {
         Insert: {
           action_config?: Json
           action_type: string
+          applies_to_records_created_after?: string | null
+          category?: string | null
           created_at?: string
           email_mode?: string | null
           id?: string
+          idempotency_template?: string | null
           is_active?: boolean | null
+          is_sales?: boolean
           name: string
           organization_id: string
+          paused_at?: string | null
+          recipient_resolver?: string | null
+          scope?: string
           send_immediately_override?: boolean | null
+          send_mode?: string
           template_id?: string | null
           trigger_config?: Json | null
           trigger_type: string
@@ -911,13 +1285,21 @@ export type Database = {
         Update: {
           action_config?: Json
           action_type?: string
+          applies_to_records_created_after?: string | null
+          category?: string | null
           created_at?: string
           email_mode?: string | null
           id?: string
+          idempotency_template?: string | null
           is_active?: boolean | null
+          is_sales?: boolean
           name?: string
           organization_id?: string
+          paused_at?: string | null
+          recipient_resolver?: string | null
+          scope?: string
           send_immediately_override?: boolean | null
+          send_mode?: string
           template_id?: string | null
           trigger_config?: Json | null
           trigger_type?: string
@@ -3017,6 +3399,93 @@ export type Database = {
           },
         ]
       }
+      client_approval_packs: {
+        Row: {
+          approval_ip: string | null
+          approval_method: string | null
+          approval_notes: string | null
+          approval_user_agent: string | null
+          approved_at: string | null
+          approved_by_contact_id: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          documents: Json
+          id: string
+          job_id: string | null
+          organization_id: string
+          pack_type: string
+          rejected_at: string | null
+          sent_at: string | null
+          status: string
+          superseded_by: string | null
+          updated_at: string
+          version_number: number
+          viewed_at: string | null
+        }
+        Insert: {
+          approval_ip?: string | null
+          approval_method?: string | null
+          approval_notes?: string | null
+          approval_user_agent?: string | null
+          approved_at?: string | null
+          approved_by_contact_id?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          documents?: Json
+          id?: string
+          job_id?: string | null
+          organization_id: string
+          pack_type: string
+          rejected_at?: string | null
+          sent_at?: string | null
+          status?: string
+          superseded_by?: string | null
+          updated_at?: string
+          version_number?: number
+          viewed_at?: string | null
+        }
+        Update: {
+          approval_ip?: string | null
+          approval_method?: string | null
+          approval_notes?: string | null
+          approval_user_agent?: string | null
+          approved_at?: string | null
+          approved_by_contact_id?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          documents?: Json
+          id?: string
+          job_id?: string | null
+          organization_id?: string
+          pack_type?: string
+          rejected_at?: string | null
+          sent_at?: string | null
+          status?: string
+          superseded_by?: string | null
+          updated_at?: string
+          version_number?: number
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_approval_packs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_approval_packs_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "client_approval_packs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_detail_cgt: {
         Row: {
           cgt_number: string | null
@@ -3420,6 +3889,78 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_tax_authorisations: {
+        Row: {
+          authorised_at: string | null
+          chaser_count: number
+          client_id: string
+          client_service_id: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          last_email_template_id: string | null
+          next_chase_at: string | null
+          notes: string | null
+          organization_id: string
+          reference: string | null
+          requested_at: string | null
+          status: string
+          tax_service_type: string
+          updated_at: string
+        }
+        Insert: {
+          authorised_at?: string | null
+          chaser_count?: number
+          client_id: string
+          client_service_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_email_template_id?: string | null
+          next_chase_at?: string | null
+          notes?: string | null
+          organization_id: string
+          reference?: string | null
+          requested_at?: string | null
+          status?: string
+          tax_service_type: string
+          updated_at?: string
+        }
+        Update: {
+          authorised_at?: string | null
+          chaser_count?: number
+          client_id?: string
+          client_service_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_email_template_id?: string | null
+          next_chase_at?: string | null
+          notes?: string | null
+          organization_id?: string
+          reference?: string | null
+          requested_at?: string | null
+          status?: string
+          tax_service_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_tax_authorisations_last_email_template_id_fkey"
+            columns: ["last_email_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_tax_authorisations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -5600,6 +6141,59 @@ export type Database = {
           },
         ]
       }
+      email_preferences: {
+        Row: {
+          category: string
+          client_id: string | null
+          contact_id: string | null
+          created_at: string
+          email: string | null
+          id: string
+          lead_id: string | null
+          opt_in_at: string | null
+          opted_out_at: string | null
+          organization_id: string
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          client_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          lead_id?: string | null
+          opt_in_at?: string | null
+          opted_out_at?: string | null
+          organization_id: string
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          client_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          lead_id?: string | null
+          opt_in_at?: string | null
+          opted_out_at?: string | null
+          organization_id?: string
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_push_subscriptions: {
         Row: {
           created_at: string
@@ -5813,6 +6407,47 @@ export type Database = {
           },
         ]
       }
+      email_suppressions: {
+        Row: {
+          category: string | null
+          created_at: string
+          email: string
+          id: string
+          organization_id: string
+          reason: string
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          organization_id: string
+          reason: string
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          organization_id?: string
+          reason?: string
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_suppressions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_threads: {
         Row: {
           client_id: string | null
@@ -5886,6 +6521,47 @@ export type Database = {
           },
           {
             foreignKeyName: "email_threads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_unsubscribe_tokens: {
+        Row: {
+          category: string | null
+          created_at: string
+          email: string
+          id: string
+          organization_id: string
+          token: string
+          updated_at: string
+          used_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          organization_id: string
+          token: string
+          updated_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          organization_id?: string
+          token?: string
+          updated_at?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_unsubscribe_tokens_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -9573,13 +10249,18 @@ export type Database = {
       message_templates: {
         Row: {
           body: string
+          category: string | null
           channel: string
           created_at: string
           id: string
+          is_sales: boolean
           is_system: boolean
           key: string | null
           name: string
           organization_id: string | null
+          recipient_rule: string | null
+          required_merge_fields: string[] | null
+          requires_unsubscribe_link: boolean
           source_template_id: string | null
           subject: string | null
           updated_at: string
@@ -9587,13 +10268,18 @@ export type Database = {
         }
         Insert: {
           body: string
+          category?: string | null
           channel: string
           created_at?: string
           id?: string
+          is_sales?: boolean
           is_system?: boolean
           key?: string | null
           name: string
           organization_id?: string | null
+          recipient_rule?: string | null
+          required_merge_fields?: string[] | null
+          requires_unsubscribe_link?: boolean
           source_template_id?: string | null
           subject?: string | null
           updated_at?: string
@@ -9601,13 +10287,18 @@ export type Database = {
         }
         Update: {
           body?: string
+          category?: string | null
           channel?: string
           created_at?: string
           id?: string
+          is_sales?: boolean
           is_system?: boolean
           key?: string | null
           name?: string
           organization_id?: string | null
+          recipient_rule?: string | null
+          required_merge_fields?: string[] | null
+          requires_unsubscribe_link?: boolean
           source_template_id?: string | null
           subject?: string | null
           updated_at?: string
@@ -12077,6 +12768,250 @@ export type Database = {
           },
         ]
       }
+      record_request_items: {
+        Row: {
+          chaser_count: number
+          client_id: string
+          client_visible: boolean
+          created_at: string
+          description: string | null
+          due_at: string | null
+          id: string
+          job_id: string | null
+          label: string
+          last_chased_at: string | null
+          metadata: Json
+          organization_id: string
+          received_by: string | null
+          requested_by: string | null
+          sort_order: number
+          source: string | null
+          status: string
+          updated_at: string
+          verified_by: string | null
+          waived_by: string | null
+          waiver_reason: string | null
+        }
+        Insert: {
+          chaser_count?: number
+          client_id: string
+          client_visible?: boolean
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          job_id?: string | null
+          label: string
+          last_chased_at?: string | null
+          metadata?: Json
+          organization_id: string
+          received_by?: string | null
+          requested_by?: string | null
+          sort_order?: number
+          source?: string | null
+          status?: string
+          updated_at?: string
+          verified_by?: string | null
+          waived_by?: string | null
+          waiver_reason?: string | null
+        }
+        Update: {
+          chaser_count?: number
+          client_id?: string
+          client_visible?: boolean
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          job_id?: string | null
+          label?: string
+          last_chased_at?: string | null
+          metadata?: Json
+          organization_id?: string
+          received_by?: string | null
+          requested_by?: string | null
+          sort_order?: number
+          source?: string | null
+          status?: string
+          updated_at?: string
+          verified_by?: string | null
+          waived_by?: string | null
+          waiver_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "record_request_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_invoice_schedules: {
+        Row: {
+          amount: number | null
+          auto_send: boolean
+          billing_day: number | null
+          cadence: string
+          client_id: string
+          create_draft_only: boolean
+          created_at: string
+          currency: string
+          end_date: string | null
+          failure_count: number
+          id: string
+          invoice_template_id: string | null
+          last_invoice_id: string | null
+          last_run_at: string | null
+          metadata: Json
+          next_run_at: string | null
+          organization_id: string
+          payment_terms_days: number
+          service_id: string | null
+          start_date: string
+          status: string
+          tax_rate_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          auto_send?: boolean
+          billing_day?: number | null
+          cadence: string
+          client_id: string
+          create_draft_only?: boolean
+          created_at?: string
+          currency?: string
+          end_date?: string | null
+          failure_count?: number
+          id?: string
+          invoice_template_id?: string | null
+          last_invoice_id?: string | null
+          last_run_at?: string | null
+          metadata?: Json
+          next_run_at?: string | null
+          organization_id: string
+          payment_terms_days?: number
+          service_id?: string | null
+          start_date: string
+          status?: string
+          tax_rate_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          auto_send?: boolean
+          billing_day?: number | null
+          cadence?: string
+          client_id?: string
+          create_draft_only?: boolean
+          created_at?: string
+          currency?: string
+          end_date?: string | null
+          failure_count?: number
+          id?: string
+          invoice_template_id?: string | null
+          last_invoice_id?: string | null
+          last_run_at?: string | null
+          metadata?: Json
+          next_run_at?: string | null
+          organization_id?: string
+          payment_terms_days?: number
+          service_id?: string | null
+          start_date?: string
+          status?: string
+          tax_rate_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_invoice_schedules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      revenue_events: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          currency: string
+          event_type: string
+          gross_amount: number
+          id: string
+          invoice_id: string | null
+          metadata: Json
+          net_amount: number
+          occurred_at: string
+          organization_id: string
+          recognition_period_end: string | null
+          recognition_period_start: string | null
+          reversal_of_event_id: string | null
+          service_id: string | null
+          source_id: string | null
+          source_type: string
+          tax_amount: number
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          currency?: string
+          event_type: string
+          gross_amount?: number
+          id?: string
+          invoice_id?: string | null
+          metadata?: Json
+          net_amount?: number
+          occurred_at?: string
+          organization_id: string
+          recognition_period_end?: string | null
+          recognition_period_start?: string | null
+          reversal_of_event_id?: string | null
+          service_id?: string | null
+          source_id?: string | null
+          source_type: string
+          tax_amount?: number
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          currency?: string
+          event_type?: string
+          gross_amount?: number
+          id?: string
+          invoice_id?: string | null
+          metadata?: Json
+          net_amount?: number
+          occurred_at?: string
+          organization_id?: string
+          recognition_period_end?: string | null
+          recognition_period_start?: string | null
+          reversal_of_event_id?: string | null
+          service_id?: string | null
+          source_id?: string | null
+          source_type?: string
+          tax_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revenue_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "revenue_events_reversal_of_event_id_fkey"
+            columns: ["reversal_of_event_id"]
+            isOneToOne: false
+            referencedRelation: "revenue_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rti_submissions: {
         Row: {
           created_at: string
@@ -12423,9 +13358,11 @@ export type Database = {
       }
       sla_definitions: {
         Row: {
+          category: string | null
           created_at: string
           default_duration_hours: number
           description: string | null
+          feeds_dashboard: boolean
           id: string
           is_active: boolean | null
           is_system: boolean | null
@@ -12442,9 +13379,11 @@ export type Database = {
           urgent_duration_hours: number | null
         }
         Insert: {
+          category?: string | null
           created_at?: string
           default_duration_hours: number
           description?: string | null
+          feeds_dashboard?: boolean
           id?: string
           is_active?: boolean | null
           is_system?: boolean | null
@@ -12461,9 +13400,11 @@ export type Database = {
           urgent_duration_hours?: number | null
         }
         Update: {
+          category?: string | null
           created_at?: string
           default_duration_hours?: number
           description?: string | null
+          feeds_dashboard?: boolean
           id?: string
           is_active?: boolean | null
           is_system?: boolean | null
@@ -12923,13 +13864,18 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          last_validated_at: string | null
           name: string
           organization_id: string | null
+          recipient_rule: string | null
+          required_merge_fields: string[] | null
+          requires_unsubscribe_link: boolean
           service: string | null
           status: string
           tags: Json | null
           type: string
           updated_at: string
+          validation_state: string | null
           version_number: number
         }
         Insert: {
@@ -12938,13 +13884,18 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          last_validated_at?: string | null
           name: string
           organization_id?: string | null
+          recipient_rule?: string | null
+          required_merge_fields?: string[] | null
+          requires_unsubscribe_link?: boolean
           service?: string | null
           status?: string
           tags?: Json | null
           type: string
           updated_at?: string
+          validation_state?: string | null
           version_number?: number
         }
         Update: {
@@ -12953,13 +13904,18 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          last_validated_at?: string | null
           name?: string
           organization_id?: string | null
+          recipient_rule?: string | null
+          required_merge_fields?: string[] | null
+          requires_unsubscribe_link?: boolean
           service?: string | null
           status?: string
           tags?: Json | null
           type?: string
           updated_at?: string
+          validation_state?: string | null
           version_number?: number
         }
         Relationships: [
