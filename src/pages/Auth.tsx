@@ -100,7 +100,12 @@ const Auth = () => {
         description: "You've been signed in successfully.",
       });
 
-      navigate("/");
+      // Self-heal: if a previous signup left a pending org behind (e.g. the
+      // user got bounced from Stripe due to a cross-origin session loss),
+      // send them back to the checkout/verification flow instead of the
+      // dashboard so they can finish setting up billing.
+      const pendingOrgId = localStorage.getItem("pending_org_id");
+      navigate(pendingOrgId ? "/complete-payment" : "/");
     } catch (error: any) {
       toast({
         title: "Error signing in",
