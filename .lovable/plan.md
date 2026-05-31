@@ -1,57 +1,63 @@
 
+# Plan: Wipe All Accountant Users & Firm Data
 
-# Fix: Remove send-email Open Relay and Dead Code
+## Goal
 
-## Diagnosis Summary
+Empty the backend of every accountant firm and user so you can sign up from scratch as the very first user. Greenfield and My Practice will be deleted too.
 
-The `send-email` edge function has JWT verification enabled (gateway-level auth), so it is **not** an unauthenticated open relay. However, it performs **zero authorization** inside the function — any authenticated user (including portal clients) can send arbitrary emails to arbitrary recipients via Postmark, with spoofable sender addresses. All three modes (`direct`, `queue`, `process_queue`) are dead code or redundant with the canonical email system.
+## What gets deleted
 
-## Finding Correction
+- **All 15 rows** in `public.organizations`
+- **All 5 owner auth users** in `auth.users` (My Practice owner, Greenfield owner, both TestAccountants owners, the other TestAccountants owner)
+- **The orphaned `leon@bluetickaccountants.com` auth user** so you can re-sign-up with that email
+- **All per-org rows** in every tenant-scoped table (clients, companies, leads, jobs, deadlines, invoices, bills, ledger entries, journals, bank accounts, transactions, payroll, CIS, filings, workpapers, automation rules, chaser policies, org-specific email/job templates, portal access, OAuth tokens, HMRC/CH integration rows, branding, audit logs, etc.)
+- **All storage objects** under `job-documents`, `onboarding-documents`, `engagement-letters`, `email-attachments`, and any other org-scoped bucket
+- **Any portal client users** linked via `portal_access`
 
-The original security finding overstated the risk ("unauthenticated open relay"). The actual risk is: **any authenticated user can send arbitrary emails without authorization checks**. This is still a serious vulnerability — a portal client could send phishing emails through your Postmark account — but it is not unauthenticated.
+## What is preserved
 
-## Required Fix
+- All **global system content**: 8 automation templates, 26 message templates, 8 workpaper templates, chart-of-accounts seed data, VAT codes, tax rates, payroll constants — none of these are org-scoped
+- All **schema, RLS policies, triggers, functions, edge functions, migrations**
+- All **infrastructure** (Stripe config, OAuth app credentials, secrets)
 
-### Step 1: Delete the send-email edge function entirely
+## Execution approach
 
-All three modes are dead or redundant:
-- `direct` mode — `sendEmailDirect()` is never imported or called anywhere in the codebase
-- `queue` mode — `sendQueuedEmail()` is never imported or called anywhere
-- `process_queue` mode — redundant with the dedicated `process-email-queue` edge function
+Because of foreign keys and the `trg_prevent_signed_document_deletion` trigger, a naive `DELETE FROM organizations` will fail. The migration will:
 
-**Action:** Delete `supabase/functions/send-email/` directory and remove `[functions.send-email]` from `supabase/config.toml`.
+1. Open a transaction
+2. Temporarily disable the signed-document-protection trigger
+3. For each org, cascade-delete in dependency order — child tables first, then parents, then `organizations` itself
+4. Delete all rows in `auth.users` (Supabase cascades into `auth.identities`, `auth.sessions`, `auth.refresh_tokens` automatically)
+5. Truncate storage objects in all org-scoped buckets
+6. Re-enable the trigger
+7. Commit
 
-### Step 2: Remove dead client code
+I'll use `TRUNCATE ... CASCADE` on a generated list of all tenant-scoped tables (filtered by presence of `organization_id` column) to make this exhaustive and resilient to schema additions, then explicitly clear the handful of tables that are user-scoped but not org-scoped (e.g. `portal_access`).
 
-**File: `src/lib/email-service.ts`** — Delete `sendEmailDirect()`, `sendQueuedEmail()`, `processEmailQueue()`, and `queueAndSendEmail()` functions. These are never imported. The canonical email path is `email-safe-service.ts` (RPCs) + `process-email-queue` (cron).
+## Verification
 
-### Step 3: Fix Settings.tsx process_queue call
+After running, I'll confirm:
+- `SELECT count(*) FROM organizations` → 0
+- `SELECT count(*) FROM organization_users` → 0
+- `SELECT count(*) FROM auth.users` → 0
+- Spot-check 5 tenant tables (clients, jobs, leads, invoices, ledger_entries) → 0
+- Spot-check 1 global table (e.g. `email_templates_global`) → unchanged count
 
-**File: `src/pages/Settings.tsx`** — The manual "Process Email Queue" button currently calls `send-email` with `mode: "process_queue"`. Change this to invoke `process-email-queue` instead (the canonical cron function).
+## Risks
 
-### Step 4: Update security finding
+- **Irreversible.** No backup will be taken. You explicitly confirmed option 1.
+- **Greenfield is gone.** If you later want a seeded test firm, we'll need to re-run the original Greenfield seed migration manually.
+- **Stripe customers/subscriptions in Stripe itself are NOT deleted** — only the local `billing_status` and customer-id references. If you re-sign-up with the same email Stripe used previously, it may reuse the existing customer record. Not a blocker, just a heads-up.
+- **Open OAuth grants on Gmail/Outlook/HMRC/Companies House** are revoked locally but the external providers still hold a grant until they expire or the user revokes them. Harmless.
 
-Mark the `send_email_open_relay` finding as fixed with explanation that the function was removed entirely.
+## Post-wipe next step
 
-## Regression Risks
+You'll go to `/auth`, sign up fresh with `leon@bluetickaccountants.com`, receive the verification email (default Lovable sender), confirm, hit `/complete-payment` (Stripe test card `4242 4242 4242 4242`), then walk the onboarding wizard. You'll be the only user in the system.
 
-- **None from deletion** — no code imports or calls the removed functions
-- **Settings.tsx** — the manual queue processing button must be re-pointed to `process-email-queue`
-- The canonical email flow (`email-safe-service.ts` → `queue_email_safe` RPC → `process-email-queue` cron) is completely unaffected
-
-## Test Cases
-
-1. Verify `process-email-queue` still processes queued emails correctly after `send-email` is deleted
-2. Verify the Settings page "Process Queue" button works after re-pointing to `process-email-queue`
-3. Verify no TypeScript compilation errors after removing dead exports
-4. Confirm no other files import from `email-service.ts` functions that are being removed
-
-## Files Changed
+## Files changed
 
 | File | Action |
 |---|---|
-| `supabase/functions/send-email/` | Delete directory |
-| `supabase/config.toml` | Remove `[functions.send-email]` block |
-| `src/lib/email-service.ts` | Remove dead functions (`sendEmailDirect`, `sendQueuedEmail`, `processEmailQueue`, `queueAndSendEmail`) |
-| `src/pages/Settings.tsx` | Re-point queue processing to `process-email-queue` |
+| `supabase/migrations/<timestamp>_wipe_all_tenant_data.sql` | New migration containing the destructive SQL |
 
+No application code changes.
