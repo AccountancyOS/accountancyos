@@ -54,6 +54,8 @@ import HMRCSettings from "./pages/settings/HMRCSettings";
 import CompaniesHouseSettings from "./pages/settings/CompaniesHouseSettings";
 import PermissionsSettings from "./pages/settings/PermissionsSettings";
 import EmailTemplates from "./pages/settings/EmailTemplates";
+import AutomationSettingsCentre from "./pages/settings/AutomationSettingsCentre";
+import EmailPreferencesPage from "./pages/settings/EmailPreferencesPage";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import { Loader2 } from "lucide-react";
@@ -459,6 +461,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <PermissionsSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/automations"
+              element={
+                <ProtectedRoute>
+                  <AutomationSettingsCentre />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/email-preferences"
+              element={
+                <ProtectedRoute>
+                  <EmailPreferencesPage />
                 </ProtectedRoute>
               }
             />
