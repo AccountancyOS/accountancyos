@@ -1,156 +1,60 @@
-# Production-safe fix: signup, confirmation domain, org creation, /complete-payment
+## What's happening
 
-## 1. Supabase Auth URL config (via `configure_auth` + manual URL list)
-Set Site URL = `https://app.accountancyos.com`. Add to allow-list:
-- `https://app.accountancyos.com/**` (production)
-- `https://accountancyos.lovable.app/**`
-- `https://id-preview--484d38ef-d5f4-4a95-9b44-cfbcba7d7c13.lovable.app/**`
-- `https://484d38ef-d5f4-4a95-9b44-cfbcba7d7c13.lovableproject.com/**`
-- `http://localhost:8080/**`
+You signed up on the preview domain (`accountancyos.lovable.app`), but the `stripe-checkout` edge function told Stripe to return you to the **production** domain (`app.accountancyos.com`). Your Supabase session cookie/localStorage only exists on the origin you signed up on, so the production domain saw no user → `ProtectedRoute` redirected you to `/auth`. The onboarding checklist never got a chance to render.
 
-Note: the redirect-URL list is set via the Auth admin API; `configure_auth` only covers signup/hibp flags. I'll apply the URL list through the supabase admin endpoint in the same step.
+Evidence from the edge-function log for your last attempt:
+```
+[STRIPE-CHECKOUT] Resolved app URLs - {
+  "appBaseUrl": "https://app.accountancyos.com",
+  "successUrl": "https://app.accountancyos.com/onboarding-wizard?session_id={...}"
+}
+```
+And the auth log shows a `refresh_token_not_found` on the preview right after the Stripe round-trip, plus a fresh password login on `app.accountancyos.com` a couple of minutes later — the classic cross-origin session-loss footprint.
 
-## 2. App-config: pin production redirect base
+Root cause: `resolveAppBaseUrl()` in `supabase/functions/stripe-checkout/index.ts` honours `APP_PUBLIC_URL` (set to `https://app.accountancyos.com`) **before** it looks at the request origin. So preview signups get bounced to production after payment.
 
-`src/lib/app-config.ts` — change `getAppUrl()` to:
-- If hostname is `app.accountancyos.com` or `accountancyos.com` → return `https://app.accountancyos.com`.
-- If hostname matches `*.lovable.app`, `*.lovableproject.com`, or `localhost` → return `window.location.origin` (dev/preview).
-- Otherwise → `https://app.accountancyos.com` (production-safe default).
+## Fix
 
-Then route every auth redirect through `getAppUrl()` instead of raw `window.location.origin`:
-- `src/pages/Auth.tsx` — signup `emailRedirectTo`, password reset `redirectTo`.
-- `src/pages/ConfirmEmail.tsx` — resend confirmation.
-- Any magic-link / invite / email-change call sites surfaced by audit.
+### 1. Keep Stripe's return on the same origin (edge function)
 
-Stripe success/cancel URLs in the `create-checkout` edge function — switch from incoming `origin` header to `APP_PUBLIC_URL` env var (set to `https://app.accountancyos.com`), with the request `origin` used only when running against `localhost`/preview.
+`supabase/functions/stripe-checkout/index.ts` — rework `resolveAppBaseUrl` so the request origin wins for any known-safe host, and the env var is only the fallback when no origin header is present:
 
-## 3. Database — enforce one-org-per-user + clean duplicates + idempotent RPC
-
-Single migration:
-
-```sql
--- (a) Verify no other duplicates beyond the known one. If any exist beyond
---     968f4acc-…, RAISE EXCEPTION so the migration aborts and we triage manually.
-DO $$
-DECLARE extra_dupes int;
-BEGIN
-  SELECT count(*) INTO extra_dupes FROM (
-    SELECT user_id FROM organization_users
-    WHERE user_id <> '968f4acc-f7ba-40ce-9735-3deb11835442'
-    GROUP BY user_id HAVING count(*) > 1
-  ) t;
-  IF extra_dupes > 0 THEN
-    RAISE EXCEPTION 'Unexpected duplicate memberships found; aborting migration.';
-  END IF;
-END $$;
-
--- (b) Remove the known duplicate org + membership for Leon.
---     Pre-check: confirm no dependent rows exist on ccbbc75a-… across all
---     tables that reference organization_id (clients, companies, jobs,
---     subscription_cache, invoices, leads, automations, etc.). If any are
---     found, abort with RAISE EXCEPTION listing them.
--- (Explicit cleanup follows once the check passes.)
-
-DELETE FROM organization_users
- WHERE organization_id = 'ccbbc75a-a477-44b7-8a9c-3efc30e1ad4d';
-DELETE FROM organizations
- WHERE id = 'ccbbc75a-a477-44b7-8a9c-3efc30e1ad4d';
-
--- (c) Enforce one org per user.
-ALTER TABLE public.organization_users
-  ADD CONSTRAINT organization_users_user_unique UNIQUE (user_id);
-
--- (d) Rewrite create_organization_with_owner: idempotent, race-safe.
-CREATE OR REPLACE FUNCTION public.create_organization_with_owner(org_name text)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  uid uuid := auth.uid();
-  existing_org uuid;
-  new_org uuid;
-BEGIN
-  IF uid IS NULL THEN
-    RAISE EXCEPTION 'not_authenticated';
-  END IF;
-
-  SELECT organization_id INTO existing_org
-    FROM organization_users WHERE user_id = uid LIMIT 1;
-  IF existing_org IS NOT NULL THEN
-    RETURN existing_org;
-  END IF;
-
-  INSERT INTO organizations (name, billing_status)
-    VALUES (org_name, 'pending_payment')
-    RETURNING id INTO new_org;
-
-  BEGIN
-    INSERT INTO organization_users (user_id, organization_id, role)
-      VALUES (uid, new_org, 'owner');
-  EXCEPTION WHEN unique_violation THEN
-    -- A parallel call won the race. Drop our org and return theirs.
-    DELETE FROM organizations WHERE id = new_org;
-    SELECT organization_id INTO existing_org
-      FROM organization_users WHERE user_id = uid LIMIT 1;
-    RETURN existing_org;
-  END;
-
-  RETURN new_org;
-END;
-$$;
+```text
+if origin header host in [
+  localhost, 127.0.0.1,
+  *.lovable.app, *.lovableproject.com,
+  app.accountancyos.com, accountancyos.com, www.accountancyos.com
+] -> use that origin
+else -> APP_PUBLIC_URL -> hard-coded https://app.accountancyos.com
 ```
 
-Keeps the existing SECURITY DEFINER posture; no RLS changes.
+Effect: preview signups return to preview, custom-domain signups return to the custom domain. Session survives the round-trip. No new env vars, no DB changes.
 
-## 4. Frontend resilience
+### 2. Land on the onboarding checklist, not the standalone wizard
 
-- `src/lib/ensure-organization.ts`
-  - Add module-level in-flight promise guard so parallel callers await the same RPC.
-  - Use `.order("created_at",{ascending:true}).limit(1).maybeSingle()` for the membership query.
-  - Same name-resolution chain (localStorage → user_metadata → email-derived default).
-  - Clear `pending_org_name` on success.
+You said the expected destination is the dismissible practice-onboarding checklist on the Overview dashboard. Today, both `OnboardingWizard.tsx` (post-verification) and `CompletePayment.tsx` (post-polling) push everyone into `/onboarding-wizard`. Change those success branches to:
 
-- `src/lib/app-context.tsx` — `loadOrganization` membership query: replace `.maybeSingle()` with `.order("created_at",{ascending:true}).limit(1).maybeSingle()`.
+- `organization.onboarding_completed === true` → `/welcome` (current behaviour)
+- otherwise → `/overview` (the Overview dashboard, where the checklist lives)
 
-- `src/pages/Auth.tsx`
-  - `handleSignUp`: trim org name, only store if non-empty, set localStorage + `options.data.pending_org_name`, use `getAppUrl()` for `emailRedirectTo`.
-  - `handleSignIn`: remove the `ensureOrganization()` call — AppContext owns post-auth resolution.
-  - Password reset: use `getAppUrl()`.
+The `/onboarding-wizard` route stays available for users who explicitly want the step-by-step wizard.
 
-- `src/pages/CompletePayment.tsx`
-  - If `getOrganizationId()` is null: call `ensureOrganization()`, refresh context, retry. If still null, show: "We couldn't finish setting up your practice. Please try signing in again or contact support."
-  - Use the resulting org id to proceed to Stripe checkout.
+### 3. Self-heal a lost-session bounce on sign-in
 
-- AppContext bootstrap: continue using `loadOrCreateOrganization`. Add an init guard so routing only happens once org load + ensure has settled (no flicker, no loops).
+Small guard in `src/pages/Auth.tsx#handleSignIn`: if `localStorage.pending_org_id` is set after a successful sign-in, navigate to `/complete-payment` instead of `/`, so a user who got bounced (or who returns later) lands back in the checkout/verification flow rather than the empty dashboard.
 
-## 5. Stripe checkout
+## Acceptance check
 
-`supabase/functions/create-checkout/index.ts`:
-- Compute `base` = `Deno.env.get("APP_PUBLIC_URL") ?? "https://app.accountancyos.com"` (overrideable to preview only when explicitly set).
-- `success_url`: `${base}/payment-success?session_id={CHECKOUT_SESSION_ID}`
-- `cancel_url`: `${base}/complete-payment`
-- Add `allow_promotion_codes: true` to the session create call.
-- Remove any custom discount-code UI/field in `CompletePayment.tsx`.
+1. Sign up on the preview URL with a fresh email + click the confirmation email.
+2. Stripe Checkout opens on the same origin.
+3. Apply promo `LEON`, pay with `4242 4242 4242 4242`.
+4. Return lands on the **preview** origin, still signed in.
+5. After the brief verifying spinner, you land on `/overview` with the practice onboarding checklist visible.
+6. Repeat on `app.accountancyos.com` — same behaviour, no cross-origin bounce.
 
-Set the `APP_PUBLIC_URL` edge-function secret to `https://app.accountancyos.com` via `add_secret`.
+## Files touched
 
-## 6. Logging
-
-Add scoped `console.log("[auth]" / "[ensureOrg]" / "[checkout]", ...)` for: resolved redirect base, current `auth.uid()`, membership lookup result, RPC call/return, race-conflict branch, `/complete-payment` self-heal, generated success/cancel URLs. No raw errors to UI.
-
-## 7. Verification
-
-After deploy:
-- DB: `select count(*) from organization_users where user_id = '968f4acc-…'` → 1; constraint exists.
-- Browser: sign in as Leon — lands on `/complete-payment` with org loaded, no PGRST116.
-- New signup from `app.accountancyos.com` — confirmation email link returns to `app.accountancyos.com/complete-payment`, exactly one org created.
-- Stripe checkout shows "Add promotion code"; success returns to `app.accountancyos.com`.
-
-## Files / migrations
-- New migration (constraint + cleanup + RPC).
-- `supabase/functions/create-checkout/index.ts`.
-- `src/lib/app-config.ts`, `src/lib/ensure-organization.ts`, `src/lib/app-context.tsx`.
-- `src/pages/Auth.tsx`, `src/pages/ConfirmEmail.tsx`, `src/pages/CompletePayment.tsx`.
-- Supabase Auth URL config + `APP_PUBLIC_URL` secret.
+- `supabase/functions/stripe-checkout/index.ts` — broaden `resolveAppBaseUrl` allow-list; prefer request origin.
+- `src/pages/OnboardingWizard.tsx` — success branch redirects to `/overview` (unless wizard explicitly requested).
+- `src/pages/CompletePayment.tsx` — verifying-success branch redirects to `/overview`.
+- `src/pages/Auth.tsx` — sign-in self-heal to `/complete-payment` when `pending_org_id` is present.

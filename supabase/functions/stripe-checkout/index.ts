@@ -14,15 +14,14 @@ const logStep = (step: string, details?: any) => {
 
 /**
  * Resolve the canonical app base URL for success/cancel URLs.
- * Prefers APP_PUBLIC_URL env var (set to https://app.accountancyos.com in prod).
- * Falls back to the request `origin` header ONLY for dev/preview hostnames so
- * Lovable preview testing still works. Production NEVER falls back to the
- * preview URL.
+ * Prefers the request `origin` header when it matches a known-safe host
+ * (preview OR production), so the user is always returned to the same
+ * origin they started checkout from — otherwise their Supabase session
+ * (stored per-origin) is lost and ProtectedRoute bounces them to /auth.
+ * Falls back to APP_PUBLIC_URL, then the hard-coded production URL, when
+ * no usable origin header is present (e.g. server-to-server callers).
  */
 function resolveAppBaseUrl(req: Request): string {
-  const envUrl = Deno.env.get("APP_PUBLIC_URL");
-  if (envUrl) return envUrl.replace(/\/$/, "");
-
   const origin = req.headers.get("origin") || "";
   try {
     const host = new URL(origin).hostname;
@@ -30,13 +29,19 @@ function resolveAppBaseUrl(req: Request): string {
       host === "localhost" ||
       host === "127.0.0.1" ||
       host.endsWith(".lovable.app") ||
-      host.endsWith(".lovableproject.com")
+      host.endsWith(".lovableproject.com") ||
+      host === "app.accountancyos.com" ||
+      host === "accountancyos.com" ||
+      host === "www.accountancyos.com"
     ) {
       return origin.replace(/\/$/, "");
     }
   } catch {
     // ignore
   }
+
+  const envUrl = Deno.env.get("APP_PUBLIC_URL");
+  if (envUrl) return envUrl.replace(/\/$/, "");
   return "https://app.accountancyos.com";
 }
 
