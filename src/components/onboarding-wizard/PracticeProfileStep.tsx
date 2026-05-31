@@ -170,7 +170,7 @@ export const PracticeProfileStep = ({ organizationId, onComplete, onSkip }: Prac
                 </div>
               </div>
             ) : (
-              <label className="cursor-pointer block">
+              <label htmlFor="logo-input" className="cursor-pointer block">
                 {uploadingLogo ? (
                   <Loader2 className="h-8 w-8 mx-auto mb-2 text-muted-foreground animate-spin" />
                 ) : (
