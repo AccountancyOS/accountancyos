@@ -11,7 +11,6 @@ import { PracticeProfileStep } from "@/components/onboarding-wizard/PracticeProf
 import { PracticeSetupStep } from "@/components/onboarding-wizard/PracticeSetupStep";
 import { ComplianceSetupStep } from "@/components/onboarding-wizard/ComplianceSetupStep";
 import { TeamSetupStep } from "@/components/onboarding-wizard/TeamSetupStep";
-import { CRMSetupStep } from "@/components/onboarding-wizard/CRMSetupStep";
 import { DataImportStep } from "@/components/onboarding-wizard/DataImportStep";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -20,8 +19,7 @@ const STEPS = [
   { id: 2, name: "Practice Setup", description: "Timezone and service catalog" },
   { id: 3, name: "Compliance Setup", description: "HMRC and Companies House" },
   { id: 4, name: "Team Setup", description: "Invite your team members" },
-  { id: 5, name: "CRM Setup", description: "Connect your CRM" },
-  { id: 6, name: "Data Import", description: "Import existing data (optional)" },
+  { id: 5, name: "Data Import", description: "Import existing data (optional)" },
 ];
 
 const POLLING_MAX_ATTEMPTS = 10;
@@ -421,13 +419,6 @@ const OnboardingWizard = () => {
               />
             )}
             {currentStep === 5 && (
-              <CRMSetupStep
-                organizationId={organization?.id || ""}
-                onComplete={() => handleStepComplete(5)}
-                onSkip={handleSkipStep}
-              />
-            )}
-            {currentStep === 6 && (
               <DataImportStep
                 organizationId={organization?.id || ""}
                 onComplete={handleFinish}
