@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
 import { ensureOrganization, setPendingOrgName } from "@/lib/ensure-organization";
+import { getAppUrl } from "@/lib/app-config";
 
 type AuthMode = "signin" | "signup" | "forgot" | "reset-password";
 
@@ -90,13 +91,9 @@ const Auth = () => {
 
       // Reset auth flow on successful sign in
       setAuthFlow("normal");
-
-      // Self-heal: if this user signed up before org-after-confirm was wired,
-      // they may not have an organization yet. Create one now if missing.
-      const { data: { user: signedInUser } } = await supabase.auth.getUser();
-      if (signedInUser) {
-        await ensureOrganization(signedInUser);
-      }
+      // Note: organisation resolution is owned by AppContext's auth listener,
+      // which calls ensureOrganization() in a single-flight guarded way.
+      // Do NOT call it here — duplicate calls used to race and create two orgs.
 
       toast({
         title: "Welcome back",
@@ -130,19 +127,21 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      const trimmedOrgName = (organizationName || "").trim();
       // Persist the practice name so we can create the org after email
-      // confirmation (when signUp returns no session).
-      setPendingOrgName(organizationName);
+      // confirmation (when signUp returns no session). setPendingOrgName
+      // ignores empty strings internally.
+      setPendingOrgName(trimmedOrgName);
 
       // Create user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            pending_org_name: organizationName,
-          },
+          emailRedirectTo: `${getAppUrl()}/complete-payment`,
+          data: trimmedOrgName
+            ? { pending_org_name: trimmedOrgName }
+            : undefined,
         },
       });
 
@@ -167,9 +166,12 @@ const Auth = () => {
         refresh_token: authData.session.refresh_token,
       });
 
-      // Create organization
+      // Create organization (idempotent RPC — safe even if AppContext
+      // listener also fires).
       const { data: orgId, error: orgError } = await supabase
-        .rpc('create_organization_with_owner', { org_name: organizationName });
+        .rpc('create_organization_with_owner', {
+          org_name: trimmedOrgName || "My Practice",
+        });
 
       if (orgError) {
         console.error("Organization creation error:", orgError);
@@ -232,7 +234,7 @@ const Auth = () => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth?reset=true`,
+        redirectTo: `${getAppUrl()}/auth?reset=true`,
       });
 
       if (error) throw error;
