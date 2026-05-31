@@ -1,121 +1,85 @@
 project_id = "moxpdejnucjjcplleefn"
 
-[functions.ch-submit]
-verify_jwt = true
-
-[functions.generate-filing-pdf]
-verify_jwt = true
-
-[functions.stripe-webhook]
-verify_jwt = false
-
-[functions.truelayer-auth]
-verify_jwt = true
-
-[functions.truelayer-callback]
-verify_jwt = false
-
-[functions.truelayer-sync]
-verify_jwt = true
-
-[functions.gmail-auth]
-verify_jwt = true
-
-[functions.gmail-callback]
-verify_jwt = false
-
-[functions.gmail-sync]
-verify_jwt = false
-
-[functions.gmail-send]
-verify_jwt = true
-
-[functions.gmail-exchange]
-verify_jwt = false
-
-[functions.outlook-auth]
-verify_jwt = true
-
-[functions.outlook-callback]
-verify_jwt = false
-
-[functions.outlook-exchange]
-verify_jwt = false
-
-[functions.outlook-sync]
-verify_jwt = false
-
-[functions.outlook-send]
-verify_jwt = true
-
-[functions.send-engagement-letter]
-verify_jwt = true
-
-[functions.stripe-connect-onboard]
-verify_jwt = true
-
-[functions.stripe-connect-charge]
-verify_jwt = true
-
-[functions.companies-house-sync]
-verify_jwt = true
-
-[functions.rti-submit]
-verify_jwt = true
-
-[functions.cis-submit]
-verify_jwt = true
-
-[functions.process-automation-events]
-verify_jwt = false
-
-[functions.process-email-queue]
-verify_jwt = false
-
-[functions.hmrc-vat-submit]
-verify_jwt = true
-
-[functions.hmrc-ct-submit]
-verify_jwt = true
-
-[functions.hmrc-ct-poll]
-verify_jwt = false
-
-[functions.hmrc-ct-delete]
-verify_jwt = false
-
-[functions.hmrc-auth]
-verify_jwt = true
-
-[functions.hmrc-callback]
-verify_jwt = false
-
-[functions.hmrc-vat-obligations]
-verify_jwt = true
-
-[functions.stripe-checkout]
-verify_jwt = true
-
-[functions.customer-portal]
-verify_jwt = true
-
-[functions.fx-rates]
-verify_jwt = true
-
-[functions.check-subscription]
-verify_jwt = true
-
-[functions.sla-check]
-verify_jwt = false
-
-[functions.session-cleanup]
-verify_jwt = false
-
-[functions.workflow-tick]
-verify_jwt = false
-
-[functions.chaser-tick]
-verify_jwt = false
-
-[functions.chaser-trigger-scan]
-verify_jwt = false
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.ch-submit]
+    verify_jwt = true
+  [functions.chaser-tick]
+    verify_jwt = false
+  [functions.chaser-trigger-scan]
+    verify_jwt = false
+  [functions.check-subscription]
+    verify_jwt = true
+  [functions.cis-submit]
+    verify_jwt = true
+  [functions.companies-house-sync]
+    verify_jwt = true
+  [functions.customer-portal]
+    verify_jwt = true
+  [functions.fx-rates]
+    verify_jwt = true
+  [functions.generate-filing-pdf]
+    verify_jwt = true
+  [functions.gmail-auth]
+    verify_jwt = true
+  [functions.gmail-callback]
+    verify_jwt = false
+  [functions.gmail-exchange]
+    verify_jwt = false
+  [functions.gmail-send]
+    verify_jwt = true
+  [functions.gmail-sync]
+    verify_jwt = false
+  [functions.hmrc-auth]
+    verify_jwt = true
+  [functions.hmrc-callback]
+    verify_jwt = false
+  [functions.hmrc-ct-delete]
+    verify_jwt = false
+  [functions.hmrc-ct-poll]
+    verify_jwt = false
+  [functions.hmrc-ct-submit]
+    verify_jwt = true
+  [functions.hmrc-vat-obligations]
+    verify_jwt = true
+  [functions.hmrc-vat-submit]
+    verify_jwt = true
+  [functions.outlook-auth]
+    verify_jwt = true
+  [functions.outlook-callback]
+    verify_jwt = false
+  [functions.outlook-exchange]
+    verify_jwt = false
+  [functions.outlook-send]
+    verify_jwt = true
+  [functions.outlook-sync]
+    verify_jwt = false
+  [functions.process-automation-events]
+    verify_jwt = false
+  [functions.process-email-queue]
+    verify_jwt = false
+  [functions.rti-submit]
+    verify_jwt = true
+  [functions.send-engagement-letter]
+    verify_jwt = true
+  [functions.session-cleanup]
+    verify_jwt = false
+  [functions.sla-check]
+    verify_jwt = false
+  [functions.stripe-checkout]
+    verify_jwt = true
+  [functions.stripe-connect-charge]
+    verify_jwt = true
+  [functions.stripe-connect-onboard]
+    verify_jwt = true
+  [functions.stripe-webhook]
+    verify_jwt = false
+  [functions.truelayer-auth]
+    verify_jwt = true
+  [functions.truelayer-callback]
+    verify_jwt = false
+  [functions.truelayer-sync]
+    verify_jwt = true
+  [functions.workflow-tick]
+    verify_jwt = false
