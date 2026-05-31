@@ -108,6 +108,11 @@ const OnboardingWizard = () => {
           // Clear localStorage guard on success
           localStorage.removeItem("stripe_return_ts");
           localStorage.removeItem("stripe_return_session_id");
+          localStorage.removeItem("pending_org_id");
+          // Post-payment landing: send to Overview where the practice
+          // onboarding checklist lives, not the standalone 6-step wizard.
+          navigate(organization?.onboarding_completed ? '/welcome' : '/overview', { replace: true });
+          return;
         } else {
           // Polling exhausted - redirect to complete-payment with friendly message
           setVerificationStatus('timeout');
@@ -132,6 +137,9 @@ const OnboardingWizard = () => {
             setVerificationStatus('success');
             localStorage.removeItem("stripe_return_ts");
             localStorage.removeItem("stripe_return_session_id");
+            localStorage.removeItem("pending_org_id");
+            navigate(organization?.onboarding_completed ? '/welcome' : '/overview', { replace: true });
+            return;
           } else {
             setVerificationStatus('timeout');
             navigate('/complete-payment?reason=verification_pending');
