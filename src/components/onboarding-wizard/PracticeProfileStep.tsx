@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,11 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Upload, X } from "lucide-react";
 import { Database } from "@/integrations/supabase/types";
+import {
+  clearWizardDraft,
+  loadWizardDraft,
+  useWizardDraft,
+} from "./useWizardDraft";
 
 type OrganizationBrandingInsert = Database["public"]["Tables"]["organization_branding"]["Insert"];
 
@@ -15,19 +20,89 @@ interface PracticeProfileStepProps {
   onSkip: () => void;
 }
 
+const STEP_KEY = "practice_profile";
+
+type PracticeProfileForm = {
+  address_line_1: string;
+  address_line_2: string;
+  city: string;
+  postcode: string;
+  country: string;
+};
+
+const EMPTY_FORM: PracticeProfileForm = {
+  address_line_1: "",
+  address_line_2: "",
+  city: "",
+  postcode: "",
+  country: "UK",
+};
+
 export const PracticeProfileStep = ({ organizationId, onComplete, onSkip }: PracticeProfileStepProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    address_line_1: "",
-    address_line_2: "",
-    city: "",
-    postcode: "",
-    country: "UK",
-  });
+  const [formData, setFormData] = useState<PracticeProfileForm>(
+    () => loadWizardDraft<PracticeProfileForm>(STEP_KEY, organizationId) ?? EMPTY_FORM,
+  );
+
+  // Hydrate from the database on mount so previously-saved values render.
+  // Local unsaved draft (loaded above) wins per field — we only fill blanks.
+  useEffect(() => {
+    if (!organizationId) return;
+    let cancelled = false;
+
+    const hydrate = async () => {
+      const [{ data: orgRow }, { data: brandingRow }] = await Promise.all([
+        supabase
+          .from("organizations")
+          .select("address_line_1, address_line_2, city, postcode, country")
+          .eq("id", organizationId)
+          .maybeSingle(),
+        supabase
+          .from("organization_branding")
+          .select("logo_light_url, address_line_1, address_line_2, city, postcode, country")
+          .eq("organization_id", organizationId)
+          .maybeSingle(),
+      ]);
+
+      if (cancelled) return;
+
+      const dbForm: PracticeProfileForm = {
+        address_line_1:
+          orgRow?.address_line_1 ?? brandingRow?.address_line_1 ?? "",
+        address_line_2:
+          orgRow?.address_line_2 ?? brandingRow?.address_line_2 ?? "",
+        city: orgRow?.city ?? brandingRow?.city ?? "",
+        postcode: orgRow?.postcode ?? brandingRow?.postcode ?? "",
+        country: orgRow?.country ?? brandingRow?.country ?? "UK",
+      };
+
+      // Merge: keep any non-empty draft value, otherwise take the DB value.
+      setFormData((current) => ({
+        address_line_1: current.address_line_1 || dbForm.address_line_1,
+        address_line_2: current.address_line_2 || dbForm.address_line_2,
+        city: current.city || dbForm.city,
+        postcode: current.postcode || dbForm.postcode,
+        country: current.country || dbForm.country,
+      }));
+
+      if (brandingRow?.logo_light_url) {
+        setLogoUrl(brandingRow.logo_light_url);
+        setLogoPreview((prev) => prev ?? brandingRow.logo_light_url);
+      }
+    };
+
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
+
+  // Autosave the in-progress form to localStorage so it survives navigation.
+  useWizardDraft(STEP_KEY, organizationId, formData);
 
   const handleLogoUpload = async (file: File) => {
     if (!organizationId) return;
@@ -124,6 +199,7 @@ export const PracticeProfileStep = ({ organizationId, onComplete, onSkip }: Prac
         description: "Your practice profile has been saved.",
       });
 
+      clearWizardDraft(STEP_KEY, organizationId);
       onComplete();
     } catch (error: any) {
       toast({

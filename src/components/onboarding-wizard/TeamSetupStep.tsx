@@ -7,6 +7,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, UserPlus, X } from "lucide-react";
+import {
+  clearWizardDraft,
+  loadWizardDraft,
+  useWizardDraft,
+} from "./useWizardDraft";
 
 interface TeamSetupStepProps {
   organizationId: string;
@@ -19,12 +24,30 @@ interface TeamMember {
   role: "admin" | "staff";
 }
 
+const STEP_KEY = "team_setup";
+
+type TeamDraft = {
+  members: TeamMember[];
+  newEmail: string;
+  newRole: "admin" | "staff";
+};
+
+const DEFAULT_DRAFT: TeamDraft = { members: [], newEmail: "", newRole: "staff" };
+
 export const TeamSetupStep = ({ organizationId, onComplete, onSkip }: TeamSetupStepProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "staff">("staff");
+  const initial =
+    loadWizardDraft<TeamDraft>(STEP_KEY, organizationId) ?? DEFAULT_DRAFT;
+  const [members, setMembers] = useState<TeamMember[]>(initial.members);
+  const [newEmail, setNewEmail] = useState(initial.newEmail);
+  const [newRole, setNewRole] = useState<"admin" | "staff">(initial.newRole);
+
+  useWizardDraft<TeamDraft>(STEP_KEY, organizationId, {
+    members,
+    newEmail,
+    newRole,
+  });
 
   const handleAddMember = () => {
     if (!newEmail) return;
@@ -75,6 +98,7 @@ export const TeamSetupStep = ({ organizationId, onComplete, onSkip }: TeamSetupS
         });
       }
 
+      clearWizardDraft(STEP_KEY, organizationId);
       onComplete();
     } catch (error: any) {
       toast({
