@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAppContext } from "@/contexts/AppContext";
+import { useOrganization } from "@/lib/organization-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,19 +28,19 @@ const CATEGORIES: CategoryDef[] = [
 ];
 
 export default function AutomationSettingsCentre() {
-  const { currentOrganization } = useAppContext();
+  const { organization } = useOrganization();
   const [seedReport, setSeedReport] = useState<any>(null);
   const [counts, setCounts] = useState<Record<string, { rules: number; chasers: number }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentOrganization?.id) return;
+    if (!organization?.id) return;
     (async () => {
       setLoading(true);
       const [{ data: rules }, { data: chasers }, { data: report }] = await Promise.all([
-        supabase.from("automation_rules").select("id, category").eq("organization_id", currentOrganization.id),
-        supabase.from("automation_chaser_policies").select("id, category").eq("organization_id", currentOrganization.id),
-        supabase.rpc("seed_org_automation_defaults", { p_org_id: currentOrganization.id, p_dry_run: true }),
+        supabase.from("automation_rules").select("id, category").eq("organization_id", organization.id),
+        supabase.from("automation_chaser_policies").select("id, category").eq("organization_id", organization.id),
+        supabase.rpc("seed_org_automation_defaults", { p_org_id: organization.id, p_dry_run: true }),
       ]);
       const agg: Record<string, { rules: number; chasers: number }> = {};
       CATEGORIES.forEach((c) => (agg[c.key] = { rules: 0, chasers: 0 }));
@@ -50,7 +50,7 @@ export default function AutomationSettingsCentre() {
       setSeedReport(report);
       setLoading(false);
     })();
-  }, [currentOrganization?.id]);
+  }, [organization?.id]);
 
   return (
     <div className="p-6 space-y-6">

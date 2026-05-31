@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAppContext } from "@/contexts/AppContext";
+import { useOrganization } from "@/lib/organization-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -8,24 +8,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
 
 export default function EmailPreferencesPage() {
-  const { currentOrganization } = useAppContext();
+  const { organization } = useOrganization();
   const [suppressions, setSuppressions] = useState<any[]>([]);
   const [preferences, setPreferences] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentOrganization?.id) return;
+    if (!organization?.id) return;
     (async () => {
       setLoading(true);
       const [{ data: s }, { data: p }] = await Promise.all([
-        supabase.from("email_suppressions").select("*").eq("organization_id", currentOrganization.id).order("created_at", { ascending: false }).limit(200),
-        supabase.from("email_preferences").select("*").eq("organization_id", currentOrganization.id).order("created_at", { ascending: false }).limit(200),
+        supabase.from("email_suppressions").select("*").eq("organization_id", organization.id).order("created_at", { ascending: false }).limit(200),
+        supabase.from("email_preferences").select("*").eq("organization_id", organization.id).order("created_at", { ascending: false }).limit(200),
       ]);
       setSuppressions(s ?? []);
       setPreferences(p ?? []);
       setLoading(false);
     })();
-  }, [currentOrganization?.id]);
+  }, [organization?.id]);
 
   return (
     <div className="p-6 space-y-6">
