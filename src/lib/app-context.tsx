@@ -3,6 +3,7 @@ import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { BillingStatus } from "@/types/billing";
+import { ensureOrganization } from "@/lib/ensure-organization";
 
 // ==================== TYPES ====================
 
@@ -196,6 +197,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  // Load org, and if missing, auto-create one for first-time confirmed users.
+  const loadOrCreateOrganization = useCallback(
+    async (sessionUser: User): Promise<string | null> => {
+      const orgId = await loadOrganization(sessionUser.id);
+      if (orgId) return orgId;
+
+      // No org yet — try to create one (post-email-confirmation flow,
+      // or self-heal for users who signed up before this was wired).
+      const createdId = await ensureOrganization(sessionUser);
+      if (createdId) {
+        // Re-load so context has full org details + role.
+        return await loadOrganization(sessionUser.id);
+      }
+      return null;
+    },
+    [loadOrganization]
+  );
+
   // ==================== SUBSCRIPTION CHECK (SINGLE-FLIGHT) ====================
   
   const readSubscriptionFromCache = useCallback(async (orgId: string): Promise<boolean> => {
@@ -361,7 +380,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (newSession?.user) {
           // Defer organization load to prevent deadlock
           setTimeout(async () => {
-            const orgId = await loadOrganization(newSession.user.id);
+            const orgId = await loadOrCreateOrganization(newSession.user);
             if (orgId) {
               // Re-fetch org to get latest data for skip check
               const { data: freshOrg } = await supabase
@@ -403,7 +422,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       if (existingSession?.user) {
         setTimeout(async () => {
-          const orgId = await loadOrganization(existingSession.user.id);
+          const orgId = await loadOrCreateOrganization(existingSession.user);
           if (orgId) {
             // Re-fetch org to get latest data for skip check
             const { data: freshOrg } = await supabase
@@ -433,7 +452,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => subscription.unsubscribe();
-  }, [loadOrganization, readSubscriptionFromCache, checkSubscriptionFromStripe]);
+  }, [loadOrCreateOrganization, readSubscriptionFromCache, checkSubscriptionFromStripe]);
 
   // ==================== VISIBILITY CHANGE HANDLER ====================
   

@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
+import { ensureOrganization, setPendingOrgName } from "@/lib/ensure-organization";
 
 type AuthMode = "signin" | "signup" | "forgot" | "reset-password";
 
@@ -90,6 +91,13 @@ const Auth = () => {
       // Reset auth flow on successful sign in
       setAuthFlow("normal");
 
+      // Self-heal: if this user signed up before org-after-confirm was wired,
+      // they may not have an organization yet. Create one now if missing.
+      const { data: { user: signedInUser } } = await supabase.auth.getUser();
+      if (signedInUser) {
+        await ensureOrganization(signedInUser);
+      }
+
       toast({
         title: "Welcome back",
         description: "You've been signed in successfully.",
@@ -122,12 +130,19 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      // Persist the practice name so we can create the org after email
+      // confirmation (when signUp returns no session).
+      setPendingOrgName(organizationName);
+
       // Create user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            pending_org_name: organizationName,
+          },
         },
       });
 
