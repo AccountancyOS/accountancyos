@@ -365,6 +365,17 @@ Deno.serve(async (req) => {
       };
 
       try {
+        // ------------------------------------------------------------
+        // Phase 2: trigger-contract routing (workflow spawn + chaser stop)
+        // Runs BEFORE legacy automation_rules so subject events get
+        // handled even when no legacy rule exists for them.
+        // ------------------------------------------------------------
+        try {
+          await routeTriggerContractEvent(supabase, typedEvent);
+        } catch (routeErr) {
+          allErrors.push(`Event ${typedEvent.id} routing: ${routeErr instanceof Error ? routeErr.message : "Unknown"}`);
+        }
+
         // Find matching rules
         const { data: rules, error: rulesError } = await supabase
           .from("automation_rules")
