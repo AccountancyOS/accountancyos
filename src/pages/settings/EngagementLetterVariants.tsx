@@ -283,8 +283,8 @@ export default function EngagementLetterVariants() {
               <div className="space-y-2">
                 <Label>Client Type</Label>
                 <Select
-                  value={form.client_type ?? ""}
-                  onValueChange={(v) => setForm({ ...form, client_type: v || null })}
+                  value={form.client_type ?? "any"}
+                  onValueChange={(v) => setForm({ ...form, client_type: v === "any" ? null : v })}
                 >
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                   <SelectContent>
@@ -297,8 +297,8 @@ export default function EngagementLetterVariants() {
               <div className="space-y-2">
                 <Label>Service Code</Label>
                 <Select
-                  value={form.service_code ?? ""}
-                  onValueChange={(v) => setForm({ ...form, service_code: v || null })}
+                  value={form.service_code ?? "any"}
+                  onValueChange={(v) => setForm({ ...form, service_code: v === "any" ? null : v })}
                 >
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                   <SelectContent>
