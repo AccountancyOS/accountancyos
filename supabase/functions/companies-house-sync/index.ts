@@ -557,7 +557,35 @@ serve(async (req: Request) => {
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
+
+    // Enforce per-org opt-in. Sync is paused for organisations that have not
+    // explicitly opted in to Companies House sync.
+    const { data: chIntegration, error: chIntegrationError } = await supabase
+      .from("organization_integrations_companies_house")
+      .select("ch_sync_opt_in")
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+    if (chIntegrationError) {
+      console.error("[CH Sync] Integration lookup failed:", chIntegrationError);
+      return new Response(
+        JSON.stringify({ error: "Failed to verify Companies House integration" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!chIntegration?.ch_sync_opt_in) {
+      console.warn(`[CH Sync] Opt-in not enabled for org ${organizationId}`);
+      return new Response(
+        JSON.stringify({
+          error: "ch_sync_opt_in_required",
+          message:
+            "Companies House sync is disabled for this organisation. An Owner must enable it in Settings → Companies House.",
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const result = await syncCompanyFromCH(supabase, companyId, organizationId);
     
     return new Response(
