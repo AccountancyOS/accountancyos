@@ -314,8 +314,89 @@ const TRIGGER_DESCRIPTIONS: Record<TriggerType, string> = {
   JOB_CREATED: "Starts when a new job is created",
 };
 
+// Friendly labels for non-job trigger types used by Slice E/F policies.
+const EXTRA_TRIGGER_DESCRIPTIONS: Record<string, string> = {
+  LEAD_CREATED: "Starts after a new lead is created",
+  LEAD_STAGE_CHANGED: "Starts when a lead changes pipeline stage",
+  LEAD_DORMANT: "Starts when a lead has gone quiet",
+  QUOTE_SENT: "Starts after a quote is sent to the prospect",
+  QUOTE_ACCEPTED: "Starts after a quote is accepted",
+  ENGAGEMENT_LETTER_SENT: "Starts after the engagement letter is sent",
+  KYC_STATUS_CHANGED: "Starts when a KYC subject is awaiting documents",
+  HMRC_AUTH_REQUESTED: "Starts after HMRC authorisation is requested",
+  CLIENT_ONBOARDED: "Starts after a client completes onboarding",
+  CLIENT_SERVICE_ENABLED: "Starts after a service is activated for a client",
+  RECORDS_REQUESTED: "Starts after records are requested from the client",
+  QUESTIONNAIRE_SENT: "Starts after a questionnaire is sent to the client",
+  QUESTIONNAIRE_SUBMITTED: "Starts after the client submits a questionnaire",
+  WORKPAPER_CREATED: "Starts after a workpaper is prepared for review",
+  DEADLINE_APPROACHING: "Starts when a deadline is approaching",
+  SIGNATURE_REQUESTED: "Starts after a signature is requested",
+  INBOUND_MESSAGE_RECEIVED: "Starts after a client message arrives",
+  INVOICE_OVERDUE: "Starts when an invoice becomes overdue",
+};
+
+function humanizeTriggerKey(key: string): string {
+  return key
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function getTriggerDescription(triggerType: TriggerType): string {
-  return TRIGGER_DESCRIPTIONS[triggerType] || triggerType;
+  if (TRIGGER_DESCRIPTIONS[triggerType]) return TRIGGER_DESCRIPTIONS[triggerType];
+  const extra = EXTRA_TRIGGER_DESCRIPTIONS[triggerType as string];
+  if (extra) return extra;
+  // Humanise rather than leak the raw machine key.
+  return `Starts after ${humanizeTriggerKey(String(triggerType)).toLowerCase()}`;
+}
+
+// ---------------------------------------------------------------------------
+// Category-aware Stop Condition & Category Labels (Settings Centre UI)
+// ---------------------------------------------------------------------------
+
+const STOP_CONDITION_LABELS: Record<string, string> = {
+  crm_sales: "Stops when the lead replies or changes stage",
+  engagement_letters: "Stops when the engagement letter is signed",
+  kyc_aml: "Stops when KYC documents are received",
+  hmrc_authorisation: "Stops when HMRC authorisation is active",
+  onboarding: "Stops when onboarding is complete",
+  services: "Stops when the service is acknowledged",
+  jobs_records: "Stops when records are received",
+  questionnaires: "Stops when the questionnaire is submitted",
+  workpapers: "Stops when the workpaper is approved",
+  deadlines_payments: "Stops when the deadline is met",
+  documents_signatures: "Stops when the document is signed",
+  messages_slas: "Stops when a reply is sent",
+  billing_revenue: "Stops when the invoice is paid",
+};
+
+export function getStopConditionLabel(category: string | null | undefined): string {
+  if (!category) return "Stops when the record is complete";
+  return STOP_CONDITION_LABELS[category] || "Stops when the record is complete";
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  crm_sales: "CRM & Sales",
+  engagement_letters: "Engagement Letters",
+  kyc_aml: "KYC & AML",
+  hmrc_authorisation: "HMRC Authorisation",
+  onboarding: "Onboarding",
+  services: "Services",
+  jobs_records: "Jobs & Records",
+  questionnaires: "Questionnaires",
+  workpapers: "Workpapers",
+  deadlines_payments: "Deadlines & Payments",
+  documents_signatures: "Documents & Signatures",
+  messages_slas: "Messages & SLAs",
+  billing_revenue: "Billing & Revenue",
+  compliance_suppression: "Compliance",
+};
+
+export function getCategoryLabel(category: string | null | undefined): string {
+  if (!category) return "General";
+  return CATEGORY_LABELS[category] || humanizeTriggerKey(category);
 }
 
 export function getFrequencyLabel(unit: FrequencyUnit, interval: number): string {
