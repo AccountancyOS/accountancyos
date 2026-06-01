@@ -109,6 +109,15 @@ Deno.serve(async (req: Request) => {
           toEmail = client?.email || '';
         }
 
+        // F2: suppression / unsubscribe guard for job-based runs
+        if (toEmail && await isSuppressed(admin, run.organization_id, toEmail, run.policy_id)) {
+          console.log(`[chaser-tick] Suppressed recipient ${toEmail} for run ${run.id}, stopping`);
+          await admin.from('automation_chaser_runs')
+            .update({ status: 'STOPPED', next_send_at: null })
+            .eq('id', run.id);
+          continue;
+        }
+
         if (!toEmail) {
           console.warn(`[chaser-tick] No email for run ${run.id}, job ${run.job_id}`);
           // Still advance to prevent stuck runs
