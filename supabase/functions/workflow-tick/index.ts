@@ -168,6 +168,42 @@ async function executeStep(supabase: any, step: StepRow, overrides: { timingOver
       return { success: true, shouldWait: false, data: { newStatus: config.new_status } };
     }
 
+    case "PORT_QUOTE": {
+      const quoteId = (step.config as { quote_id?: string }).quote_id
+        || (ctx.workflowContext.quoteId as string | undefined);
+      if (!quoteId) return { success: false, shouldWait: false, error: "PORT_QUOTE requires quote_id" };
+      const { data, error } = await supabase.rpc("port_quote_to_client", { p_quote_id: quoteId });
+      if (error) return { success: false, shouldWait: false, error: error.message };
+      return { success: true, shouldWait: false, data: { clientId: data } };
+    }
+
+    case "START_KYC_PACK": {
+      const clientId = ctx.clientId || (ctx.workflowContext.clientId as string | undefined);
+      if (!clientId) return { success: false, shouldWait: false, error: "START_KYC_PACK requires client" };
+      const subjects = ((step.config as { subjects?: unknown[] }).subjects) ?? [];
+      const { data, error } = await supabase.rpc("start_kyc_pack", {
+        p_client_id: clientId,
+        p_subjects: subjects,
+      });
+      if (error) return { success: false, shouldWait: false, error: error.message };
+      return { success: true, shouldWait: false, data: { kycPackId: data } };
+    }
+
+    case "REQUEST_HMRC_AUTH": {
+      const clientId = ctx.clientId || (ctx.workflowContext.clientId as string | undefined);
+      if (!clientId) return { success: false, shouldWait: false, error: "REQUEST_HMRC_AUTH requires client" };
+      const taxRegime = (step.config as { tax_regime?: string }).tax_regime || "ITSA";
+      await supabase.from("automation_events").insert({
+        organization_id: ctx.orgId,
+        event_type: "HMRC_AUTH_REQUESTED",
+        entity_type: "client",
+        entity_id: clientId,
+        payload: { tax_regime: taxRegime, source: "workflow", instance_id: ctx.instanceId },
+        status: "pending",
+      });
+      return { success: true, shouldWait: false, data: { hmrcAuthRequested: true, tax_regime: taxRegime } };
+    }
+
     default:
       return { success: false, shouldWait: false, error: `Unknown step type: ${step.step_type}` };
   }
