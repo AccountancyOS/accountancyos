@@ -37,7 +37,8 @@ Deno.serve(async (req: Request) => {
       .select(`
         id, organization_id, job_id, policy_id, status,
         next_send_at, frequency_unit, frequency_interval,
-        email_template_id, stop_condition_value, send_count
+        email_template_id, stop_condition_value, send_count,
+        subject_type, subject_id
       `)
       .eq('status', 'ACTIVE')
       .lte('next_send_at', new Date().toISOString())
@@ -58,6 +59,14 @@ Deno.serve(async (req: Request) => {
 
     for (const run of dueRuns) {
       try {
+        // Subject-based runs (Phase 2: lead, quote, engagement_letter, kyc_subject, hmrc_auth)
+        if (run.subject_type && run.subject_id) {
+          const handled = await processSubjectRun(admin, run);
+          if (handled) processed++;
+          continue;
+        }
+
+        // Job-based runs (Phase 1 — unchanged)
         // 1. Check stop condition — fetch job status
         const { data: job } = await admin
           .from('jobs')
@@ -249,6 +258,223 @@ Deno.serve(async (req: Request) => {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Subject-based chaser processor (Phase 2).
+ * Handles lead, quote, engagement_letter, kyc_subject, hmrc_auth subjects.
+ * Returns true if a send slot was processed (sent / queued / advanced), false on early exit.
+ */
+async function processSubjectRun(admin: any, run: any): Promise<boolean> {
+  const { subject_type, subject_id, organization_id, id: runId } = run;
+
+  // 1. Resolve subject + stop condition + recipient
+  let stop = false;
+  let toEmail = '';
+  let subjectLabel = subject_type;
+  let clientData: Record<string, string> = {};
+  let companyData: Record<string, string> = {};
+
+  try {
+    if (subject_type === 'lead') {
+      const { data } = await admin
+        .from('leads')
+        .select('id, pipeline_stage, email, first_name, last_name, converted_at, lost_at')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        toEmail = data.email || '';
+        subjectLabel = `${data.first_name ?? ''} ${data.last_name ?? ''}`.trim() || 'Lead';
+        clientData = { first_name: data.first_name || '', last_name: data.last_name || '', email: toEmail };
+        if (data.converted_at || data.lost_at) stop = true;
+        if (['won','lost','converted','dormant'].includes((data.pipeline_stage || '').toLowerCase())) stop = true;
+      }
+    } else if (subject_type === 'quote') {
+      const { data } = await admin
+        .from('quotes')
+        .select('id, status, ported_to_client_id, quote_number, lead_id, client_id')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.quote_number || 'Quote';
+        if (['accepted','rejected','expired','withdrawn'].includes((data.status || '').toLowerCase()) || data.ported_to_client_id) stop = true;
+        if (data.lead_id) {
+          const { data: lead } = await admin.from('leads')
+            .select('email, first_name, last_name')
+            .eq('id', data.lead_id).maybeSingle();
+          if (lead) {
+            toEmail = lead.email || '';
+            clientData = { first_name: lead.first_name || '', last_name: lead.last_name || '', email: toEmail };
+          }
+        }
+        if (!toEmail && data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) {
+            toEmail = cl.email || '';
+            clientData = cl as any;
+          }
+        }
+      }
+    } else if (subject_type === 'engagement_letter') {
+      const { data } = await admin
+        .from('engagement_letters')
+        .select('id, signed_at, onboarding_application_id')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        if (data.signed_at) stop = true;
+        if (data.onboarding_application_id) {
+          const { data: app } = await admin.from('onboarding_applications')
+            .select('client_id').eq('id', data.onboarding_application_id).maybeSingle();
+          if (app?.client_id) {
+            const { data: cl } = await admin.from('clients')
+              .select('email, first_name, last_name').eq('id', app.client_id).maybeSingle();
+            if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+          }
+        }
+      }
+    } else if (subject_type === 'kyc_subject') {
+      const { data } = await admin
+        .from('kyc_pack_subjects')
+        .select('id, subject_status, subject_name, kyc_pack_id')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.subject_name || 'KYC subject';
+        if (['complete','waived'].includes((data.subject_status || '').toLowerCase())) stop = true;
+        if (data.kyc_pack_id) {
+          const { data: pack } = await admin.from('kyc_packs')
+            .select('client_id').eq('id', data.kyc_pack_id).maybeSingle();
+          if (pack?.client_id) {
+            const { data: cl } = await admin.from('clients')
+              .select('email, first_name, last_name').eq('id', pack.client_id).maybeSingle();
+            if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+          }
+        }
+      }
+    } else if (subject_type === 'hmrc_auth') {
+      const { data } = await admin
+        .from('client_tax_authorisations')
+        .select('id, status, client_id, tax_service_type')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = `HMRC ${data.tax_service_type || ''}`.trim();
+        if (['active','revoked','expired'].includes((data.status || '').toLowerCase())) stop = true;
+        if (data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
+    } else {
+      // Unknown subject type — stop quietly
+      stop = true;
+    }
+  } catch (err) {
+    console.error(`[chaser-tick:subject] Resolve error for run ${runId}:`, err);
+    return false;
+  }
+
+  if (stop) {
+    await admin.from('automation_chaser_runs')
+      .update({ status: 'STOPPED', next_send_at: null })
+      .eq('id', runId);
+    await admin.from('automation_chaser_messages')
+      .update({ status: 'CANCELLED' })
+      .eq('chaser_run_id', runId)
+      .eq('status', 'QUEUED');
+    return true;
+  }
+
+  const idempotencyKey = `${organization_id}:${runId}:${run.next_send_at}`;
+
+  // Always advance next_send_at to prevent stuck loops on missing recipient
+  const advance = async () => {
+    const nextSend = computeNext(new Date(), run.frequency_unit, run.frequency_interval);
+    await admin.from('automation_chaser_runs').update({
+      next_send_at: nextSend.toISOString(),
+      last_sent_at: new Date().toISOString(),
+      send_count: (run.send_count || 0) + 1,
+    }).eq('id', runId);
+  };
+
+  if (!toEmail) {
+    console.warn(`[chaser-tick:subject] No recipient for ${subject_type} ${subject_id}`);
+    await advance();
+    return true;
+  }
+
+  // Render template
+  let renderedSubject = `Reminder: ${subjectLabel}`;
+  let renderedBody = `<p>This is a reminder regarding ${subjectLabel}.</p>`;
+
+  if (run.email_template_id) {
+    const { data: template } = await admin
+      .from('templates').select('content').eq('id', run.email_template_id).maybeSingle();
+    if (template?.content) {
+      const content = typeof template.content === 'string' ? JSON.parse(template.content) : template.content;
+      renderedSubject = resolvePlaceholders(content.subject || renderedSubject, clientData, companyData, { job_name: subjectLabel });
+      renderedBody = resolvePlaceholders(content.body_html || content.body || renderedBody, clientData, companyData, { job_name: subjectLabel });
+    }
+  }
+
+  const { data: inserted, error: insertErr } = await admin
+    .from('automation_chaser_messages')
+    .insert({
+      organization_id,
+      job_id: null,
+      subject_type,
+      subject_id,
+      chaser_run_id: runId,
+      to_email: toEmail,
+      template_id: run.email_template_id,
+      rendered_subject: renderedSubject,
+      rendered_body: renderedBody,
+      status: 'QUEUED',
+      send_at: run.next_send_at,
+      idempotency_key: idempotencyKey,
+    })
+    .select('id')
+    .single();
+
+  if (insertErr) {
+    if (insertErr.code !== '23505') {
+      console.error(`[chaser-tick:subject] Insert error for run ${runId}:`, insertErr);
+    }
+    await advance();
+    return true;
+  }
+
+  let messageStatus = 'SENT';
+  let failureReason: string | null = null;
+  try {
+    const { data: org } = await admin.from('organizations').select('name').eq('id', organization_id).single();
+    await admin.from('email_queue').insert({
+      organization_id,
+      to_email: toEmail,
+      subject: renderedSubject,
+      body_html: renderedBody,
+      status: 'queued',
+      source: `chaser:${subject_type}`,
+      source_id: inserted.id,
+      from_name: org?.name || 'AccountancyOS',
+    });
+  } catch (emailErr: unknown) {
+    messageStatus = 'FAILED';
+    failureReason = (emailErr as Error).message;
+    console.error(`[chaser-tick:subject] Email queue error for run ${runId}:`, emailErr);
+  }
+
+  await admin.from('automation_chaser_messages').update({
+    status: messageStatus,
+    sent_at: messageStatus === 'SENT' ? new Date().toISOString() : null,
+    failure_reason: failureReason,
+  }).eq('id', inserted.id);
+
+  await advance();
+  return true;
+}
 
 function computeNext(from: Date, unit: string, interval: number): Date {
   const d = new Date(from);
