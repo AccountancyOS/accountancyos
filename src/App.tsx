@@ -482,6 +482,14 @@ const App = () => (
               }
             />
             <Route
+              path="/settings/companies-house/diffs"
+              element={
+                <ProtectedRoute>
+                  <CompaniesHouseDiffInbox />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/ops/health"
               element={
                 <ProtectedRoute>
