@@ -10,6 +10,13 @@ import { toast } from "@/hooks/use-toast";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  getTriggerDescription,
+  getFrequencyLabel,
+  getStopConditionLabel,
+  type FrequencyUnit,
+  type TriggerType,
+} from "@/lib/chaser-policy-service";
 
 interface ChaserPolicy {
   id: string;
@@ -23,6 +30,7 @@ interface ChaserPolicy {
   trigger_type: string;
   frequency_interval: number;
   frequency_unit: string;
+  stop_condition_value: string | null;
 }
 
 interface Props {
@@ -120,7 +128,7 @@ export function CategoryAutomationEditor({ categoryKey, categoryLabel }: Props) 
     setLoading(true);
     const { data, error } = await supabase
       .from("automation_chaser_policies")
-      .select("id, name, description, category, send_mode, scope, is_enabled, paused_at, trigger_type, frequency_interval, frequency_unit")
+      .select("id, name, description, category, send_mode, scope, is_enabled, paused_at, trigger_type, frequency_interval, frequency_unit, stop_condition_value")
       .eq("organization_id", organization!.id)
       .eq("category", categoryKey)
       .order("name", { ascending: true });
@@ -170,9 +178,11 @@ export function CategoryAutomationEditor({ categoryKey, categoryLabel }: Props) 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-sm">{p.name}</span>
-                <Badge variant="outline" className="text-xs">{p.trigger_type}</Badge>
                 <Badge variant="outline" className="text-xs">
-                  Every {p.frequency_interval} {p.frequency_unit.toLowerCase()}
+                  {getTriggerDescription(p.trigger_type as TriggerType)}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {getFrequencyLabel(p.frequency_unit as FrequencyUnit, p.frequency_interval)}
                 </Badge>
                 <Badge variant={p.scope === "new_records" ? "outline" : "secondary"} className="text-xs">
                   {p.scope === "new_records" ? "New Records Only" : "All Records"}
@@ -182,6 +192,9 @@ export function CategoryAutomationEditor({ categoryKey, categoryLabel }: Props) 
               {p.description && (
                 <p className="text-xs text-muted-foreground mt-1">{p.description}</p>
               )}
+              <p className="text-xs text-muted-foreground mt-1">
+                {getStopConditionLabel(p.category, p.stop_condition_value)}
+              </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <PolicyActivityDrawer policyId={p.id} policyName={p.name} orgId={organization!.id} />
