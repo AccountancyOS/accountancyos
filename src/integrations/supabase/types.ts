@@ -382,13 +382,15 @@ export type Database = {
           failure_reason: string | null
           id: string
           idempotency_key: string
-          job_id: string
+          job_id: string | null
           organization_id: string
           rendered_body: string
           rendered_subject: string
           send_at: string
           sent_at: string | null
           status: string
+          subject_id: string | null
+          subject_type: string | null
           template_id: string | null
           to_email: string
         }
@@ -398,13 +400,15 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           idempotency_key: string
-          job_id: string
+          job_id?: string | null
           organization_id: string
           rendered_body?: string
           rendered_subject?: string
           send_at?: string
           sent_at?: string | null
           status?: string
+          subject_id?: string | null
+          subject_type?: string | null
           template_id?: string | null
           to_email: string
         }
@@ -414,13 +418,15 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           idempotency_key?: string
-          job_id?: string
+          job_id?: string | null
           organization_id?: string
           rendered_body?: string
           rendered_subject?: string
           send_at?: string
           sent_at?: string | null
           status?: string
+          subject_id?: string | null
+          subject_type?: string | null
           template_id?: string | null
           to_email?: string
         }
@@ -564,7 +570,7 @@ export type Database = {
           frequency_interval: number
           frequency_unit: string
           id: string
-          job_id: string
+          job_id: string | null
           last_sent_at: string | null
           next_send_at: string | null
           organization_id: string
@@ -574,6 +580,8 @@ export type Database = {
           send_count: number
           status: string
           stop_condition_value: string
+          subject_id: string | null
+          subject_type: string | null
           trigger_date: string
           updated_at: string
         }
@@ -583,7 +591,7 @@ export type Database = {
           frequency_interval: number
           frequency_unit: string
           id?: string
-          job_id: string
+          job_id?: string | null
           last_sent_at?: string | null
           next_send_at?: string | null
           organization_id: string
@@ -593,6 +601,8 @@ export type Database = {
           send_count?: number
           status?: string
           stop_condition_value?: string
+          subject_id?: string | null
+          subject_type?: string | null
           trigger_date: string
           updated_at?: string
         }
@@ -602,7 +612,7 @@ export type Database = {
           frequency_interval?: number
           frequency_unit?: string
           id?: string
-          job_id?: string
+          job_id?: string | null
           last_sent_at?: string | null
           next_send_at?: string | null
           organization_id?: string
@@ -612,6 +622,8 @@ export type Database = {
           send_count?: number
           status?: string
           stop_condition_value?: string
+          subject_id?: string | null
+          subject_type?: string | null
           trigger_date?: string
           updated_at?: string
         }
