@@ -511,7 +511,7 @@ export type Database = {
           send_mode?: string
           service_code: string
           stop_condition_type?: string
-          stop_condition_value?: string
+          stop_condition_value: string
           stop_on_unsubscribe?: boolean
           suppression_category?: string | null
           trigger_offset_days?: number
