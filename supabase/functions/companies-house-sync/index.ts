@@ -132,7 +132,7 @@ async function syncCompanyFromCH(
   // Get company details from our database
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .select("id, company_number, company_name, organization_id")
+    .select("id, company_number, company_name, organization_id, registered_office_address, sic_codes, company_type, confirmation_statement_made_up_to, confirmation_statement_next_due, client_id")
     .eq("id", companyId)
     .single();
   
@@ -153,9 +153,10 @@ async function syncCompanyFromCH(
   const chProfile = generateMockCompanyProfile(companyNumber);
   const chOfficers = generateMockOfficers(companyNumber);
   const chPSCs = generateMockPSCs(companyNumber);
-  
-  // Store the raw CH profile
-  const { error: updateError } = await supabase
+
+  // Persist the raw CH snapshot ONLY (no field overwrites). All field changes
+  // go to companies_house_diff_staging for Owner review before being applied.
+  const { error: snapshotError } = await supabase
     .from("companies")
     .update({
       ch_company_profile: {
@@ -164,19 +165,32 @@ async function syncCompanyFromCH(
         pscs: chPSCs,
         synced_at: new Date().toISOString(),
       },
-      registered_office_address: chProfile.registered_office_address,
-      sic_codes: chProfile.sic_codes,
-      company_type: chProfile.type,
-      confirmation_statement_made_up_to: chProfile.confirmation_statement?.last_made_up_to,
-      confirmation_statement_next_due: chProfile.confirmation_statement?.next_due,
       ch_last_synced_at: new Date().toISOString(),
     })
     .eq("id", companyId);
-  
-  if (updateError) {
-    console.error("[CH Sync] Failed to update company:", updateError);
-    throw new Error(`Failed to update company: ${updateError.message}`);
+
+  if (snapshotError) {
+    console.error("[CH Sync] Failed to store CH snapshot:", snapshotError);
+    throw new Error(`Failed to store CH snapshot: ${snapshotError.message}`);
   }
+
+  // Build field-level diff candidates and stage them
+  const diffCandidates: Array<{ field_path: string; current: unknown; incoming: unknown }> = [
+    { field_path: "registered_office_address", current: company.registered_office_address, incoming: chProfile.registered_office_address },
+    { field_path: "sic_codes", current: company.sic_codes, incoming: chProfile.sic_codes },
+    { field_path: "company_type", current: company.company_type, incoming: chProfile.type },
+    { field_path: "confirmation_statement_made_up_to", current: company.confirmation_statement_made_up_to, incoming: chProfile.confirmation_statement?.last_made_up_to },
+    { field_path: "confirmation_statement_next_due", current: company.confirmation_statement_next_due, incoming: chProfile.confirmation_statement?.next_due },
+  ];
+
+  const stagedDiffs = await stageFieldDiffs(
+    supabase,
+    organizationId,
+    companyId,
+    company.client_id ?? null,
+    companyNumber,
+    diffCandidates,
+  );
   
   // Compare with internal registers and identify discrepancies
   const discrepancies = await compareWithInternalRegisters(
@@ -197,6 +211,7 @@ async function syncCompanyFromCH(
       officers_count: chOfficers.length,
       pscs_count: chPSCs.length,
       discrepancies_found: discrepancies.length,
+      staged_field_diffs: stagedDiffs,
       discrepancies: discrepancies,
     },
   });
@@ -215,7 +230,7 @@ async function syncCompanyFromCH(
     console.log(`[CH Sync] CS01 deadline generation: ${deadlineResult.message}`);
   }
   
-  console.log(`[CH Sync] Completed sync for ${companyNumber}. Found ${discrepancies.length} discrepancies.`);
+  console.log(`[CH Sync] Completed sync for ${companyNumber}. Staged ${stagedDiffs} field diffs, found ${discrepancies.length} register discrepancies.`);
   
   return {
     success: true,
@@ -224,9 +239,61 @@ async function syncCompanyFromCH(
     officers: chOfficers,
     pscs: chPSCs,
     discrepancies,
+    stagedFieldDiffs: stagedDiffs,
     cs01DeadlineCreated,
     syncedAt: new Date().toISOString(),
   };
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+async function stageFieldDiffs(
+  supabase: any,
+  organizationId: string,
+  companyId: string,
+  clientId: string | null,
+  companyNumber: string,
+  candidates: Array<{ field_path: string; current: unknown; incoming: unknown }>,
+): Promise<number> {
+  const changed = candidates.filter((c) => !valuesEqual(c.current, c.incoming));
+  if (changed.length === 0) return 0;
+
+  // Supersede any prior pending diffs for the same field paths on this company
+  await supabase
+    .from("companies_house_diff_staging")
+    .update({ status: "superseded", decided_at: new Date().toISOString() })
+    .eq("organization_id", organizationId)
+    .eq("company_id", companyId)
+    .eq("status", "pending")
+    .in("field_path", changed.map((c) => c.field_path));
+
+  const rows = changed.map((c) => ({
+    organization_id: organizationId,
+    company_id: companyId,
+    client_id: clientId,
+    company_number: companyNumber,
+    field_path: c.field_path,
+    current_value: c.current ?? null,
+    incoming_value: c.incoming ?? null,
+    source: "ch_sync",
+    status: "pending",
+  }));
+
+  const { error } = await supabase.from("companies_house_diff_staging").insert(rows);
+  if (error) {
+    console.error("[CH Sync] Failed to stage field diffs:", error);
+    return 0;
+  }
+  return rows.length;
 }
 
 async function generateCS01Deadline(
