@@ -121,3 +121,19 @@ Tackle the runtime safety gaps first, in this order, before any policy is allowe
 6. **F6**: Add an Activity drawer per category in the Settings Centre (read-only view of last 50 runs + last send log entries). *(medium)*
 
 After F1–F6 the engine is honestly production-safe and an Owner can confidently flip the first policy to `send_mode = 'auto'`.
+
+---
+
+## Slice F status — what shipped this turn
+
+- **F1 — Casing normalised**: `AutomationEventType` rewritten to UPPERCASE (`QUOTE_ACCEPTED`, `JOB_STATUS_CHANGED`, etc.) so emits now match `automation_trigger_contracts.key`. All existing helpers updated; 18 new helpers added for the previously-uncovered events (lead, quote sent/rejected, engagement letter sent/signed, KYC, HMRC auth, questionnaire, conversation, records, workpaper, signature, invoice overdue, payment due).
+- **F2 — Suppression / unsubscribe enforcement**: `isSuppressed()` helper added to `chaser-tick`. Both job-based and subject-based paths now hard-stop a run if the recipient appears in `email_suppressions` or has `opted_out_at IS NOT NULL` in `email_preferences` (category-aware when the policy specifies one, and only enforced when `policy.stop_on_unsubscribe = true`).
+- **F3 — 9 missing subject handlers**: `processSubjectRun` extended with branches for `onboarding_subject`, `client_service`, `records_request`, `questionnaire_response`, `workpaper`, `deadline`, `signature_request`, `conversation`, `invoice`. Each resolves the subject, evaluates a category-appropriate stop condition, resolves the recipient via client/contact, and uses the same `${org}:${run_id}:${next_send_at}` idempotency key. The `chk_chaser_run_subject_type` CHECK constraint was widened in a migration to allow these new types.
+- **F5 — Default email templates**: 13 paused templates (one per category) seeded per organisation and back-linked into any seeded chaser policy that lacked a template. All templates are `status='inactive'` with `requires_unsubscribe_link=true` so nothing sends until an Owner activates them.
+- **F6 — Per-policy Activity drawer**: `CategoryAutomationEditor` now exposes an activity icon per policy that opens a side sheet listing the last 50 `automation_chaser_runs` for that policy (status, target, send count, next/last send timestamps). Read-only — Owners can answer "is this firing" without leaving Settings.
+
+## Deferred to Slice G
+
+- **F4 — Wire the new emit helpers into real production code paths.** The helpers exist and are typed, but actual call sites (lead create/stage change in CRM, quote send/accept/reject in quote services, KYC subject status change in `KycPackPanel`, engagement letter sent/signed in `EngagementLetterSection` and `DocumentSignatureFlow`, inbound `CONVERSATION_RECEIVED` in the email inbound handler, `INVOICE_OVERDUE` from a daily scan, `QUESTIONNAIRE_SUBMITTED` from the response submit path, `RECORDS_REQUESTED`/`WORKPAPER_CREATED`/`SIGNATURE_REQUESTED` from their creation services) are deferred. Until F4 lands, the matching chaser policies will not auto-create runs — they remain Owner-enable-only via the existing `chaser-trigger-scan` job-based path.
+- **F1.x cleanup**: `EVENT_TO_TRIGGER_KEY` was inlined to identity (event types now equal contract keys). When confident no legacy lowercase callers remain, remove the entire map and the `triggerKey` variable.
+- **Owner kill-switch UI** for `automation_pauses` (2.7) and a "Test fire" button per policy (2.2) are still open.
