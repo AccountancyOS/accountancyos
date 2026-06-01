@@ -355,11 +355,11 @@ async function processSubjectRun(admin: any, run: any): Promise<boolean> {
     } else if (subject_type === 'hmrc_auth') {
       const { data } = await admin
         .from('client_tax_authorisations')
-        .select('id, status, client_id, tax_regime')
+        .select('id, status, client_id, tax_service_type')
         .eq('id', subject_id).maybeSingle();
       if (!data) stop = true;
       else {
-        subjectLabel = `HMRC ${data.tax_regime || ''}`.trim();
+        subjectLabel = `HMRC ${data.tax_service_type || ''}`.trim();
         if (['active','revoked','expired'].includes((data.status || '').toLowerCase())) stop = true;
         if (data.client_id) {
           const { data: cl } = await admin.from('clients')
