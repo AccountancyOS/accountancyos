@@ -376,6 +376,140 @@ async function processSubjectRun(admin: any, run: any): Promise<boolean> {
           if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
         }
       }
+    } else if (subject_type === 'onboarding_subject') {
+      const { data } = await admin
+        .from('onboarding_applications')
+        .select('id, status, client_id, primary_contact_email, primary_contact_first_name, primary_contact_last_name')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = 'Onboarding';
+        if (['approved','completed','rejected','cancelled'].includes((data.status || '').toLowerCase())) stop = true;
+        toEmail = data.primary_contact_email || '';
+        clientData = { first_name: data.primary_contact_first_name || '', last_name: data.primary_contact_last_name || '', email: toEmail };
+      }
+    } else if (subject_type === 'client_service') {
+      const { data } = await admin
+        .from('client_services')
+        .select('id, is_active, client_id, company_id, service_type')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.service_type || 'Service';
+        if (!data.is_active) stop = true;
+        const recipientId = data.client_id;
+        if (recipientId) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', recipientId).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
+    } else if (subject_type === 'records_request') {
+      const { data } = await admin
+        .from('jobs')
+        .select('id, status, job_name, client_id')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.job_name || 'Records request';
+        if (['records_received','in_progress','complete','cancelled'].includes((data.status || '').toLowerCase())) stop = true;
+        if (data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
+    } else if (subject_type === 'questionnaire_response') {
+      const { data } = await admin
+        .from('questionnaire_responses')
+        .select('id, status, client_id')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = 'Questionnaire';
+        if (['submitted','completed','cancelled'].includes((data.status || '').toLowerCase())) stop = true;
+        if (data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
+    } else if (subject_type === 'workpaper') {
+      const { data } = await admin
+        .from('workpapers')
+        .select('id, status, job_id, name')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.name || 'Workpaper';
+        if (['approved','rejected','locked'].includes((data.status || '').toLowerCase())) stop = true;
+        if (data.job_id) {
+          const { data: job } = await admin.from('jobs').select('client_id').eq('id', data.job_id).maybeSingle();
+          if (job?.client_id) {
+            const { data: cl } = await admin.from('clients')
+              .select('email, first_name, last_name').eq('id', job.client_id).maybeSingle();
+            if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+          }
+        }
+      }
+    } else if (subject_type === 'deadline') {
+      const { data } = await admin
+        .from('deadlines')
+        .select('id, status, deadline_date, client_id, company_id, deadline_type')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.deadline_type || 'Deadline';
+        if (['complete','filed','cancelled','dismissed'].includes((data.status || '').toLowerCase())) stop = true;
+        if (data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
+    } else if (subject_type === 'signature_request') {
+      const { data } = await admin
+        .from('document_signature_requests')
+        .select('id, status, signer_email, signer_name')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = 'Signature request';
+        if (['signed','declined','cancelled','expired'].includes((data.status || '').toLowerCase())) stop = true;
+        toEmail = data.signer_email || '';
+        clientData = { first_name: data.signer_name || '', last_name: '', email: toEmail };
+      }
+    } else if (subject_type === 'conversation') {
+      const { data } = await admin
+        .from('email_threads')
+        .select('id, last_message_direction, client_id, subject')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.subject || 'Conversation';
+        // Stop when we have replied (last message outbound)
+        if ((data.last_message_direction || '').toLowerCase() === 'outbound') stop = true;
+        if (data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
+    } else if (subject_type === 'invoice') {
+      const { data } = await admin
+        .from('invoices')
+        .select('id, status, client_id, invoice_number')
+        .eq('id', subject_id).maybeSingle();
+      if (!data) stop = true;
+      else {
+        subjectLabel = data.invoice_number || 'Invoice';
+        if (['paid','void','cancelled','written_off'].includes((data.status || '').toLowerCase())) stop = true;
+        if (data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
+        }
+      }
     } else {
       // Unknown subject type — stop quietly
       stop = true;
@@ -393,6 +527,15 @@ async function processSubjectRun(admin: any, run: any): Promise<boolean> {
       .update({ status: 'CANCELLED' })
       .eq('chaser_run_id', runId)
       .eq('status', 'QUEUED');
+    return true;
+  }
+
+  // F2: suppression / unsubscribe guard for subject-based runs
+  if (toEmail && await isSuppressed(admin, organization_id, toEmail, run.policy_id)) {
+    console.log(`[chaser-tick:subject] Suppressed recipient ${toEmail} for run ${runId}, stopping`);
+    await admin.from('automation_chaser_runs')
+      .update({ status: 'STOPPED', next_send_at: null })
+      .eq('id', runId);
     return true;
   }
 
