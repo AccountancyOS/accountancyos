@@ -343,6 +343,18 @@ export default function Settings() {
                   </div>
                 </CardHeader>
               </Card>
+              <Card
+                className="cursor-pointer hover:border-primary transition-colors"
+                onClick={() => navigate("/settings/engagement-letters")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Mail className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">Engagement Letter Variants</CardTitle>
+                    <CardDescription className="text-sm">Per-service and per-entity wording overrides</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
             </div>
           </div>
 
