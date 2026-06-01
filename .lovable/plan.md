@@ -80,6 +80,7 @@ Schedule via `cron.schedule` (using the insert tool, not migration, since URL + 
 - **Slice B — Per-category Settings Centre editors**: DONE. Seeded policy categories remapped to the UI keys (`crm_sales`, `engagement_letters`, `kyc_aml`, `hmrc_authorisation`); the generic `CategoryAutomationEditor` now renders them with send-mode, scope and active toggles per policy.
 - **Slice C — CH sync diff-staging route + per-org opt-in**: DONE. `companies_house_diff_staging` already in place; `organization_integrations_companies_house.ch_sync_opt_in` added (default false); `companies-house-sync` edge function returns HTTP 409 `ch_sync_opt_in_required` when disabled; opt-in toggle added to Settings → Companies House.
 - **Slice D — Cross-org RLS isolation evidence pack**: DONE. Audit captured in `docs/automation/rls-isolation-evidence.md`. All 23 automation/CH tables enforce RLS; non-catalog policies scope via `organization_users` membership.
+- **Slice E — Full category coverage**: DONE. Trigger-type constraint extended with `CLIENT_ONBOARDED`, `SERVICE_ACTIVATED`, `RECORDS_REQUESTED`, `QUESTIONNAIRE_SENT`, `WORKPAPER_CREATED`, `DEADLINE_APPROACHING`, `SIGNATURE_REQUESTED`, `INBOUND_MESSAGE_RECEIVED`, `INVOICE_OVERDUE`. One paused default policy seeded per org per remaining Settings Centre category — 13 of 14 categories now visible in the editor (compliance/suppression is rule-only, no chaser by design). All seeded as `is_enabled=false`, `send_mode='draft'`, `scope='new_records'`.
 
 ## Out of scope (future)
 
