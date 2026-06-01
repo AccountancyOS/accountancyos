@@ -74,8 +74,14 @@ Schedule via `cron.schedule` (using the insert tool, not migration, since URL + 
 
 **No UI changes in this slice.** The five dedicated Settings Centre editors remain Slice B.
 
-## Out of scope (next slices)
+## Slice status
 
-- Slice B: per-category Settings Centre editors.
-- Slice C: CH sync diff-staging route + per-org opt-in flag.
-- Slice D: cross-org RLS isolation tests + handover evidence pack.
+- **Slice A — Automation Runtime Wiring**: DONE. Five paused chaser policies seeded per org, `process-automation-events` routes Quote→Onboarding workflow and stop signals, `dormant-lead-scan` scheduled daily.
+- **Slice B — Per-category Settings Centre editors**: DONE. Seeded policy categories remapped to the UI keys (`crm_sales`, `engagement_letters`, `kyc_aml`, `hmrc_authorisation`); the generic `CategoryAutomationEditor` now renders them with send-mode, scope and active toggles per policy.
+- **Slice C — CH sync diff-staging route + per-org opt-in**: DONE. `companies_house_diff_staging` already in place; `organization_integrations_companies_house.ch_sync_opt_in` added (default false); `companies-house-sync` edge function returns HTTP 409 `ch_sync_opt_in_required` when disabled; opt-in toggle added to Settings → Companies House.
+- **Slice D — Cross-org RLS isolation evidence pack**: DONE. Audit captured in `docs/automation/rls-isolation-evidence.md`. All 23 automation/CH tables enforce RLS; non-catalog policies scope via `organization_users` membership.
+
+## Out of scope (future)
+
+- Synthetic load test (10k subjects) for `chaser-tick`.
+- Sweep the 355 pre-existing Supabase linter warnings (legacy `search_path` mutability) — unrelated to automation engine.
