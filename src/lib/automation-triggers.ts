@@ -294,3 +294,82 @@ export async function emitPaymentReceived(
     metadata: { ...metadata, invoiceId, clientId }
   });
 }
+
+// ---------------------------------------------------------------------------
+// Slice F4: emit helpers for the previously-uncovered lifecycle events.
+// All seeded chaser policies for these events are paused — these helpers
+// only insert a row into automation_events; no email is sent until an Owner
+// flips the policy to send_mode='auto' inside Settings → Automation.
+// ---------------------------------------------------------------------------
+
+export function emitLeadCreated(organizationId: string, leadId: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'LEAD_CREATED', entityType: 'lead', entityId: leadId, newValue: { id: leadId }, metadata });
+}
+
+export function emitLeadStageChanged(organizationId: string, leadId: string, oldStage: string | null, newStage: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'LEAD_STAGE_CHANGED', entityType: 'lead', entityId: leadId, oldValue: { stage: oldStage }, newValue: { stage: newStage }, metadata: { ...metadata, oldStage, newStage } });
+}
+
+export function emitLeadLost(organizationId: string, leadId: string, reason?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'LEAD_LOST', entityType: 'lead', entityId: leadId, newValue: { status: 'lost', reason } });
+}
+
+export function emitQuoteSent(organizationId: string, quoteId: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUOTE_SENT', entityType: 'quote', entityId: quoteId, newValue: { status: 'sent' }, metadata });
+}
+
+export function emitQuoteRejected(organizationId: string, quoteId: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUOTE_REJECTED', entityType: 'quote', entityId: quoteId, newValue: { status: 'rejected' }, metadata });
+}
+
+export function emitEngagementLetterSent(organizationId: string, letterId: string, clientId?: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'ENGAGEMENT_LETTER_SENT', entityType: 'engagement_letter', entityId: letterId, newValue: { status: 'sent' }, metadata: { ...metadata, clientId } });
+}
+
+export function emitEngagementLetterSigned(organizationId: string, letterId: string, clientId?: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'ENGAGEMENT_LETTER_SIGNED', entityType: 'engagement_letter', entityId: letterId, newValue: { status: 'signed' }, metadata: { ...metadata, clientId } });
+}
+
+export function emitKycStatusChanged(organizationId: string, subjectId: string, oldStatus: string | null, newStatus: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'KYC_STATUS_CHANGED', entityType: 'kyc_subject', entityId: subjectId, oldValue: { status: oldStatus }, newValue: { status: newStatus }, metadata });
+}
+
+export function emitHmrcAuthRequested(organizationId: string, authId: string, clientId?: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'HMRC_AUTH_REQUESTED', entityType: 'hmrc_auth', entityId: authId, newValue: { status: 'requested' }, metadata: { ...metadata, clientId } });
+}
+
+export function emitClientServiceEnabled(organizationId: string, clientServiceId: string, serviceType: string, clientId?: string, companyId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'CLIENT_SERVICE_ENABLED', entityType: 'client_service', entityId: clientServiceId, newValue: { service_type: serviceType }, metadata: { clientId, companyId, serviceType } });
+}
+
+export function emitQuestionnaireSent(organizationId: string, responseId: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUESTIONNAIRE_SENT', entityType: 'questionnaire_response', entityId: responseId, newValue: { status: 'sent' }, metadata: { clientId } });
+}
+
+export function emitQuestionnaireSubmitted(organizationId: string, responseId: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUESTIONNAIRE_SUBMITTED', entityType: 'questionnaire_response', entityId: responseId, newValue: { status: 'submitted' }, metadata: { clientId } });
+}
+
+export function emitConversationReceived(organizationId: string, conversationId: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'CONVERSATION_RECEIVED', entityType: 'conversation', entityId: conversationId, newValue: { direction: 'inbound' }, metadata: { clientId } });
+}
+
+export function emitRecordsRequested(organizationId: string, requestId: string, jobId?: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'RECORDS_REQUESTED', entityType: 'records_request', entityId: requestId, newValue: { status: 'requested' }, metadata: { jobId, clientId } });
+}
+
+export function emitWorkpaperCreated(organizationId: string, workpaperId: string, jobId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'WORKPAPER_CREATED', entityType: 'workpaper', entityId: workpaperId, metadata: { jobId } });
+}
+
+export function emitSignatureRequested(organizationId: string, signatureId: string, documentId?: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'SIGNATURE_REQUESTED', entityType: 'signature_request', entityId: signatureId, newValue: { status: 'requested' }, metadata: { documentId, clientId } });
+}
+
+export function emitInvoiceOverdue(organizationId: string, invoiceId: string, clientId?: string, daysOverdue?: number) {
+  return emitAutomationEvent({ organizationId, eventType: 'INVOICE_OVERDUE', entityType: 'invoice', entityId: invoiceId, newValue: { status: 'overdue', days_overdue: daysOverdue }, metadata: { clientId, daysOverdue } });
+}
+
+export function emitPaymentDueDateSet(organizationId: string, invoiceId: string, dueDate: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'PAYMENT_DUE_DATE_SET', entityType: 'invoice', entityId: invoiceId, newValue: { due_date: dueDate }, metadata: { clientId, dueDate } });
+}
