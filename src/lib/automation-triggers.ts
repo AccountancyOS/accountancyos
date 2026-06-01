@@ -2,30 +2,43 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { routeTriggerEvent, type TriggerPayload } from "./workflow-trigger-router";
 
-// Event types for the automation system
-export type AutomationEventType = 
-  | 'job_status_change'
-  | 'deadline_approaching'
-  | 'client_onboarded'
-  | 'filing_status_change'
-  | 'onboarding_approved'
-  | 'quote_accepted'
-  | 'invoice_issued'
-  | 'payment_received';
+// Event types — MUST match keys in `automation_trigger_contracts`
+// (registry uses UPPERCASE — keep these aligned).
+export type AutomationEventType =
+  | 'JOB_STATUS_CHANGED'
+  | 'DEADLINE_APPROACHING'
+  | 'CLIENT_CREATED'
+  | 'CLIENT_ONBOARDED'
+  | 'CLIENT_SERVICE_ENABLED'
+  | 'FILING_ACCEPTED'
+  | 'ONBOARDING_APPROVED'
+  | 'QUOTE_SENT'
+  | 'QUOTE_ACCEPTED'
+  | 'QUOTE_REJECTED'
+  | 'INVOICE_ISSUED'
+  | 'INVOICE_OVERDUE'
+  | 'PAYMENT_RECEIVED'
+  | 'PAYMENT_DUE_DATE_SET'
+  | 'LEAD_CREATED'
+  | 'LEAD_STAGE_CHANGED'
+  | 'LEAD_LOST'
+  | 'LEAD_DORMANT'
+  | 'ENGAGEMENT_LETTER_SENT'
+  | 'ENGAGEMENT_LETTER_SIGNED'
+  | 'KYC_STATUS_CHANGED'
+  | 'HMRC_AUTH_REQUESTED'
+  | 'QUESTIONNAIRE_SENT'
+  | 'QUESTIONNAIRE_SUBMITTED'
+  | 'CONVERSATION_RECEIVED'
+  | 'RECORDS_REQUESTED'
+  | 'WORKPAPER_CREATED'
+  | 'SIGNATURE_REQUESTED';
 
-export type EntityType = 'job' | 'deadline' | 'client' | 'filing' | 'onboarding' | 'company' | 'quote' | 'invoice' | 'payment';
-
-// Map legacy event types to new workflow trigger contract keys
-const EVENT_TO_TRIGGER_KEY: Record<string, string> = {
-  job_status_change: 'JOB_STATUS_CHANGED',
-  deadline_approaching: 'DEADLINE_APPROACHING',
-  client_onboarded: 'CLIENT_CREATED',
-  filing_status_change: 'FILING_ACCEPTED',
-  onboarding_approved: 'ONBOARDING_APPROVED',
-  quote_accepted: 'QUOTE_ACCEPTED',
-  invoice_issued: 'INVOICE_ISSUED',
-  payment_received: 'PAYMENT_RECEIVED',
-};
+export type EntityType =
+  | 'job' | 'deadline' | 'client' | 'filing' | 'onboarding' | 'company'
+  | 'quote' | 'invoice' | 'payment' | 'lead' | 'engagement_letter'
+  | 'kyc_subject' | 'hmrc_auth' | 'questionnaire_response' | 'conversation'
+  | 'records_request' | 'workpaper' | 'signature_request' | 'client_service';
 
 interface EmitEventParams {
   organizationId: string;
@@ -66,8 +79,8 @@ export async function emitAutomationEvent({
       console.error('Failed to emit automation event:', error);
     }
 
-    // 2. Also route to new workflow engine
-    const triggerKey = EVENT_TO_TRIGGER_KEY[eventType];
+    // 2. Also route to new workflow engine (event keys already match contract keys)
+    const triggerKey = eventType;
     if (triggerKey) {
       const payload: TriggerPayload = {
         triggerKey,
@@ -135,7 +148,7 @@ export async function emitJobStatusChange(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'job_status_change',
+    eventType: 'JOB_STATUS_CHANGED',
     entityType: 'job',
     entityId: jobId,
     oldValue: { status: oldStatus },
@@ -156,7 +169,7 @@ export async function emitDeadlineApproaching(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'deadline_approaching',
+    eventType: 'DEADLINE_APPROACHING',
     entityType: 'deadline',
     entityId: deadlineId,
     newValue: { dueDate, daysRemaining },
@@ -175,7 +188,7 @@ export async function emitClientOnboarded(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'client_onboarded',
+    eventType: 'CLIENT_ONBOARDED',
     entityType: clientType,
     entityId: clientId,
     newValue: { status: 'active' },
@@ -195,7 +208,7 @@ export async function emitOnboardingApproved(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'onboarding_approved',
+    eventType: 'ONBOARDING_APPROVED',
     entityType: 'onboarding',
     entityId: onboardingId,
     newValue: { status: 'approved', clientId, companyId },
@@ -215,7 +228,7 @@ export async function emitFilingStatusChange(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'filing_status_change',
+    eventType: 'FILING_ACCEPTED',
     entityType: 'filing',
     entityId: filingId,
     oldValue: { status: oldStatus },
@@ -235,7 +248,7 @@ export async function emitQuoteAccepted(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'quote_accepted',
+    eventType: 'QUOTE_ACCEPTED',
     entityType: 'quote',
     entityId: quoteId,
     newValue: { status: 'accepted' },
@@ -254,7 +267,7 @@ export async function emitInvoiceIssued(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'invoice_issued',
+    eventType: 'INVOICE_ISSUED',
     entityType: 'invoice',
     entityId: invoiceId,
     newValue: { status: 'issued' },
@@ -274,10 +287,89 @@ export async function emitPaymentReceived(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'payment_received',
+    eventType: 'PAYMENT_RECEIVED',
     entityType: 'payment',
     entityId: paymentId,
     newValue: { status: 'received' },
     metadata: { ...metadata, invoiceId, clientId }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Slice F4: emit helpers for the previously-uncovered lifecycle events.
+// All seeded chaser policies for these events are paused — these helpers
+// only insert a row into automation_events; no email is sent until an Owner
+// flips the policy to send_mode='auto' inside Settings → Automation.
+// ---------------------------------------------------------------------------
+
+export function emitLeadCreated(organizationId: string, leadId: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'LEAD_CREATED', entityType: 'lead', entityId: leadId, newValue: { id: leadId }, metadata });
+}
+
+export function emitLeadStageChanged(organizationId: string, leadId: string, oldStage: string | null, newStage: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'LEAD_STAGE_CHANGED', entityType: 'lead', entityId: leadId, oldValue: { stage: oldStage }, newValue: { stage: newStage }, metadata: { ...metadata, oldStage, newStage } });
+}
+
+export function emitLeadLost(organizationId: string, leadId: string, reason?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'LEAD_LOST', entityType: 'lead', entityId: leadId, newValue: { status: 'lost', reason } });
+}
+
+export function emitQuoteSent(organizationId: string, quoteId: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUOTE_SENT', entityType: 'quote', entityId: quoteId, newValue: { status: 'sent' }, metadata });
+}
+
+export function emitQuoteRejected(organizationId: string, quoteId: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUOTE_REJECTED', entityType: 'quote', entityId: quoteId, newValue: { status: 'rejected' }, metadata });
+}
+
+export function emitEngagementLetterSent(organizationId: string, letterId: string, clientId?: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'ENGAGEMENT_LETTER_SENT', entityType: 'engagement_letter', entityId: letterId, newValue: { status: 'sent' }, metadata: { ...metadata, clientId } });
+}
+
+export function emitEngagementLetterSigned(organizationId: string, letterId: string, clientId?: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'ENGAGEMENT_LETTER_SIGNED', entityType: 'engagement_letter', entityId: letterId, newValue: { status: 'signed' }, metadata: { ...metadata, clientId } });
+}
+
+export function emitKycStatusChanged(organizationId: string, subjectId: string, oldStatus: string | null, newStatus: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'KYC_STATUS_CHANGED', entityType: 'kyc_subject', entityId: subjectId, oldValue: { status: oldStatus }, newValue: { status: newStatus }, metadata });
+}
+
+export function emitHmrcAuthRequested(organizationId: string, authId: string, clientId?: string, metadata?: Record<string, unknown>) {
+  return emitAutomationEvent({ organizationId, eventType: 'HMRC_AUTH_REQUESTED', entityType: 'hmrc_auth', entityId: authId, newValue: { status: 'requested' }, metadata: { ...metadata, clientId } });
+}
+
+export function emitClientServiceEnabled(organizationId: string, clientServiceId: string, serviceType: string, clientId?: string, companyId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'CLIENT_SERVICE_ENABLED', entityType: 'client_service', entityId: clientServiceId, newValue: { service_type: serviceType }, metadata: { clientId, companyId, serviceType } });
+}
+
+export function emitQuestionnaireSent(organizationId: string, responseId: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUESTIONNAIRE_SENT', entityType: 'questionnaire_response', entityId: responseId, newValue: { status: 'sent' }, metadata: { clientId } });
+}
+
+export function emitQuestionnaireSubmitted(organizationId: string, responseId: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'QUESTIONNAIRE_SUBMITTED', entityType: 'questionnaire_response', entityId: responseId, newValue: { status: 'submitted' }, metadata: { clientId } });
+}
+
+export function emitConversationReceived(organizationId: string, conversationId: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'CONVERSATION_RECEIVED', entityType: 'conversation', entityId: conversationId, newValue: { direction: 'inbound' }, metadata: { clientId } });
+}
+
+export function emitRecordsRequested(organizationId: string, requestId: string, jobId?: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'RECORDS_REQUESTED', entityType: 'records_request', entityId: requestId, newValue: { status: 'requested' }, metadata: { jobId, clientId } });
+}
+
+export function emitWorkpaperCreated(organizationId: string, workpaperId: string, jobId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'WORKPAPER_CREATED', entityType: 'workpaper', entityId: workpaperId, metadata: { jobId } });
+}
+
+export function emitSignatureRequested(organizationId: string, signatureId: string, documentId?: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'SIGNATURE_REQUESTED', entityType: 'signature_request', entityId: signatureId, newValue: { status: 'requested' }, metadata: { documentId, clientId } });
+}
+
+export function emitInvoiceOverdue(organizationId: string, invoiceId: string, clientId?: string, daysOverdue?: number) {
+  return emitAutomationEvent({ organizationId, eventType: 'INVOICE_OVERDUE', entityType: 'invoice', entityId: invoiceId, newValue: { status: 'overdue', days_overdue: daysOverdue }, metadata: { clientId, daysOverdue } });
+}
+
+export function emitPaymentDueDateSet(organizationId: string, invoiceId: string, dueDate: string, clientId?: string) {
+  return emitAutomationEvent({ organizationId, eventType: 'PAYMENT_DUE_DATE_SET', entityType: 'invoice', entityId: invoiceId, newValue: { due_date: dueDate }, metadata: { clientId, dueDate } });
 }
