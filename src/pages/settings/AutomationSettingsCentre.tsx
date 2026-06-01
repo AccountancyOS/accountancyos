@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
 import { Loader2, ShieldAlert } from "lucide-react";
+import { CategoryAutomationEditor } from "@/components/settings/automations/CategoryAutomationEditor";
 
 type CategoryDef = { key: string; label: string; description: string; sales: boolean };
 
@@ -114,10 +115,7 @@ export default function AutomationSettingsCentre() {
                 </AccordionTrigger>
                 <AccordionContent>
                   <p className="text-sm text-muted-foreground mb-3">{cat.description}</p>
-                  <div className="text-xs text-muted-foreground">
-                    Phase 1 ships the safety layer (scope, pause, suppression, idempotency, audit).
-                    Individual automations for this category arrive in subsequent phases.
-                  </div>
+                  <CategoryAutomationEditor categoryKey={cat.key} categoryLabel={cat.label} />
                 </AccordionContent>
               </AccordionItem>
             );
