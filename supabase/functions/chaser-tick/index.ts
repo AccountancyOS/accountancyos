@@ -277,52 +277,59 @@ async function processSubjectRun(admin: any, run: any): Promise<boolean> {
   try {
     if (subject_type === 'lead') {
       const { data } = await admin
-        .from('crm_leads')
-        .select('id, status, stage, contact_email, contact_first_name, contact_last_name, company_name')
+        .from('leads')
+        .select('id, pipeline_stage, email, first_name, last_name, converted_at, lost_at')
         .eq('id', subject_id).maybeSingle();
       if (!data) stop = true;
       else {
-        toEmail = data.contact_email || '';
-        subjectLabel = data.company_name || `${data.contact_first_name ?? ''} ${data.contact_last_name ?? ''}`.trim();
-        clientData = { first_name: data.contact_first_name || '', last_name: data.contact_last_name || '', email: toEmail };
-        companyData = { company_name: data.company_name || '' };
-        if (['won','lost','dormant','converted'].includes((data.stage || data.status || '').toLowerCase())) stop = true;
+        toEmail = data.email || '';
+        subjectLabel = `${data.first_name ?? ''} ${data.last_name ?? ''}`.trim() || 'Lead';
+        clientData = { first_name: data.first_name || '', last_name: data.last_name || '', email: toEmail };
+        if (data.converted_at || data.lost_at) stop = true;
+        if (['won','lost','converted','dormant'].includes((data.pipeline_stage || '').toLowerCase())) stop = true;
       }
     } else if (subject_type === 'quote') {
       const { data } = await admin
         .from('quotes')
-        .select('id, status, ported_to_client_id, quote_number, contact_email, lead_id, client_id')
+        .select('id, status, ported_to_client_id, quote_number, lead_id, client_id')
         .eq('id', subject_id).maybeSingle();
       if (!data) stop = true;
       else {
-        toEmail = data.contact_email || '';
         subjectLabel = data.quote_number || 'Quote';
         if (['accepted','rejected','expired','withdrawn'].includes((data.status || '').toLowerCase()) || data.ported_to_client_id) stop = true;
-        if (!toEmail && data.lead_id) {
-          const { data: lead } = await admin.from('crm_leads')
-            .select('contact_email, contact_first_name, contact_last_name, company_name')
+        if (data.lead_id) {
+          const { data: lead } = await admin.from('leads')
+            .select('email, first_name, last_name')
             .eq('id', data.lead_id).maybeSingle();
           if (lead) {
-            toEmail = lead.contact_email || '';
-            clientData = { first_name: lead.contact_first_name || '', last_name: lead.contact_last_name || '', email: toEmail };
-            companyData = { company_name: lead.company_name || '' };
+            toEmail = lead.email || '';
+            clientData = { first_name: lead.first_name || '', last_name: lead.last_name || '', email: toEmail };
+          }
+        }
+        if (!toEmail && data.client_id) {
+          const { data: cl } = await admin.from('clients')
+            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
+          if (cl) {
+            toEmail = cl.email || '';
+            clientData = cl as any;
           }
         }
       }
     } else if (subject_type === 'engagement_letter') {
       const { data } = await admin
         .from('engagement_letters')
-        .select('id, status, client_id, signed_at')
+        .select('id, signed_at, onboarding_application_id')
         .eq('id', subject_id).maybeSingle();
       if (!data) stop = true;
       else {
-        if (data.signed_at || ['signed','cancelled','superseded'].includes((data.status || '').toLowerCase())) stop = true;
-        if (data.client_id) {
-          const { data: cl } = await admin.from('clients')
-            .select('email, first_name, last_name').eq('id', data.client_id).maybeSingle();
-          if (cl) {
-            toEmail = cl.email || '';
-            clientData = cl as any;
+        if (data.signed_at) stop = true;
+        if (data.onboarding_application_id) {
+          const { data: app } = await admin.from('onboarding_applications')
+            .select('client_id').eq('id', data.onboarding_application_id).maybeSingle();
+          if (app?.client_id) {
+            const { data: cl } = await admin.from('clients')
+              .select('email, first_name, last_name').eq('id', app.client_id).maybeSingle();
+            if (cl) { toEmail = cl.email || ''; clientData = cl as any; }
           }
         }
       }
