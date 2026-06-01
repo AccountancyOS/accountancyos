@@ -656,3 +656,52 @@ function resolvePlaceholders(
     .replace(/\{\{job\.name\}\}/g, (job.job_name as string) || '')
     .replace(/\{\{job\.status\}\}/g, (job.status as string) || '');
 }
+
+/**
+ * F2: returns true if the recipient must NOT receive automation mail.
+ * Checks email_suppressions (any reason) and email_preferences (opted_out_at)
+ * scoped to org. Suppression category match optional — we treat ANY org-level
+ * suppression as a hard block.
+ */
+async function isSuppressed(admin: any, orgId: string, email: string, policyId: string | null): Promise<boolean> {
+  try {
+    const lowered = email.trim().toLowerCase();
+    if (!lowered) return false;
+
+    // 1. Any org-level suppression on this email
+    const { data: sup } = await admin
+      .from('email_suppressions')
+      .select('id')
+      .eq('organization_id', orgId)
+      .ilike('email', lowered)
+      .limit(1);
+    if (sup && sup.length > 0) return true;
+
+    // 2. Category-aware opt-out — look up policy.suppression_category if present
+    let category: string | null = null;
+    if (policyId) {
+      const { data: p } = await admin
+        .from('automation_chaser_policies')
+        .select('suppression_category, stop_on_unsubscribe')
+        .eq('id', policyId).maybeSingle();
+      if (p && p.stop_on_unsubscribe === false) return false;
+      category = p?.suppression_category || null;
+    }
+
+    const prefQuery = admin
+      .from('email_preferences')
+      .select('id, opted_out_at')
+      .eq('organization_id', orgId)
+      .ilike('email', lowered)
+      .not('opted_out_at', 'is', null)
+      .limit(1);
+    if (category) prefQuery.eq('category', category);
+    const { data: pref } = await prefQuery;
+    if (pref && pref.length > 0) return true;
+
+    return false;
+  } catch (e) {
+    console.warn('[chaser-tick] suppression check failed (fail-open):', e);
+    return false;
+  }
+}
