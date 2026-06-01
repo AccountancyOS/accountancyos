@@ -689,6 +689,36 @@ export const LeadDetailPanel = ({
           </ScrollArea>
         </Tabs>
       </SheetContent>
+      <AlertDialog open={!!lifecycleAction} onOpenChange={(o) => !o && setLifecycleAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {lifecycleAction === "dormant" ? "Mark Lead Dormant" : "Mark Lead Lost"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {lifecycleAction === "dormant"
+                ? "Pauses chaser cycles. Lead can be reactivated later by moving back to an active stage."
+                : "Closes this lead as lost. This stops all automations and chasers."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="lifecycle-reason">Reason (Optional)</Label>
+            <Textarea
+              id="lifecycle-reason"
+              value={lifecycleReason}
+              onChange={(e) => setLifecycleReason(e.target.value)}
+              placeholder="Brief reason for record-keeping"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={lifecycleSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLifecycleSubmit} disabled={lifecycleSubmitting}>
+              {lifecycleSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 };
