@@ -291,6 +291,191 @@ async function executeAction(
   }
 }
 
+// ============================================================
+// Phase 2: trigger-contract routing
+// ============================================================
+
+/**
+ * Route a single automation_event against the new trigger-contract layer:
+ *  - QUOTE_ACCEPTED  → spawn workflow instances per automation_workflow_trigger_map.
+ *  - LEAD_STAGE_CHANGED → stop CRM-followup chaser runs when stage advances or = lost.
+ *  - QUOTE_REJECTED / QUOTE_EXPIRED → stop quote-chaser runs for that quote.
+ *  - KYC_STATUS_CHANGED → stop kyc-subject chaser runs once subject is complete/waived.
+ *
+ * Safe to run for every event — non-matching types fall through silently.
+ * Errors are surfaced to the caller for logging but never block legacy rule processing.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function routeTriggerContractEvent(supabase: any, ev: AutomationEvent): Promise<void> {
+  const type = ev.event_type;
+
+  // 1. Workflow spawn for any event mapped via trigger contracts
+  await spawnWorkflowInstancesForEvent(supabase, ev);
+
+  // 2. Subject-based stop logic
+  if (type === "LEAD_STAGE_CHANGED") {
+    const newStage = String((ev.new_value?.stage ?? ev.new_value?.pipeline_stage ?? "")).toLowerCase();
+    const stopStages = new Set(["qualified", "won", "converted", "lost", "dormant"]);
+    if (stopStages.has(newStage)) {
+      await stopSubjectRuns(supabase, ev.organization_id, "lead", ev.entity_id);
+    }
+    return;
+  }
+
+  if (type === "QUOTE_REJECTED" || type === "QUOTE_EXPIRED") {
+    await stopSubjectRuns(supabase, ev.organization_id, "quote", ev.entity_id);
+    return;
+  }
+
+  if (type === "KYC_STATUS_CHANGED") {
+    const status = String((ev.new_value?.subject_status ?? ev.new_value?.status ?? "")).toLowerCase();
+    if (status === "complete" || status === "waived") {
+      await stopSubjectRuns(supabase, ev.organization_id, "kyc_subject", ev.entity_id);
+    }
+    return;
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function spawnWorkflowInstancesForEvent(supabase: any, ev: AutomationEvent): Promise<void> {
+  // Find trigger contract id for this event_type
+  const { data: contract } = await supabase
+    .from("automation_trigger_contracts")
+    .select("id")
+    .eq("key", ev.event_type)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!contract?.id) return;
+
+  // Find mapped templates
+  const { data: maps } = await supabase
+    .from("automation_workflow_trigger_map")
+    .select("workflow_template_id, filter_config")
+    .eq("trigger_contract_id", contract.id);
+
+  if (!maps || maps.length === 0) return;
+
+  for (const m of maps) {
+    // Skip if org disabled this template via override
+    const { data: tpl } = await supabase
+      .from("automation_workflow_templates")
+      .select("id, org_id, default_enabled")
+      .eq("id", m.workflow_template_id)
+      .maybeSingle();
+
+    if (!tpl) continue;
+    // Skip per-org templates that belong to a different org
+    if (tpl.org_id && tpl.org_id !== ev.organization_id) continue;
+
+    // Resolve subject IDs based on the source entity (quote, lead, client, etc.)
+    const subject = await resolveWorkflowSubject(supabase, ev);
+
+    // Build period_key — for ad-hoc trigger-driven workflows use the event id
+    const periodKey = `event:${ev.id}`;
+
+    const insertPayload = {
+      org_id: ev.organization_id,
+      template_id: tpl.id,
+      client_id: subject.clientId,
+      company_id: subject.companyId,
+      service_id: null,
+      period_key: periodKey,
+      status: "QUEUED",
+      next_run_at: new Date().toISOString(),
+      triggering_event_key: ev.event_type,
+      triggering_event_id: ev.id,
+      context: {
+        ...subject.context,
+        event_id: ev.id,
+        event_type: ev.event_type,
+      },
+    };
+
+    const { error: insertErr } = await supabase
+      .from("automation_workflow_instances")
+      .insert(insertPayload);
+
+    if (insertErr && insertErr.code !== "23505") {
+      // 23505 = unique violation (already spawned for this period_key) — idempotent
+      console.warn(
+        `[process-automation-events] workflow spawn failed for template ${tpl.id} on event ${ev.id}: ${insertErr.message}`,
+      );
+    }
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveWorkflowSubject(
+  supabase: any,
+  ev: AutomationEvent,
+): Promise<{ clientId: string | null; companyId: string | null; context: Record<string, unknown> }> {
+  const ctx: Record<string, unknown> = {};
+
+  if (ev.entity_type === "quote") {
+    const { data: q } = await supabase
+      .from("quotes")
+      .select("id, client_id, company_id, lead_id, ported_to_client_id")
+      .eq("id", ev.entity_id)
+      .maybeSingle();
+    if (q) {
+      ctx.quoteId = q.id;
+      if (q.lead_id) ctx.leadId = q.lead_id;
+      return {
+        clientId: q.client_id || q.ported_to_client_id || null,
+        companyId: q.company_id || null,
+        context: ctx,
+      };
+    }
+  }
+
+  if (ev.entity_type === "client") {
+    return { clientId: ev.entity_id, companyId: null, context: ctx };
+  }
+
+  if (ev.entity_type === "company") {
+    return { clientId: null, companyId: ev.entity_id, context: ctx };
+  }
+
+  if (ev.entity_type === "lead") {
+    ctx.leadId = ev.entity_id;
+    return { clientId: null, companyId: null, context: ctx };
+  }
+
+  return { clientId: null, companyId: null, context: ctx };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function stopSubjectRuns(
+  supabase: any,
+  organizationId: string,
+  subjectType: string,
+  subjectId: string,
+): Promise<void> {
+  const { data: runs } = await supabase
+    .from("automation_chaser_runs")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("subject_type", subjectType)
+    .eq("subject_id", subjectId)
+    .eq("status", "ACTIVE");
+
+  if (!runs || runs.length === 0) return;
+
+  const ids = runs.map((r: { id: string }) => r.id);
+
+  await supabase
+    .from("automation_chaser_runs")
+    .update({ status: "STOPPED", next_send_at: null, updated_at: new Date().toISOString() })
+    .in("id", ids);
+
+  await supabase
+    .from("automation_chaser_messages")
+    .update({ status: "CANCELLED" })
+    .in("chaser_run_id", ids)
+    .eq("status", "QUEUED");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -365,6 +550,17 @@ Deno.serve(async (req) => {
       };
 
       try {
+        // ------------------------------------------------------------
+        // Phase 2: trigger-contract routing (workflow spawn + chaser stop)
+        // Runs BEFORE legacy automation_rules so subject events get
+        // handled even when no legacy rule exists for them.
+        // ------------------------------------------------------------
+        try {
+          await routeTriggerContractEvent(supabase, typedEvent);
+        } catch (routeErr) {
+          allErrors.push(`Event ${typedEvent.id} routing: ${routeErr instanceof Error ? routeErr.message : "Unknown"}`);
+        }
+
         // Find matching rules
         const { data: rules, error: rulesError } = await supabase
           .from("automation_rules")
