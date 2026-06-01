@@ -37,7 +37,8 @@ Deno.serve(async (req: Request) => {
       .select(`
         id, organization_id, job_id, policy_id, status,
         next_send_at, frequency_unit, frequency_interval,
-        email_template_id, stop_condition_value, send_count
+        email_template_id, stop_condition_value, send_count,
+        subject_type, subject_id
       `)
       .eq('status', 'ACTIVE')
       .lte('next_send_at', new Date().toISOString())
@@ -58,6 +59,14 @@ Deno.serve(async (req: Request) => {
 
     for (const run of dueRuns) {
       try {
+        // Subject-based runs (Phase 2: lead, quote, engagement_letter, kyc_subject, hmrc_auth)
+        if (run.subject_type && run.subject_id) {
+          const handled = await processSubjectRun(admin, run);
+          if (handled) processed++;
+          continue;
+        }
+
+        // Job-based runs (Phase 1 — unchanged)
         // 1. Check stop condition — fetch job status
         const { data: job } = await admin
           .from('jobs')
