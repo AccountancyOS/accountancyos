@@ -22,7 +22,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
+import { useOrganization as useOrg } from "@/lib/organization-context";
 
 interface Variant {
   id: string;
@@ -48,6 +49,22 @@ const ENGAGEMENT_KINDS = [
 const CLIENT_TYPES = ["", "limited_company", "sole_trader", "partnership", "llp", "charity", "individual", "trust", "other"];
 const SERVICE_CODES = ["", "accounts_filing", "ct_filing", "vat_filing", "payroll", "sa_filing", "bookkeeping", "cis", "confirmation_statement"];
 
+const SAMPLE_CONTEXT: Record<string, string> = {
+  "recipient_name": "Jane Smith",
+  "client.name": "Jane Smith",
+  "firm_name": "",
+  "firm.name": "",
+  "signing_url": "https://client.accountancyos.com/engagement/sample-token",
+};
+
+const renderPlaceholders = (text: string, firmName: string): string => {
+  const ctx = { ...SAMPLE_CONTEXT, firm_name: firmName, "firm.name": firmName };
+  return Object.entries(ctx).reduce(
+    (acc, [k, v]) => acc.replaceAll(`{{${k}}}`, v),
+    text,
+  );
+};
+
 const EMPTY: Omit<Variant, "id" | "organization_id"> = {
   variant_group_key: null,
   client_type: null,
@@ -68,6 +85,7 @@ export default function EngagementLetterVariants() {
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY>(EMPTY);
+  const [showPreview, setShowPreview] = useState(false);
 
   const { data: variants, isLoading } = useQuery({
     queryKey: ["engagement-letter-variants", organization?.id],
@@ -163,6 +181,9 @@ export default function EngagementLetterVariants() {
   };
 
   const open = creating || !!editing;
+  const firmName = organization?.name || "Your Firm";
+  const previewSubject = renderPlaceholders(form.subject || "(No Subject)", firmName);
+  const previewBody = renderPlaceholders(form.body || "(No Body)", firmName);
 
   return (
     <DashboardLayout>
@@ -333,6 +354,40 @@ export default function EngagementLetterVariants() {
                 rows={10}
                 placeholder="Use {{placeholder}} syntax for dynamic fields"
               />
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Eye className="h-4 w-4" />
+                  Preview With Sample Data
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPreview((s) => !s)}
+                >
+                  {showPreview ? "Hide" : "Show"}
+                </Button>
+              </div>
+              {showPreview && (
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Subject</div>
+                    <div className="font-medium">{previewSubject}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Body</div>
+                    <div
+                      className="rounded border bg-background p-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-foreground"
+                      dangerouslySetInnerHTML={{ __html: previewBody }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sample values: recipient_name = Jane Smith, firm_name = {firmName}, signing_url = example token.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
