@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -34,6 +35,7 @@ export default function CompaniesHouseSettings() {
   const [presenterId, setPresenterId] = useState("");
   const [presenterName, setPresenterName] = useState("");
   const [presenterEmail, setPresenterEmail] = useState("");
+  const [optInBusy, setOptInBusy] = useState(false);
 
   // Fetch CH integration data
   const { data: chData, isLoading } = useQuery({
@@ -96,6 +98,31 @@ export default function CompaniesHouseSettings() {
       toast.error(`Failed to save: ${error.message}`);
     },
   });
+
+  const optInEnabled = !!chData?.ch_sync_opt_in;
+
+  const toggleOptIn = async (next: boolean) => {
+    if (!organization?.id) return;
+    setOptInBusy(true);
+    const { data: userResp } = await supabase.auth.getUser();
+    const userId = userResp.user?.id ?? null;
+    const { error } = await supabase
+      .from("organization_integrations_companies_house")
+      .upsert({
+        organization_id: organization.id,
+        ch_sync_opt_in: next,
+        ch_sync_opt_in_at: next ? new Date().toISOString() : null,
+        ch_sync_opt_in_by: next ? userId : null,
+        updated_at: new Date().toISOString(),
+      });
+    setOptInBusy(false);
+    if (error) {
+      toast.error(`Failed to update sync opt-in: ${error.message}`);
+      return;
+    }
+    toast.success(next ? "Companies House Sync Enabled" : "Companies House Sync Paused");
+    queryClient.invalidateQueries({ queryKey: ["organization-ch"] });
+  };
 
   const getConnectionStatus = () => {
     const hasPresenter = !!chData?.presenter_id && !!chData?.presenter_email;
