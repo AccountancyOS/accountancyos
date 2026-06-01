@@ -60,7 +60,7 @@ const SAMPLE_CONTEXT: Record<string, string> = {
 const renderPlaceholders = (text: string, firmName: string): string => {
   const ctx = { ...SAMPLE_CONTEXT, firm_name: firmName, "firm.name": firmName };
   return Object.entries(ctx).reduce(
-    (acc, [k, v]) => acc.replaceAll(`{{${k}}}`, v),
+    (acc, [k, v]) => acc.split(`{{${k}}}`).join(v),
     text,
   );
 };
