@@ -227,9 +227,43 @@ serve(async (req: Request) => {
     // Generate signing URL
     const signingUrl = `https://client.accountancyos.com/engagement/${letter.signature_token}`;
 
-    // Build email content
-    const subject = `Please sign your engagement letter - ${firmName}`;
-    const bodyHtml = `
+    // Attempt to resolve an org-specific engagement letter variant.
+    // Falls back to default wording if no active variant matches.
+    const clientTypeHint = application.application_type === 'individual' ? 'individual' : 'limited_company';
+    let variantSubject: string | null = null;
+    let variantBody: string | null = null;
+    try {
+      const { data: variantId } = await serviceSupabase.rpc('resolve_engagement_letter_variant', {
+        p_organization_id: application.organization_id,
+        p_client_type: clientTypeHint,
+        p_service_code: null,
+        p_legal_entity: null,
+        p_engagement_kind: 'recurring',
+      });
+      if (variantId) {
+        const { data: variant } = await serviceSupabase
+          .from('engagement_letter_template_variants')
+          .select('subject, body')
+          .eq('id', variantId)
+          .maybeSingle();
+        if (variant) {
+          const replace = (s: string) => s
+            .replaceAll('{{recipient_name}}', recipientName ?? '')
+            .replaceAll('{{client.name}}', recipientName ?? '')
+            .replaceAll('{{firm_name}}', firmName)
+            .replaceAll('{{firm.name}}', firmName)
+            .replaceAll('{{signing_url}}', signingUrl);
+          variantSubject = replace(variant.subject);
+          variantBody = replace(variant.body);
+        }
+      }
+    } catch (e) {
+      console.warn('Variant resolution failed, using default wording:', e);
+    }
+
+    // Build email content (variant if resolved, else default)
+    const subject = variantSubject ?? `Please sign your engagement letter - ${firmName}`;
+    const bodyHtml = variantBody ?? `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #1a1a1a; margin-bottom: 20px;">Engagement Letter</h2>
         <p style="color: #4a4a4a; line-height: 1.6;">Dear ${recipientName},</p>
