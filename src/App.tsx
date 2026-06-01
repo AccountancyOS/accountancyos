@@ -56,6 +56,7 @@ import PermissionsSettings from "./pages/settings/PermissionsSettings";
 import EmailTemplates from "./pages/settings/EmailTemplates";
 import AutomationSettingsCentre from "./pages/settings/AutomationSettingsCentre";
 import EmailPreferencesPage from "./pages/settings/EmailPreferencesPage";
+import CompaniesHouseDiffInbox from "./pages/settings/CompaniesHouseDiffInbox";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import { Loader2 } from "lucide-react";
