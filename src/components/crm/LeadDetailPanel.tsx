@@ -55,6 +55,7 @@ import {
 } from "@/lib/client-types";
 import { useNavigate } from "react-router-dom";
 import { convertLeadToClient } from "@/lib/lead-conversion-service";
+import { markLeadDormant, markLeadLost } from "@/lib/lead-lifecycle-service";
 
 interface Lead {
   id: string;
@@ -113,6 +114,30 @@ export const LeadDetailPanel = ({
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<"dormant" | "lost" | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleSubmitting, setLifecycleSubmitting] = useState(false);
+
+  const handleLifecycleSubmit = async () => {
+    if (!lead || !lifecycleAction) return;
+    setLifecycleSubmitting(true);
+    try {
+      if (lifecycleAction === "dormant") {
+        await markLeadDormant(lead.id, lifecycleReason || undefined);
+        toast({ title: "Lead Marked Dormant", description: "Chaser cycles will pause for this lead." });
+      } else {
+        await markLeadLost(lead.id, lifecycleReason || undefined);
+        toast({ title: "Lead Marked Lost", description: "Lead moved to lost stage." });
+      }
+      setLifecycleAction(null);
+      setLifecycleReason("");
+      onLeadUpdated();
+    } catch (e: any) {
+      toast({ title: "Action Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLifecycleSubmitting(false);
+    }
+  };
 
   const handleConvertToClient = async () => {
     if (!lead || !organization) return;
@@ -335,6 +360,16 @@ export const LeadDetailPanel = ({
                 )}
                 Convert to Client
               </Button>
+            )}
+            {(lead.pipeline_stage === "proposal_sent" || lead.pipeline_stage === "chasing") && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setLifecycleAction("dormant")}>
+                  Mark Dormant
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setLifecycleAction("lost")}>
+                  Mark Lost
+                </Button>
+              </div>
             )}
           </div>
           <SheetDescription className="flex items-center gap-2 flex-wrap">
@@ -654,6 +689,36 @@ export const LeadDetailPanel = ({
           </ScrollArea>
         </Tabs>
       </SheetContent>
+      <AlertDialog open={!!lifecycleAction} onOpenChange={(o) => !o && setLifecycleAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {lifecycleAction === "dormant" ? "Mark Lead Dormant" : "Mark Lead Lost"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {lifecycleAction === "dormant"
+                ? "Pauses chaser cycles. Lead can be reactivated later by moving back to an active stage."
+                : "Closes this lead as lost. This stops all automations and chasers."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="lifecycle-reason">Reason (Optional)</Label>
+            <Textarea
+              id="lifecycle-reason"
+              value={lifecycleReason}
+              onChange={(e) => setLifecycleReason(e.target.value)}
+              placeholder="Brief reason for record-keeping"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={lifecycleSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLifecycleSubmit} disabled={lifecycleSubmitting}>
+              {lifecycleSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 };
