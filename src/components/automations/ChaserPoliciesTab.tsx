@@ -223,7 +223,7 @@ function ChaserPolicyCard({
         <div className="flex items-center gap-2 text-sm">
           <StopCircle className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-muted-foreground">
-            {getStopConditionLabel(policy.category)}
+            {getStopConditionLabel(policy.category, policy.stop_condition_value)}
           </span>
         </div>
 
@@ -302,21 +302,56 @@ function isRealServiceCode(code: string | null | undefined): boolean {
 // Frequency Options Builder
 // ---------------------------------------------------------------------------
 
+/**
+ * Build a single, non-duplicated list of cadence options.
+ * - Days for anything under 28 days (1, 3, 7, 14, 21).
+ * - Months for genuinely monthly cadences (1, 3, 6, 12).
+ * - "1 week" / "2 weeks" are never offered alongside "7 days" / "14 days".
+ * The policy's min/max_frequency_interval is interpreted in DAYS so the
+ * picker stays consistent regardless of the row's stored unit.
+ */
 function buildFrequencyOptions(policy: ChaserPolicy) {
-  const options: { value: string; label: string }[] = [];
-  
-  // Daily options
-  for (let i = Math.max(1, policy.min_frequency_interval); i <= Math.min(7, policy.max_frequency_interval); i++) {
-    options.push({ value: `DAY:${i}`, label: getFrequencyLabel("DAY" as FrequencyUnit, i) });
+  const DAY_CHOICES = [1, 3, 7, 14, 21];
+  const MONTH_CHOICES = [1, 3, 6, 12];
+
+  const minDays = Math.max(1, policy.min_frequency_interval || 1);
+  const maxDays = Math.max(minDays, policy.max_frequency_interval || 365);
+
+  const options: { value: string; label: string; days: number }[] = [];
+
+  for (const d of DAY_CHOICES) {
+    if (d >= minDays && d <= maxDays) {
+      options.push({ value: `DAY:${d}`, label: getFrequencyLabel("DAY" as FrequencyUnit, d), days: d });
+    }
   }
-  // Weekly options
-  for (let i = 1; i <= Math.min(4, policy.max_frequency_interval); i++) {
-    options.push({ value: `WEEK:${i}`, label: getFrequencyLabel("WEEK" as FrequencyUnit, i) });
-  }
-  // Monthly options
-  for (let i = 1; i <= Math.min(6, policy.max_frequency_interval); i++) {
-    options.push({ value: `MONTH:${i}`, label: getFrequencyLabel("MONTH" as FrequencyUnit, i) });
+  for (const m of MONTH_CHOICES) {
+    const d = m * 30;
+    if (d >= minDays && d <= Math.max(maxDays, 365)) {
+      options.push({ value: `MONTH:${m}`, label: getFrequencyLabel("MONTH" as FrequencyUnit, m), days: d });
+    }
   }
 
-  return options;
+  // Ensure the policy's current value is present even if it falls outside
+  // the curated list (e.g. legacy DAY:5) so the Select stays controlled.
+  const currentKey = `${policy.frequency_unit}:${policy.frequency_interval}`;
+  if (!options.some((o) => o.value === currentKey)) {
+    const days =
+      policy.frequency_unit === "MONTH"
+        ? policy.frequency_interval * 30
+        : policy.frequency_unit === "WEEK"
+          ? policy.frequency_interval * 7
+          : policy.frequency_interval;
+    options.push({
+      value: currentKey,
+      label: getFrequencyLabel(policy.frequency_unit as FrequencyUnit, policy.frequency_interval),
+      days,
+    });
+  }
+
+  // De-duplicate by effective day count, then sort ascending.
+  const seen = new Set<number>();
+  return options
+    .sort((a, b) => a.days - b.days)
+    .filter((o) => (seen.has(o.days) ? false : (seen.add(o.days), true)))
+    .map(({ value, label }) => ({ value, label }));
 }

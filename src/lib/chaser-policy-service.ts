@@ -353,28 +353,101 @@ export function getTriggerDescription(triggerType: TriggerType): string {
 }
 
 // ---------------------------------------------------------------------------
-// Category-aware Stop Condition & Category Labels (Settings Centre UI)
+// Stop-Condition Labels — keyed by the stored `stop_condition_value` so the
+// UI never falls back to a generic "records received" wording for non-records
+// automations. Category is only used as a last-resort fallback.
 // ---------------------------------------------------------------------------
 
-const STOP_CONDITION_LABELS: Record<string, string> = {
-  crm_sales: "Stops when the lead replies or changes stage",
-  engagement_letters: "Stops when the engagement letter is signed",
-  kyc_aml: "Stops when KYC documents are received",
-  hmrc_authorisation: "Stops when HMRC authorisation is active",
-  onboarding: "Stops when onboarding is complete",
-  services: "Stops when the service is acknowledged",
-  jobs_records: "Stops when records are received",
-  questionnaires: "Stops when the questionnaire is submitted",
-  workpapers: "Stops when the workpaper is approved",
-  deadlines_payments: "Stops when the deadline is met",
-  documents_signatures: "Stops when the document is signed",
-  messages_slas: "Stops when a reply is sent",
-  billing_revenue: "Stops when the invoice is paid",
+const STOP_CONDITION_BY_VALUE: Record<string, string> = {
+  // CRM / sales
+  lead_qualified_or_lost:
+    "Stops when the lead replies, converts, is marked lost, or unsubscribes",
+  quote_closed:
+    "Stops when the quote is accepted, rejected, expired, or the lead replies",
+  lead_replied: "Stops when the lead replies or is reactivated",
+
+  // Onboarding & client lifecycle
+  onboarding_complete:
+    "Stops when onboarding is completed, cancelled, or the client is archived",
+  first_job_created:
+    "Stops when the service is acknowledged or the first job is created",
+  client_archived: "Stops when the client is archived",
+
+  // Engagement & KYC
+  engagement_letter_signed:
+    "Stops when the engagement letter is signed, superseded, or withdrawn",
+  kyc_subject_complete:
+    "Stops when KYC is approved, waived, or a new request supersedes it",
+
+  // HMRC
+  hmrc_auth_active:
+    "Stops when HMRC authorisation is active, cancelled, or not required",
+
+  // Records & questionnaires
+  records_received:
+    "Stops when records are received, verified, or the job moves past records collection",
+  records_sufficient:
+    "Stops when no required records remain outstanding",
+  completed: "Stops when the questionnaire is submitted or withdrawn",
+
+  // Workpapers
+  approved: "Stops when the workpaper is approved or rejected",
+
+  // Deadlines / filings / payments
+  filed:
+    "Stops when the filing is accepted, the deadline is satisfied, or the job is completed",
+  deadline_satisfied:
+    "Stops when the deadline is marked satisfied or cancelled",
+  paid:
+    "Stops when the invoice is paid, voided, or no longer due",
+  task_completed: "Stops when the task is completed or cancelled",
+
+  // Documents & signatures
+  signed:
+    "Stops when the document is signed, superseded, or the request is cancelled",
+  approval_granted:
+    "Stops when the approval pack is approved, rejected, or withdrawn",
+
+  // Messages / SLAs
+  responded: "Stops when the practice replies to the conversation",
 };
 
-export function getStopConditionLabel(category: string | null | undefined): string {
-  if (!category) return "Stops when the record is complete";
-  return STOP_CONDITION_LABELS[category] || "Stops when the record is complete";
+const STOP_CONDITION_BY_CATEGORY: Record<string, string> = {
+  crm_sales: "Stops when the lead replies, converts, or unsubscribes",
+  engagement_letters: "Stops when the engagement letter is signed or superseded",
+  kyc_aml: "Stops when KYC is approved or waived",
+  hmrc_authorisation: "Stops when HMRC authorisation is completed or cancelled",
+  onboarding: "Stops when onboarding is complete",
+  services: "Stops when the service is activated or the first job is created",
+  jobs_records:
+    "Stops when records are received or the job moves past records collection",
+  questionnaires: "Stops when the questionnaire is submitted or withdrawn",
+  workpapers: "Stops when the workpaper is approved or rejected",
+  deadlines_payments:
+    "Stops when the deadline is satisfied, the filing is accepted, or the payment is settled",
+  documents_signatures:
+    "Stops when the document is signed or the request is cancelled",
+  messages_slas: "Stops when the practice replies",
+  billing_revenue: "Stops when the invoice is paid, voided, or written off",
+};
+
+export function getStopConditionLabel(
+  categoryOrValue: string | null | undefined,
+  stopConditionValue?: string | null,
+): string {
+  // Preferred: resolve by the policy's actual stop_condition_value
+  if (stopConditionValue && STOP_CONDITION_BY_VALUE[stopConditionValue]) {
+    return STOP_CONDITION_BY_VALUE[stopConditionValue];
+  }
+  // Back-compat: single-arg call with a category key
+  if (categoryOrValue && STOP_CONDITION_BY_CATEGORY[categoryOrValue]) {
+    return STOP_CONDITION_BY_CATEGORY[categoryOrValue];
+  }
+  // Last resort: humanise the raw value rather than a generic placeholder
+  if (stopConditionValue) {
+    return `Stops when ${humanizeTriggerKey(stopConditionValue).toLowerCase()}`;
+  }
+  return "Stops when the underlying obligation is satisfied";
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -399,10 +472,19 @@ export function getCategoryLabel(category: string | null | undefined): string {
   return CATEGORY_LABELS[category] || humanizeTriggerKey(category);
 }
 
+/**
+ * Render a frequency consistently. Weeks are normalised into days so the UI
+ * never shows "7 days" and "1 week" as different choices. Months are kept
+ * only for genuinely monthly cadences.
+ */
 export function getFrequencyLabel(unit: FrequencyUnit, interval: number): string {
-  if (unit === "WEEK" && interval === 1) return "Weekly";
-  if (unit === "WEEK" && interval === 2) return "Fortnightly";
-  if (unit === "MONTH" && interval === 1) return "Monthly";
-  if (unit === "DAY" && interval === 1) return "Daily";
-  return `Every ${interval} ${unit.toLowerCase()}${interval > 1 ? "s" : ""}`;
+  if (unit === "WEEK") {
+    const days = interval * 7;
+    return days === 1 ? "Every 1 day" : `Every ${days} days`;
+  }
+  if (unit === "MONTH") {
+    return interval === 1 ? "Every 1 month" : `Every ${interval} months`;
+  }
+  // DAY
+  return interval === 1 ? "Every 1 day" : `Every ${interval} days`;
 }
