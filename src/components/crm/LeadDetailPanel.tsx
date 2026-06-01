@@ -55,6 +55,7 @@ import {
 } from "@/lib/client-types";
 import { useNavigate } from "react-router-dom";
 import { convertLeadToClient } from "@/lib/lead-conversion-service";
+import { markLeadDormant, markLeadLost } from "@/lib/lead-lifecycle-service";
 
 interface Lead {
   id: string;
@@ -113,6 +114,30 @@ export const LeadDetailPanel = ({
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<"dormant" | "lost" | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleSubmitting, setLifecycleSubmitting] = useState(false);
+
+  const handleLifecycleSubmit = async () => {
+    if (!lead || !lifecycleAction) return;
+    setLifecycleSubmitting(true);
+    try {
+      if (lifecycleAction === "dormant") {
+        await markLeadDormant(lead.id, lifecycleReason || undefined);
+        toast({ title: "Lead Marked Dormant", description: "Chaser cycles will pause for this lead." });
+      } else {
+        await markLeadLost(lead.id, lifecycleReason || undefined);
+        toast({ title: "Lead Marked Lost", description: "Lead moved to lost stage." });
+      }
+      setLifecycleAction(null);
+      setLifecycleReason("");
+      onLeadUpdated();
+    } catch (e: any) {
+      toast({ title: "Action Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLifecycleSubmitting(false);
+    }
+  };
 
   const handleConvertToClient = async () => {
     if (!lead || !organization) return;
@@ -335,6 +360,16 @@ export const LeadDetailPanel = ({
                 )}
                 Convert to Client
               </Button>
+            )}
+            {(lead.pipeline_stage === "proposal_sent" || lead.pipeline_stage === "chasing") && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setLifecycleAction("dormant")}>
+                  Mark Dormant
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setLifecycleAction("lost")}>
+                  Mark Lost
+                </Button>
+              </div>
             )}
           </div>
           <SheetDescription className="flex items-center gap-2 flex-wrap">
