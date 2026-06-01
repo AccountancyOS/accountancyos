@@ -15,7 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { getTriggerDescription, getFrequencyLabel, type FrequencyUnit } from "@/lib/chaser-policy-service";
+import {
+  getTriggerDescription,
+  getFrequencyLabel,
+  getStopConditionLabel,
+  getCategoryLabel,
+  type FrequencyUnit,
+} from "@/lib/chaser-policy-service";
 import { Mail, Clock, StopCircle, AlertTriangle } from "lucide-react";
 
 interface ChaserPolicy {
@@ -33,6 +39,7 @@ interface ChaserPolicy {
   email_template_id: string | null;
   stop_condition_value: string;
   is_enabled: boolean;
+  category: string | null;
 }
 
 interface EmailTemplate {
@@ -216,7 +223,7 @@ function ChaserPolicyCard({
         <div className="flex items-center gap-2 text-sm">
           <StopCircle className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-muted-foreground">
-            Stops when job status = <Badge variant="outline" className="ml-1 text-xs">Records Received</Badge>
+            {getStopConditionLabel(policy.category)}
           </span>
         </div>
 
@@ -270,15 +277,25 @@ function ChaserPolicyCard({
           )}
         </div>
 
-        {/* Service code badge */}
-        <div className="pt-1">
-          <Badge variant="secondary" className="text-xs">
-            {policy.service_code}
-          </Badge>
-        </div>
+        {/* Category badge — friendly label, hide raw machine code */}
+        {(policy.category || isRealServiceCode(policy.service_code)) && (
+          <div className="pt-1">
+            <Badge variant="secondary" className="text-xs">
+              {policy.category ? getCategoryLabel(policy.category) : policy.service_code}
+            </Badge>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
+}
+
+// Only surface service_code when it is a recognised real service catalog code,
+// not a category placeholder like "crm_followup" / "kyc_subject".
+function isRealServiceCode(code: string | null | undefined): boolean {
+  if (!code) return false;
+  // Real service codes are UPPER_SNAKE in the catalog (e.g. LIMITED_ACCOUNTS).
+  return /^[A-Z][A-Z0-9_]+$/.test(code);
 }
 
 // ---------------------------------------------------------------------------
