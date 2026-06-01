@@ -1555,6 +1555,7 @@ export type Database = {
           applies_to_client_types: string[] | null
           created_at: string
           default_enabled: boolean
+          definition_kind: string | null
           description: string
           id: string
           key: string
@@ -1568,6 +1569,7 @@ export type Database = {
           applies_to_client_types?: string[] | null
           created_at?: string
           default_enabled?: boolean
+          definition_kind?: string | null
           description?: string
           id?: string
           key: string
@@ -1581,6 +1583,7 @@ export type Database = {
           applies_to_client_types?: string[] | null
           created_at?: string
           default_enabled?: boolean
+          definition_kind?: string | null
           description?: string
           id?: string
           key?: string
@@ -3983,6 +3986,8 @@ export type Database = {
           email: string
           first_name: string
           id: string
+          last_engagement_letter_id: string | null
+          last_kyc_pack_id: string | null
           last_name: string
           mobile_number: string | null
           national_insurance_number: string | null
@@ -4014,6 +4019,8 @@ export type Database = {
           email: string
           first_name: string
           id?: string
+          last_engagement_letter_id?: string | null
+          last_kyc_pack_id?: string | null
           last_name: string
           mobile_number?: string | null
           national_insurance_number?: string | null
@@ -4045,6 +4052,8 @@ export type Database = {
           email?: string
           first_name?: string
           id?: string
+          last_engagement_letter_id?: string | null
+          last_kyc_pack_id?: string | null
           last_name?: string
           mobile_number?: string | null
           national_insurance_number?: string | null
@@ -4234,6 +4243,74 @@ export type Database = {
             columns: ["staff_in_charge"]
             isOneToOne: false
             referencedRelation: "organization_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies_house_diff_staging: {
+        Row: {
+          client_id: string | null
+          company_id: string | null
+          company_number: string
+          created_at: string
+          current_value: Json | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_notes: string | null
+          detected_at: string
+          field_path: string
+          id: string
+          incoming_value: Json | null
+          metadata: Json
+          organization_id: string
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string | null
+          company_number: string
+          created_at?: string
+          current_value?: Json | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_notes?: string | null
+          detected_at?: string
+          field_path: string
+          id?: string
+          incoming_value?: Json | null
+          metadata?: Json
+          organization_id: string
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string | null
+          company_number?: string
+          created_at?: string
+          current_value?: Json | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_notes?: string | null
+          detected_at?: string
+          field_path?: string
+          id?: string
+          incoming_value?: Json | null
+          metadata?: Json
+          organization_id?: string
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companies_house_diff_staging_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -6951,6 +7028,71 @@ export type Database = {
             columns: ["pension_scheme_id"]
             isOneToOne: false
             referencedRelation: "pension_schemes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      engagement_letter_template_variants: {
+        Row: {
+          body: string
+          client_type: string | null
+          created_at: string
+          created_by: string | null
+          engagement_kind: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          legal_entity: string | null
+          merge_fields: string[] | null
+          organization_id: string
+          service_code: string | null
+          subject: string
+          template_id: string | null
+          updated_at: string
+          variant_group_key: string | null
+        }
+        Insert: {
+          body: string
+          client_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          engagement_kind?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          legal_entity?: string | null
+          merge_fields?: string[] | null
+          organization_id: string
+          service_code?: string | null
+          subject: string
+          template_id?: string | null
+          updated_at?: string
+          variant_group_key?: string | null
+        }
+        Update: {
+          body?: string
+          client_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          engagement_kind?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          legal_entity?: string | null
+          merge_fields?: string[] | null
+          organization_id?: string
+          service_code?: string | null
+          subject?: string
+          template_id?: string | null
+          updated_at?: string
+          variant_group_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagement_letter_template_variants_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -9814,6 +9956,144 @@ export type Database = {
           },
         ]
       }
+      kyc_pack_subjects: {
+        Row: {
+          chaser_count: number
+          created_at: string
+          documents: Json
+          due_at: string | null
+          id: string
+          kyc_pack_id: string
+          last_chased_at: string | null
+          metadata: Json
+          organization_id: string
+          subject_name: string
+          subject_ref_id: string | null
+          subject_ref_type: string | null
+          subject_status: string
+          subject_type: string
+          updated_at: string
+          waiver_reason: string | null
+        }
+        Insert: {
+          chaser_count?: number
+          created_at?: string
+          documents?: Json
+          due_at?: string | null
+          id?: string
+          kyc_pack_id: string
+          last_chased_at?: string | null
+          metadata?: Json
+          organization_id: string
+          subject_name: string
+          subject_ref_id?: string | null
+          subject_ref_type?: string | null
+          subject_status?: string
+          subject_type: string
+          updated_at?: string
+          waiver_reason?: string | null
+        }
+        Update: {
+          chaser_count?: number
+          created_at?: string
+          documents?: Json
+          due_at?: string | null
+          id?: string
+          kyc_pack_id?: string
+          last_chased_at?: string | null
+          metadata?: Json
+          organization_id?: string
+          subject_name?: string
+          subject_ref_id?: string | null
+          subject_ref_type?: string | null
+          subject_status?: string
+          subject_type?: string
+          updated_at?: string
+          waiver_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kyc_pack_subjects_kyc_pack_id_fkey"
+            columns: ["kyc_pack_id"]
+            isOneToOne: false
+            referencedRelation: "kyc_packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_pack_subjects_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kyc_packs: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          due_at: string | null
+          expires_at: string | null
+          id: string
+          metadata: Json
+          notes: string | null
+          organization_id: string
+          status: string
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          due_at?: string | null
+          expires_at?: string | null
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          organization_id: string
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          due_at?: string | null
+          expires_at?: string | null
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          organization_id?: string
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kyc_packs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kyc_packs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activities: {
         Row: {
           body: string | null
@@ -9864,6 +10144,54 @@ export type Database = {
           },
           {
             foreignKeyName: "lead_activities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_activity_summary: {
+        Row: {
+          dormant_threshold_days: number
+          is_dormant: boolean
+          last_activity_at: string | null
+          last_stage_change_at: string | null
+          lead_id: string
+          organization_id: string
+          refreshed_at: string
+          stage: string | null
+        }
+        Insert: {
+          dormant_threshold_days?: number
+          is_dormant?: boolean
+          last_activity_at?: string | null
+          last_stage_change_at?: string | null
+          lead_id: string
+          organization_id: string
+          refreshed_at?: string
+          stage?: string | null
+        }
+        Update: {
+          dormant_threshold_days?: number
+          is_dormant?: boolean
+          last_activity_at?: string | null
+          last_stage_change_at?: string | null
+          lead_id?: string
+          organization_id?: string
+          refreshed_at?: string
+          stage?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_activity_summary_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_activity_summary_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -12437,6 +12765,8 @@ export type Database = {
           lead_id: string | null
           notes: string | null
           organization_id: string
+          ported_at: string | null
+          ported_to_client_id: string | null
           quote_number: string
           rejected_at: string | null
           rejection_reason: string | null
@@ -12456,6 +12786,8 @@ export type Database = {
           lead_id?: string | null
           notes?: string | null
           organization_id: string
+          ported_at?: string | null
+          ported_to_client_id?: string | null
           quote_number: string
           rejected_at?: string | null
           rejection_reason?: string | null
@@ -12475,6 +12807,8 @@ export type Database = {
           lead_id?: string | null
           notes?: string | null
           organization_id?: string
+          ported_at?: string | null
+          ported_to_client_id?: string | null
           quote_number?: string
           rejected_at?: string | null
           rejection_reason?: string | null
@@ -15518,6 +15852,10 @@ export type Database = {
         }
         Returns: string
       }
+      apply_ch_diff: {
+        Args: { p_decision: string; p_diff_id: string; p_notes?: string }
+        Returns: undefined
+      }
       apply_client_override: {
         Args: {
           p_chaser_policy_id: string
@@ -16119,6 +16457,14 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      mark_lead_dormant: {
+        Args: { p_lead_id: string; p_reason?: string }
+        Returns: undefined
+      }
+      mark_lead_lost: {
+        Args: { p_lead_id: string; p_reason?: string }
+        Returns: undefined
+      }
       override_bill_lock_safe: {
         Args: { p_bill_id: string; p_changes: Json; p_reason: string }
         Returns: Json
@@ -16138,6 +16484,7 @@ export type Database = {
         }
         Returns: string
       }
+      port_quote_to_client: { Args: { p_quote_id: string }; Returns: string }
       post_to_ledger: {
         Args: {
           p_client_id: string
@@ -16226,9 +16573,23 @@ export type Database = {
         }
         Returns: Json
       }
+      record_kyc_subject_progress: {
+        Args: { p_new_status: string; p_notes?: string; p_subject_id: string }
+        Returns: undefined
+      }
       regress_filing_status: {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
+      }
+      resolve_engagement_letter_variant: {
+        Args: {
+          p_client_type: string
+          p_engagement_kind: string
+          p_legal_entity: string
+          p_organization_id: string
+          p_service_code: string
+        }
+        Returns: string
       }
       resume_automation: { Args: { p_pause_id: string }; Returns: boolean }
       retry_failed_email_safe: { Args: { p_email_id: string }; Returns: Json }
@@ -16293,6 +16654,10 @@ export type Database = {
       send_onboarding_questionnaire: {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
+      }
+      start_kyc_pack: {
+        Args: { p_client_id: string; p_subjects?: Json }
+        Returns: string
       }
       submit_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       submit_questionnaire_by_token: {

@@ -1,146 +1,153 @@
 
-# AccountancyOS Automation Engine — Approved Plan (Amendments Applied)
+# Phase 2 — CRM, Onboarding, Engagement, KYC/AML, HMRC Auth, CH Diff (single build)
 
-Plan approved. Preserve existing primitives: `automation_rules`, `automation_chaser_policies`, `automation_workflows`, `sla_definitions`. No engine refactor — safe extension only.
+Built on the Phase 1 safety layer. All external automations seed as `send_mode='draft'`, `scope='new_records'`, `applies_to_records_created_after=now()`. Owner must activate per category.
 
-**Build order:** Phase 1 first, in isolation. Phases 2–4 follow only after Phase 1 sign-off.
+## Scope (9 areas)
 
----
+1. **CRM follow-up chaser** — cadenced reminders on `LEAD_CREATED` + stage dwell time.
+2. **Quote chaser** — cadenced reminders on `QUOTE_SENT` until `accepted`/`rejected`/`expired`.
+3. **Quote → onboarding workflow** — multi-step on `QUOTE_ACCEPTED`: create client, port services/fees, send engagement letter, request KYC, request HMRC auth.
+4. **Lost / dormant lead scan** — daily scan: `LEAD_DORMANT` event after N days no activity; `LEAD_LOST` on explicit mark.
+5. **Engagement letter variants** — template variant model by `client_type`, `service_code`, `legal_entity`, `engagement_kind`. Resolver picks the right variant on send.
+6. **KYC/AML multi-subject** — KYC packs supporting subjects `individual_client | director | partner | llp_member | trustee | psc | authorised_contact`; chaser per outstanding subject.
+7. **HMRC auth chaser** — uses `client_tax_authorisations` from Phase 1; cadenced reminders until `active`; blocks filing per existing HMRC auth blocking memory.
+8. **Companies House diff sync** — CH sync writes to staging diff table with accept/reject UI; never silent-overwrites user-entered fields.
+9. **Quote → client port** — atomic RPC porting accepted quote's services, fees, billing cadence, and contacts into the new client record.
 
-## Phase 1 Scope (this build)
+## Database changes
 
-Engine safety + migration layer. No external automations are wired in Phase 1.
+### New tables
 
-### Tables to create
+- `engagement_letter_template_variants` — `template_id`, `client_type`, `service_code`, `legal_entity`, `engagement_kind`, `is_default bool`, `body`, `subject`, `merge_fields`. Unique partial index on `(org_id, client_type, service_code, legal_entity, engagement_kind)` where active.
+- `kyc_packs` — `client_id`, `status` (`not_started|in_progress|submitted|approved|rejected|expired`), `due_at`, `submitted_at`, `approved_at`, `approved_by`, `expires_at`, `notes`.
+- `kyc_pack_subjects` — `kyc_pack_id`, `subject_type` enum (7 values above), `subject_ref_type` (`contact|director|free_text`), `subject_ref_id`, `subject_name`, `subject_status` (`pending|documents_requested|partial|complete|waived|failed`), `due_at`, `last_chased_at`, `chaser_count`, `documents jsonb`, `waiver_reason`.
+- `companies_house_diff_staging` — `client_id`, `company_number`, `field_path`, `current_value jsonb`, `incoming_value jsonb`, `source` (`ch_sync`), `detected_at`, `status` (`pending|accepted|rejected|superseded`), `decided_by`, `decided_at`, `decision_notes`. Index on `(org_id, status, detected_at)`.
+- `lead_activity_summary` — materialised projection used by dormant scan: `lead_id`, `last_activity_at`, `last_stage_change_at`, `stage`, `dormant_threshold_days`, `is_dormant bool`. Refreshed by `dormant-lead-scan` edge function.
 
-All tables: `id uuid pk`, `org_id`, `created_at`, `updated_at`, RLS scoped via `current_user_org_ids()`, GRANTs to `authenticated` + `service_role`.
+### Extend tables
 
-| Table | Purpose | Notable columns |
-|---|---|---|
-| `automation_pauses` | Pause at org/client/job/rule level | `scope`, `target_id`, `paused_by`, `reason`, `expires_at` |
-| `email_suppressions` | Bounces, complaints, unsubscribes | `email`, `category nullable`, `reason`, `source` |
-| `email_unsubscribe_tokens` | One token per email per org | `email`, `token`, `used_at` |
-| `email_preferences` | Contact-level prefs (Amendment 12) | `email`, `client_id nullable`, `contact_id nullable`, `lead_id nullable`, `category`, `opted_out_at` |
-| `automation_client_overrides` | Per-client rule config | `client_id`, `rule_id`, `enabled`, `config_overrides jsonb` |
-| `automation_job_overrides` | Per-job rule config | `job_id`, `rule_id`, `enabled`, `config_overrides jsonb` |
-| `automation_audit_logs` | Settings change history (insert-only) | `actor_id`, `entity_type`, `entity_id`, `action`, `before jsonb`, `after jsonb` |
-| `client_tax_authorisations` | HMRC auth lifecycle (Amendment 4) | Decision-3 fields + `next_chase_at`, `chaser_count`, `last_email_template_id`; **partial unique index** on `(org_id, client_id, tax_service_type, coalesce(client_service_id,'00000000-...'::uuid))` |
-| `record_request_items` | Itemised records (Amendments 2 & 3) | `client_id`, `job_id`, `label`, `status` (11 values below), `due_at`, `last_chased_at`, `chaser_count`, `requested_by`, `received_by`, `verified_by`, `waived_by`, `waiver_reason`, `source`, `client_visible bool default true`, `sort_order`, `metadata jsonb` |
-| `client_approval_packs` | Versioned approval (Amendment 13) | `client_id`, `job_id`, `status`, `version_number`, `superseded_by`, `sent_at`, `approved_at`, `approved_by_contact_id`, `approval_method`, `approval_ip`, `approval_user_agent`, `approval_notes`, `documents jsonb` |
-| `recurring_invoice_schedules` | Idempotent billing (Amendment 15) | `client_id`, `service_id`, `cadence`, `start_date`, `end_date`, `billing_day`, `payment_terms_days`, `tax_rate_id`, `invoice_template_id`, `auto_send bool`, `create_draft_only bool`, `next_run_at`, `last_run_at`, `last_invoice_id`, `failure_count`, `amount`, `currency`, `status` (active/paused/cancelled/completed/failed) |
-| `revenue_events` | Append-only ledger (Amendment 14) | `client_id`, `service_id`, `invoice_id`, `event_type`, `source_type`, `source_id`, `reversal_of_event_id`, `currency`, `tax_amount`, `net_amount`, `gross_amount`, `recognition_period_start`, `recognition_period_end`, `occurred_at`; no UPDATE/DELETE policies |
-| `automation_idempotency_keys` | Dedup ledger (Amendment 8) | `key text unique`, `rule_id`, `created_at` |
-| `automation_entity_link_suggestions` | Suggestion-first tagging (Amendment 17) | `source_entity_type`, `source_entity_id`, `suggested_entity_type`, `suggested_entity_id`, `confidence_score`, `suggestion_reason`, `accepted_by`, `accepted_at`, `rejected_by`, `rejected_at` (reuse existing entity link table if present; otherwise create) |
+- `automation_workflows`: add `definition_kind text` (`linear|branching`) and `seed_key text unique nullable` for idempotent seeding of the Quote→Onboarding workflow.
+- `quotes`: add `ported_to_client_id uuid nullable`, `ported_at timestamptz nullable` (set by port RPC).
+- `clients`: add `last_kyc_pack_id`, `last_engagement_letter_id` (FKs, nullable) — convenience pointers, not source of truth.
+- `email_templates`: ensure `variant_group_key` exists to group engagement letter variants under one logical template.
 
-**`record_request_items.status` enum:** `not_requested`, `requested`, `pending`, `received`, `invalid`, `missing`, `waived`, `not_applicable`, `client_says_unavailable`, `reviewed`, `verified`.
+### Trigger contracts (already seeded in Phase 1)
 
-### Tables to extend
-
-- `automation_rules`: add `scope text default 'all_records'` (`new_records`|`all_records`), `applies_to_records_created_after timestamptz`, `paused_at`, `category text`, `send_mode text` (`auto`|`draft`|`task_only`|`disabled` — Amendment 9), `recipient_resolver text` (Amendment 11), `idempotency_template text` (Amendment 8).
-- `automation_rule_templates`: align `category` to the 14 Settings Centre categories; add `default_scope`, `default_frequency`, `default_template_id`, `default_send_mode`, `default_recipient_resolver`, `is_sales_category bool` (Amendment 5).
-- `automation_trigger_contracts`: seed all missing contracts (full list below).
-- `automation_chaser_policies`: add `scope`, `applies_to_records_created_after`, `category`, `suppression_category`, `stop_on_unsubscribe bool default true`, `send_mode`, `recipient_resolver`, `is_sales bool`.
-- `sla_definitions`: add `category`, `feeds_dashboard bool`.
-- `templates` / `message_templates`: add `requires_unsubscribe_link bool`, `required_merge_fields text[]`, `recipient_rule text`.
-
-### Trigger contracts to seed (Amendment 1 — full list, 35)
-
-Original 18: `LEAD_CREATED`, `LEAD_STAGE_CHANGED`, `LEAD_LOST`, `LEAD_DORMANT`, `QUOTE_ACCEPTED`, `QUOTE_REJECTED`, `ENGAGEMENT_LETTER_SENT`, `KYC_STATUS_CHANGED`, `HMRC_AUTH_REQUESTED`, `HMRC_AUTH_COMPLETED`, `RECORDS_REQUESTED`, `RECORDS_PARTIAL`, `RECORDS_RECEIVED`, `RECORDS_VERIFIED`, `WORKPAPER_APPROVED`, `FILING_REJECTED`, `INVOICE_PAYMENT_FAILED`, `DOCUMENT_SIGNED`.
-
-Added (Amendment 1): `SERVICE_ACTIVATED`, `SERVICE_DEACTIVATED`, `SERVICE_FEE_CHANGED`, `JOB_CREATED`, `JOB_COMPLETED`, `WORKPAPER_CREATED`, `WORKPAPER_LOCKED`, `DOCUMENT_UPLOADED`, `DOCUMENT_SIGNATURE_REQUESTED`, `MESSAGE_RECEIVED`, `INVOICE_CREATED`, `PAYMENT_DUE`, `CLIENT_PORTAL_INVITE_SENT`, `CLIENT_ONBOARDING_STARTED`, `RECORD_ITEM_STATUS_CHANGED`, `CLIENT_APPROVAL_PACK_SENT`, `CLIENT_APPROVAL_PACK_APPROVED`.
-
-### Settings Centre categories (14)
-
-CRM & Sales · Onboarding · Engagement Letters · KYC / AML · HMRC Authorisation · Services · Jobs & Records · Questionnaires · Workpapers · Deadlines & Payments · Documents & Signatures · Messages & SLAs · Billing & Revenue · Compliance / Suppression.
-
-**Sales vs service distinction (Amendment 5):** CRM & Sales = sales category, mandatory unsubscribe footer + token. All others = service-critical; respect `email_preferences` category opt-outs but not bulk unsubscribe. UI badges each automation accordingly.
+Phase 2 wires rules/chasers/workflows to:
+`LEAD_CREATED`, `LEAD_STAGE_CHANGED`, `LEAD_DORMANT`, `LEAD_LOST`, `QUOTE_SENT` (add if missing), `QUOTE_ACCEPTED`, `QUOTE_REJECTED`, `ENGAGEMENT_LETTER_SENT`, `KYC_STATUS_CHANGED`, `HMRC_AUTH_REQUESTED`, `HMRC_AUTH_COMPLETED`, `CLIENT_ONBOARDING_STARTED`.
 
 ### RPCs
 
-- `pause_automation(scope, target_id, reason, expires_at)` / `resume_automation(...)`
-- `apply_client_override(...)` / `apply_job_override(...)`
-- `record_automation_audit(...)` — invoked by triggers on rule/policy/template writes
-- `check_suppression(email, category) returns boolean`
-- `enqueue_unsubscribe_token(email) returns token` / `consume_unsubscribe_token(token, category)`
-- `seed_org_automation_defaults(org_id, dry_run boolean default true)` returns JSON summary (Amendment 6)
-- `claim_idempotency_key(key, rule_id) returns boolean` (Amendment 8)
-- `validate_template(template_id, automation_context) returns jsonb` (Amendment 10)
-- `resolve_recipients(rule_id, entity_type, entity_id) returns table` (Amendment 11)
+- `port_quote_to_client(quote_id) returns uuid` — atomic, SECURITY DEFINER. Creates `clients` row from accepted quote, copies services/fees/contacts, sets `quotes.ported_to_client_id`, fires `CLIENT_ONBOARDING_STARTED`. Idempotent via `quotes.ported_to_client_id` guard.
+- `resolve_engagement_letter_variant(client_id, service_codes text[], engagement_kind) returns uuid` — picks most specific matching variant; falls back to default; logs choice.
+- `start_kyc_pack(client_id, subjects jsonb) returns uuid` — creates `kyc_packs` + `kyc_pack_subjects`. Subject list derived from client_type by default.
+- `record_kyc_subject_progress(subject_id, new_status, actor_id, notes)` — updates subject; recomputes pack status; emits `KYC_STATUS_CHANGED`.
+- `apply_ch_diff(diff_id, decision text, notes)` — `accept` writes to live `companies` field, `reject` marks superseded. Audit-logged.
+- `mark_lead_dormant(lead_id, reason)` / `mark_lead_lost(lead_id, reason)` — emits events.
 
-### Edge functions
+### Seed inserts (data, via insert tool, not migration)
 
-**New (Phase 1 only):** `handle-email-unsubscribe`, `handle-email-suppression`, `seed-org-defaults` (wraps `seed_org_automation_defaults`).
+- 1 default engagement letter variant per `engagement_kind` (one_off / annual_renewal / recurring).
+- Chaser policies (all `send_mode='draft'`, `scope='new_records'`, `applies_to_records_created_after=now()`):
+  - CRM follow-up: 3 / 7 / 14 days after `LEAD_CREATED`, stop on stage change to `qualified`+ or `lost`.
+  - Quote chaser: 3 / 7 / 14 / 21 days after `QUOTE_SENT`, stop on accept/reject/expire.
+  - Engagement letter chaser: 3 / 7 / 14 days, stop on signed.
+  - KYC subject chaser: 3 / 7 / 14 days per outstanding subject, stop on `complete|waived`.
+  - HMRC auth chaser: 5 / 10 / 20 days, stop on `active`.
+- Dormant threshold: 30 days default.
 
-**Extend (gating only — no new automations yet):**
-- `process-email-queue`: check `email_suppressions`, `email_preferences`, `automation_pauses`.
-- `chaser-tick` / `chaser-trigger-scan`: honour scope, `applies_to_records_created_after`, pauses, overrides, `send_mode`, idempotency.
-- `process-automation-events`: same gating.
-- `workflow-tick`: same gating per step.
+## Edge functions
 
-**Amendment 7 — no duplicate schedulers.** `lead-followup-tick` and `quote-chaser-tick` are dropped. `chaser-tick` handles them via policy `category`. Only true scans/non-chaser ticks remain for later phases: `dormant-lead-scan`, `recurring-invoice-tick`, `deadline-risk-scan`, `document-archive-tick`, `revenue-rollup`.
+### New
+- `dormant-lead-scan` (cron daily 02:00 UTC) — refresh `lead_activity_summary`, emit `LEAD_DORMANT` for crossings.
+- `companies-house-diff-sync` — extends existing `companies-house-sync` to write to staging instead of overwriting. (Modify existing function rather than duplicating.)
 
-### UI (Phase 1)
+### Extend (no new schedulers per Amendment 7)
+- `chaser-tick` — handle new policy categories: `crm_followup`, `quote_chaser`, `engagement_letter`, `kyc_subject`, `hmrc_auth`. Resolves recipient via Phase 1 `resolve_recipients`.
+- `workflow-tick` — execute the seeded `quote_to_onboarding` workflow steps: port → create kyc pack → request hmrc auth → enqueue engagement letter draft.
+- `process-automation-events` — route `QUOTE_ACCEPTED` to workflow trigger; `LEAD_STAGE_CHANGED` to stop CRM chaser when stage advances.
 
-- `src/pages/settings/AutomationSettingsCentre.tsx` — shell with 14 categories, abstracts primitive type. Per-item editor: enable, frequency, template, scope, send_mode, recipient resolver, test send. Sales vs service badge.
-- `src/pages/settings/EmailPreferencesPage.tsx` + per-client/contact drawer (Amendment 12).
-- Client detail: HMRC Authorisation panel (Amendment 4).
-- Migration review banner with dry-run report (Amendment 6): templates seeded, policies seeded, rules seeded, 0 historic emails queued, 0 historic records activated.
-- Unsubscribe public page `/unsubscribe`.
-- Template editor: live validation panel (Amendment 10) — block save/activation on validation failure.
-- Audit log viewer (Owner/Admin).
+## UI surfaces
 
-### Migration safety (Amendment 6 — dry-run)
+- **Settings Centre** — populate the existing 14-category shell:
+  - CRM & Sales: CRM follow-up, Quote chaser, Lost/Dormant config.
+  - Onboarding: Quote→Onboarding workflow editor (steps reorderable, draft/auto/disabled per step).
+  - Engagement Letters: variant matrix editor (client_type × service_code × kind).
+  - KYC / AML: subject defaults per client_type, chaser cadence.
+  - HMRC Authorisation: chaser cadence; surfaces blocking status.
+- **Client detail**
+  - KYC Pack panel: subject list with status, "Mark Received / Waived", "Send Chaser Now".
+  - Engagement Letter panel: variant resolved on send, re-sign trigger surfaced.
+  - HMRC Authorisation panel (already in Phase 1) — wire chaser controls.
+  - Companies House Diff panel: pending diffs with Accept / Reject buttons (per field).
+- **Lead detail** — Dormant/Lost actions; show active CRM follow-up cadence + next scheduled chaser.
+- **Quote detail** — Port-to-Client action (only when accepted and not yet ported); shows porting status.
+- **CH Diff inbox** (`/settings/companies-house/diffs`) — global queue across clients for Owner/Admin.
 
-1. Deploy schema.
-2. For every existing org: call `seed_org_automation_defaults(org_id, dry_run=true)` and store summary.
-3. Settings Centre shows banner: "Review N seeded automations. 0 emails will be sent until you activate them."
-4. External-facing rules/chasers seeded with `scope='new_records'`, `applies_to_records_created_after=now()`, `send_mode='draft'` (Amendment 9).
-5. Internal-only rules may be seeded as `scope='all_records'` + `send_mode='auto'`.
-6. Bulk activation for historic records requires explicit Owner confirmation per category.
+## Migration safety
 
-### Cross-cutting amendments (applied to all future phases too)
+1. All new chaser policies seed paused for existing orgs; banner in Settings Centre lists what was seeded.
+2. `port_quote_to_client` guarded by `ported_to_client_id IS NULL` — re-running is a no-op.
+3. CH sync change is **opt-in per org**: existing orgs keep current behaviour until they flip "Use diff staging" in Companies House settings. New orgs default to diff staging on.
+4. Engagement letter variant resolver falls back to existing global template if no variant matches — zero behaviour change for orgs that haven't created variants.
+5. KYC pack creation does not auto-trigger for existing clients; only fires on new `CLIENT_ONBOARDING_STARTED`. Existing clients get a "Start KYC Pack" button.
 
-- **#8 Idempotency** — every rule declares an `idempotency_template`; engine calls `claim_idempotency_key` before any external side effect. Examples documented in code comments per rule.
-- **#10 Template validation** — `validate_template` runs on save and on activation. Required merge fields, recipient rule, non-blank subject/body, unsubscribe link for sales categories, portal/action links where required.
-- **#11 Recipient resolution** — named resolvers: `lead_primary`, `client_primary_contact`, `all_signers`, `payroll_contact`, `bookkeeping_contact`, `director_contact`, `partner_or_trustee`, `assigned_accountant`, `assigned_reviewer`, `partner_in_charge`.
-- **#16 Deadline risk levels** — `green|amber|red|critical|blocked` with explainable reasoning stored as `risk_reason text` (built in Phase 4 but contract defined now).
-- **#17 Suggestion-first tagging** — store via `automation_entity_link_suggestions`, never auto-apply low-confidence.
-- **#18 Engagement letter templates** — templating model supports variants by `client_type`, `service_code`, `legal_entity`, `firm_preference`, `engagement_kind` (one_off/recurring/annual_renewal). Seed one default; allow full replacement.
-- **#19 KYC subjects** — KYC entity model must allow subjects of type `individual_client`, `director`, `partner`, `llp_member`, `trustee`, `psc`, `authorised_contact`. Phase 1 only confirms the data model can express this; build occurs in Phase 2.
-- **#20 Companies House diff** — sync writes to a staging diff with accept/reject UI; never silent overwrite of user-entered fields. Phase 1 only formalises the contract.
-- **#21 Dashboard feeds** — every Phase 1 table and counter is exposed via a `v_automation_dashboard_*` view set so later phases can plug straight in.
+## Files / functions touched
 
-### RLS / security tests (Amendment 22)
+**New files**
+- `src/pages/settings/CompaniesHouseDiffInbox.tsx`
+- `src/components/clients/KycPackPanel.tsx`
+- `src/components/clients/CompaniesHouseDiffPanel.tsx`
+- `src/components/crm/LeadDormantActions.tsx`
+- `src/components/quotes/PortQuoteToClientButton.tsx`
+- `src/components/settings/automations/CrmFollowupEditor.tsx`
+- `src/components/settings/automations/QuoteChaserEditor.tsx`
+- `src/components/settings/automations/QuoteOnboardingWorkflowEditor.tsx`
+- `src/components/settings/automations/EngagementLetterVariantMatrix.tsx`
+- `src/components/settings/automations/KycSubjectDefaultsEditor.tsx`
+- `src/components/settings/automations/HmrcAuthChaserEditor.tsx`
+- `src/lib/kyc-pack-service.ts`
+- `src/lib/quote-port-service.ts`
+- `src/lib/engagement-variant-resolver.ts`
+- `src/lib/ch-diff-service.ts`
+- `supabase/functions/dormant-lead-scan/index.ts`
 
-- Org A cannot read/write Org B `automation_rules`, `automation_chaser_policies`, `templates`, `automation_audit_logs`.
-- Org A cannot trigger Org B chasers via RPC.
-- Unsubscribe token cannot opt-out an address in another org's suppression list.
-- Public `/unsubscribe` endpoint leaks no client data — only success/already-unsubscribed/invalid.
-- Service-role writes scoped through SECURITY DEFINER RPCs that re-check `org_id`.
-- Client portal role cannot read internal automation settings tables.
+**Edited**
+- `src/pages/settings/AutomationSettingsCentre.tsx` (mount Phase 2 editors per category)
+- `src/components/clients/HmrcAuthorisationPanel.tsx` (wire chaser controls)
+- `src/components/clients/EngagementLetterStatus.tsx` (use variant resolver)
+- `src/pages/QuoteDetail.tsx` (port button)
+- `src/pages/CRM.tsx` + `src/components/crm/LeadDetailPanel.tsx` (dormant/lost actions, chaser status)
+- `src/lib/automation-actions.ts` (new action: `port_quote`, `start_kyc_pack`, `send_engagement_variant`)
+- `src/lib/chaser-policy-service.ts` (new categories)
+- `src/lib/ch-sync-service.ts` (route through diff staging)
+- `supabase/functions/chaser-tick/index.ts` (new policy categories)
+- `supabase/functions/workflow-tick/index.ts` (quote_to_onboarding execution)
+- `supabase/functions/process-automation-events/index.ts` (route new events)
+- `supabase/functions/companies-house-sync/index.ts` (write to staging)
+- `supabase/functions/send-engagement-letter/index.ts` (variant resolution)
 
----
+## Sequence of work
 
-## Phase 1 Deliverables (handover required before Phase 2)
+1. Schema migration (new tables + extends + GRANTs + RLS).
+2. RPCs (`port_quote_to_client`, KYC pack RPCs, CH diff RPC, variant resolver, dormant/lost markers).
+3. Backend services (`src/lib/*-service.ts`).
+4. Edge function changes (extend existing; add `dormant-lead-scan`).
+5. Schedule cron for `dormant-lead-scan`.
+6. Seed inserts (default variants, paused chaser policies, seeded workflow).
+7. UI: Settings Centre editors, client/quote/lead panels, CH diff inbox.
+8. Verification: dry-run report shows 0 historic sends; integration tests for each chaser path; CH diff round-trip; port-quote idempotency.
 
-After Phase 1 ships, the build response must include:
-1. Migration summary (all new/extended tables).
-2. Full RLS policy list.
-3. All new RPCs with signatures.
-4. Edge function diffs (gating only, no new sends).
-5. UI surfaces added.
-6. Evidence: `email_send_log` shows 0 historic sends queued post-migration for any existing org.
-7. Evidence: suppression / pause / scope checks pass integration tests.
-8. RLS cross-org isolation test results.
-9. Template validation test results.
-10. Open issues / deferred items before Phase 2.
+## Phase 2 handover deliverables (required before any later work)
 
----
+- Migration summary + RLS list.
+- All new RPC signatures.
+- Edge function diffs.
+- UI surfaces added.
+- Evidence: `email_send_log` shows 0 historic external sends after migration.
+- Evidence: every seeded automation has `send_mode='draft'`, `scope='new_records'`.
+- Tests: chaser stop conditions, KYC subject lifecycle, CH diff accept/reject, quote port idempotency, engagement variant resolution, HMRC chaser blocked when auth active.
+- RLS cross-org isolation results for all new tables.
+- Open issues / deferred items before Phase 3.
 
-## Later Phases (locked, not built now)
-
-- **Phase 2:** CRM follow-up, quote chaser, quote→onboarding workflow, lost/dormant, engagement letter (variant templates), KYC/AML (multi-subject), HMRC auth chaser, Companies House diff sync, quote→client/services/fees port.
-- **Phase 3:** Service activate/deactivate/fee-change, job create/rollover, records & partial records chasers (using 11-status model + items table), questionnaires, workpapers (create/approve/lock), internal review, client approval packs (versioned), filing accepted/rejected.
-- **Phase 4:** Deadline reminders + risk scan (5 levels), payment reminders, document upload + signature chasers, 7-year archive, message SLA, suggestion-first tagging, quote→billing, recurring invoices, payment failed, revenue rollup.
-
-All use cases reuse `chaser-tick` where the behaviour is cadenced; only true scans get dedicated edge functions.
