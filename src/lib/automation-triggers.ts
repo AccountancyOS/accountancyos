@@ -148,7 +148,7 @@ export async function emitJobStatusChange(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'job_status_change',
+    eventType: 'JOB_STATUS_CHANGED',
     entityType: 'job',
     entityId: jobId,
     oldValue: { status: oldStatus },
@@ -169,7 +169,7 @@ export async function emitDeadlineApproaching(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'deadline_approaching',
+    eventType: 'DEADLINE_APPROACHING',
     entityType: 'deadline',
     entityId: deadlineId,
     newValue: { dueDate, daysRemaining },
@@ -188,7 +188,7 @@ export async function emitClientOnboarded(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'client_onboarded',
+    eventType: 'CLIENT_ONBOARDED',
     entityType: clientType,
     entityId: clientId,
     newValue: { status: 'active' },
@@ -208,7 +208,7 @@ export async function emitOnboardingApproved(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'onboarding_approved',
+    eventType: 'ONBOARDING_APPROVED',
     entityType: 'onboarding',
     entityId: onboardingId,
     newValue: { status: 'approved', clientId, companyId },
@@ -228,7 +228,7 @@ export async function emitFilingStatusChange(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'filing_status_change',
+    eventType: 'FILING_ACCEPTED',
     entityType: 'filing',
     entityId: filingId,
     oldValue: { status: oldStatus },
@@ -248,7 +248,7 @@ export async function emitQuoteAccepted(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'quote_accepted',
+    eventType: 'QUOTE_ACCEPTED',
     entityType: 'quote',
     entityId: quoteId,
     newValue: { status: 'accepted' },
@@ -267,7 +267,7 @@ export async function emitInvoiceIssued(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'invoice_issued',
+    eventType: 'INVOICE_ISSUED',
     entityType: 'invoice',
     entityId: invoiceId,
     newValue: { status: 'issued' },
@@ -287,7 +287,7 @@ export async function emitPaymentReceived(
 ): Promise<string | null> {
   return emitAutomationEvent({
     organizationId,
-    eventType: 'payment_received',
+    eventType: 'PAYMENT_RECEIVED',
     entityType: 'payment',
     entityId: paymentId,
     newValue: { status: 'received' },
