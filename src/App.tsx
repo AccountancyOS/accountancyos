@@ -57,6 +57,7 @@ import EmailTemplates from "./pages/settings/EmailTemplates";
 import AutomationSettingsCentre from "./pages/settings/AutomationSettingsCentre";
 import EmailPreferencesPage from "./pages/settings/EmailPreferencesPage";
 import CompaniesHouseDiffInbox from "./pages/settings/CompaniesHouseDiffInbox";
+import EngagementLetterVariants from "./pages/settings/EngagementLetterVariants";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import { Loader2 } from "lucide-react";
@@ -486,6 +487,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <CompaniesHouseDiffInbox />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/engagement-letters"
+              element={
+                <ProtectedRoute>
+                  <EngagementLetterVariants />
                 </ProtectedRoute>
               }
             />
