@@ -219,6 +219,37 @@ export default function CompaniesHouseSettings() {
             </CardContent>
           </Card>
 
+          {/* Sync Opt-In */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Companies House Sync
+              </CardTitle>
+              <CardDescription>
+                When enabled, scheduled syncs pull the latest Companies House data for your companies. All field changes are
+                staged in the Diff Inbox for Owner review — nothing is overwritten automatically.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {optInEnabled ? "Sync Enabled" : "Sync Paused"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {optInEnabled
+                    ? "New diffs from Companies House will appear in the Diff Inbox."
+                    : "Sync requests are rejected until an Owner enables this toggle."}
+                </p>
+              </div>
+              <Switch
+                checked={optInEnabled}
+                disabled={optInBusy}
+                onCheckedChange={toggleOptIn}
+              />
+            </CardContent>
+          </Card>
+
           {/* Presenter Details */}
           <Card>
             <CardHeader>
