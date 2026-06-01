@@ -2,30 +2,43 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { routeTriggerEvent, type TriggerPayload } from "./workflow-trigger-router";
 
-// Event types for the automation system
-export type AutomationEventType = 
-  | 'job_status_change'
-  | 'deadline_approaching'
-  | 'client_onboarded'
-  | 'filing_status_change'
-  | 'onboarding_approved'
-  | 'quote_accepted'
-  | 'invoice_issued'
-  | 'payment_received';
+// Event types — MUST match keys in `automation_trigger_contracts`
+// (registry uses UPPERCASE — keep these aligned).
+export type AutomationEventType =
+  | 'JOB_STATUS_CHANGED'
+  | 'DEADLINE_APPROACHING'
+  | 'CLIENT_CREATED'
+  | 'CLIENT_ONBOARDED'
+  | 'CLIENT_SERVICE_ENABLED'
+  | 'FILING_ACCEPTED'
+  | 'ONBOARDING_APPROVED'
+  | 'QUOTE_SENT'
+  | 'QUOTE_ACCEPTED'
+  | 'QUOTE_REJECTED'
+  | 'INVOICE_ISSUED'
+  | 'INVOICE_OVERDUE'
+  | 'PAYMENT_RECEIVED'
+  | 'PAYMENT_DUE_DATE_SET'
+  | 'LEAD_CREATED'
+  | 'LEAD_STAGE_CHANGED'
+  | 'LEAD_LOST'
+  | 'LEAD_DORMANT'
+  | 'ENGAGEMENT_LETTER_SENT'
+  | 'ENGAGEMENT_LETTER_SIGNED'
+  | 'KYC_STATUS_CHANGED'
+  | 'HMRC_AUTH_REQUESTED'
+  | 'QUESTIONNAIRE_SENT'
+  | 'QUESTIONNAIRE_SUBMITTED'
+  | 'CONVERSATION_RECEIVED'
+  | 'RECORDS_REQUESTED'
+  | 'WORKPAPER_CREATED'
+  | 'SIGNATURE_REQUESTED';
 
-export type EntityType = 'job' | 'deadline' | 'client' | 'filing' | 'onboarding' | 'company' | 'quote' | 'invoice' | 'payment';
-
-// Map legacy event types to new workflow trigger contract keys
-const EVENT_TO_TRIGGER_KEY: Record<string, string> = {
-  job_status_change: 'JOB_STATUS_CHANGED',
-  deadline_approaching: 'DEADLINE_APPROACHING',
-  client_onboarded: 'CLIENT_CREATED',
-  filing_status_change: 'FILING_ACCEPTED',
-  onboarding_approved: 'ONBOARDING_APPROVED',
-  quote_accepted: 'QUOTE_ACCEPTED',
-  invoice_issued: 'INVOICE_ISSUED',
-  payment_received: 'PAYMENT_RECEIVED',
-};
+export type EntityType =
+  | 'job' | 'deadline' | 'client' | 'filing' | 'onboarding' | 'company'
+  | 'quote' | 'invoice' | 'payment' | 'lead' | 'engagement_letter'
+  | 'kyc_subject' | 'hmrc_auth' | 'questionnaire_response' | 'conversation'
+  | 'records_request' | 'workpaper' | 'signature_request' | 'client_service';
 
 interface EmitEventParams {
   organizationId: string;
@@ -66,8 +79,8 @@ export async function emitAutomationEvent({
       console.error('Failed to emit automation event:', error);
     }
 
-    // 2. Also route to new workflow engine
-    const triggerKey = EVENT_TO_TRIGGER_KEY[eventType];
+    // 2. Also route to new workflow engine (event keys already match contract keys)
+    const triggerKey = eventType;
     if (triggerKey) {
       const payload: TriggerPayload = {
         triggerKey,
