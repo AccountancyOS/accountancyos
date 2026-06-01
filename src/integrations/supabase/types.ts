@@ -11191,6 +11191,9 @@ export type Database = {
       }
       organization_integrations_companies_house: {
         Row: {
+          ch_sync_opt_in: boolean
+          ch_sync_opt_in_at: string | null
+          ch_sync_opt_in_by: string | null
           connected_at: string | null
           created_at: string | null
           last_test_at: string | null
@@ -11202,6 +11205,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ch_sync_opt_in?: boolean
+          ch_sync_opt_in_at?: string | null
+          ch_sync_opt_in_by?: string | null
           connected_at?: string | null
           created_at?: string | null
           last_test_at?: string | null
@@ -11213,6 +11219,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ch_sync_opt_in?: boolean
+          ch_sync_opt_in_at?: string | null
+          ch_sync_opt_in_by?: string | null
           connected_at?: string | null
           created_at?: string | null
           last_test_at?: string | null
