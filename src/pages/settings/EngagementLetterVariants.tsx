@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
-import { useOrganization as useOrg } from "@/lib/organization-context";
 
 interface Variant {
   id: string;
