@@ -14427,6 +14427,7 @@ export type Database = {
           field_key: string
           field_label: string
           id: string
+          template_types: string[]
         }
         Insert: {
           created_at?: string
@@ -14436,6 +14437,7 @@ export type Database = {
           field_key: string
           field_label: string
           id?: string
+          template_types?: string[]
         }
         Update: {
           created_at?: string
@@ -14445,6 +14447,7 @@ export type Database = {
           field_key?: string
           field_label?: string
           id?: string
+          template_types?: string[]
         }
         Relationships: []
       }
