@@ -37,7 +37,12 @@ import {
   CheckCircle,
   Clock,
   Filter,
-  Loader2
+  Loader2,
+  Folder,
+  FolderPlus,
+  FolderOpen,
+  Pencil,
+  FolderInput,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DocumentSignatureFlow } from "@/components/documents/DocumentSignatureFlow";
@@ -61,7 +66,14 @@ interface JobDocument {
   signature_typed_name: string | null;
   archived: boolean;
   job_id: string;
+  folder_id: string | null;
   jobs?: { name: string } | null;
+}
+
+interface DocFolder {
+  id: string;
+  name: string;
+  parent_id: string | null;
 }
 
 type FilterType = "all" | "visible" | "signature_pending" | "signed";
