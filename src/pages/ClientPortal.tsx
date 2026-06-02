@@ -185,7 +185,8 @@ export default function ClientPortal() {
 
             <TabsContent value="settings">
               <ClientSettingsTab
-                clientId={client.id}
+                entityId={client.id}
+                entityKind="client"
                 status={(client as any).status}
                 archivedAt={(client as any).archived_at}
                 disengagedAt={(client as any).disengaged_at}
