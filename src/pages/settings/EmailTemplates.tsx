@@ -90,6 +90,8 @@ export default function EmailTemplates() {
       return data as EmailTemplate[];
     },
     enabled: !!organization?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const duplicateMutation = useMutation({
