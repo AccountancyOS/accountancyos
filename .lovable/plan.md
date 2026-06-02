@@ -1,81 +1,40 @@
-## Goal
+## What's broken
 
-Complete Phases 2, 3, and 4 of the automation engine: full trigger coverage, deeper workflow execution, and an authoring/observability UI.
+On the Branding page, both logo upload slots (Light and Dark) have the same UX bug in their **empty state** (when no logo has been uploaded yet):
 
-## Phase 2 — Trigger coverage & wiring
+```tsx
+<label className="cursor-pointer block">
+  <Upload ... />
+  <span>Click to upload</span>
+</label>
+<input id="logo-light-input" type="file" className="hidden" ... />
+```
 
-**Consumers in `process-automation-events`**
-Add handlers for the events that already emit but aren't mapped:
-- `LEAD_DORMANT`, `QUOTE_ACCEPTED`, `ENGAGEMENT_LETTER_SENT`, `KYC_STATUS_CHANGED`, `HMRC_AUTH_REQUESTED`, `CLIENT_SERVICE_ENABLED`, `QUESTIONNAIRE_SUBMITTED`, `WORKPAPER_CREATED`, `INBOUND_MESSAGE_RECEIVED`, `INVOICE_OVERDUE`.
-- Each handler resolves the subject (lead/quote/engagement/kyc/etc.), looks up enabled `automation_chaser_policies` and `automation_rule_templates` matching the trigger, and enqueues runs idempotently.
+The `<label>` has no `htmlFor` attribute, and the `<input>` is its **sibling**, not a child. So clicking "Click to upload" does nothing — no file picker, no error, no toast. That's why uploads appear silently broken.
 
-**Emitters that are missing**
-- `dormant-lead-scan` edge function: daily cron, marks leads dormant past threshold and emits `LEAD_DORMANT`. (Function exists — add event emission + cron.)
-- New `invoice-overdue-scan` edge function: daily cron, emits `INVOICE_OVERDUE` per overdue invoice.
-- App-level emit hooks for `QUOTE_ACCEPTED`, `ENGAGEMENT_LETTER_SENT`, `KYC_STATUS_CHANGED`, `HMRC_AUTH_REQUESTED`, `CLIENT_SERVICE_ENABLED`, `QUESTIONNAIRE_SUBMITTED`, `WORKPAPER_CREATED` wired at the existing service-layer call sites (no duplicate triggers).
-- `INBOUND_MESSAGE_RECEIVED` emitted from `gmail-sync` / `outlook-sync` on new inbound message persistence.
+The "Replace" path (after a logo already exists) works, because it calls `document.getElementById(...).click()` directly. Empty state never gets that chance, which is why a first-time upload always fails.
 
-**Stop-condition coverage**
-Confirm `chaser-tick` evaluates terminal status for each new subject type already in the per-subject map; add `lead`, `invoice` (already present), `client_service` to the same path if missing.
+The Cloud side is healthy:
+- `branding` storage bucket exists, set to public on 2026-05-31
+- RLS policies allow members of the organization to insert/read/update/delete under `{org_id}/...`
+- `organization_branding` table + upsert logic are correct
 
-## Phase 3 — Workflow execution depth
+So this is a pure frontend wiring bug, not a permissions or storage issue.
 
-**`workflow-tick` action types** — implement the stubbed steps:
-- `create_task` (insert into `tasks` with placeholder resolution)
-- `assign_staff` (write `job_assignments` / task assignee)
-- `send_portal_message` (insert into `portal_messages`)
-- `raise_notification` (insert into `notifications` for target user/role)
-- `branch_on_condition` (evaluate JSON condition against resolved context; pick next step id)
+## Fix
 
-**Reliability**
-- Add `retry_count`, `last_error`, `next_retry_at`, `dead_lettered_at` columns to `automation_workflow_runs` (migration).
-- Exponential back-off: 1m, 5m, 30m, 2h, 12h, then dead-letter at 6 retries.
-- Surface failures in the new run-history UI (Phase 4).
+In `src/pages/settings/BrandingSettings.tsx`, in both empty-state branches (Light and Dark logo slots):
 
-**Controls**
-- Pause/resume/cancel RPCs (`pause_workflow_run`, `resume_workflow_run`, `cancel_workflow_run`) — parity with chaser runs.
+1. Replace the non-functional `<label>` with a `<button type="button">` that calls `document.getElementById("logo-light-input").click()` (or `"logo-dark-input"`), matching how the Replace button already works.
+2. Add `disabled={uploadingLight}` / `disabled={uploadingDark}` so users can't double-trigger during upload.
+3. Keep the dashed border, upload icon, and "Click to upload" / "Uploading…" text exactly as they are now.
+4. Add a tiny defensive check in `handleLogoUpload`: reject files >2MB and reject anything that isn't `image/png` or `image/svg+xml`, with a clear toast — the card promises "PNG or SVG, max 2MB" but nothing enforces it client-side, so a too-large PNG today would fail at the storage layer with a confusing message.
 
-## Phase 4 — Authoring UI & observability
-
-**Run history (priority for trust)**
-- New tab in `AutomationSettingsCentre`: "Run History".
-- Filters: status (active/stopped/paused/failed/dead-lettered), subject type, policy/template, date range, last error contains.
-- Row drill-down: timeline of `automation_chaser_messages` + `automation_workflow_step_runs` for that run.
-- Pause/resume/cancel buttons inline.
-
-**Visual rule builder**
-- New page `src/pages/settings/automation-rules/RuleBuilder.tsx`.
-- Three-pane editor: Trigger → Conditions (AND/OR groups on resolved-context fields) → Steps (drag-reorder).
-- Saves to `automation_rule_templates` (no SQL needed).
-- Reuses placeholder picker from existing template editor.
-
-**Test-fire / dry-run**
-- "Test fire" button on any policy/template.
-- Modal: pick a subject entity → backend resolves context, evaluates conditions, returns a dry-run plan (steps that would execute, messages that would send, with rendered placeholders). Nothing is persisted or sent.
-- New edge function `automation-dry-run`.
-
-**Kill switches**
-- Per-category enable/disable toggle (writes to `automation_category_settings` — new tiny table).
-- Org-level master kill switch in `AutomationSettingsCentre` header.
-- Both checked in `process-automation-events` before enqueuing.
-
-## Technical details
-
-- **Migrations**: workflow-run reliability columns; `automation_category_settings` table with RLS scoped by org; `org_settings.automations_enabled` flag.
-- **Edge functions**: new `invoice-overdue-scan`, `automation-dry-run`; updates to `process-automation-events`, `workflow-tick`, `dormant-lead-scan`, `gmail-sync`, `outlook-sync`.
-- **Cron**: schedule `invoice-overdue-scan` and `dormant-lead-scan` daily 06:00 UTC via `pg_cron` (using insert tool, not migration, per user-specific URL rule).
-- **UI**: new tabs/pages under `/settings/automations`; shared components for run-row, status pill, retry timeline.
-- **No removal of existing behaviour.** All additions are additive; existing chaser flow keeps working.
-
-## Out of scope
-
-- Re-architecting stop conditions into a JSON DSL (deferred unless requested).
-- Multi-tenant template marketplace.
-- Webhook outbound steps (will scope separately if wanted).
+No backend changes, no storage changes, no schema changes.
 
 ## Acceptance
 
-- All listed triggers fire end-to-end from a real user action through to a queued chaser/workflow run.
-- Workflow runs that fail retry with back-off and dead-letter after 6 attempts; both visible in Run History.
-- Accountant can build a new rule without writing SQL and dry-run it before enabling.
-- Per-category and org-wide kill switches halt enqueuing immediately.
+- Click the empty Light or Dark logo card → native file picker opens
+- Selecting a valid PNG/SVG uploads it, shows a success toast, and the preview appears
+- Selecting a >2MB or wrong-type file shows a friendly toast and nothing is uploaded
+- Replace flow continues to work as before
