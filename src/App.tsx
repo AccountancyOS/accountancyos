@@ -141,6 +141,7 @@ const App = () => (
               path="/confirm-email"
               element={<ConfirmEmail />}
             />
+            <Route path="/q/:token" element={<PublicQuoteView />} />
             <Route
               path="/color-comparison"
               element={<ColorComparison />}
