@@ -5521,6 +5521,97 @@ export type Database = {
           },
         ]
       }
+      crm_followup_sequences: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          stop_on_stages: Json
+          trigger_stage: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          stop_on_stages?: Json
+          trigger_stage?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          stop_on_stages?: Json
+          trigger_stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_followup_sequences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_followup_steps: {
+        Row: {
+          body: string | null
+          channel: string
+          created_at: string
+          delay_days: number
+          id: string
+          sequence_id: string
+          step_order: number
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          channel?: string
+          created_at?: string
+          delay_days?: number
+          id?: string
+          sequence_id: string
+          step_order: number
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          channel?: string
+          created_at?: string
+          delay_days?: number
+          id?: string
+          sequence_id?: string
+          step_order?: number
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_followup_steps_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "crm_followup_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crypto_token_pools: {
         Row: {
           average_cost_per_unit: number
@@ -6086,6 +6177,61 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_folders: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          organization_id: string
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_folders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_folders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "document_folders"
             referencedColumns: ["id"]
           },
         ]
@@ -9228,6 +9374,7 @@ export type Database = {
           file_name: string
           file_path: string
           file_size: number | null
+          folder_id: string | null
           id: string
           job_id: string
           mime_type: string | null
@@ -9252,6 +9399,7 @@ export type Database = {
           file_name: string
           file_path: string
           file_size?: number | null
+          folder_id?: string | null
           id?: string
           job_id: string
           mime_type?: string | null
@@ -9276,6 +9424,7 @@ export type Database = {
           file_name?: string
           file_path?: string
           file_size?: number | null
+          folder_id?: string | null
           id?: string
           job_id?: string
           mime_type?: string | null
@@ -9293,6 +9442,13 @@ export type Database = {
           version?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "job_documents_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "document_folders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "job_documents_job_id_fkey"
             columns: ["job_id"]
