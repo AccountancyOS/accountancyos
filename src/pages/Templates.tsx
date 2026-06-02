@@ -139,7 +139,7 @@ export default function Templates() {
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
               <div className="relative md:col-span-2">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -149,6 +149,16 @@ export default function Templates() {
                   className="pl-9"
                 />
               </div>
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="library">System Library</SelectItem>
+                  <SelectItem value="practice">My Practice</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Types" />
