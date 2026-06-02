@@ -10,12 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Shield, Users, Check, X, ChevronLeft, Crown, ShieldCheck, Briefcase, Eye, User } from "lucide-react";
+import { Shield, Users, Check, X, ChevronLeft, Crown, ShieldCheck, Briefcase, Eye, User, Plus, Loader2, Trash2, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { PermissionGuard } from "@/components/ui/permission-guard";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -32,6 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { updateUserRoleSafe } from "@/lib/permission-service";
+import { formatDistanceToNow } from "date-fns";
 
 type AppRole = "owner" | "admin" | "manager" | "staff" | "viewer";
 
@@ -63,6 +69,9 @@ export default function PermissionsSettings() {
   const queryClient = useQueryClient();
   const { organization } = useOrganization();
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "staff">("staff");
 
   // Fetch team members
   const { data: teamMembers, isLoading } = useQuery({
@@ -91,6 +100,66 @@ export default function PermissionsSettings() {
       return data || [];
     },
     enabled: !!organization?.id,
+  });
+
+  const { data: pendingInvitations } = useQuery({
+    queryKey: ["team-invitations", organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      const { data, error } = await supabase
+        .from("team_invitations")
+        .select("id, email, role, invited_at, expires_at, accepted_at")
+        .eq("organization_id", organization.id)
+        .is("accepted_at", null)
+        .order("invited_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!organization?.id,
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async () => {
+      if (!organization?.id) throw new Error("No organization");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const email = inviteEmail.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        throw new Error("Please enter a valid email address.");
+      }
+      const { error } = await supabase.from("team_invitations").insert({
+        organization_id: organization.id,
+        email,
+        role: inviteRole,
+        invited_by: user.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      queryClient.invalidateQueries({ queryKey: ["team-invitations"] });
+      setInviteOpen(false);
+      setInviteEmail("");
+      setInviteRole("staff");
+    },
+    onError: (e: Error) => {
+      const msg = e.message.includes("duplicate") || e.message.includes("unique")
+        ? "An invitation already exists for that email address."
+        : e.message;
+      toast.error(msg);
+    },
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("team_invitations").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Invitation revoked");
+      queryClient.invalidateQueries({ queryKey: ["team-invitations"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   // Update role mutation
@@ -156,13 +225,68 @@ export default function PermissionsSettings() {
           {/* Team Members Card */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Team Members
-              </CardTitle>
-              <CardDescription>
-                Assign roles to control what team members can access
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Team Members
+                  </CardTitle>
+                  <CardDescription>
+                    Assign roles to control what team members can access
+                  </CardDescription>
+                </div>
+                <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Invite Member
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Invite Team Member</DialogTitle>
+                      <DialogDescription>
+                        Send an invitation email. They will be added to the practice on accepting.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-email">Email Address</Label>
+                        <Input
+                          id="invite-email"
+                          type="email"
+                          autoComplete="off"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          placeholder="colleague@example.com"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-role">Role</Label>
+                        <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "admin" | "staff")}>
+                          <SelectTrigger id="invite-role">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="staff">Staff</SelectItem>
+                            <SelectItem value="admin">Administrator</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                      <Button
+                        onClick={() => inviteMutation.mutate()}
+                        disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                      >
+                        {inviteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Send Invitation
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -236,6 +360,61 @@ export default function PermissionsSettings() {
               )}
             </CardContent>
           </Card>
+
+          {pendingInvitations && pendingInvitations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5" />
+                  Pending Invitations
+                </CardTitle>
+                <CardDescription>
+                  Invitations awaiting acceptance. Expire after 7 days.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Invited</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingInvitations.map((inv) => (
+                      <TableRow key={inv.id}>
+                        <TableCell className="font-medium">{inv.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {inv.role === "admin" ? "Administrator" : "Staff"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDistanceToNow(new Date(inv.invited_at), { addSuffix: true })}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDistanceToNow(new Date(inv.expires_at), { addSuffix: true })}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => revokeInviteMutation.mutate(inv.id)}
+                            disabled={revokeInviteMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           <Separator />
 
