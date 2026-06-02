@@ -403,7 +403,96 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png"
       />
 
-      <Card>
+      <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4">
+        {/* Folder sidebar */}
+        <Card className="h-fit">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base">Folders</CardTitle>
+            <Button size="sm" variant="ghost" onClick={() => setFolderDialogOpen(true)}>
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <button
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
+                !selectedFolderId ? "bg-muted font-medium" : "hover:bg-muted/50"
+              }`}
+              onClick={() => setSelectedFolderId(null)}
+            >
+              <FolderOpen className="h-4 w-4" /> All Documents
+            </button>
+            {folders.map((f) => (
+              <div
+                key={f.id}
+                className={`group flex items-center gap-1 px-2 py-1.5 rounded text-sm ${
+                  selectedFolderId === f.id ? "bg-muted font-medium" : "hover:bg-muted/50"
+                }`}
+              >
+                <button
+                  className="flex-1 flex items-center gap-2 text-left"
+                  onClick={() => setSelectedFolderId(f.id)}
+                >
+                  <Folder className="h-4 w-4" />
+                  {renameFolderId === f.id ? (
+                    <input
+                      autoFocus
+                      className="bg-transparent border-b border-primary outline-none text-sm w-full"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => {
+                        if (renameValue.trim() && renameValue !== f.name) {
+                          renameFolder.mutate({ id: f.id, name: renameValue });
+                        } else {
+                          setRenameFolderId(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") setRenameFolderId(null);
+                      }}
+                    />
+                  ) : (
+                    <span className="truncate">{f.name}</span>
+                  )}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100">
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setRenameFolderId(f.id);
+                        setRenameValue(f.name);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => {
+                        if (confirm(`Delete folder "${f.name}"? Documents inside will move to All Documents.`)) {
+                          deleteFolder.mutate(f.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ))}
+            {folders.length === 0 && (
+              <p className="text-xs text-muted-foreground px-2 py-2">
+                No folders. Create one to organize documents.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Documents</CardTitle>
