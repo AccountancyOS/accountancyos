@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { AddTaskDialog } from "./AddTaskDialog";
+import { ServiceStatusDashboard } from "./ServiceStatusDashboard";
 
 interface ClientPortalTabProps {
   clientId: string;
@@ -238,18 +239,7 @@ export default function ClientPortalTab({ clientId, onViewConversations }: Clien
         </Card>
       </div>
 
-      {/* Service Status Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Service Status</CardTitle>
-          <CardDescription>
-            High-level overview of work status per service
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">Service status dashboard coming soon...</p>
-        </CardContent>
-      </Card>
+      <ServiceStatusDashboard clientId={clientId} />
     </div>
   );
 }
