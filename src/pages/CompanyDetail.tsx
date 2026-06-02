@@ -47,6 +47,8 @@ import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { YearEndEditor } from "@/components/company/YearEndEditor";
 import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
+import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
+import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -257,6 +259,10 @@ const CompanyDetail = () => {
             <TabsTrigger value="documents" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
+            </TabsTrigger>
+            <TabsTrigger value="services" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <ClipboardList className="h-4 w-4" />
+              <span className="hidden sm:inline">Services</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <Settings className="h-4 w-4" />
@@ -594,20 +600,18 @@ const CompanyDetail = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="services" className="mt-6">
+            <ServiceStatusDashboard companyId={companyId} />
+          </TabsContent>
+
           <TabsContent value="settings" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Company Settings</CardTitle>
-                <CardDescription>
-                  Configure company-specific settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground text-sm">
-                  Settings configuration coming soon...
-                </p>
-              </CardContent>
-            </Card>
+            <ClientSettingsTab
+              entityId={companyId!}
+              entityKind="company"
+              status={(company as any).status ?? "active"}
+              archivedAt={(company as any).archived_at ?? null}
+              disengagedAt={(company as any).disengaged_at ?? null}
+            />
           </TabsContent>
         </Tabs>
 
