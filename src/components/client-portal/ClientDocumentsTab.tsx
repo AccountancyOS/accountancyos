@@ -556,6 +556,31 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                 <PenLine className="h-4 w-4 mr-1" />
                 Require Signature
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <FolderInput className="h-4 w-4 mr-1" />
+                    Move to Folder
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    onClick={() => moveToFolder.mutate({ docIds: selectedDocs, folderId: null })}
+                  >
+                    No folder
+                  </DropdownMenuItem>
+                  {folders.length > 0 && <DropdownMenuSeparator />}
+                  {folders.map((f) => (
+                    <DropdownMenuItem
+                      key={f.id}
+                      onClick={() => moveToFolder.mutate({ docIds: selectedDocs, folderId: f.id })}
+                    >
+                      <Folder className="h-4 w-4 mr-2" />
+                      {f.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button 
                 variant="outline" 
                 size="sm"
