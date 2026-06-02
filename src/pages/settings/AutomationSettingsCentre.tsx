@@ -8,6 +8,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Link } from "react-router-dom";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { CategoryAutomationEditor } from "@/components/settings/automations/CategoryAutomationEditor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OrgAutomationsMasterSwitch, CategoryKillSwitch } from "@/components/settings/automations/AutomationKillSwitches";
+import { AutomationRunHistory } from "@/components/settings/automations/AutomationRunHistory";
 
 type CategoryDef = { key: string; label: string; description: string; sales: boolean };
 
@@ -62,9 +65,12 @@ export default function AutomationSettingsCentre() {
             Configure every automation across CRM, onboarding, jobs, deadlines and billing in one place.
           </p>
         </div>
-        <Button variant="outline" asChild>
-          <Link to="/automations">Advanced (Rules, Workflows, Chasers)</Link>
-        </Button>
+        <div className="flex items-center gap-3">
+          <OrgAutomationsMasterSwitch />
+          <Button variant="outline" asChild>
+            <Link to="/automations">Advanced (Rules, Workflows, Chasers)</Link>
+          </Button>
+        </div>
       </div>
 
       {seedReport && (
@@ -90,38 +96,52 @@ export default function AutomationSettingsCentre() {
         </Card>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading categories…
-        </div>
-      ) : (
-        <Accordion type="multiple" className="space-y-2">
-          {CATEGORIES.map((cat) => {
-            const c = counts[cat.key] ?? { rules: 0, chasers: 0 };
-            return (
-              <AccordionItem value={cat.key} key={cat.key} className="border rounded-lg px-4">
-                <AccordionTrigger className="hover:no-underline">
-                  <div className="flex items-center gap-3 text-left">
-                    <span className="font-medium">{cat.label}</span>
-                    {cat.sales ? (
-                      <Badge variant="outline" className="border-orange-500/40 text-orange-500">Sales</Badge>
-                    ) : (
-                      <Badge variant="outline">Service</Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {c.rules} rules · {c.chasers} chasers
-                    </span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <p className="text-sm text-muted-foreground mb-3">{cat.description}</p>
-                  <CategoryAutomationEditor categoryKey={cat.key} categoryLabel={cat.label} />
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
-        </Accordion>
-      )}
+      <Tabs defaultValue="categories">
+        <TabsList>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="history">Run History</TabsTrigger>
+        </TabsList>
+        <TabsContent value="categories" className="mt-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading categories…
+            </div>
+          ) : (
+            <Accordion type="multiple" className="space-y-2">
+              {CATEGORIES.map((cat) => {
+                const c = counts[cat.key] ?? { rules: 0, chasers: 0 };
+                return (
+                  <AccordionItem value={cat.key} key={cat.key} className="border rounded-lg px-4">
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-3 text-left flex-1">
+                        <span className="font-medium">{cat.label}</span>
+                        {cat.sales ? (
+                          <Badge variant="outline" className="border-orange-500/40 text-orange-500">Sales</Badge>
+                        ) : (
+                          <Badge variant="outline">Service</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {c.rules} rules · {c.chasers} chasers
+                        </span>
+                        <div className="ml-auto pr-3">
+                          <CategoryKillSwitch categoryKey={cat.key} categoryLabel={cat.label} />
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-sm text-muted-foreground mb-3">{cat.description}</p>
+                      <CategoryAutomationEditor categoryKey={cat.key} categoryLabel={cat.label} />
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          )}
+        </TabsContent>
+        <TabsContent value="history" className="mt-4">
+          <AutomationRunHistory />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
