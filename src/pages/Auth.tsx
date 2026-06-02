@@ -465,6 +465,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-accent/20 p-4">
+      <h1 className="sr-only">Sign in to AccountancyOS or create your practice account</h1>
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-4 pb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
