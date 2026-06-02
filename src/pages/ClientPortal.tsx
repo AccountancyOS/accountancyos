@@ -21,6 +21,8 @@ import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab"
 import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
 import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPanel";
 import { EngagementLetterStatus } from "@/components/clients/EngagementLetterStatus";
+import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
+import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -182,17 +184,12 @@ export default function ClientPortal() {
             </TabsContent>
 
             <TabsContent value="settings">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Client Settings</CardTitle>
-                  <CardDescription>
-                    Manage client-specific configuration
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Settings view coming soon...</p>
-                </CardContent>
-              </Card>
+              <ClientSettingsTab
+                clientId={client.id}
+                status={(client as any).status}
+                archivedAt={(client as any).archived_at}
+                disengagedAt={(client as any).disengaged_at}
+              />
             </TabsContent>
           </Tabs>
         </div>
