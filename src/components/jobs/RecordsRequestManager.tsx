@@ -271,6 +271,26 @@ export function RecordsRequestManager({ jobId, mode }: RecordsRequestManagerProp
         </div>
       </CardHeader>
       <CardContent>
+        {/* Trigger explainer */}
+        <Collapsible className="mb-4">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between">
+              <span className="flex items-center gap-2">
+                <Info className="h-4 w-4" /> What happens when these requests are actioned?
+              </span>
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 rounded-md border bg-muted/40 p-3 space-y-2">
+            {TRIGGER_EXPLAINER.map((row) => (
+              <div key={row.event} className="text-sm">
+                <div className="font-medium">{row.event}</div>
+                <div className="text-muted-foreground text-xs">{row.description}</div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+
         <ScrollArea className="max-h-[400px]">
           <div className="space-y-2">
             {tasks.map((task, index) => (
