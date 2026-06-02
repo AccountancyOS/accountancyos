@@ -25,7 +25,7 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
-  const run = async (label: string, fn: () => Promise<any>) => {
+  const run = async (label: string, fn: () => PromiseLike<any>) => {
     setBusy(true);
     try {
       const { error } = await fn();
