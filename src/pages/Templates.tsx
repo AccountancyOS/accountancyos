@@ -40,6 +40,8 @@ export default function Templates() {
       return data;
     },
     enabled: !!organization?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const filteredTemplates = templates?.filter((template) => {
@@ -182,13 +184,13 @@ export default function Templates() {
             ))}
           </div>
         ) : filteredTemplates && filteredTemplates.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredTemplates.map((template) => {
+          (() => {
+            const renderCard = (template: typeof filteredTemplates[number]) => {
               const Icon = getTemplateIcon(template.type);
               const isSystem = !template.organization_id;
               return (
-                <Card 
-                  key={template.id} 
+                <Card
+                  key={template.id}
                   className="cursor-pointer hover:shadow-lg transition-shadow"
                   onClick={() => navigate(isSystem ? `/templates/new?clone_from=${template.id}` : `/templates/${template.id}`)}
                 >
@@ -248,8 +250,38 @@ export default function Templates() {
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
+            };
+            const systemTemplates = filteredTemplates.filter((t) => !t.organization_id);
+            const orgTemplates = filteredTemplates.filter((t) => t.organization_id);
+            return (
+              <div className="space-y-8">
+                {systemTemplates.length > 0 && (
+                  <section className="space-y-3">
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground">System Library</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm.
+                      </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {systemTemplates.map(renderCard)}
+                    </div>
+                  </section>
+                )}
+                {orgTemplates.length > 0 && (
+                  <section className="space-y-3">
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground">Your Templates</h2>
+                      <p className="text-sm text-muted-foreground">Templates created and maintained by your firm.</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {orgTemplates.map(renderCard)}
+                    </div>
+                  </section>
+                )}
+              </div>
+            );
+          })()
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
