@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Send, CheckCircle, XCircle, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, XCircle, ExternalLink, Loader2, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
 
@@ -17,6 +29,7 @@ const QuoteDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data: quote, isLoading } = useQuery({
     queryKey: ["quote", id],
@@ -97,46 +110,6 @@ const QuoteDetail = () => {
     }
   });
 
-  // Use lifecycle_accept_quote RPC instead of manual update
-  const acceptQuoteMutation = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.rpc('lifecycle_accept_quote', {
-        p_quote_id: id
-      });
-      if (error) throw error;
-      return data as {
-        quote_id: string;
-        quote_status: string;
-        lead_id: string | null;
-        lead_stage: string | null;
-        onboarding_application_id: string;
-        onboarding_status: string;
-        created_new_onboarding: boolean;
-      };
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["quote", id] });
-      queryClient.invalidateQueries({ queryKey: ["quotes"] });
-      queryClient.invalidateQueries({ queryKey: ["quote-onboarding", id] });
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["onboarding-applications"] });
-      
-      toast({ 
-        title: "Quote accepted",
-        description: data.created_new_onboarding 
-          ? "Onboarding application created automatically"
-          : "Onboarding application linked"
-      });
-    },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Failed to accept quote",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  });
-
   const rejectQuoteMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
@@ -157,6 +130,33 @@ const QuoteDetail = () => {
         variant: "destructive"
       });
     }
+  });
+
+  const deleteQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const { error: linesError } = await supabase
+        .from("quote_lines")
+        .delete()
+        .eq("quote_id", id!);
+      if (linesError) throw linesError;
+      const { error } = await supabase
+        .from("quotes")
+        .delete()
+        .eq("id", id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast({ title: "Quote deleted" });
+      navigate("/quotes");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete quote",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -383,17 +383,6 @@ const QuoteDetail = () => {
         {quote.status === "sent" && (
           <div className="flex gap-2">
             <Button
-              onClick={() => acceptQuoteMutation.mutate()}
-              disabled={acceptQuoteMutation.isPending}
-            >
-              {acceptQuoteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle className="h-4 w-4 mr-2" />
-              )}
-              Mark as Accepted
-            </Button>
-            <Button
               variant="outline"
               onClick={() => rejectQuoteMutation.mutate()}
               disabled={rejectQuoteMutation.isPending}
@@ -407,6 +396,50 @@ const QuoteDetail = () => {
             </Button>
           </div>
         )}
+
+        {/* Delete action — available except when accepted */}
+        <div className="flex justify-end pt-4 border-t">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={quote.status === "accepted" || deleteQuoteMutation.isPending}
+                  >
+                    {deleteQuoteMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Delete Quote
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {quote.status === "accepted" && (
+                <TooltipContent>Accepted Quotes Cannot Be Deleted</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete This Quote?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete the quote and its line items. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => deleteQuoteMutation.mutate()}>
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
