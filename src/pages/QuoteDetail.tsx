@@ -41,7 +41,7 @@ const QuoteDetail = () => {
           *,
           lead:leads(first_name, last_name, email),
           client:clients(first_name, last_name, email),
-          company:companies(company_name, email)
+          company:companies!quotes_company_id_fkey(company_name, email)
         `)
         .eq("id", id)
         .single();
