@@ -25,6 +25,7 @@ export default function Templates() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["templates", organization?.id],
