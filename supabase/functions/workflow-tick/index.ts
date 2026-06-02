@@ -501,7 +501,10 @@ Deno.serve(async (req) => {
         .from("automation_workflow_instances")
         .select("*")
         .eq("status", "waiting")
-        .eq("waiting_for_event_key", eventKey);
+        .eq("waiting_for_event_key", eventKey)
+        .is("paused_at", null)
+        .is("cancelled_at", null)
+        .is("dead_lettered_at", null);
 
       let resumed = 0;
       const errors: string[] = [];
