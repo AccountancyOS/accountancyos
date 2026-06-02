@@ -58,6 +58,7 @@ import AutomationSettingsCentre from "./pages/settings/AutomationSettingsCentre"
 import EmailPreferencesPage from "./pages/settings/EmailPreferencesPage";
 import CompaniesHouseDiffInbox from "./pages/settings/CompaniesHouseDiffInbox";
 import EngagementLetterVariants from "./pages/settings/EngagementLetterVariants";
+import EngagementLetterPreview from "./pages/EngagementLetterPreview";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import { Loader2 } from "lucide-react";
@@ -498,6 +499,15 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/settings/email-templates"
+              element={
+                <ProtectedRoute>
+                  <EmailTemplates />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/engagement/:token" element={<EngagementLetterPreview />} />
             <Route
               path="/ops/health"
               element={

@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
+import { CLIENT_TYPES as CLIENT_TYPE_VALUES, CLIENT_TYPE_LABELS, getClientTypeLabel } from "@/lib/client-types";
+import { formatServiceType } from "@/lib/format-utils";
 
 interface Variant {
   id: string;
@@ -45,15 +47,35 @@ const ENGAGEMENT_KINDS = [
   { value: "annual_renewal", label: "Annual Renewal" },
 ];
 
-const CLIENT_TYPES = ["", "limited_company", "sole_trader", "partnership", "llp", "charity", "individual", "trust", "other"];
-const SERVICE_CODES = ["", "accounts_filing", "ct_filing", "vat_filing", "payroll", "sa_filing", "bookkeeping", "cis", "confirmation_statement"];
+const CLIENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Any" },
+  ...CLIENT_TYPE_VALUES.map((v) => ({ value: v, label: CLIENT_TYPE_LABELS[v] })),
+];
+const SERVICE_CODE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Any" },
+  { value: "accounts_filing", label: "Company Accounts" },
+  { value: "ct_filing", label: "Company Tax Return" },
+  { value: "vat_filing", label: "VAT Return" },
+  { value: "payroll", label: "Payroll" },
+  { value: "sa_filing", label: "Self-Assessment Tax Return" },
+  { value: "bookkeeping", label: "Bookkeeping" },
+  { value: "cis", label: "CIS" },
+  { value: "confirmation_statement", label: "Confirmation Statement" },
+  { value: "cgt_filing", label: "Capital Gains Tax Return" },
+  { value: "p11d", label: "P11D" },
+  { value: "pensions", label: "Pensions" },
+  { value: "registered_office", label: "Registered Office Address" },
+  { value: "advisory", label: "Advisory" },
+];
 
 const SAMPLE_CONTEXT: Record<string, string> = {
   "recipient_name": "Jane Smith",
   "client.name": "Jane Smith",
   "firm_name": "",
   "firm.name": "",
-  "signing_url": "https://client.accountancyos.com/engagement/sample-token",
+  "signing_url": typeof window !== "undefined"
+    ? `${window.location.origin}/engagement/sample-token`
+    : "/engagement/sample-token",
 };
 
 const renderPlaceholders = (text: string, firmName: string): string => {
@@ -228,8 +250,8 @@ export default function EngagementLetterVariants() {
                   {variants.map((v) => (
                     <TableRow key={v.id}>
                       <TableCell className="font-medium">{v.subject}</TableCell>
-                      <TableCell>{v.client_type || "Any"}</TableCell>
-                      <TableCell>{v.service_code || "Any"}</TableCell>
+                      <TableCell>{v.client_type ? getClientTypeLabel(v.client_type) : "Any"}</TableCell>
+                      <TableCell>{v.service_code ? formatServiceType(v.service_code) : "Any"}</TableCell>
                       <TableCell>
                         {ENGAGEMENT_KINDS.find((k) => k.value === v.engagement_kind)?.label}
                       </TableCell>
@@ -308,8 +330,8 @@ export default function EngagementLetterVariants() {
                 >
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                   <SelectContent>
-                    {CLIENT_TYPES.map((t) => (
-                      <SelectItem key={t || "any"} value={t || "any"}>{t || "Any"}</SelectItem>
+                    {CLIENT_TYPE_OPTIONS.map((t) => (
+                      <SelectItem key={t.value || "any"} value={t.value || "any"}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -322,8 +344,8 @@ export default function EngagementLetterVariants() {
                 >
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                   <SelectContent>
-                    {SERVICE_CODES.map((s) => (
-                      <SelectItem key={s || "any"} value={s || "any"}>{s || "Any"}</SelectItem>
+                    {SERVICE_CODE_OPTIONS.map((s) => (
+                      <SelectItem key={s.value || "any"} value={s.value || "any"}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -382,9 +404,6 @@ export default function EngagementLetterVariants() {
                       dangerouslySetInnerHTML={{ __html: previewBody }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Sample values: recipient_name = Jane Smith, firm_name = {firmName}, signing_url = example token.
-                  </p>
                 </div>
               )}
             </div>
