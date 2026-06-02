@@ -32,6 +32,7 @@ export default function TemplateDetail() {
 
   const isNew = id === "new";
   const templateType = searchParams.get("type") || "workpaper";
+  const cloneFromId = searchParams.get("clone_from");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -56,6 +57,21 @@ export default function TemplateDetail() {
     enabled: !isNew && !!id,
   });
 
+  const { data: cloneSource } = useQuery({
+    queryKey: ["template-clone-source", cloneFromId],
+    queryFn: async () => {
+      if (!cloneFromId) return null;
+      const { data, error } = await supabase
+        .from("templates")
+        .select("*")
+        .eq("id", cloneFromId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!cloneFromId && isNew,
+  });
+
   useEffect(() => {
     if (template) {
       setName(template.name);
@@ -65,6 +81,16 @@ export default function TemplateDetail() {
       setContent(template.content || {});
     }
   }, [template]);
+
+  useEffect(() => {
+    if (cloneSource && isNew) {
+      setName(`${cloneSource.name} (Custom)`);
+      setDescription(cloneSource.description || "");
+      setService(cloneSource.service || "");
+      setStatus("draft");
+      setContent(cloneSource.content || {});
+    }
+  }, [cloneSource, isNew]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
