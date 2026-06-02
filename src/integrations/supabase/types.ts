@@ -13045,11 +13045,13 @@ export type Database = {
           organization_id: string
           ported_at: string | null
           ported_to_client_id: string | null
+          ported_to_company_id: string | null
           quote_number: string
           rejected_at: string | null
           rejection_reason: string | null
           sent_at: string | null
           status: string
+          supersedes_quote_id: string | null
           total_amount: number
           updated_at: string
           valid_until: string | null
@@ -13066,11 +13068,13 @@ export type Database = {
           organization_id: string
           ported_at?: string | null
           ported_to_client_id?: string | null
+          ported_to_company_id?: string | null
           quote_number: string
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
           status?: string
+          supersedes_quote_id?: string | null
           total_amount?: number
           updated_at?: string
           valid_until?: string | null
@@ -13087,11 +13091,13 @@ export type Database = {
           organization_id?: string
           ported_at?: string | null
           ported_to_client_id?: string | null
+          ported_to_company_id?: string | null
           quote_number?: string
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
           status?: string
+          supersedes_quote_id?: string | null
           total_amount?: number
           updated_at?: string
           valid_until?: string | null
@@ -13123,6 +13129,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_ported_to_company_id_fkey"
+            columns: ["ported_to_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_supersedes_quote_id_fkey"
+            columns: ["supersedes_quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
             referencedColumns: ["id"]
           },
         ]
@@ -13878,6 +13898,7 @@ export type Database = {
           default_job_template_id: string | null
           default_price: number
           description: string | null
+          entity_scope: string
           id: string
           information_request_template_id: string | null
           is_bookkeeping_related: boolean | null
@@ -13898,6 +13919,7 @@ export type Database = {
           default_job_template_id?: string | null
           default_price: number
           description?: string | null
+          entity_scope?: string
           id?: string
           information_request_template_id?: string | null
           is_bookkeeping_related?: boolean | null
@@ -13918,6 +13940,7 @@ export type Database = {
           default_job_template_id?: string | null
           default_price?: number
           description?: string | null
+          entity_scope?: string
           id?: string
           information_request_template_id?: string | null
           is_bookkeeping_related?: boolean | null
@@ -16793,12 +16816,23 @@ export type Database = {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
       }
-      public_accept_quote_by_token: { Args: { p_token: string }; Returns: Json }
+      public_accept_quote_by_token:
+        | {
+            Args: { p_token: string }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.public_accept_quote_by_token(p_token => text), public.public_accept_quote_by_token(p_token => uuid). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { p_token: string }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.public_accept_quote_by_token(p_token => text), public.public_accept_quote_by_token(p_token => uuid). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
       public_get_quote_by_token: { Args: { p_token: string }; Returns: Json }
-      public_reject_quote_by_token: {
-        Args: { p_reason?: string; p_token: string }
-        Returns: Json
-      }
+      public_reject_quote_by_token:
+        | { Args: { p_reason?: string; p_token: string }; Returns: Json }
+        | { Args: { p_reason?: string; p_token: string }; Returns: Json }
       queue_email_safe: {
         Args: {
           p_body_html?: string
@@ -16873,6 +16907,7 @@ export type Database = {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
       }
+      reissue_quote: { Args: { p_quote_id: string }; Returns: string }
       resolve_engagement_letter_variant: {
         Args: {
           p_client_type: string
