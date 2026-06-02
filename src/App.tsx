@@ -517,6 +517,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/settings/crm-sequences"
+              element={
+                <ProtectedRoute>
+                  <CrmFollowupSequences />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/engagement/:token" element={<EngagementLetterPreview />} />
             <Route
               path="/ops/health"
