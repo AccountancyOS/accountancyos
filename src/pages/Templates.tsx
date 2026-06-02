@@ -269,27 +269,47 @@ export default function Templates() {
             const orgTemplates = filteredTemplates.filter((t) => t.organization_id);
             return (
               <div className="space-y-8">
-                {systemTemplates.length > 0 && (
+                {sourceFilter === "all" ? (
+                  <>
+                    {systemTemplates.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h2 className="text-lg font-semibold text-foreground">System Library</h2>
+                          <p className="text-sm text-muted-foreground">
+                            Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm.
+                          </p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                          {systemTemplates.map(renderCard)}
+                        </div>
+                      </section>
+                    )}
+                    {orgTemplates.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h2 className="text-lg font-semibold text-foreground">Your Templates</h2>
+                          <p className="text-sm text-muted-foreground">Templates created and maintained by your firm.</p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                          {orgTemplates.map(renderCard)}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                ) : (
                   <section className="space-y-3">
                     <div>
-                      <h2 className="text-lg font-semibold text-foreground">System Library</h2>
+                      <h2 className="text-lg font-semibold text-foreground">
+                        {sourceFilter === "library" ? "System Library" : "Your Templates"}
+                      </h2>
                       <p className="text-sm text-muted-foreground">
-                        Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm.
+                        {sourceFilter === "library"
+                          ? "Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm."
+                          : "Templates created and maintained by your firm."}
                       </p>
                     </div>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {systemTemplates.map(renderCard)}
-                    </div>
-                  </section>
-                )}
-                {orgTemplates.length > 0 && (
-                  <section className="space-y-3">
-                    <div>
-                      <h2 className="text-lg font-semibold text-foreground">Your Templates</h2>
-                      <p className="text-sm text-muted-foreground">Templates created and maintained by your firm.</p>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {orgTemplates.map(renderCard)}
+                      {filteredTemplates.map(renderCard)}
                     </div>
                   </section>
                 )}
@@ -302,7 +322,7 @@ export default function Templates() {
               <FileText className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No templates found</h3>
               <p className="text-muted-foreground text-center mb-4">
-                {searchTerm || typeFilter !== "all" || statusFilter !== "all"
+                {searchTerm || typeFilter !== "all" || statusFilter !== "all" || sourceFilter !== "all"
                   ? "Try adjusting your filters"
                   : "Get started by creating your first template"}
               </p>
