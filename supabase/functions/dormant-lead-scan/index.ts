@@ -82,8 +82,8 @@ Deno.serve(async (req: Request) => {
             event_type: "LEAD_DORMANT",
             entity_type: "lead",
             entity_id: lead.id,
-            payload: { days_inactive: Math.floor(ageDays) },
-            status: "pending",
+            new_value: { status: "dormant", days_inactive: Math.floor(ageDays) },
+            metadata: { days_inactive: Math.floor(ageDays), threshold_days: DEFAULT_THRESHOLD_DAYS },
           });
           dormantCount++;
         }
