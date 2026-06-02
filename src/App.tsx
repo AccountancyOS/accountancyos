@@ -500,6 +500,15 @@ const App = () => (
               }
             />
             <Route
+              path="/settings/email-templates"
+              element={
+                <ProtectedRoute>
+                  <EmailTemplates />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/engagement/:token" element={<EngagementLetterPreview />} />
+            <Route
               path="/ops/health"
               element={
                 <ProtectedRoute>
