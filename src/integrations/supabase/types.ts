@@ -14509,6 +14509,7 @@ export type Database = {
           required_merge_fields: string[] | null
           requires_unsubscribe_link: boolean
           service: string | null
+          source_template_id: string | null
           status: string
           tags: Json | null
           type: string
@@ -14529,6 +14530,7 @@ export type Database = {
           required_merge_fields?: string[] | null
           requires_unsubscribe_link?: boolean
           service?: string | null
+          source_template_id?: string | null
           status?: string
           tags?: Json | null
           type: string
@@ -14549,6 +14551,7 @@ export type Database = {
           required_merge_fields?: string[] | null
           requires_unsubscribe_link?: boolean
           service?: string | null
+          source_template_id?: string | null
           status?: string
           tags?: Json | null
           type?: string
@@ -14562,6 +14565,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_source_template_id_fkey"
+            columns: ["source_template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
             referencedColumns: ["id"]
           },
         ]
@@ -16481,6 +16491,10 @@ export type Database = {
       enqueue_unsubscribe_token: {
         Args: { p_category?: string; p_email: string; p_org_id: string }
         Returns: string
+      }
+      ensure_default_templates_for_org: {
+        Args: { _org_id: string }
+        Returns: number
       }
       ensure_org_settings: {
         Args: { _org_id: string }
