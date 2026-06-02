@@ -192,6 +192,17 @@ export default function BrandingSettings() {
   const handleLogoUpload = async (file: File, type: "light" | "dark") => {
     if (!organization?.id) return;
 
+    // Client-side validation matching the card's "PNG or SVG, max 2MB" promise
+    const allowedTypes = ["image/png", "image/svg+xml"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Logo Must Be A PNG Or SVG File");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Logo Must Be Smaller Than 2MB");
+      return;
+    }
+
     const setter = type === "light" ? setUploadingLight : setUploadingDark;
     setter(true);
 
@@ -433,12 +444,17 @@ export default function BrandingSettings() {
                           </Button>
                         </div>
                       ) : (
-                        <label className="cursor-pointer block">
+                        <button
+                          type="button"
+                          className="cursor-pointer block w-full"
+                          onClick={() => document.getElementById("logo-light-input")?.click()}
+                          disabled={uploadingLight}
+                        >
                           <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">
-                            {uploadingLight ? "Uploading..." : "Click to upload"}
+                            {uploadingLight ? "Uploading..." : "Click To Upload"}
                           </span>
-                        </label>
+                        </button>
                       )}
                       <input
                         id="logo-light-input"
@@ -474,12 +490,17 @@ export default function BrandingSettings() {
                           </Button>
                         </div>
                       ) : (
-                        <label className="cursor-pointer block">
+                        <button
+                          type="button"
+                          className="cursor-pointer block w-full"
+                          onClick={() => document.getElementById("logo-dark-input")?.click()}
+                          disabled={uploadingDark}
+                        >
                           <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
                           <span className="text-sm text-slate-400">
-                            {uploadingDark ? "Uploading..." : "Click to upload"}
+                            {uploadingDark ? "Uploading..." : "Click To Upload"}
                           </span>
-                        </label>
+                        </button>
                       )}
                       <input
                         id="logo-dark-input"
