@@ -39,6 +39,35 @@ import {
   Info,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+
+const TRIGGER_EXPLAINER: { event: string; description: string }[] = [
+  {
+    event: "Request created",
+    description:
+      "Client is notified by email. SLA timer starts. Item appears in the client portal task list.",
+  },
+  {
+    event: "Document uploaded by client",
+    description:
+      "Document is auto-tagged to this job and stored against the client. Accountant receives a notification.",
+  },
+  {
+    event: "Item overdue",
+    description:
+      "Chaser policy fires reminder emails on its configured cadence until verified or marked complete.",
+  },
+  {
+    event: "Item verified",
+    description:
+      "Job progress updates. If all records are verified, the job auto-advances to the next workflow status.",
+  },
+];
 
 interface ClientTask {
   id: string;
