@@ -367,6 +367,18 @@ export default function Settings() {
                   </div>
                 </CardHeader>
               </Card>
+              <Card
+                className="cursor-pointer hover:border-primary transition-colors"
+                onClick={() => navigate("/settings/crm-sequences")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <MailCheck className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">CRM Follow-Up Sequences</CardTitle>
+                    <CardDescription className="text-sm">Multi-step nurture flows for leads</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
             </div>
           </div>
 

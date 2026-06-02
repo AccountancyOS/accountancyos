@@ -39,6 +39,35 @@ import {
   Info,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+
+const TRIGGER_EXPLAINER: { event: string; description: string }[] = [
+  {
+    event: "Request created",
+    description:
+      "Client is notified by email. SLA timer starts. Item appears in the client portal task list.",
+  },
+  {
+    event: "Document uploaded by client",
+    description:
+      "Document is auto-tagged to this job and stored against the client. Accountant receives a notification.",
+  },
+  {
+    event: "Item overdue",
+    description:
+      "Chaser policy fires reminder emails on its configured cadence until verified or marked complete.",
+  },
+  {
+    event: "Item verified",
+    description:
+      "Job progress updates. If all records are verified, the job auto-advances to the next workflow status.",
+  },
+];
 
 interface ClientTask {
   id: string;
@@ -242,6 +271,26 @@ export function RecordsRequestManager({ jobId, mode }: RecordsRequestManagerProp
         </div>
       </CardHeader>
       <CardContent>
+        {/* Trigger explainer */}
+        <Collapsible className="mb-4">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between">
+              <span className="flex items-center gap-2">
+                <Info className="h-4 w-4" /> What happens when these requests are actioned?
+              </span>
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 rounded-md border bg-muted/40 p-3 space-y-2">
+            {TRIGGER_EXPLAINER.map((row) => (
+              <div key={row.event} className="text-sm">
+                <div className="font-medium">{row.event}</div>
+                <div className="text-muted-foreground text-xs">{row.description}</div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+
         <ScrollArea className="max-h-[400px]">
           <div className="space-y-2">
             {tasks.map((task, index) => (

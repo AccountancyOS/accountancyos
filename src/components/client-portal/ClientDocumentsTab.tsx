@@ -37,7 +37,12 @@ import {
   CheckCircle,
   Clock,
   Filter,
-  Loader2
+  Loader2,
+  Folder,
+  FolderPlus,
+  FolderOpen,
+  Pencil,
+  FolderInput,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DocumentSignatureFlow } from "@/components/documents/DocumentSignatureFlow";
@@ -61,7 +66,14 @@ interface JobDocument {
   signature_typed_name: string | null;
   archived: boolean;
   job_id: string;
+  folder_id: string | null;
   jobs?: { name: string } | null;
+}
+
+interface DocFolder {
+  id: string;
+  name: string;
+  parent_id: string | null;
 }
 
 type FilterType = "all" | "visible" | "signature_pending" | "signed";
@@ -76,6 +88,89 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const { data: folders = [] } = useQuery({
+    queryKey: ["client-document-folders", clientId, organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      const { data, error } = await supabase
+        .from("document_folders")
+        .select("id,name,parent_id")
+        .eq("organization_id", organization.id)
+        .eq("client_id", clientId)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data || []) as DocFolder[];
+    },
+    enabled: !!organization?.id && !!clientId,
+  });
+
+  const createFolder = useMutation({
+    mutationFn: async (name: string) => {
+      if (!organization?.id) throw new Error("No organization");
+      const { error } = await supabase.from("document_folders").insert({
+        organization_id: organization.id,
+        client_id: clientId,
+        name: name.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-document-folders"] });
+      setNewFolderName("");
+      setFolderDialogOpen(false);
+      toast({ title: "Folder created" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const renameFolder = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase
+        .from("document_folders")
+        .update({ name: name.trim() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-document-folders"] });
+      setRenameFolderId(null);
+      toast({ title: "Folder renamed" });
+    },
+  });
+
+  const deleteFolder = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("document_folders").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-document-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["client-documents"] });
+      if (selectedFolderId) setSelectedFolderId(null);
+      toast({ title: "Folder deleted. Documents moved to root." });
+    },
+  });
+
+  const moveToFolder = useMutation({
+    mutationFn: async ({ docIds, folderId }: { docIds: string[]; folderId: string | null }) => {
+      const { error } = await supabase
+        .from("job_documents")
+        .update({ folder_id: folderId })
+        .in("id", docIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-documents"] });
+      setSelectedDocs([]);
+      toast({ title: "Documents moved" });
+    },
+  });
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["client-documents", clientId, organization?.id],
@@ -109,6 +204,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
           signature_typed_name,
           archived,
           job_id,
+          folder_id,
           jobs:job_id (name)
         `)
         .eq("organization_id", organization.id)
@@ -123,6 +219,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
   });
 
   const filteredDocs = documents?.filter(doc => {
+    if (selectedFolderId && doc.folder_id !== selectedFolderId) return false;
     switch (filter) {
       case "visible": return doc.client_visible;
       case "signature_pending": return doc.signature_required && !doc.signed_at;
@@ -266,6 +363,22 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
     });
 
     if (success) {
+      if (selectedFolderId) {
+        const { data: justUploaded } = await supabase
+          .from("job_documents")
+          .select("id")
+          .eq("organization_id", organization.id)
+          .eq("job_id", jobs[0].id)
+          .eq("file_name", file.name)
+          .order("uploaded_at", { ascending: false })
+          .limit(1);
+        if (justUploaded?.[0]) {
+          await supabase
+            .from("job_documents")
+            .update({ folder_id: selectedFolderId })
+            .eq("id", justUploaded[0].id);
+        }
+      }
       toast({ title: "Document uploaded" });
       queryClient.invalidateQueries({ queryKey: ["client-documents"] });
     } else {
@@ -290,7 +403,96 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png"
       />
 
-      <Card>
+      <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4">
+        {/* Folder sidebar */}
+        <Card className="h-fit">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base">Folders</CardTitle>
+            <Button size="sm" variant="ghost" onClick={() => setFolderDialogOpen(true)}>
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <button
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
+                !selectedFolderId ? "bg-muted font-medium" : "hover:bg-muted/50"
+              }`}
+              onClick={() => setSelectedFolderId(null)}
+            >
+              <FolderOpen className="h-4 w-4" /> All Documents
+            </button>
+            {folders.map((f) => (
+              <div
+                key={f.id}
+                className={`group flex items-center gap-1 px-2 py-1.5 rounded text-sm ${
+                  selectedFolderId === f.id ? "bg-muted font-medium" : "hover:bg-muted/50"
+                }`}
+              >
+                <button
+                  className="flex-1 flex items-center gap-2 text-left"
+                  onClick={() => setSelectedFolderId(f.id)}
+                >
+                  <Folder className="h-4 w-4" />
+                  {renameFolderId === f.id ? (
+                    <input
+                      autoFocus
+                      className="bg-transparent border-b border-primary outline-none text-sm w-full"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => {
+                        if (renameValue.trim() && renameValue !== f.name) {
+                          renameFolder.mutate({ id: f.id, name: renameValue });
+                        } else {
+                          setRenameFolderId(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") setRenameFolderId(null);
+                      }}
+                    />
+                  ) : (
+                    <span className="truncate">{f.name}</span>
+                  )}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100">
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setRenameFolderId(f.id);
+                        setRenameValue(f.name);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => {
+                        if (confirm(`Delete folder "${f.name}"? Documents inside will move to All Documents.`)) {
+                          deleteFolder.mutate(f.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ))}
+            {folders.length === 0 && (
+              <p className="text-xs text-muted-foreground px-2 py-2">
+                No folders. Create one to organize documents.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Documents</CardTitle>
@@ -354,6 +556,31 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                 <PenLine className="h-4 w-4 mr-1" />
                 Require Signature
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <FolderInput className="h-4 w-4 mr-1" />
+                    Move to Folder
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    onClick={() => moveToFolder.mutate({ docIds: selectedDocs, folderId: null })}
+                  >
+                    No folder
+                  </DropdownMenuItem>
+                  {folders.length > 0 && <DropdownMenuSeparator />}
+                  {folders.map((f) => (
+                    <DropdownMenuItem
+                      key={f.id}
+                      onClick={() => moveToFolder.mutate({ docIds: selectedDocs, folderId: f.id })}
+                    >
+                      <Folder className="h-4 w-4 mr-2" />
+                      {f.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button 
                 variant="outline" 
                 size="sm"
@@ -501,6 +728,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -531,6 +759,39 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
           document={signatureDoc}
         />
       )}
+
+      {/* Create Folder Dialog */}
+      <AlertDialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>New Folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Folders help organize this client's documents (e.g., "VAT 2025", "Bank Statements").
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <input
+            autoFocus
+            className="w-full border rounded px-3 py-2 text-sm"
+            placeholder="Folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newFolderName.trim()) {
+                createFolder.mutate(newFolderName);
+              }
+            }}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => createFolder.mutate(newFolderName)}
+              disabled={!newFolderName.trim()}
+            >
+              Create
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
