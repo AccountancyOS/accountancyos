@@ -58,6 +58,7 @@ import AutomationSettingsCentre from "./pages/settings/AutomationSettingsCentre"
 import EmailPreferencesPage from "./pages/settings/EmailPreferencesPage";
 import CompaniesHouseDiffInbox from "./pages/settings/CompaniesHouseDiffInbox";
 import EngagementLetterVariants from "./pages/settings/EngagementLetterVariants";
+import MyProfileSettings from "./pages/settings/MyProfileSettings";
 import EngagementLetterPreview from "./pages/EngagementLetterPreview";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
@@ -504,6 +505,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <EmailTemplates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/my-profile"
+              element={
+                <ProtectedRoute>
+                  <MyProfileSettings />
                 </ProtectedRoute>
               }
             />
