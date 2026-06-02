@@ -16816,19 +16816,7 @@ export type Database = {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
       }
-      public_accept_quote_by_token:
-        | {
-            Args: { p_token: string }
-            Returns: {
-              error: true
-            } & "Could not choose the best candidate function between: public.public_accept_quote_by_token(p_token => text), public.public_accept_quote_by_token(p_token => uuid). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
-          }
-        | {
-            Args: { p_token: string }
-            Returns: {
-              error: true
-            } & "Could not choose the best candidate function between: public.public_accept_quote_by_token(p_token => text), public.public_accept_quote_by_token(p_token => uuid). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
-          }
+      public_accept_quote_by_token: { Args: { p_token: string }; Returns: Json }
       public_get_quote_by_token: { Args: { p_token: string }; Returns: Json }
       public_reject_quote_by_token:
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
