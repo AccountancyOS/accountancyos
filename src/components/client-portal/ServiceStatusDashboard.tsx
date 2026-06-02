@@ -40,7 +40,7 @@ export function ServiceStatusDashboard({ clientId, companyId }: Props) {
       if (engagementIds.length) {
         const { data: jobs } = await supabase
           .from("jobs")
-          .select("id, service_code, status, deadline, updated_at")
+          .select("id, service_type, status, filing_deadline, updated_at")
           .eq("organization_id", organization.id)
           .or(
             [
@@ -52,7 +52,7 @@ export function ServiceStatusDashboard({ clientId, companyId }: Props) {
           )
           .order("updated_at", { ascending: false });
         for (const j of jobs || []) {
-          if (!jobsByService[j.service_code]) jobsByService[j.service_code] = j;
+          if (!jobsByService[j.service_type]) jobsByService[j.service_type] = j;
         }
       }
 
@@ -102,7 +102,7 @@ export function ServiceStatusDashboard({ clientId, companyId }: Props) {
                     {eng.latestJob && (
                       <div className="text-right text-xs text-muted-foreground">
                         <div>Latest job: <span className="font-medium text-foreground">{eng.latestJob.status}</span></div>
-                        {eng.latestJob.deadline && <div>Due {eng.latestJob.deadline}</div>}
+                        {eng.latestJob.filing_deadline && <div>Due {eng.latestJob.filing_deadline}</div>}
                       </div>
                     )}
                     <Badge variant={meta.variant}>{meta.label}</Badge>
