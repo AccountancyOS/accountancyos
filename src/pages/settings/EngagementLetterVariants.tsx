@@ -73,7 +73,9 @@ const SAMPLE_CONTEXT: Record<string, string> = {
   "client.name": "Jane Smith",
   "firm_name": "",
   "firm.name": "",
-  "signing_url": "https://client.accountancyos.com/engagement/sample-token",
+  "signing_url": typeof window !== "undefined"
+    ? `${window.location.origin}/engagement/sample-token`
+    : "/engagement/sample-token",
 };
 
 const renderPlaceholders = (text: string, firmName: string): string => {
