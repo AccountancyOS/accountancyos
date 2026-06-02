@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     const { data: emails, error: fetchError } = await supabase
       .from("email_queue")
       .select("*")
-      .in("status", ["queued", "pending"])
+      .in("status", ["pending"])
       .or("scheduled_at.is.null,scheduled_at.lte.now()")
       .lt("retry_count", 3)
       .order("created_at", { ascending: true })
@@ -306,7 +306,7 @@ Deno.serve(async (req) => {
         console.log(`Email ${email.id} sent successfully via ${provider}`);
       } else {
         const newRetryCount = email.retry_count + 1;
-        const newStatus = newRetryCount >= 3 ? "failed" : "queued";
+        const newStatus = newRetryCount >= 3 ? "failed" : "pending";
 
         await supabase
           .from("email_queue")
