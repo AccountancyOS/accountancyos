@@ -1,0 +1,9 @@
+# AccountancyOS
+
+> The unified operating system for UK accountancy practices — CRM, quoting, onboarding, bookkeeping, jobs, workpapers, deadlines, payroll, CIS, and HMRC/Companies House filing in one product.
+
+AccountancyOS is a private, multi-tenant SaaS used by UK accounting firms to run their entire practice. Most surfaces are behind authentication; the public surface is limited to the sign-in / sign-up flow.
+
+## Pages
+
+- [Sign in or create a practice](/auth): Entry point for accountants to sign in, sign up, or recover a password.
