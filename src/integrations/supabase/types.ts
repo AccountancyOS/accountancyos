@@ -12926,6 +12926,48 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_acceptance_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          organization_id: string
+          quote_id: string
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          organization_id: string
+          quote_id: string
+          token?: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          organization_id?: string
+          quote_id?: string
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_acceptance_tokens_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_acceptance_tokens_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_lines: {
         Row: {
           billing_frequency: string
@@ -16749,6 +16791,12 @@ export type Database = {
       }
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
+        Returns: Json
+      }
+      public_accept_quote_by_token: { Args: { p_token: string }; Returns: Json }
+      public_get_quote_by_token: { Args: { p_token: string }; Returns: Json }
+      public_reject_quote_by_token: {
+        Args: { p_reason?: string; p_token: string }
         Returns: Json
       }
       queue_email_safe: {
