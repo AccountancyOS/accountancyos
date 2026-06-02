@@ -5,6 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface QuoteLine {
   service_name: string;
@@ -37,6 +46,8 @@ export default function PublicQuoteView() {
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<"accepted" | "rejected" | null>(null);
+  const [declineOpen, setDeclineOpen] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
 
   useEffect(() => {
     if (!token) return;
@@ -66,17 +77,20 @@ export default function PublicQuoteView() {
     setDone("accepted");
   };
 
-  const reject = async () => {
+  const confirmDecline = async () => {
     if (!token) return;
-    if (!confirm("Are you sure you want to decline this proposal?")) return;
     setSubmitting("reject");
-    const { data, error } = await supabase.rpc("public_reject_quote_by_token", { p_token: token, p_reason: null });
+    const { data, error } = await supabase.rpc("public_reject_quote_by_token", {
+      p_token: token,
+      p_reason: declineReason.trim() || null,
+    });
     setSubmitting(null);
     const payload = data as unknown as { success?: boolean; error?: string };
     if (error || payload?.error) {
       toast({ title: "Could not decline quote", description: error?.message || payload?.error, variant: "destructive" });
       return;
     }
+    setDeclineOpen(false);
     setDone("rejected");
   };
 
@@ -176,8 +190,8 @@ export default function PublicQuoteView() {
                 <p className="text-sm text-muted-foreground">This proposal link has already been used.</p>
               ) : (
                 <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-                  <Button variant="outline" onClick={reject} disabled={!!submitting}>
-                    {submitting === "reject" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Decline"}
+                  <Button variant="outline" onClick={() => setDeclineOpen(true)} disabled={!!submitting}>
+                    Decline
                   </Button>
                   <Button onClick={accept} disabled={!!submitting}>
                     {submitting === "accept" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept Proposal"}
@@ -187,6 +201,31 @@ export default function PublicQuoteView() {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={declineOpen} onOpenChange={setDeclineOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Decline Proposal</DialogTitle>
+              <DialogDescription>
+                Let {quote.practice_name} know why you're declining (optional).
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+              placeholder="Reason for declining"
+              rows={4}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeclineOpen(false)} disabled={!!submitting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDecline} disabled={!!submitting}>
+                {submitting === "reject" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Decline"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
