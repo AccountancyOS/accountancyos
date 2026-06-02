@@ -375,6 +375,44 @@ export type Database = {
           },
         ]
       }
+      automation_category_settings: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_enabled: boolean
+          organization_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          organization_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_category_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_chaser_messages: {
         Row: {
           chaser_run_id: string
@@ -1421,16 +1459,22 @@ export type Database = {
       }
       automation_workflow_instances: {
         Row: {
+          cancelled_at: string | null
           client_id: string | null
           company_id: string | null
           context: Json
           created_at: string
           current_step_id: string | null
+          dead_lettered_at: string | null
           error_message: string | null
           id: string
+          last_error: string | null
+          next_retry_at: string | null
           next_run_at: string | null
           org_id: string
+          paused_at: string | null
           period_key: string
+          retry_count: number
           service_id: string | null
           status: string
           template_id: string
@@ -1440,16 +1484,22 @@ export type Database = {
           waiting_for_event_key: string | null
         }
         Insert: {
+          cancelled_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: Json
           created_at?: string
           current_step_id?: string | null
+          dead_lettered_at?: string | null
           error_message?: string | null
           id?: string
+          last_error?: string | null
+          next_retry_at?: string | null
           next_run_at?: string | null
           org_id: string
+          paused_at?: string | null
           period_key: string
+          retry_count?: number
           service_id?: string | null
           status?: string
           template_id: string
@@ -1459,16 +1509,22 @@ export type Database = {
           waiting_for_event_key?: string | null
         }
         Update: {
+          cancelled_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: Json
           created_at?: string
           current_step_id?: string | null
+          dead_lettered_at?: string | null
           error_message?: string | null
           id?: string
+          last_error?: string | null
+          next_retry_at?: string | null
           next_run_at?: string | null
           org_id?: string
+          paused_at?: string | null
           period_key?: string
+          retry_count?: number
           service_id?: string | null
           status?: string
           template_id?: string
@@ -11407,6 +11463,7 @@ export type Database = {
         Row: {
           address_line_1: string | null
           address_line_2: string | null
+          automations_enabled: boolean
           billing_status: Database["public"]["Enums"]["billing_status_enum"]
           city: string | null
           country: string | null
@@ -11433,6 +11490,7 @@ export type Database = {
         Insert: {
           address_line_1?: string | null
           address_line_2?: string | null
+          automations_enabled?: boolean
           billing_status?: Database["public"]["Enums"]["billing_status_enum"]
           city?: string | null
           country?: string | null
@@ -11459,6 +11517,7 @@ export type Database = {
         Update: {
           address_line_1?: string | null
           address_line_2?: string | null
+          automations_enabled?: boolean
           billing_status?: Database["public"]["Enums"]["billing_status_enum"]
           city?: string | null
           country?: string | null
@@ -16035,6 +16094,10 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      cancel_workflow_instance: {
+        Args: { p_instance_id: string; p_reason?: string }
+        Returns: undefined
+      }
       check_automation_rate_limit: {
         Args: { p_organization_id: string; p_rule_id?: string }
         Returns: Json
@@ -16505,6 +16568,10 @@ export type Database = {
         }
         Returns: string
       }
+      pause_workflow_instance: {
+        Args: { p_instance_id: string; p_reason?: string }
+        Returns: undefined
+      }
       port_quote_to_client: { Args: { p_quote_id: string }; Returns: string }
       post_to_ledger: {
         Args: {
@@ -16613,6 +16680,10 @@ export type Database = {
         Returns: string
       }
       resume_automation: { Args: { p_pause_id: string }; Returns: boolean }
+      resume_workflow_instance: {
+        Args: { p_instance_id: string }
+        Returns: undefined
+      }
       retry_failed_email_safe: { Args: { p_email_id: string }; Returns: Json }
       reverse_bill_payment_safe: {
         Args: { p_payment_id: string; p_reason: string }
