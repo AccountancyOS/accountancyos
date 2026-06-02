@@ -13,17 +13,22 @@ import {
 import { Archive, ArchiveRestore, Trash2, UserMinus, RotateCcw } from "lucide-react";
 
 interface Props {
-  clientId: string;
+  entityId: string;
+  entityKind?: "client" | "company";
   status: string;
   archivedAt: string | null;
   disengagedAt: string | null;
 }
 
-export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }: Props) {
+export function ClientSettingsTab({ entityId, entityKind = "client", status, archivedAt, disengagedAt }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+
+  const table = entityKind === "company" ? "companies" : "clients";
+  const listRoute = entityKind === "company" ? "/clients" : "/clients";
+  const noun = entityKind === "company" ? "Company" : "Client";
 
   const run = async (label: string, fn: () => PromiseLike<any>) => {
     setBusy(true);
@@ -31,8 +36,9 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
       const { error } = await fn();
       if (error) throw error;
       toast({ title: label, description: "Action completed successfully." });
-      queryClient.invalidateQueries({ queryKey: ["client", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: [entityKind, entityId] });
+      queryClient.invalidateQueries({ queryKey: [`${entityKind}s`] });
+      queryClient.invalidateQueries({ queryKey: ["company-detail", entityId] });
     } catch (e: any) {
       toast({ title: "Action failed", description: e.message, variant: "destructive" });
     } finally {
@@ -48,7 +54,7 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
       <Card>
         <CardHeader>
           <CardTitle>Lifecycle Status</CardTitle>
-          <CardDescription>Current state of the client relationship</CardDescription>
+          <CardDescription>Current state of the {noun.toLowerCase()} relationship</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex items-center gap-3">
@@ -72,12 +78,12 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" disabled={busy}>
-                  <UserMinus className="h-4 w-4 mr-2" /> Disengage Client
+                  <UserMinus className="h-4 w-4 mr-2" /> Disengage {noun}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Disengage this client?</AlertDialogTitle>
+                  <AlertDialogTitle>Disengage this {noun.toLowerCase()}?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This marks the engagement as ended. All active recurring jobs and deadlines will stop generating.
                     History is preserved. You can reverse this later.
@@ -87,11 +93,11 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() =>
-                      run("Client Disengaged", () =>
+                      run(`${noun} Disengaged`, () =>
                         supabase
-                          .from("clients")
+                          .from(table as any)
                           .update({ disengaged_at: new Date().toISOString(), status: "disengaged" })
-                          .eq("id", clientId)
+                          .eq("id", entityId)
                       )
                     }
                   >Confirm Disengagement</AlertDialogAction>
@@ -103,15 +109,15 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
               variant="outline"
               disabled={busy}
               onClick={() =>
-                run("Client Reengaged", () =>
+                run(`${noun} Reengaged`, () =>
                   supabase
-                    .from("clients")
+                    .from(table as any)
                     .update({ disengaged_at: null, status: "active", activated_at: new Date().toISOString() })
-                    .eq("id", clientId)
+                    .eq("id", entityId)
                 )
               }
             >
-              <RotateCcw className="h-4 w-4 mr-2" /> Reengage Client
+              <RotateCcw className="h-4 w-4 mr-2" /> Reengage {noun}
             </Button>
           )}
 
@@ -120,27 +126,27 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
               variant="outline"
               disabled={busy}
               onClick={() =>
-                run("Client Archived", () =>
+                run(`${noun} Archived`, () =>
                   supabase
-                    .from("clients")
+                    .from(table as any)
                     .update({ archived_at: new Date().toISOString() })
-                    .eq("id", clientId)
+                    .eq("id", entityId)
                 )
               }
             >
-              <Archive className="h-4 w-4 mr-2" /> Archive Client
+              <Archive className="h-4 w-4 mr-2" /> Archive {noun}
             </Button>
           ) : (
             <Button
               variant="outline"
               disabled={busy}
               onClick={() =>
-                run("Client Restored", () =>
-                  supabase.from("clients").update({ archived_at: null }).eq("id", clientId)
+                run(`${noun} Restored`, () =>
+                  supabase.from(table as any).update({ archived_at: null }).eq("id", entityId)
                 )
               }
             >
-              <ArchiveRestore className="h-4 w-4 mr-2" /> Restore Client
+              <ArchiveRestore className="h-4 w-4 mr-2" /> Restore {noun}
             </Button>
           )}
         </CardContent>
@@ -150,7 +156,7 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
         <CardHeader>
           <CardTitle className="text-destructive">Danger Zone</CardTitle>
           <CardDescription>
-            Permanently delete this client and all associated data. This cannot be undone and may fail if
+            Permanently delete this {noun.toLowerCase()} and all associated data. This cannot be undone and may fail if
             historical filings or invoices reference this record.
           </CardDescription>
         </CardHeader>
@@ -158,14 +164,14 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" disabled={busy}>
-                <Trash2 className="h-4 w-4 mr-2" /> Delete Client
+                <Trash2 className="h-4 w-4 mr-2" /> Delete {noun}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Permanently delete this client?</AlertDialogTitle>
+                <AlertDialogTitle>Permanently delete this {noun.toLowerCase()}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will remove all contacts, jobs, documents, and conversations for this client.
+                  This will remove all contacts, jobs, documents, and conversations for this {noun.toLowerCase()}.
                   For compliance reasons, we recommend archiving instead of deleting.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -175,14 +181,14 @@ export function ClientSettingsTab({ clientId, status, archivedAt, disengagedAt }
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   onClick={async () => {
                     setBusy(true);
-                    const { error } = await supabase.from("clients").delete().eq("id", clientId);
+                    const { error } = await supabase.from(table as any).delete().eq("id", entityId);
                     setBusy(false);
                     if (error) {
                       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
                     } else {
-                      toast({ title: "Client deleted" });
-                      queryClient.invalidateQueries({ queryKey: ["clients"] });
-                      navigate("/clients");
+                      toast({ title: `${noun} deleted` });
+                      queryClient.invalidateQueries({ queryKey: [`${entityKind}s`] });
+                      navigate(listRoute);
                     }
                   }}
                 >Permanently Delete</AlertDialogAction>
