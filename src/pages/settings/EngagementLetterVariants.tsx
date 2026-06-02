@@ -333,14 +333,14 @@ export default function EngagementLetterVariants() {
       </div>
 
       <Dialog open={open} onOpenChange={(o) => { if (!o) { setEditing(null); setCreating(false); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Variant" : "New Variant"}</DialogTitle>
             <DialogDescription>
-              Leave client type or service blank to make the variant apply to any value at that level.
+              Leave client type or service blank to make the variant apply to any value at that level. Firm name is auto-populated from your organization settings.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto space-y-4 py-2 pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Engagement Kind</Label>
@@ -411,45 +411,64 @@ export default function EngagementLetterVariants() {
                 placeholder="Engagement Letter For {{client.name}}"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Body</Label>
-              <Textarea
-                value={form.body}
-                onChange={(e) => setForm({ ...form, body: e.target.value })}
-                rows={10}
-                placeholder="Use {{placeholder}} syntax for dynamic fields"
-              />
-            </div>
-            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Body</Label>
+                  <div className="flex items-center gap-1">
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Bold" onClick={() => wrapSelection("<strong>", "</strong>")}>
+                      <Bold className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Italic" onClick={() => wrapSelection("<em>", "</em>")}>
+                      <Italic className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Heading" onClick={() => wrapSelection("<h2>", "</h2>")}>
+                      <Heading2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Bullet List" onClick={() => insertAtCursor("\n<ul>\n  <li>Item</li>\n</ul>\n")}>
+                      <List className="h-3.5 w-3.5" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+                          <Variable className="h-3.5 w-3.5" /> Insert Field
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {PLACEHOLDERS.map((p) => (
+                          <DropdownMenuItem key={p.key} onClick={() => insertAtCursor(`{{${p.key}}}`)}>
+                            {p.label}
+                            <span className="ml-auto text-xs text-muted-foreground">{`{{${p.key}}}`}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <Textarea
+                  ref={bodyRef}
+                  value={form.body}
+                  onChange={(e) => setForm({ ...form, body: e.target.value })}
+                  rows={20}
+                  className="font-mono text-sm leading-relaxed min-h-[420px]"
+                  placeholder="Write the engagement letter body. Use the toolbar to insert formatting or merge fields."
+                />
+              </div>
+              <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Eye className="h-4 w-4" />
-                  Preview With Sample Data
+                  Live Preview
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPreview((s) => !s)}
-                >
-                  {showPreview ? "Hide" : "Show"}
-                </Button>
+                <div className="rounded-md border bg-background p-4 min-h-[420px] max-h-[480px] overflow-y-auto">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Subject</div>
+                  <div className="font-medium mb-4">{previewSubject}</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Body</div>
+                  <div
+                    className="prose prose-sm max-w-none text-foreground"
+                    dangerouslySetInnerHTML={{ __html: previewBody }}
+                  />
+                </div>
               </div>
-              {showPreview && (
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Subject</div>
-                    <div className="font-medium">{previewSubject}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Body</div>
-                    <div
-                      className="rounded border bg-background p-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-foreground"
-                      dangerouslySetInnerHTML={{ __html: previewBody }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
