@@ -734,6 +734,39 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
           document={signatureDoc}
         />
       )}
+
+      {/* Create Folder Dialog */}
+      <AlertDialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>New Folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Folders help organize this client's documents (e.g., "VAT 2025", "Bank Statements").
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <input
+            autoFocus
+            className="w-full border rounded px-3 py-2 text-sm"
+            placeholder="Folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newFolderName.trim()) {
+                createFolder.mutate(newFolderName);
+              }
+            }}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => createFolder.mutate(newFolderName)}
+              disabled={!newFolderName.trim()}
+            >
+              Create
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
