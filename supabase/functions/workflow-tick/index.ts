@@ -541,6 +541,9 @@ Deno.serve(async (req) => {
       .eq("status", "running")
       .lte("next_run_at", now)
       .is("waiting_for_event_key", null)
+      .is("paused_at", null)
+      .is("cancelled_at", null)
+      .is("dead_lettered_at", null)
       .order("next_run_at", { ascending: true })
       .limit(limit);
 
