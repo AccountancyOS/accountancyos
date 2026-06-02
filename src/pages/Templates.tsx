@@ -33,7 +33,7 @@ export default function Templates() {
       const { data, error } = await supabase
         .from("templates")
         .select("*")
-        .eq("organization_id", organization.id)
+        .or(`organization_id.eq.${organization.id},organization_id.is.null`)
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -185,11 +185,12 @@ export default function Templates() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredTemplates.map((template) => {
               const Icon = getTemplateIcon(template.type);
+              const isSystem = !template.organization_id;
               return (
                 <Card 
                   key={template.id} 
                   className="cursor-pointer hover:shadow-lg transition-shadow"
-                  onClick={() => navigate(`/templates/${template.id}`)}
+                  onClick={() => navigate(isSystem ? `/templates/new?clone_from=${template.id}` : `/templates/${template.id}`)}
                 >
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -197,9 +198,16 @@ export default function Templates() {
                         <Icon className="h-5 w-5 text-primary" />
                         <CardTitle className="text-lg">{template.name}</CardTitle>
                       </div>
-                      <Badge variant={getStatusColor(template.status)}>
-                        {formatStatus(template.status)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {isSystem && (
+                          <Badge variant="outline" className="border-primary text-primary">
+                            System
+                          </Badge>
+                        )}
+                        <Badge variant={getStatusColor(template.status)}>
+                          {formatStatus(template.status)}
+                        </Badge>
+                      </div>
                     </div>
                     {template.description && (
                       <CardDescription className="line-clamp-2">
@@ -219,10 +227,23 @@ export default function Templates() {
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {new Date(template.updated_at).toLocaleDateString()}
-                      </div>
+                      {isSystem ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/templates/new?clone_from=${template.id}`);
+                          }}
+                        >
+                          Clone & Customise
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(template.updated_at).toLocaleDateString()}
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
