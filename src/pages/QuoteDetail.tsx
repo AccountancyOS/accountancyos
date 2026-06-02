@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Send, XCircle, ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, XCircle, ExternalLink, Loader2, Trash2, RefreshCw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -159,6 +159,21 @@ const QuoteDetail = () => {
     },
   });
 
+  const reissueMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("reissue_quote", { p_quote_id: id! });
+      if (error) throw error;
+      return data as string;
+    },
+    onSuccess: (newId) => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast({ title: "Quote Re-Issued", description: "A new draft has been created." });
+      navigate(`/quotes/${newId}`);
+    },
+    onError: (error: Error) =>
+      toast({ title: "Re-Issue Failed", description: error.message, variant: "destructive" }),
+  });
+
   if (isLoading) {
     return <div className="text-center py-12">Loading quote...</div>;
   }
@@ -183,6 +198,7 @@ const QuoteDetail = () => {
     accepted: "default",
     rejected: "destructive",
     expired: "secondary",
+    superseded: "secondary",
   } as const;
 
   return (
