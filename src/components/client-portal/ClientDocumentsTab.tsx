@@ -703,6 +703,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
