@@ -36,8 +36,6 @@ interface ConnectedMailbox {
   display_name: string | null;
 }
 
-const POSTMARK_API_KEY = Deno.env.get("POSTMARK_API_KEY");
-
 /**
  * Process merge fields in a template string
  */
@@ -49,49 +47,6 @@ function processMergeFields(template: string, mergeData: Record<string, unknown>
     result = result.replace(regex, String(value ?? ""));
   }
   return result;
-}
-
-/**
- * Send email via Postmark (fallback)
- */
-async function sendViaPostmark(
-  to: string,
-  subject: string,
-  htmlBody: string,
-  textBody: string | null,
-  from?: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!POSTMARK_API_KEY) {
-    return { success: false, error: "Postmark API key not configured" };
-  }
-
-  try {
-    const response = await fetch("https://api.postmarkapp.com/email", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-Postmark-Server-Token": POSTMARK_API_KEY,
-      },
-      body: JSON.stringify({
-        From: from || "noreply@accountancyos.com",
-        To: to,
-        Subject: subject,
-        HtmlBody: htmlBody || undefined,
-        TextBody: textBody || undefined,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.Message || "Postmark API error" };
-    }
-
-    const data = await response.json();
-    return { success: true, messageId: data.MessageID };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
 }
 
 /**
