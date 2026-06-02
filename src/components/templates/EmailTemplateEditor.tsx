@@ -176,6 +176,11 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
             {groupedFields && Object.entries(groupedFields).map(([category, fields]) => (
               <div key={category} className="space-y-2">
                 <h4 className="text-sm font-semibold capitalize">{category}</h4>
+                {category === "quote" && (
+                  <p className="text-xs text-muted-foreground">
+                    Inserted only when the template is dispatched by Send Quote. {"{{quote_lines_table}}"} renders a styled HTML table of line items.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {fields.map((field) => (
                     <Badge
