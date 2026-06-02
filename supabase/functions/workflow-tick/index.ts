@@ -51,6 +51,38 @@ interface StepResult {
   waitForEventKey?: string;
   data?: Record<string, unknown>;
   error?: string;
+  /** When set, overrides default sequential advancement and jumps to step with this step_order */
+  nextStepOrder?: number;
+}
+
+// Exponential back-off schedule (seconds) for failed step executions
+const RETRY_BACKOFF_SECONDS = [60, 300, 1800, 7200, 43200, 86400];
+const MAX_RETRIES = RETRY_BACKOFF_SECONDS.length;
+
+function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
+  return path.split(".").reduce<unknown>((acc, key) => {
+    if (acc && typeof acc === "object") return (acc as Record<string, unknown>)[key];
+    return undefined;
+  }, obj);
+}
+
+function evaluateCondition(
+  ctx: Record<string, unknown>,
+  cond: { field: string; op: string; value?: unknown }
+): boolean {
+  const actual = getNestedValue(ctx, cond.field);
+  switch (cond.op) {
+    case "eq": return actual === cond.value;
+    case "neq": return actual !== cond.value;
+    case "gt": return typeof actual === "number" && typeof cond.value === "number" && actual > cond.value;
+    case "gte": return typeof actual === "number" && typeof cond.value === "number" && actual >= cond.value;
+    case "lt": return typeof actual === "number" && typeof cond.value === "number" && actual < cond.value;
+    case "lte": return typeof actual === "number" && typeof cond.value === "number" && actual <= cond.value;
+    case "in": return Array.isArray(cond.value) && cond.value.includes(actual);
+    case "exists": return actual !== undefined && actual !== null;
+    case "missing": return actual === undefined || actual === null;
+    default: return false;
+  }
 }
 
 // ============================================================
@@ -159,6 +191,75 @@ async function executeStep(supabase: any, step: StepRow, overrides: { timingOver
 
     case "SET_SLA_TIMER":
       return { success: true, shouldWait: false, data: { slaSet: true } };
+
+    case "ASSIGN_STAFF": {
+      const config = step.config as { user_id?: string; entity_type?: string };
+      const userId = config.user_id || overrides.assigneeUserId;
+      if (!userId) return { success: false, shouldWait: false, error: "ASSIGN_STAFF requires user_id" };
+      const entityType = config.entity_type || "job";
+      if (entityType === "job") {
+        const jobId = (ctx.workflowContext.jobId as string | undefined);
+        if (!jobId) return { success: false, shouldWait: false, error: "ASSIGN_STAFF (job) requires jobId in context" };
+        const { error } = await supabase.from("jobs").update({ assigned_to: userId }).eq("id", jobId).eq("organization_id", ctx.orgId);
+        if (error) return { success: false, shouldWait: false, error: error.message };
+        return { success: true, shouldWait: false, data: { assignedTo: userId, jobId } };
+      }
+      if (entityType === "task") {
+        const taskId = (ctx.workflowContext.taskId as string | undefined);
+        if (!taskId) return { success: false, shouldWait: false, error: "ASSIGN_STAFF (task) requires taskId in context" };
+        const { error } = await supabase.from("client_tasks").update({ assigned_to: userId }).eq("id", taskId).eq("organization_id", ctx.orgId);
+        if (error) return { success: false, shouldWait: false, error: error.message };
+        return { success: true, shouldWait: false, data: { assignedTo: userId, taskId } };
+      }
+      return { success: false, shouldWait: false, error: `Unsupported entity_type: ${entityType}` };
+    }
+
+    case "SEND_PORTAL_MESSAGE": {
+      const config = step.config as { subject?: string; content?: string; visibility?: string; message_type?: string };
+      const subject = resolvePlaceholders(config.subject || "Update from your accountant", ctx);
+      const content = resolvePlaceholders(config.content || "", ctx);
+      if (!ctx.clientId && !ctx.companyId) return { success: false, shouldWait: false, error: "SEND_PORTAL_MESSAGE requires client or company" };
+      const { data, error } = await supabase.from("client_messages").insert({
+        organization_id: ctx.orgId,
+        client_id: ctx.clientId || null,
+        company_id: ctx.companyId || null,
+        subject,
+        content,
+        sender_type: "system",
+        message_type: config.message_type || "automation",
+        visibility: config.visibility || "client",
+      }).select("id").single();
+      if (error) return { success: false, shouldWait: false, error: error.message };
+      return { success: true, shouldWait: false, data: { messageId: data.id } };
+    }
+
+    case "BRANCH_ON_CONDITION": {
+      const config = step.config as {
+        branches?: Array<{ conditions?: Array<{ field: string; op: string; value?: unknown }>; logic?: "and" | "or"; next_step_order: number }>;
+        default_step_order?: number;
+      };
+      const branches = config.branches || [];
+      const evalCtx: Record<string, unknown> = {
+        ...ctx.workflowContext,
+        period_key: ctx.periodKey,
+        client_id: ctx.clientId,
+        company_id: ctx.companyId,
+      };
+      for (const br of branches) {
+        const conds = br.conditions || [];
+        if (conds.length === 0) continue;
+        const logic = br.logic || "and";
+        const results = conds.map((c) => evaluateCondition(evalCtx, c));
+        const matched = logic === "or" ? results.some(Boolean) : results.every(Boolean);
+        if (matched) {
+          return { success: true, shouldWait: false, nextStepOrder: br.next_step_order, data: { matchedBranch: br.next_step_order } };
+        }
+      }
+      if (config.default_step_order !== undefined) {
+        return { success: true, shouldWait: false, nextStepOrder: config.default_step_order, data: { matchedBranch: "default" } };
+      }
+      return { success: true, shouldWait: false, data: { matchedBranch: null } };
+    }
 
     case "UPDATE_STATUS": {
       const config = step.config as { entity_type?: string; new_status?: string };
@@ -284,7 +385,44 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
     });
 
     if (!result.success) {
-      await supabase.from("automation_workflow_instances").update({ status: "failed", error_message: result.error, updated_at: new Date().toISOString() }).eq("id", instance.id);
+      // Reliability: exponential back-off then dead-letter
+      const { data: current } = await supabase
+        .from("automation_workflow_instances")
+        .select("retry_count")
+        .eq("id", instance.id)
+        .maybeSingle();
+      const currentRetries = (current?.retry_count as number | null) ?? 0;
+      const nextRetries = currentRetries + 1;
+
+      if (nextRetries >= MAX_RETRIES) {
+        await supabase.from("automation_workflow_instances").update({
+          status: "failed",
+          error_message: result.error,
+          last_error: result.error,
+          retry_count: nextRetries,
+          dead_lettered_at: new Date().toISOString(),
+          next_run_at: null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", instance.id);
+        await supabase.from("automation_workflow_events").insert({
+          instance_id: instance.id,
+          org_id: instance.org_id,
+          step_id: step.id,
+          event_type: "instance_dead_lettered",
+          payload: { retries: nextRetries, error: result.error },
+        });
+      } else {
+        const backoffSec = RETRY_BACKOFF_SECONDS[currentRetries] ?? RETRY_BACKOFF_SECONDS[RETRY_BACKOFF_SECONDS.length - 1];
+        const retryAt = new Date(Date.now() + backoffSec * 1000).toISOString();
+        await supabase.from("automation_workflow_instances").update({
+          // Keep status running so tick will re-pick when next_run_at hits
+          last_error: result.error,
+          retry_count: nextRetries,
+          next_retry_at: retryAt,
+          next_run_at: retryAt,
+          updated_at: new Date().toISOString(),
+        }).eq("id", instance.id);
+      }
       return { advanced: false, error: result.error };
     }
 
@@ -299,12 +437,18 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
     }
 
     // Advance to next step
-    const nextStep = findNextEnabledStep(steps, currentIdx, stepToggles);
+    let nextStep: StepRow | null = null;
+    if (result.nextStepOrder !== undefined) {
+      nextStep = (steps.find((s: StepRow) => s.step_order === result.nextStepOrder) as StepRow | undefined) || null;
+    } else {
+      nextStep = findNextEnabledStep(steps, currentIdx, stepToggles);
+    }
     if (!nextStep) {
       await supabase.from("automation_workflow_instances").update({ status: "completed", next_run_at: null, current_step_id: null, waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
       await supabase.from("automation_workflow_events").insert({ instance_id: instance.id, org_id: instance.org_id, event_type: "instance_completed", payload: {} });
     } else {
-      await supabase.from("automation_workflow_instances").update({ current_step_id: nextStep.id, next_run_at: new Date().toISOString(), waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
+      // Reset retry counters on successful step
+      await supabase.from("automation_workflow_instances").update({ current_step_id: nextStep.id, next_run_at: new Date().toISOString(), waiting_for_event_key: null, retry_count: 0, last_error: null, next_retry_at: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
     }
 
     return { advanced: true };
@@ -357,7 +501,10 @@ Deno.serve(async (req) => {
         .from("automation_workflow_instances")
         .select("*")
         .eq("status", "waiting")
-        .eq("waiting_for_event_key", eventKey);
+        .eq("waiting_for_event_key", eventKey)
+        .is("paused_at", null)
+        .is("cancelled_at", null)
+        .is("dead_lettered_at", null);
 
       let resumed = 0;
       const errors: string[] = [];
@@ -397,6 +544,9 @@ Deno.serve(async (req) => {
       .eq("status", "running")
       .lte("next_run_at", now)
       .is("waiting_for_event_key", null)
+      .is("paused_at", null)
+      .is("cancelled_at", null)
+      .is("dead_lettered_at", null)
       .order("next_run_at", { ascending: true })
       .limit(limit);
 
