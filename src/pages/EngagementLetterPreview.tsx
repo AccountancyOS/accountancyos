@@ -43,7 +43,7 @@ export default function EngagementLetterPreview() {
       try {
         const { data: letter, error: lerr } = await supabase
           .from("engagement_letters")
-          .select("id, organization_id, body_html, subject, viewed_at")
+          .select("id, organization_id, document_content, viewed_at")
           .eq("signature_token", token)
           .maybeSingle();
         if (lerr) throw lerr;
@@ -61,8 +61,8 @@ export default function EngagementLetterPreview() {
           .maybeSingle();
         if (!cancelled) {
           setData({
-            subject: (letter as any).subject || "Engagement Letter",
-            body: (letter as any).body_html || "",
+            subject: "Engagement Letter",
+            body: (letter as any).document_content || "",
             firmName: org?.name || "Your Firm",
             isSample: false,
           });
