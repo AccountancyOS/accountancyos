@@ -59,6 +59,7 @@ import EmailPreferencesPage from "./pages/settings/EmailPreferencesPage";
 import CompaniesHouseDiffInbox from "./pages/settings/CompaniesHouseDiffInbox";
 import EngagementLetterVariants from "./pages/settings/EngagementLetterVariants";
 import MyProfileSettings from "./pages/settings/MyProfileSettings";
+import CrmFollowupSequences from "./pages/settings/CrmFollowupSequences";
 import EngagementLetterPreview from "./pages/EngagementLetterPreview";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
