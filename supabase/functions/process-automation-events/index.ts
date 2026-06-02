@@ -296,6 +296,70 @@ async function executeAction(
 // ============================================================
 
 /**
+ * Alias map: chaser policy trigger_type ↔ automation event_type.
+ * Most names match; this only lists the divergent ones.
+ */
+const POLICY_TRIGGER_ALIASES: Record<string, string[]> = {
+  // event_type → list of policy trigger_type values that should respond
+  CLIENT_SERVICE_ENABLED: ["SERVICE_ACTIVATED", "CLIENT_SERVICE_ENABLED"],
+  CLIENT_ONBOARDED: ["CLIENT_ONBOARDED"],
+};
+
+function policyTriggersForEvent(eventType: string): string[] {
+  return POLICY_TRIGGER_ALIASES[eventType] ?? [eventType];
+}
+
+/**
+ * Map an event's entity_type to the chaser-run subject_type accepted by
+ * `chk_chaser_run_subject_type`. Returns null for entities that don't have
+ * a subject-based chaser model (e.g. jobs use job_id, not subject_id).
+ */
+function eventEntityToSubjectType(entityType: string): string | null {
+  const allowed = new Set([
+    "lead", "quote", "engagement_letter", "kyc_subject", "hmrc_auth",
+    "onboarding_subject", "client_service", "records_request",
+    "questionnaire_response", "workpaper", "deadline", "signature_request",
+    "conversation", "invoice",
+  ]);
+  if (allowed.has(entityType)) return entityType;
+  if (entityType === "onboarding") return "onboarding_subject";
+  return null;
+}
+
+// In-request caches for kill-switch lookups.
+const orgEnabledCache = new Map<string, boolean>();
+const categoryEnabledCache = new Map<string, boolean>();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function isOrgAutomationsEnabled(supabase: any, organizationId: string): Promise<boolean> {
+  if (orgEnabledCache.has(organizationId)) return orgEnabledCache.get(organizationId)!;
+  const { data } = await supabase
+    .from("organizations")
+    .select("automations_enabled")
+    .eq("id", organizationId)
+    .maybeSingle();
+  const enabled = data?.automations_enabled !== false; // default true
+  orgEnabledCache.set(organizationId, enabled);
+  return enabled;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function isCategoryEnabled(supabase: any, organizationId: string, category: string | null): Promise<boolean> {
+  if (!category) return true;
+  const cacheKey = `${organizationId}:${category}`;
+  if (categoryEnabledCache.has(cacheKey)) return categoryEnabledCache.get(cacheKey)!;
+  const { data } = await supabase
+    .from("automation_category_settings")
+    .select("is_enabled")
+    .eq("organization_id", organizationId)
+    .eq("category", category)
+    .maybeSingle();
+  const enabled = data?.is_enabled !== false; // default true (no row = enabled)
+  categoryEnabledCache.set(cacheKey, enabled);
+  return enabled;
+}
+
+/**
  * Route a single automation_event against the new trigger-contract layer:
  *  - QUOTE_ACCEPTED  → spawn workflow instances per automation_workflow_trigger_map.
  *  - LEAD_STAGE_CHANGED → stop CRM-followup chaser runs when stage advances or = lost.
@@ -309,10 +373,19 @@ async function executeAction(
 async function routeTriggerContractEvent(supabase: any, ev: AutomationEvent): Promise<void> {
   const type = ev.event_type;
 
-  // 1. Workflow spawn for any event mapped via trigger contracts
-  await spawnWorkflowInstancesForEvent(supabase, ev);
+  // 0. Kill switch — short-circuit ALL starts (stops still run so terminal
+  //    events can clean up in-flight runs even when automations are disabled).
+  const orgEnabled = await isOrgAutomationsEnabled(supabase, ev.organization_id);
 
-  // 2. Subject-based stop logic
+  if (orgEnabled) {
+    // 1. Workflow spawn for any event mapped via trigger contracts
+    await spawnWorkflowInstancesForEvent(supabase, ev);
+
+    // 2. Event-driven chaser run enqueue
+    await enqueueEventDrivenChaserRuns(supabase, ev);
+  }
+
+  // 3. Subject-based stop logic (always runs)
   if (type === "LEAD_STAGE_CHANGED") {
     const newStage = String((ev.new_value?.stage ?? ev.new_value?.pipeline_stage ?? "")).toLowerCase();
     const stopStages = new Set(["qualified", "won", "converted", "lost", "dormant"]);
@@ -322,17 +395,111 @@ async function routeTriggerContractEvent(supabase: any, ev: AutomationEvent): Pr
     return;
   }
 
+  if (type === "LEAD_LOST") {
+    await stopSubjectRuns(supabase, ev.organization_id, "lead", ev.entity_id);
+    return;
+  }
+
   if (type === "QUOTE_REJECTED" || type === "QUOTE_EXPIRED") {
+    await stopSubjectRuns(supabase, ev.organization_id, "quote", ev.entity_id);
+    return;
+  }
+
+  if (type === "QUOTE_ACCEPTED") {
+    // Accepted quotes no longer need chasing.
     await stopSubjectRuns(supabase, ev.organization_id, "quote", ev.entity_id);
     return;
   }
 
   if (type === "KYC_STATUS_CHANGED") {
     const status = String((ev.new_value?.subject_status ?? ev.new_value?.status ?? "")).toLowerCase();
-    if (status === "complete" || status === "waived") {
+    const terminal = new Set(["complete", "approved", "waived", "rejected", "expired", "replaced"]);
+    if (terminal.has(status)) {
       await stopSubjectRuns(supabase, ev.organization_id, "kyc_subject", ev.entity_id);
     }
     return;
+  }
+
+  if (type === "ENGAGEMENT_LETTER_SIGNED") {
+    await stopSubjectRuns(supabase, ev.organization_id, "engagement_letter", ev.entity_id);
+    return;
+  }
+
+  if (type === "PAYMENT_RECEIVED") {
+    const invoiceId = (ev.metadata?.invoiceId as string | undefined)
+      ?? (ev.new_value?.invoice_id as string | undefined);
+    if (invoiceId) {
+      await stopSubjectRuns(supabase, ev.organization_id, "invoice", invoiceId);
+    }
+    return;
+  }
+
+  if (type === "QUESTIONNAIRE_SUBMITTED") {
+    await stopSubjectRuns(supabase, ev.organization_id, "questionnaire_response", ev.entity_id);
+    return;
+  }
+}
+
+/**
+ * Look up enabled chaser policies whose trigger_type matches this event and
+ * ensure an ACTIVE chaser run exists for the subject. Idempotent via the
+ * `uq_chaser_run_subject_policy` unique index.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function enqueueEventDrivenChaserRuns(supabase: any, ev: AutomationEvent): Promise<void> {
+  const subjectType = eventEntityToSubjectType(ev.entity_type);
+  if (!subjectType) return;
+
+  const triggerTypes = policyTriggersForEvent(ev.event_type);
+
+  const { data: policies, error } = await supabase
+    .from("automation_chaser_policies")
+    .select("id, organization_id, category, trigger_type, frequency_unit, frequency_interval, trigger_offset_days, email_template_id, stop_condition_value, is_enabled, paused_at")
+    .eq("organization_id", ev.organization_id)
+    .in("trigger_type", triggerTypes)
+    .eq("is_enabled", true);
+
+  if (error) {
+    console.warn(`[process-automation-events] policy lookup failed for event ${ev.id}: ${error.message}`);
+    return;
+  }
+  if (!policies || policies.length === 0) return;
+
+  const now = new Date();
+  const triggerDate = ev.created_at ?? now.toISOString();
+
+  for (const p of policies) {
+    if (p.paused_at) continue;
+    if (!(await isCategoryEnabled(supabase, ev.organization_id, p.category))) continue;
+
+    const firstSend = new Date(triggerDate);
+    firstSend.setDate(firstSend.getDate() + (p.trigger_offset_days || 0));
+    const nextSendAt = (firstSend < now ? now : firstSend).toISOString();
+
+    const payload = {
+      organization_id: ev.organization_id,
+      policy_id: p.id,
+      job_id: null,
+      subject_type: subjectType,
+      subject_id: ev.entity_id,
+      status: "ACTIVE",
+      trigger_date: triggerDate,
+      next_send_at: nextSendAt,
+      frequency_unit: p.frequency_unit,
+      frequency_interval: p.frequency_interval,
+      email_template_id: p.email_template_id,
+      stop_condition_value: p.stop_condition_value,
+    };
+
+    const { error: insErr } = await supabase
+      .from("automation_chaser_runs")
+      .insert(payload);
+
+    // 23505 = unique violation → an ACTIVE run for this (subject, policy)
+    // already exists. That's the intended idempotent outcome.
+    if (insErr && insErr.code !== "23505") {
+      console.warn(`[process-automation-events] chaser enqueue failed for policy ${p.id} on event ${ev.id}: ${insErr.message}`);
+    }
   }
 }
 
