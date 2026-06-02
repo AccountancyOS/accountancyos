@@ -1,44 +1,75 @@
-## Root Causes
+## Two issues to fix
 
-1. **Send failure**: `lifecycle_send_quote` inserts `subject = NULL` into `email_queue` whenever a `quote_proposal` template is found. The newly seeded **Quote Proposal** system template now matches, so the previously-unreached `ELSE NULL` branch fires and the `NOT NULL` constraint on `email_queue.subject` trips. The same RPC also never updates `quotes.status='sent'` / `sent_at`.
-2. **"Template missing from library"**: The DB row exists and RLS/grants allow it. The page just never refetched after the migration inserted it — `react-query` was caching the pre-seed result under an unchanged key.
+### A. Quote merge fields are invisible
+The Merge Fields panel exposes 25 dot-notation tokens (`{{client.email}}` etc.) drawn from `template_merge_fields`. **No Quote category exists.** `lifecycle_send_quote` does resolve `{{quote_number}}`, `{{quote_total}}`, `{{currency}}`, `{{valid_until}}`, `{{accept_link}}`, `{{quote_lines_table}}`, `{{recipient_name}}`, `{{practice_name}}` — but those tokens cannot be discovered or inserted from the UI. My earlier "just paste it in the body" answer was wrong in practice.
 
-## Changes
+### B. Every template ships blank
+13 of 14 templates have empty `subject`, `body`, and `htmlBody`. Only `Quote Proposal` has real content. Accountants currently see an editor with nothing in it for: CRM follow-up, Deadline approaching, Engagement letter reminder, HMRC authorisation reminder, Invoice payment reminder, KYC document reminder, Message follow-up, New service welcome, Onboarding reminder, Questionnaire reminder, Records request reminder, Signature request reminder, Workpaper review reminder.
 
-### A. Database migration — rewrite `lifecycle_send_quote`
-Single migration that recreates the function with these corrections:
+## Fix
 
-- Resolve the email subject/body **before** the insert by reading from the chosen template:
-  ```sql
-  SELECT
-    COALESCE(NULLIF(content->>'subject',''), 'Your quote from ' || v_practice_name),
-    COALESCE(NULLIF(content->>'htmlBody',''), NULLIF(content->>'body',''),
-             '<p>Please find your proposal ' || v_quote.quote_number || ' attached. ...</p>')
-    INTO v_subject, v_body_html
-  FROM templates WHERE id = v_template_id;
-  ```
-  Run merge-token substitution server-side so the queue row is fully rendered (and the dispatcher can send it even if the template later changes). Use the same tokens already produced for `merge_data`.
-- Always pass non-null `subject` and `body_html` into `email_queue`. Keep `template_id` for traceability.
-- After the email insert, `UPDATE quotes SET status='sent', sent_at = now(), valid_until = v_valid_until WHERE id = p_quote_id`.
-- Wrap the email/quote mutations in a single transaction (already the case as it's a function) and add a clear `RAISE EXCEPTION` if `email_queue` insert fails so the toast shows a helpful message.
-- Drop the stale `chk_email_queue_status` NOT VALID constraint (housekeeping; the live constraint stays).
+### 1. Seed Quote merge fields (DB migration + insert)
+Add a `quote` category to `template_merge_fields` whose keys match exactly what `lifecycle_send_quote` already substitutes — no RPC change required:
 
-### B. Template library refresh — `src/pages/Templates.tsx` and `src/pages/settings/EmailTemplates.tsx`
-- Lower `staleTime` to `0` and set `refetchOnMount: "always"` on the templates query so a new system template appears the next time the page is opened, without requiring a hard reload.
-- Render system templates in a clearly labelled **"System Library"** section above the "Your Templates" section on `/templates` (matches the existing Settings page pattern). This makes the Quote Proposal impossible to miss regardless of search/filter state.
-- Add an info banner in the header explaining what System templates are and that "Clone & Customise" creates an org-scoped copy.
+| Label              | Key                  |
+|--------------------|----------------------|
+| Quote Number       | `quote_number`       |
+| Quote Total        | `quote_total`        |
+| Currency           | `currency`           |
+| Valid Until        | `valid_until`        |
+| Accept Link        | `accept_link`        |
+| Line Items Table   | `quote_lines_table`  |
+| Recipient Name     | `recipient_name`     |
+| Practice Name      | `practice_name`      |
 
-### C. Verification (run after migration applies)
-1. Re-trigger send on the existing draft quote `871ba038-b434-47f5-bfdc-dc79bba9d406`. Expect:
-   - RPC returns `{ status: 'sent', email_queued: true, accept_token: <uuid> }`.
-   - `quotes.status='sent'`, `sent_at` set.
-   - New `email_queue` row with non-null `subject` and `body_html`, `template_id=…0a01`, `status='pending'`.
-   - New `quote_acceptance_tokens` row.
-2. Open `/templates` in the app, confirm "Quote Proposal" card renders under "System Library" with the "Clone & Customise" action.
+Also add a `template_types text[]` column (default `'{all}'`) on `template_merge_fields`. Tag the new quote rows with `'{quote_proposal}'`. Update `EmailTemplateEditor.tsx` to filter the panel to fields whose `template_types` contains `'all'` or matches the template's category — so Quote tokens only show when authoring a Quote Proposal and don't clutter other templates.
 
-### Files touched
-- New migration file (function rewrite + constraint cleanup).
-- `src/pages/Templates.tsx` (sectioned render + cache options).
-- `src/pages/settings/EmailTemplates.tsx` (cache options only).
+Add a one-line hint under the Quote group: *"`{{quote_lines_table}}` renders the styled HTML table of line items when the template is dispatched by Send Quote."*
 
-No other modules affected. No schema additions, no new RLS, no new grants.
+### 2. Seed real content into all 13 blank templates
+Replace blank `content` JSON on every existing template (and re-seed on future installs) with a professional, ready-to-send body containing the appropriate merge tokens. Each template gets `subject`, plain-text `body`, `htmlBody` (matching the Quote Proposal styling — Arial, teal CTA where relevant, max-width 640px), and a `category`.
+
+Drafts (tone: corporate, no emojis, Title Case, no placeholders left in subject lines):
+
+| Template | Tokens used | Category |
+|---|---|---|
+| CRM follow-up reminder | `{{client.first_name}}`, `{{firm.name}}`, `{{user.first_name}}` | CRM |
+| Deadline approaching | `{{client.first_name}}`, `{{deadline.filing_date}}`, `{{filing.type}}`, `{{firm.name}}` | Compliance |
+| Engagement letter reminder | `{{client.first_name}}`, `{{firm.name}}`, `{{user.first_name}}` | Onboarding |
+| HMRC authorisation reminder | `{{client.first_name}}`, `{{firm.name}}` | Onboarding |
+| Invoice payment reminder | `{{client.first_name}}`, `{{invoice.amount}}`, `{{invoice.due_date}}`, `{{payment.reference}}`, `{{firm.name}}` | Billing |
+| KYC document reminder | `{{client.first_name}}`, `{{firm.name}}` | Compliance |
+| Message follow-up | `{{client.first_name}}`, `{{user.first_name}}`, `{{firm.name}}` | CRM |
+| New service welcome | `{{client.first_name}}`, `{{service.name}}`, `{{firm.name}}` | Onboarding |
+| Onboarding reminder | `{{client.first_name}}`, `{{firm.name}}` | Onboarding |
+| Questionnaire reminder | `{{client.first_name}}`, `{{firm.name}}` (questionnaire link inserted via existing dialog) | Compliance |
+| Records request reminder | `{{client.first_name}}`, `{{company.name}}`, `{{filing.period_end}}`, `{{firm.name}}` | Compliance |
+| Signature request reminder | `{{client.first_name}}`, `{{firm.name}}` | Onboarding |
+| Workpaper review reminder | `{{client.first_name}}`, `{{filing.type}}`, `{{filing.period_end}}`, `{{firm.name}}` | Compliance |
+
+All bodies follow the same skeleton: greeting, 1–2 sentence context, clear action sentence, sign-off. Each `htmlBody` mirrors the `body` with matching inline styles (white background, Arial 15px, `#1a1a1a` text, teal `#0f766e` CTA where there is a link).
+
+The existing `Quote Proposal` system template is already populated and stays as-is.
+
+### 3. Make seeding self-healing for future orgs
+Move the 13 templates from per-org rows into system templates (`organization_id IS NULL`) — same pattern as Quote Proposal. The org-scoped row pattern means every new firm currently inherits zero content. After this change:
+- One row per template under `organization_id IS NULL` with rich content
+- The Templates page already renders system templates in the "System Library" section (from the previous fix)
+- "Clone & Customise" creates the org-scoped copy with content pre-filled
+
+Delete the 13 existing blank org-scoped rows on the current test org during the same data migration (they have no usage — the Templates page will then show system-only).
+
+## Files touched
+
+- New schema migration: add `template_types` column to `template_merge_fields`; backfill `'{all}'`.
+- Data insert (via insert tool): seed 8 quote merge fields; upsert 13 system templates with full content; delete the 13 blank org-scoped rows.
+- `src/components/templates/EmailTemplateEditor.tsx`: filter merge fields by template type; render quote-token hint.
+- No changes to `lifecycle_send_quote`, `process-email-queue`, or RLS.
+
+## Verification
+
+1. Open `/templates` → "System Library" section shows all 14 templates with non-empty previews.
+2. Click "Clone & Customise" on any template → editor opens with the body pre-filled.
+3. Open the Quote Proposal clone → Merge Fields panel includes a new "Quote" group with all 8 tokens.
+4. Open a non-quote template → Quote group is hidden.
+5. Re-send a draft quote → `email_queue.body_html` still contains the substituted line-items table (no regression).

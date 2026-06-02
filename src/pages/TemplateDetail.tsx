@@ -286,7 +286,7 @@ export default function TemplateDetail() {
           <WorkpaperTemplateEditor content={content} onChange={setContent} />
         )}
         {currentType === "email" && (
-          <EmailTemplateEditor content={content} onChange={setContent} />
+          <EmailTemplateEditor content={content} onChange={setContent} templateName={name} />
         )}
         {currentType === "job" && (
           <JobTemplateEditor content={content} onChange={setContent} />
