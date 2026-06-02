@@ -100,7 +100,7 @@ export default function TemplateDetail() {
         organization_id: organization.id,
         name,
         description,
-        type: isNew ? templateType : template?.type,
+        type: isNew ? (cloneSource?.type || templateType) : template?.type,
         service,
         status,
         content,
@@ -184,7 +184,7 @@ export default function TemplateDetail() {
     );
   }
 
-  const currentType = isNew ? templateType : template?.type;
+  const currentType = isNew ? (cloneSource?.type || templateType) : template?.type;
 
   return (
     <DashboardLayout>
