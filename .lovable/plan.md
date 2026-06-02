@@ -1,76 +1,81 @@
+## Goal
 
-## Background
+Complete Phases 2, 3, and 4 of the automation engine: full trigger coverage, deeper workflow execution, and an authoring/observability UI.
 
-Full audit (queries above) shows the stored stop conditions, seed templates, workflow steps, SLA definitions and edge-function evaluators are already context-specific. Only **one** real defect remains: the schema-level default on `automation_chaser_policies.stop_condition_value` is the literal string `'records_received'`, which would silently poison any future `INSERT` that forgets to set it.
+## Phase 2 — Trigger coverage & wiring
 
-The previous turn already corrected the UI labels (per-`stop_condition_value` map), the cadence picker (no duplicate `7 days` / `1 week`) and normalised `WEEK` rows to `DAY`. This plan finishes the job and produces the evidence pack the user asked for.
+**Consumers in `process-automation-events`**
+Add handlers for the events that already emit but aren't mapped:
+- `LEAD_DORMANT`, `QUOTE_ACCEPTED`, `ENGAGEMENT_LETTER_SENT`, `KYC_STATUS_CHANGED`, `HMRC_AUTH_REQUESTED`, `CLIENT_SERVICE_ENABLED`, `QUESTIONNAIRE_SUBMITTED`, `WORKPAPER_CREATED`, `INBOUND_MESSAGE_RECEIVED`, `INVOICE_OVERDUE`.
+- Each handler resolves the subject (lead/quote/engagement/kyc/etc.), looks up enabled `automation_chaser_policies` and `automation_rule_templates` matching the trigger, and enqueues runs idempotently.
 
-## Changes
+**Emitters that are missing**
+- `dormant-lead-scan` edge function: daily cron, marks leads dormant past threshold and emits `LEAD_DORMANT`. (Function exists — add event emission + cron.)
+- New `invoice-overdue-scan` edge function: daily cron, emits `INVOICE_OVERDUE` per overdue invoice.
+- App-level emit hooks for `QUOTE_ACCEPTED`, `ENGAGEMENT_LETTER_SENT`, `KYC_STATUS_CHANGED`, `HMRC_AUTH_REQUESTED`, `CLIENT_SERVICE_ENABLED`, `QUESTIONNAIRE_SUBMITTED`, `WORKPAPER_CREATED` wired at the existing service-layer call sites (no duplicate triggers).
+- `INBOUND_MESSAGE_RECEIVED` emitted from `gmail-sync` / `outlook-sync` on new inbound message persistence.
 
-### 1. Migration — remove the generic default
+**Stop-condition coverage**
+Confirm `chaser-tick` evaluates terminal status for each new subject type already in the per-subject map; add `lead`, `invoice` (already present), `client_service` to the same path if missing.
 
-```sql
-ALTER TABLE public.automation_chaser_policies
-  ALTER COLUMN stop_condition_value DROP DEFAULT;
-```
+## Phase 3 — Workflow execution depth
 
-`stop_condition_value` stays `NOT NULL`, so callers must now specify a category-appropriate value. No existing rows are touched (all 14 already store a specific value).
+**`workflow-tick` action types** — implement the stubbed steps:
+- `create_task` (insert into `tasks` with placeholder resolution)
+- `assign_staff` (write `job_assignments` / task assignee)
+- `send_portal_message` (insert into `portal_messages`)
+- `raise_notification` (insert into `notifications` for target user/role)
+- `branch_on_condition` (evaluate JSON condition against resolved context; pick next step id)
 
-### 2. Evidence doc — `docs/automation/stop-condition-audit.md`
+**Reliability**
+- Add `retry_count`, `last_error`, `next_retry_at`, `dead_lettered_at` columns to `automation_workflow_runs` (migration).
+- Exponential back-off: 1m, 5m, 30m, 2h, 12h, then dead-letter at 6 retries.
+- Surface failures in the new run-history UI (Phase 4).
 
-Single markdown file capturing:
+**Controls**
+- Pause/resume/cancel RPCs (`pause_workflow_run`, `resume_workflow_run`, `cancel_workflow_run`) — parity with chaser runs.
 
-- Per-table row counts of `records_received` usage (chaser_policies, rule_templates, workflow_steps, sla_definitions, templates, message_templates, chaser_runs).
-- The 14-row per-policy table from the audit above.
-- The two legitimate `records_received` references in edge functions, with file/line and justification.
-- Confirmation that `process-automation-events`, `workflow-tick`, `sla-check` contain zero references.
-- Per-category corrected stop wording now rendered by `getStopConditionLabel(category, stop_condition_value)` (lifted from `src/lib/chaser-policy-service.ts`).
-- Before/after example for the schema default:
+## Phase 4 — Authoring UI & observability
 
-  ```
-  Before: stop_condition_value text NOT NULL DEFAULT 'records_received'
-  After : stop_condition_value text NOT NULL
-  ```
+**Run history (priority for trust)**
+- New tab in `AutomationSettingsCentre`: "Run History".
+- Filters: status (active/stopped/paused/failed/dead-lettered), subject type, policy/template, date range, last error contains.
+- Row drill-down: timeline of `automation_chaser_messages` + `automation_workflow_step_runs` for that run.
+- Pause/resume/cancel buttons inline.
 
-- Verification commands and their outputs so the user can re-run them.
+**Visual rule builder**
+- New page `src/pages/settings/automation-rules/RuleBuilder.tsx`.
+- Three-pane editor: Trigger → Conditions (AND/OR groups on resolved-context fields) → Steps (drag-reorder).
+- Saves to `automation_rule_templates` (no SQL needed).
+- Reuses placeholder picker from existing template editor.
 
-### 3. Verification queries to re-run after the migration
+**Test-fire / dry-run**
+- "Test fire" button on any policy/template.
+- Modal: pick a subject entity → backend resolves context, evaluates conditions, returns a dry-run plan (steps that would execute, messages that would send, with rendered placeholders). Nothing is persisted or sent.
+- New edge function `automation-dry-run`.
 
-```sql
--- No generic default remains
-SELECT column_default
-FROM information_schema.columns
-WHERE table_name = 'automation_chaser_policies'
-  AND column_name = 'stop_condition_value';
--- expected: NULL
+**Kill switches**
+- Per-category enable/disable toggle (writes to `automation_category_settings` — new tiny table).
+- Org-level master kill switch in `AutomationSettingsCentre` header.
+- Both checked in `process-automation-events` before enqueuing.
 
--- Still no non-records policy stores records_received
-SELECT name, category
-FROM automation_chaser_policies
-WHERE stop_condition_value = 'records_received'
-  AND category <> 'jobs_records';
--- expected: 0 rows
+## Technical details
 
--- Cadence picker has nothing to deduplicate
-SELECT count(*) FROM automation_chaser_policies WHERE frequency_unit = 'WEEK';
-SELECT count(*) FROM automation_chaser_runs     WHERE frequency_unit = 'WEEK';
--- expected: 0, 0
-```
+- **Migrations**: workflow-run reliability columns; `automation_category_settings` table with RLS scoped by org; `org_settings.automations_enabled` flag.
+- **Edge functions**: new `invoice-overdue-scan`, `automation-dry-run`; updates to `process-automation-events`, `workflow-tick`, `dormant-lead-scan`, `gmail-sync`, `outlook-sync`.
+- **Cron**: schedule `invoice-overdue-scan` and `dormant-lead-scan` daily 06:00 UTC via `pg_cron` (using insert tool, not migration, per user-specific URL rule).
+- **UI**: new tabs/pages under `/settings/automations`; shared components for run-row, status pill, retry timeline.
+- **No removal of existing behaviour.** All additions are additive; existing chaser flow keeps working.
 
-## Out of scope (and why)
+## Out of scope
 
-- **Workflow steps / rule templates / SLA defs / message templates** — already 0 hits for `records_received`; no rewrite needed.
-- **`chaser-tick` per-subject handlers** — already use context-specific terminal-status lists per subject type (invoice/signature/deadline/engagement_letter/kyc/hmrc/quote/onboarding/workpaper/questionnaire). No code change.
-- **`chaser-trigger-scan` line 435** — the `records_received` reference there is a *start gate* for the records-collection flow, not a stop condition. Correct as-is.
-- **Stop-condition JSONB schema** (`{entity, field, operator, value}` shape) — current model uses `stop_condition_type` + `stop_condition_value` plus per-subject handlers and is already context-specific. Introducing a JSONB DSL is a larger refactor that does not change runtime behaviour, so it is deferred unless explicitly requested.
+- Re-architecting stop conditions into a JSON DSL (deferred unless requested).
+- Multi-tenant template marketplace.
+- Webhook outbound steps (will scope separately if wanted).
 
 ## Acceptance
 
-After this plan ships, all twelve acceptance points from the user's message hold:
-
-1. Cadence labels normalised ✅ (done previous turn).
-2. No duplicate `7 days` / `1 week` ✅ (done previous turn).
-3. No non-records automation stores `records_received` ✅ (verified by query; default now removed so it cannot regress).
-4–11. Deadline, payment, signature, engagement-letter, KYC, HMRC-auth, quote, CRM stops driven by per-subject handlers in `chaser-tick` ✅ (verified by grep + code review).
-12. UI labels match backend evaluators ✅ (UI now reads from `stop_condition_value`; backend evaluates per-subject terminal statuses).
-
+- All listed triggers fire end-to-end from a real user action through to a queued chaser/workflow run.
+- Workflow runs that fail retry with back-off and dead-letter after 6 attempts; both visible in Run History.
+- Accountant can build a new rule without writing SQL and dry-run it before enabling.
+- Per-category and org-wide kill switches halt enqueuing immediately.
