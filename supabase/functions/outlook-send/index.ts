@@ -71,12 +71,18 @@ serve(async (req: Request) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const bearer = authHeader.replace(/^Bearer\s+/i, '');
+    const isInternalCall = bearer === SUPABASE_SERVICE_ROLE_KEY;
+    let verifiedUserId: string | null = null;
+    if (!isInternalCall) {
+      const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      verifiedUserId = user.id;
     }
 
     const body: SendEmailRequest = await req.json();
