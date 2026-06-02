@@ -92,6 +92,30 @@ const PLACEHOLDER_DEFINITIONS: PlaceholderDefinition[] = [
   
   // Organization placeholders
   { key: "{{organization.name}}", resolver: (ctx) => ctx.organization?.name || "" },
+  { key: "{{organization.email}}", resolver: (ctx) => (ctx.organization as any)?.email || "" },
+  { key: "{{organization.phone}}", resolver: (ctx) => (ctx.organization as any)?.phone || "" },
+
+  // Job placeholders (additional)
+  { key: "{{job.name}}", resolver: (ctx) => ctx.job?.job_name || "" },
+
+  // Portal & action links — resolved by the dispatching code when known,
+  // otherwise rendered as an empty string so unresolved tokens never leak
+  // into outbound emails.
+  { key: "{{client.portal_link}}",          resolver: (ctx) => (ctx.client as any)?.portal_link || "" },
+  { key: "{{engagement.sign_link}}",        resolver: (ctx) => (ctx as any).engagement?.sign_link || "" },
+  { key: "{{records_request.link}}",        resolver: (ctx) => (ctx as any).records_request?.link || "" },
+  { key: "{{questionnaire.link}}",          resolver: (ctx) => (ctx as any).questionnaire?.link || "" },
+  { key: "{{approval.link}}",               resolver: (ctx) => (ctx as any).approval?.link || "" },
+
+  // Payment placeholders
+  { key: "{{payment.name}}",                resolver: (ctx) => (ctx as any).payment?.name || "" },
+  { key: "{{payment.amount}}",              resolver: (ctx) => (ctx as any).payment?.amount || "" },
+  { key: "{{payment.due_date}}",            resolver: (ctx) => (ctx as any).payment?.due_date || "" },
+
+  // Filing placeholders (additional)
+  { key: "{{filing.name}}",                 resolver: (ctx) => (ctx.filing as any)?.name || ctx.filing?.filing_type || "" },
+  { key: "{{filing.submission_reference}}", resolver: (ctx) => (ctx.filing as any)?.submission_reference || "" },
+  { key: "{{filing.submission_date}}",      resolver: (ctx) => (ctx.filing as any)?.submission_date || "" },
   
   // Period placeholders
   { key: "{{period}}", resolver: (ctx) => {
