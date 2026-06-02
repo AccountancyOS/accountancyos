@@ -363,16 +363,21 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
     });
 
     if (success) {
-      // If a folder is selected, set folder_id on the just-uploaded document
       if (selectedFolderId) {
-        await supabase
+        const { data: justUploaded } = await supabase
           .from("job_documents")
-          .update({ folder_id: selectedFolderId })
+          .select("id")
           .eq("organization_id", organization.id)
           .eq("job_id", jobs[0].id)
           .eq("file_name", file.name)
           .order("uploaded_at", { ascending: false })
           .limit(1);
+        if (justUploaded?.[0]) {
+          await supabase
+            .from("job_documents")
+            .update({ folder_id: selectedFolderId })
+            .eq("id", justUploaded[0].id);
+        }
       }
       toast({ title: "Document uploaded" });
       queryClient.invalidateQueries({ queryKey: ["client-documents"] });
