@@ -394,6 +394,7 @@ const Services = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEdit(service)}
+                        aria-label={`Edit service ${service.name}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -405,6 +406,7 @@ const Services = () => {
                             deleteMutation.mutate(service.id);
                           }
                         }}
+                        aria-label={`Delete service ${service.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
