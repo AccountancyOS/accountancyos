@@ -1,26 +1,44 @@
-## Make System Templates Visible in the Library
+## Root Causes
 
-**Problem:** The seeded "Quote Proposal" email template exists (`organization_id IS NULL`) but the Templates page filters strictly by `organization_id = current org`, so it never appears. Accountants have no way to view or customise it.
+1. **Send failure**: `lifecycle_send_quote` inserts `subject = NULL` into `email_queue` whenever a `quote_proposal` template is found. The newly seeded **Quote Proposal** system template now matches, so the previously-unreached `ELSE NULL` branch fires and the `NOT NULL` constraint on `email_queue.subject` trips. The same RPC also never updates `quotes.status='sent'` / `sent_at`.
+2. **"Template missing from library"**: The DB row exists and RLS/grants allow it. The page just never refetched after the migration inserted it — `react-query` was caching the pre-seed result under an unchanged key.
 
-**Audit:** Only one system-level template exists today (`Quote Proposal`). This fix is generic, so any future seeded system templates will automatically appear too.
+## Changes
 
-### Changes
+### A. Database migration — rewrite `lifecycle_send_quote`
+Single migration that recreates the function with these corrections:
 
-**1. `src/pages/Templates.tsx`**
-- Update query to fetch rows where `organization_id = current org` **OR** `organization_id IS NULL`.
-- Add a "System" badge (alongside the existing Active/Inactive chip) on rows with `organization_id = null`.
-- On click of a system row, route to `/templates/new?clone_from=<id>` instead of the read-only detail view.
-- Add a `Clone & Customise` action button on system template cards for discoverability.
+- Resolve the email subject/body **before** the insert by reading from the chosen template:
+  ```sql
+  SELECT
+    COALESCE(NULLIF(content->>'subject',''), 'Your quote from ' || v_practice_name),
+    COALESCE(NULLIF(content->>'htmlBody',''), NULLIF(content->>'body',''),
+             '<p>Please find your proposal ' || v_quote.quote_number || ' attached. ...</p>')
+    INTO v_subject, v_body_html
+  FROM templates WHERE id = v_template_id;
+  ```
+  Run merge-token substitution server-side so the queue row is fully rendered (and the dispatcher can send it even if the template later changes). Use the same tokens already produced for `merge_data`.
+- Always pass non-null `subject` and `body_html` into `email_queue`. Keep `template_id` for traceability.
+- After the email insert, `UPDATE quotes SET status='sent', sent_at = now(), valid_until = v_valid_until WHERE id = p_quote_id`.
+- Wrap the email/quote mutations in a single transaction (already the case as it's a function) and add a clear `RAISE EXCEPTION` if `email_queue` insert fails so the toast shows a helpful message.
+- Drop the stale `chk_email_queue_status` NOT VALID constraint (housekeeping; the live constraint stays).
 
-**2. `src/pages/TemplateDetail.tsx` (new-template route)**
-- When the `clone_from` query param is present, fetch the source template and prefill: `name` (suffix " (Custom)"), `subject`, `body`, `type`, `service`, merge-field metadata, description.
-- Save creates a new row scoped to the current `organization_id` with `status = 'draft'`.
+### B. Template library refresh — `src/pages/Templates.tsx` and `src/pages/settings/EmailTemplates.tsx`
+- Lower `staleTime` to `0` and set `refetchOnMount: "always"` on the templates query so a new system template appears the next time the page is opened, without requiring a hard reload.
+- Render system templates in a clearly labelled **"System Library"** section above the "Your Templates" section on `/templates` (matches the existing Settings page pattern). This makes the Quote Proposal impossible to miss regardless of search/filter state.
+- Add an info banner in the header explaining what System templates are and that "Clone & Customise" creates an org-scoped copy.
 
-**3. Resolution logic — no change needed**
-- `lifecycle_send_quote` already prefers org-scoped templates matching `service = 'quote_proposal'` and falls back to the system row. Once the practice activates their clone, it automatically wins.
+### C. Verification (run after migration applies)
+1. Re-trigger send on the existing draft quote `871ba038-b434-47f5-bfdc-dc79bba9d406`. Expect:
+   - RPC returns `{ status: 'sent', email_queued: true, accept_token: <uuid> }`.
+   - `quotes.status='sent'`, `sent_at` set.
+   - New `email_queue` row with non-null `subject` and `body_html`, `template_id=…0a01`, `status='pending'`.
+   - New `quote_acceptance_tokens` row.
+2. Open `/templates` in the app, confirm "Quote Proposal" card renders under "System Library" with the "Clone & Customise" action.
 
-**4. No database migration** — the template row already exists.
+### Files touched
+- New migration file (function rewrite + constraint cleanup).
+- `src/pages/Templates.tsx` (sectioned render + cache options).
+- `src/pages/settings/EmailTemplates.tsx` (cache options only).
 
-### Out of scope
-- Auto-cloning every system template into every org on signup (rejected: keeps the library uncluttered; opt-in via clone).
-- Adding a dedicated "Quote" filter chip — the existing All Types dropdown handles `email` already.
+No other modules affected. No schema additions, no new RLS, no new grants.
