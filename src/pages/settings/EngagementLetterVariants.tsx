@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -22,7 +22,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Eye, Bold, Italic, List, Heading2, Variable } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CLIENT_TYPES as CLIENT_TYPE_VALUES, CLIENT_TYPE_LABELS, getClientTypeLabel } from "@/lib/client-types";
 import { formatServiceType } from "@/lib/format-utils";
 
@@ -78,6 +81,16 @@ const SAMPLE_CONTEXT: Record<string, string> = {
     : "/engagement/sample-token",
 };
 
+const PLACEHOLDERS: { key: string; label: string }[] = [
+  { key: "client.name", label: "Client Name" },
+  { key: "recipient_name", label: "Recipient Name" },
+  { key: "firm.name", label: "Firm Name (Auto)" },
+  { key: "signing_url", label: "Signing URL" },
+  { key: "today", label: "Today's Date" },
+  { key: "service.name", label: "Service Name" },
+  { key: "fee.amount", label: "Fee Amount" },
+];
+
 const renderPlaceholders = (text: string, firmName: string): string => {
   const ctx = { ...SAMPLE_CONTEXT, firm_name: firmName, "firm.name": firmName };
   return Object.entries(ctx).reduce(
@@ -106,7 +119,7 @@ export default function EngagementLetterVariants() {
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY>(EMPTY);
-  const [showPreview, setShowPreview] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: variants, isLoading } = useQuery({
     queryKey: ["engagement-letter-variants", organization?.id],
@@ -206,6 +219,37 @@ export default function EngagementLetterVariants() {
   const previewSubject = renderPlaceholders(form.subject || "(No Subject)", firmName);
   const previewBody = renderPlaceholders(form.body || "(No Body)", firmName);
 
+  const insertAtCursor = (text: string) => {
+    const ta = bodyRef.current;
+    if (!ta) {
+      setForm((f) => ({ ...f, body: f.body + text }));
+      return;
+    }
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    const next = ta.value.slice(0, start) + text + ta.value.slice(end);
+    setForm((f) => ({ ...f, body: next }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + text.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  const wrapSelection = (before: string, after: string = before) => {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    const selected = ta.value.slice(start, end) || "text";
+    const next = ta.value.slice(0, start) + before + selected + after + ta.value.slice(end);
+    setForm((f) => ({ ...f, body: next }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
@@ -289,14 +333,14 @@ export default function EngagementLetterVariants() {
       </div>
 
       <Dialog open={open} onOpenChange={(o) => { if (!o) { setEditing(null); setCreating(false); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Variant" : "New Variant"}</DialogTitle>
             <DialogDescription>
-              Leave client type or service blank to make the variant apply to any value at that level.
+              Leave client type or service blank to make the variant apply to any value at that level. Firm name is auto-populated from your organization settings.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="flex-1 overflow-y-auto space-y-4 py-2 pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Engagement Kind</Label>
@@ -367,45 +411,64 @@ export default function EngagementLetterVariants() {
                 placeholder="Engagement Letter For {{client.name}}"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Body</Label>
-              <Textarea
-                value={form.body}
-                onChange={(e) => setForm({ ...form, body: e.target.value })}
-                rows={10}
-                placeholder="Use {{placeholder}} syntax for dynamic fields"
-              />
-            </div>
-            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Body</Label>
+                  <div className="flex items-center gap-1">
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Bold" onClick={() => wrapSelection("<strong>", "</strong>")}>
+                      <Bold className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Italic" onClick={() => wrapSelection("<em>", "</em>")}>
+                      <Italic className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Heading" onClick={() => wrapSelection("<h2>", "</h2>")}>
+                      <Heading2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Bullet List" onClick={() => insertAtCursor("\n<ul>\n  <li>Item</li>\n</ul>\n")}>
+                      <List className="h-3.5 w-3.5" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+                          <Variable className="h-3.5 w-3.5" /> Insert Field
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {PLACEHOLDERS.map((p) => (
+                          <DropdownMenuItem key={p.key} onClick={() => insertAtCursor(`{{${p.key}}}`)}>
+                            {p.label}
+                            <span className="ml-auto text-xs text-muted-foreground">{`{{${p.key}}}`}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <Textarea
+                  ref={bodyRef}
+                  value={form.body}
+                  onChange={(e) => setForm({ ...form, body: e.target.value })}
+                  rows={20}
+                  className="font-mono text-sm leading-relaxed min-h-[420px]"
+                  placeholder="Write the engagement letter body. Use the toolbar to insert formatting or merge fields."
+                />
+              </div>
+              <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Eye className="h-4 w-4" />
-                  Preview With Sample Data
+                  Live Preview
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPreview((s) => !s)}
-                >
-                  {showPreview ? "Hide" : "Show"}
-                </Button>
+                <div className="rounded-md border bg-background p-4 min-h-[420px] max-h-[480px] overflow-y-auto">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Subject</div>
+                  <div className="font-medium mb-4">{previewSubject}</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Body</div>
+                  <div
+                    className="prose prose-sm max-w-none text-foreground"
+                    dangerouslySetInnerHTML={{ __html: previewBody }}
+                  />
+                </div>
               </div>
-              {showPreview && (
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Subject</div>
-                    <div className="font-medium">{previewSubject}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Body</div>
-                    <div
-                      className="rounded border bg-background p-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-foreground"
-                      dangerouslySetInnerHTML={{ __html: previewBody }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
