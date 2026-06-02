@@ -355,6 +355,18 @@ export default function Settings() {
                   </div>
                 </CardHeader>
               </Card>
+              <Card
+                className="cursor-pointer hover:border-primary transition-colors"
+                onClick={() => navigate("/settings/my-profile")}
+              >
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <Users className="h-6 w-6 text-primary" />
+                  <div>
+                    <CardTitle className="text-base">My Profile</CardTitle>
+                    <CardDescription className="text-sm">Personal email signature and preferences</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
             </div>
           </div>
 
