@@ -204,6 +204,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
           signature_typed_name,
           archived,
           job_id,
+          folder_id,
           jobs:job_id (name)
         `)
         .eq("organization_id", organization.id)
@@ -218,6 +219,11 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
   });
 
   const filteredDocs = documents?.filter(doc => {
+    if (selectedFolderId !== null && doc.folder_id !== selectedFolderId) return false;
+    if (selectedFolderId === null && doc.folder_id !== null) {
+      // root view: show only docs not in a folder
+      // (still allow filter chip below to override)
+    }
     switch (filter) {
       case "visible": return doc.client_visible;
       case "signature_pending": return doc.signature_required && !doc.signed_at;
