@@ -1,75 +1,130 @@
-## Two issues to fix
+## Audit findings (verified against DB and code)
 
-### A. Quote merge fields are invisible
-The Merge Fields panel exposes 25 dot-notation tokens (`{{client.email}}` etc.) drawn from `template_merge_fields`. **No Quote category exists.** `lifecycle_send_quote` does resolve `{{quote_number}}`, `{{quote_total}}`, `{{currency}}`, `{{valid_until}}`, `{{accept_link}}`, `{{quote_lines_table}}`, `{{recipient_name}}`, `{{practice_name}}` — but those tokens cannot be discovered or inserted from the UI. My earlier "just paste it in the body" answer was wrong in practice.
+**Templates table (`public.templates`)**
+- 14 system templates already exist (`organization_id IS NULL`) with non-empty `subject`, `body`, `htmlBody`, `category`: Quote Proposal, CRM Follow-Up, Deadline Approaching, Engagement Letter Reminder, HMRC Authorisation Reminder, Invoice Payment Reminder, KYC Document Reminder, Message Follow-Up, New Service Welcome, Onboarding Reminder, Questionnaire Reminder, Records Request Reminder, Signature Request Reminder, Workpaper Review Reminder.
+- RLS: SELECT allowed when `organization_id IS NULL` OR caller belongs to that org. INSERT/UPDATE/DELETE restricted to org members. Correct.
+- No per-practice clones exist yet. Practices only get a row when they explicitly clone via the UI.
 
-### B. Every template ships blank
-13 of 14 templates have empty `subject`, `body`, and `htmlBody`. Only `Quote Proposal` has real content. Accountants currently see an editor with nothing in it for: CRM follow-up, Deadline approaching, Engagement letter reminder, HMRC authorisation reminder, Invoice payment reminder, KYC document reminder, Message follow-up, New service welcome, Onboarding reminder, Questionnaire reminder, Records request reminder, Signature request reminder, Workpaper review reminder.
+**Templates page (`src/pages/Templates.tsx`)**
+- Lists both system and org-owned rows. Clicking a system card or the "Clone & Customise" button routes to `/templates/new?clone_from=<id>`.
 
-## Fix
+**Detail page (`src/pages/TemplateDetail.tsx`)**
+- `cloneSource` query fetches the system row and a `useEffect` pushes its content into local `content` state. Works correctly.
+- Two cosmetic bugs to fix while here: `setStatus("draft")` violates the status check constraint (must be `inactive`/`active`), and on save it would 23514. Use `"inactive"`.
 
-### 1. Seed Quote merge fields (DB migration + insert)
-Add a `quote` category to `template_merge_fields` whose keys match exactly what `lifecycle_send_quote` already substitutes — no RPC change required:
+**Editor (`src/components/templates/EmailTemplateEditor.tsx`) — the real UI bug**
+```ts
+const [subject, setSubject]   = useState(content.subject  || "");
+const [body, setBody]         = useState(content.body     || "");
+const [htmlBody, setHtmlBody] = useState(content.htmlBody || "");
+const [category, setCategory] = useState(content.category || "");
+```
+`useState` initialises once. Editor mounts with empty `content` from the parent's initial render, then ignores the cloned payload when it arrives. Inputs stay blank — exactly what is on screen.
 
-| Label              | Key                  |
-|--------------------|----------------------|
-| Quote Number       | `quote_number`       |
-| Quote Total        | `quote_total`        |
-| Currency           | `currency`           |
-| Valid Until        | `valid_until`        |
-| Accept Link        | `accept_link`        |
-| Line Items Table   | `quote_lines_table`  |
-| Recipient Name     | `recipient_name`     |
-| Practice Name      | `practice_name`      |
+**Merge fields**
+- `template_merge_fields` has 33 rows in real dot-notation (`{{client.first_name}}`, `{{organization.name}}`, `{{filing.period_end}}`, `{{deadline.filing_date}}`, etc.) plus 8 quote-scoped tokens (`{{accept_link}}`, `{{quote_total}}`…).
+- The runtime resolver (`src/lib/placeholder-resolver.ts` + `workflow-step-executor.ts`) supports the dot-notation keys.
+- The spec proposes underscore-style tokens (`{{practice_name}}`, `{{client_first_name}}`, `{{quote_acceptance_link}}`, `{{records_request_link}}`, `{{questionnaire_link}}`, `{{approval_link}}`, `{{client_portal_link}}`, `{{payment_*}}`, `{{filing_name}}`, `{{submission_*}}`). Most do **not** exist in the resolver. We will standardise seeded templates on the **existing dot-notation** and only add new resolver tokens for the genuinely missing concepts (links, payment, submission).
 
-Also add a `template_types text[]` column (default `'{all}'`) on `template_merge_fields`. Tag the new quote rows with `'{quote_proposal}'`. Update `EmailTemplateEditor.tsx` to filter the panel to fields whose `template_types` contains `'all'` or matches the template's category — so Quote tokens only show when authoring a Quote Proposal and don't clutter other templates.
+## What we will build
 
-Add a one-line hint under the Quote group: *"`{{quote_lines_table}}` renders the styled HTML table of line items when the template is dispatched by Send Quote."*
+### Part 1 — Editor bug (real, separate from seeding)
 
-### 2. Seed real content into all 13 blank templates
-Replace blank `content` JSON on every existing template (and re-seed on future installs) with a professional, ready-to-send body containing the appropriate merge tokens. Each template gets `subject`, plain-text `body`, `htmlBody` (matching the Quote Proposal styling — Arial, teal CTA where relevant, max-width 640px), and a `category`.
+`src/components/templates/EmailTemplateEditor.tsx`:
+- Delete the four `useState` hooks for `subject` / `body` / `htmlBody` / `category`.
+- Derive each value from the `content` prop: `const subject = content.subject ?? ""` etc.
+- Replace setters with a single `update(field, value)` that calls `onChange({ ...content, [field]: value })`.
+- Update `insertMergeField` and `insertQuestionnaireLink` (they already operate on whichever field is "active") to use `update(...)`.
+- Leave the merge-field panel, the rich/HTML toggle, and the Quote-scoped filter untouched.
 
-Drafts (tone: corporate, no emojis, Title Case, no placeholders left in subject lines):
+`src/pages/TemplateDetail.tsx`:
+- Change the clone effect's `setStatus("draft")` to `setStatus("inactive")` so cloned rows save without violating the check constraint.
 
-| Template | Tokens used | Category |
-|---|---|---|
-| CRM follow-up reminder | `{{client.first_name}}`, `{{firm.name}}`, `{{user.first_name}}` | CRM |
-| Deadline approaching | `{{client.first_name}}`, `{{deadline.filing_date}}`, `{{filing.type}}`, `{{firm.name}}` | Compliance |
-| Engagement letter reminder | `{{client.first_name}}`, `{{firm.name}}`, `{{user.first_name}}` | Onboarding |
-| HMRC authorisation reminder | `{{client.first_name}}`, `{{firm.name}}` | Onboarding |
-| Invoice payment reminder | `{{client.first_name}}`, `{{invoice.amount}}`, `{{invoice.due_date}}`, `{{payment.reference}}`, `{{firm.name}}` | Billing |
-| KYC document reminder | `{{client.first_name}}`, `{{firm.name}}` | Compliance |
-| Message follow-up | `{{client.first_name}}`, `{{user.first_name}}`, `{{firm.name}}` | CRM |
-| New service welcome | `{{client.first_name}}`, `{{service.name}}`, `{{firm.name}}` | Onboarding |
-| Onboarding reminder | `{{client.first_name}}`, `{{firm.name}}` | Onboarding |
-| Questionnaire reminder | `{{client.first_name}}`, `{{firm.name}}` (questionnaire link inserted via existing dialog) | Compliance |
-| Records request reminder | `{{client.first_name}}`, `{{company.name}}`, `{{filing.period_end}}`, `{{firm.name}}` | Compliance |
-| Signature request reminder | `{{client.first_name}}`, `{{firm.name}}` | Onboarding |
-| Workpaper review reminder | `{{client.first_name}}`, `{{filing.type}}`, `{{filing.period_end}}`, `{{firm.name}}` | Compliance |
+### Part 2 — Expand the system library and resolver
 
-All bodies follow the same skeleton: greeting, 1–2 sentence context, clear action sentence, sign-off. Each `htmlBody` mirrors the `body` with matching inline styles (white background, Arial 15px, `#1a1a1a` text, teal `#0f766e` CTA where there is a link).
+**Resolver additions (`src/lib/placeholder-resolver.ts`, `workflow-step-executor.ts`, `supabase/functions/workflow-tick/index.ts`):** add resolvers for the link/payment/submission concepts that the seeded templates reference but the engine does not yet support:
+- `{{client.portal_link}}`
+- `{{quote.accept_link}}` (alias of existing `{{accept_link}}` outside the quote-only scope)
+- `{{engagement.sign_link}}`
+- `{{records_request.link}}`
+- `{{questionnaire.link}}`
+- `{{approval.link}}`
+- `{{payment.name}}`, `{{payment.amount}}`, `{{payment.due_date}}`
+- `{{filing.name}}`, `{{filing.submission_reference}}`, `{{filing.submission_date}}`
+- `{{organization.email}}`, `{{organization.phone}}`
 
-The existing `Quote Proposal` system template is already populated and stays as-is.
+Mirror each new key as a row in `template_merge_fields` (data insert, not schema change) so the editor's merge-field panel exposes them, scoped via `template_types` where relevant.
 
-### 3. Make seeding self-healing for future orgs
-Move the 13 templates from per-org rows into system templates (`organization_id IS NULL`) — same pattern as Quote Proposal. The org-scoped row pattern means every new firm currently inherits zero content. After this change:
-- One row per template under `organization_id IS NULL` with rich content
-- The Templates page already renders system templates in the "System Library" section (from the previous fix)
-- "Clone & Customise" creates the org-scoped copy with content pre-filled
+**System template upserts (data insert, idempotent by stable `id`):** keep the 14 existing rows where the content already passes review and upsert the missing categories from the spec so the library covers every workflow the spec lists. Final library, all `organization_id IS NULL`, all with `subject` + plain `body` + `htmlBody` + `category`:
 
-Delete the 13 existing blank org-scoped rows on the current test org during the same data migration (they have no usage — the Templates page will then show system-only).
+| Category | Templates |
+|---|---|
+| Quotes | Quote Proposal (existing), Quote Reminder, Quote Final Reminder |
+| Onboarding | Welcome / Onboarding Started, Engagement Letter Ready, Engagement Letter Reminder (existing), HMRC Authorisation Reminder (existing), KYC Document Reminder (existing), New Service Welcome (existing), Onboarding Reminder (existing), Signature Request Reminder (existing) |
+| Records | Records Request, Records Request Reminder (existing), Records Request Final Reminder |
+| Questionnaires | Questionnaire Sent, Questionnaire Reminder (existing) |
+| Deadlines | Deadline Approaching (existing), Payment Reminder |
+| Workflows | Workpaper Review Reminder (existing), Approval Required, Filing Submitted, Job Completed |
+| CRM | CRM Follow-Up (existing), Message Follow-Up (existing) |
+| Billing | Invoice Payment Reminder (existing) |
+
+Each template body uses the dot-notation tokens listed above and the existing professional/Title-Case house style (no emojis, no exclamations, Arial-15 / teal CTA HTML matching Quote Proposal). Stable IDs in the `00000000-0000-0000-0000-0000000000bXX` range so re-running the seed never duplicates.
+
+Every seeded row also gets a stable `tags` entry `["system_default","<slug>"]` so the backfill (Part 3) can match by slug rather than UUID.
+
+### Part 3 — Backfill for every existing practice + new-signup parity
+
+**No new table.** Practice copies live in the existing `templates` table, identified by:
+- a `source_template_id uuid` column pointing back to the system row, and
+- a unique index `(organization_id, source_template_id) where source_template_id is not null` to prevent duplicate clones.
+
+Schema migration:
+1. `alter table public.templates add column if not exists source_template_id uuid references public.templates(id) on delete set null;`
+2. Partial unique index above.
+3. No GRANT changes needed (covered by existing grants).
+
+Backfill function (security definer, idempotent):
+- `public.ensure_default_templates_for_org(_org_id uuid)` loops over every system template (`organization_id IS NULL`) and `INSERT … ON CONFLICT (organization_id, source_template_id) DO NOTHING` a `status='inactive'` copy with the same name/description/type/service/content/tags. Practice-edited rows are never touched because we only insert when no row with that `source_template_id` exists.
+
+Wiring:
+- Call `ensure_default_templates_for_org(NEW.id)` from the existing `handle_new_organization` trigger / `create_organization` SECURITY DEFINER function (whichever already runs on org creation — verified in the org-creation memory).
+- One-shot backfill at the bottom of the migration: `select public.ensure_default_templates_for_org(id) from public.organizations;`
+
+Safety:
+- Function is `security definer`, `search_path = public`.
+- Re-running the migration or calling the function repeatedly is a no-op on practices that already have copies.
+- Practice edits are preserved because we never `UPDATE` existing rows.
+
+### Part 4 — UI distinction (minimal, no redesign)
+
+`Templates.tsx`: the System badge already exists. Add one filter chip "Library" that defaults to showing the practice's own copies (`organization_id = currentOrg`) and a toggle to also reveal system originals. The current "Clone & Customise" affordance stays for any practice that wants a fresh fork.
+
+No changes to category navigation, sidebar, or routing.
+
+### Part 5 — Automation linkage
+
+No code changes required to the chaser/automation engine: it already references templates by ID via `templates_id` on chaser policies. Once Part 3 runs, every practice has a complete set of clonable rows whose IDs can be selected in existing automation pickers.
+
+Fix the misleading stop-condition copy in **two** places only (verified by grep earlier in the loop): the chaser-policy default labels in `src/lib/chaser-policy-service.ts` that currently read "ceases when records received" for non-records workflows. Use the deadline/job/filing/task completion language from the spec.
+
+## Acceptance verification
+
+1. Existing practice → `/templates` shows the full library with non-empty subject/body/HTML/category before any clicking.
+2. New practice (sign up Greenfield-style test user) → `/templates` already populated.
+3. Opening any system or practice template renders subject, category, plain body, HTML body. Insert merge field still works. Save persists.
+4. Re-running the migration adds zero rows and changes zero edited rows (verify with `select count(*) from templates`).
+5. Chaser pickers list the seeded templates by name.
+6. Records reminders' stop language references job/task completion; deadline reminders' stop language references deadline/filing/task completion.
 
 ## Files touched
 
-- New schema migration: add `template_types` column to `template_merge_fields`; backfill `'{all}'`.
-- Data insert (via insert tool): seed 8 quote merge fields; upsert 13 system templates with full content; delete the 13 blank org-scoped rows.
-- `src/components/templates/EmailTemplateEditor.tsx`: filter merge fields by template type; render quote-token hint.
-- No changes to `lifecycle_send_quote`, `process-email-queue`, or RLS.
+- `src/components/templates/EmailTemplateEditor.tsx` — remove local state, derive from `content`.
+- `src/pages/TemplateDetail.tsx` — use `"inactive"` not `"draft"` on clone.
+- `src/pages/Templates.tsx` — add the Library/System filter chip.
+- `src/lib/placeholder-resolver.ts`, `src/lib/workflow-step-executor.ts`, `supabase/functions/workflow-tick/index.ts` — add the new dot-notation resolvers.
+- `src/lib/chaser-policy-service.ts` — correct stop-condition labels.
+- New schema migration — `source_template_id` column, unique index, `ensure_default_templates_for_org` function, hook into org-creation trigger, one-shot backfill.
+- New data insert — upsert system templates and new merge-field rows (idempotent by stable IDs).
+- Edge function redeploy after `workflow-tick` change.
 
-## Verification
-
-1. Open `/templates` → "System Library" section shows all 14 templates with non-empty previews.
-2. Click "Clone & Customise" on any template → editor opens with the body pre-filled.
-3. Open the Quote Proposal clone → Merge Fields panel includes a new "Quote" group with all 8 tokens.
-4. Open a non-quote template → Quote group is hidden.
-5. Re-send a draft quote → `email_queue.body_html` still contains the substituted line-items table (no regression).
+Out of scope (confirm if you want them in): redesigning the Templates list page, building a separate System Library page, adding per-template version history beyond the existing `version_number` column.

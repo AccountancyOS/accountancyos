@@ -28,10 +28,10 @@ interface EmailTemplateEditorProps {
 
 export default function EmailTemplateEditor({ content, onChange, templateName }: EmailTemplateEditorProps) {
   const { organization } = useOrganization();
-  const [subject, setSubject] = useState(content.subject || "");
-  const [body, setBody] = useState(content.body || "");
-  const [htmlBody, setHtmlBody] = useState(content.htmlBody || "");
-  const [category, setCategory] = useState(content.category || "");
+  const subject: string = content?.subject ?? "";
+  const body: string = content?.body ?? "";
+  const htmlBody: string = content?.htmlBody ?? "";
+  const category: string = content?.category ?? "";
   const [showQuestionnaireDialog, setShowQuestionnaireDialog] = useState(false);
   const [selectedQuestionnaire, setSelectedQuestionnaire] = useState("");
 
@@ -64,12 +64,7 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
   });
 
   const handleChange = (field: string, value: string) => {
-    const updates = { ...content, [field]: value };
-    if (field === "subject") setSubject(value);
-    if (field === "body") setBody(value);
-    if (field === "htmlBody") setHtmlBody(value);
-    if (field === "category") setCategory(value);
-    onChange(updates);
+    onChange({ ...(content ?? {}), [field]: value });
   };
 
   const insertMergeField = (fieldKey: string, targetField: "subject" | "body" | "htmlBody") => {

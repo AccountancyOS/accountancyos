@@ -87,7 +87,7 @@ export default function TemplateDetail() {
       setName(`${cloneSource.name} (Custom)`);
       setDescription(cloneSource.description || "");
       setService(cloneSource.service || "");
-      setStatus("draft");
+      setStatus("inactive");
       setContent(cloneSource.content || {});
     }
   }, [cloneSource, isNew]);
