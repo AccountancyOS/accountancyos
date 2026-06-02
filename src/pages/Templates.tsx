@@ -25,6 +25,7 @@ export default function Templates() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["templates", organization?.id],
@@ -50,7 +51,10 @@ export default function Templates() {
       template.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === "all" || template.type === typeFilter;
     const matchesStatus = statusFilter === "all" || template.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
+    const matchesSource = sourceFilter === "all"
+      || (sourceFilter === "library" && !template.organization_id)
+      || (sourceFilter === "practice" && !!template.organization_id);
+    return matchesSearch && matchesType && matchesStatus && matchesSource;
   });
 
   const getTemplateIcon = (type: string) => {
@@ -135,7 +139,7 @@ export default function Templates() {
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
               <div className="relative md:col-span-2">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -145,6 +149,16 @@ export default function Templates() {
                   className="pl-9"
                 />
               </div>
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="library">System Library</SelectItem>
+                  <SelectItem value="practice">My Practice</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Types" />
@@ -255,27 +269,47 @@ export default function Templates() {
             const orgTemplates = filteredTemplates.filter((t) => t.organization_id);
             return (
               <div className="space-y-8">
-                {systemTemplates.length > 0 && (
+                {sourceFilter === "all" ? (
+                  <>
+                    {systemTemplates.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h2 className="text-lg font-semibold text-foreground">System Library</h2>
+                          <p className="text-sm text-muted-foreground">
+                            Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm.
+                          </p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                          {systemTemplates.map(renderCard)}
+                        </div>
+                      </section>
+                    )}
+                    {orgTemplates.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h2 className="text-lg font-semibold text-foreground">Your Templates</h2>
+                          <p className="text-sm text-muted-foreground">Templates created and maintained by your firm.</p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                          {orgTemplates.map(renderCard)}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                ) : (
                   <section className="space-y-3">
                     <div>
-                      <h2 className="text-lg font-semibold text-foreground">System Library</h2>
+                      <h2 className="text-lg font-semibold text-foreground">
+                        {sourceFilter === "library" ? "System Library" : "Your Templates"}
+                      </h2>
                       <p className="text-sm text-muted-foreground">
-                        Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm.
+                        {sourceFilter === "library"
+                          ? "Maintained templates included with AccountancyOS. Use Clone & Customise to make an editable copy for your firm."
+                          : "Templates created and maintained by your firm."}
                       </p>
                     </div>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {systemTemplates.map(renderCard)}
-                    </div>
-                  </section>
-                )}
-                {orgTemplates.length > 0 && (
-                  <section className="space-y-3">
-                    <div>
-                      <h2 className="text-lg font-semibold text-foreground">Your Templates</h2>
-                      <p className="text-sm text-muted-foreground">Templates created and maintained by your firm.</p>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {orgTemplates.map(renderCard)}
+                      {filteredTemplates.map(renderCard)}
                     </div>
                   </section>
                 )}
@@ -288,7 +322,7 @@ export default function Templates() {
               <FileText className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No templates found</h3>
               <p className="text-muted-foreground text-center mb-4">
-                {searchTerm || typeFilter !== "all" || statusFilter !== "all"
+                {searchTerm || typeFilter !== "all" || statusFilter !== "all" || sourceFilter !== "all"
                   ? "Try adjusting your filters"
                   : "Get started by creating your first template"}
               </p>
