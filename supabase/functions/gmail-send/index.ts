@@ -150,22 +150,28 @@ serve(async (req: Request) => {
     
     const serviceSupabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    // Verify user
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Detect internal service-role call (used by process-email-queue dispatcher)
+    const bearer = authHeader.replace(/^Bearer\s+/i, '');
+    const isInternalCall = bearer === SUPABASE_SERVICE_ROLE_KEY;
 
-    // Get mailbox (verify ownership)
-    const { data: mailbox, error: mailboxError } = await userSupabase
+    let mailboxQuery = serviceSupabase
       .from('connected_mailboxes')
       .select('*')
-      .eq('id', body.mailbox_id)
-      .eq('user_id', user.id)
-      .single();
+      .eq('id', body.mailbox_id);
+
+    if (!isInternalCall) {
+      // Verify user owns the mailbox
+      const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      mailboxQuery = mailboxQuery.eq('user_id', user.id);
+    }
+
+    const { data: mailbox, error: mailboxError } = await mailboxQuery.single();
 
     if (mailboxError || !mailbox) {
       return new Response(

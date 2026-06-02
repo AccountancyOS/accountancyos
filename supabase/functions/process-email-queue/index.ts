@@ -36,8 +36,6 @@ interface ConnectedMailbox {
   display_name: string | null;
 }
 
-const POSTMARK_API_KEY = Deno.env.get("POSTMARK_API_KEY");
-
 /**
  * Process merge fields in a template string
  */
@@ -49,49 +47,6 @@ function processMergeFields(template: string, mergeData: Record<string, unknown>
     result = result.replace(regex, String(value ?? ""));
   }
   return result;
-}
-
-/**
- * Send email via Postmark (fallback)
- */
-async function sendViaPostmark(
-  to: string,
-  subject: string,
-  htmlBody: string,
-  textBody: string | null,
-  from?: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!POSTMARK_API_KEY) {
-    return { success: false, error: "Postmark API key not configured" };
-  }
-
-  try {
-    const response = await fetch("https://api.postmarkapp.com/email", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-Postmark-Server-Token": POSTMARK_API_KEY,
-      },
-      body: JSON.stringify({
-        From: from || "noreply@accountancyos.com",
-        To: to,
-        Subject: subject,
-        HtmlBody: htmlBody || undefined,
-        TextBody: textBody || undefined,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.Message || "Postmark API error" };
-    }
-
-    const data = await response.json();
-    return { success: true, messageId: data.MessageID };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
 }
 
 /**
@@ -287,33 +242,52 @@ Deno.serve(async (req) => {
       body = processMergeFields(body, mergeData);
 
       let result: { success: boolean; error?: string; messageId?: string };
-      let provider = "postmark";
+      let provider = "none";
 
-      // Try to use connected mailbox if available
+      // Resolve the mailbox to send from: explicit on the queue row, or the
+      // org's most recently connected active mailbox as a fallback.
+      let mailbox: ConnectedMailbox | null = null;
       if (email.mailbox_id) {
-        const { data: mailbox } = await supabase
+        const { data } = await supabase
           .from("connected_mailboxes")
           .select("*")
           .eq("id", email.mailbox_id)
-          .single();
-
-        if (mailbox && mailbox.status === "active") {
-          provider = mailbox.provider;
-          if (mailbox.provider === "gmail") {
-            result = await sendViaGmail(supabase, mailbox as ConnectedMailbox, email, subject, body);
-          } else if (mailbox.provider === "outlook") {
-            result = await sendViaOutlook(supabase, mailbox as ConnectedMailbox, email, subject, body);
-          } else {
-            result = await sendViaPostmark(email.to_email, subject, body, email.body_text);
-            provider = "postmark";
-          }
-        } else {
-          // Mailbox not active, fallback to Postmark
-          result = await sendViaPostmark(email.to_email, subject, body, email.body_text);
+          .maybeSingle();
+        mailbox = data as ConnectedMailbox | null;
+      }
+      if (!mailbox || mailbox.status !== "active") {
+        const { data } = await supabase
+          .from("connected_mailboxes")
+          .select("*")
+          .eq("organization_id", email.organization_id)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        mailbox = (data as ConnectedMailbox | null) ?? null;
+        if (mailbox && !email.mailbox_id) {
+          await supabase
+            .from("email_queue")
+            .update({ mailbox_id: mailbox.id })
+            .eq("id", email.id);
         }
+      }
+
+      if (!mailbox || mailbox.status !== "active") {
+        result = {
+          success: false,
+          error:
+            "No connected mailbox. Connect Gmail or Outlook in Settings → Email Provider before sending.",
+        };
       } else {
-        // No mailbox specified, use Postmark
-        result = await sendViaPostmark(email.to_email, subject, body, email.body_text);
+        provider = mailbox.provider;
+        if (mailbox.provider === "gmail") {
+          result = await sendViaGmail(supabase, mailbox, email, subject, body);
+        } else if (mailbox.provider === "outlook") {
+          result = await sendViaOutlook(supabase, mailbox, email, subject, body);
+        } else {
+          result = { success: false, error: `Unsupported provider: ${mailbox.provider}` };
+        }
       }
 
       if (result.success) {

@@ -71,12 +71,18 @@ serve(async (req: Request) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const bearer = authHeader.replace(/^Bearer\s+/i, '');
+    const isInternalCall = bearer === SUPABASE_SERVICE_ROLE_KEY;
+    let verifiedUserId: string | null = null;
+    if (!isInternalCall) {
+      const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      verifiedUserId = user.id;
     }
 
     const body: SendEmailRequest = await req.json();
@@ -92,14 +98,16 @@ serve(async (req: Request) => {
     // Use service role for mailbox access
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    // Get mailbox and verify ownership
-    const { data: mailbox, error: mailboxError } = await supabase
+    // Get mailbox (verify ownership when called by an end-user)
+    let mailboxQuery = supabase
       .from('connected_mailboxes')
       .select('*')
       .eq('id', mailbox_id)
-      .eq('user_id', user.id)
-      .eq('provider', 'outlook')
-      .single();
+      .eq('provider', 'outlook');
+    if (verifiedUserId) {
+      mailboxQuery = mailboxQuery.eq('user_id', verifiedUserId);
+    }
+    const { data: mailbox, error: mailboxError } = await mailboxQuery.single();
 
     if (mailboxError || !mailbox) {
       return new Response(
