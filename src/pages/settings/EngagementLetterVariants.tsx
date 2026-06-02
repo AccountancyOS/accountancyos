@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -22,7 +22,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Eye, Bold, Italic, List, Heading2, Variable } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CLIENT_TYPES as CLIENT_TYPE_VALUES, CLIENT_TYPE_LABELS, getClientTypeLabel } from "@/lib/client-types";
 import { formatServiceType } from "@/lib/format-utils";
 
@@ -78,6 +81,16 @@ const SAMPLE_CONTEXT: Record<string, string> = {
     : "/engagement/sample-token",
 };
 
+const PLACEHOLDERS: { key: string; label: string }[] = [
+  { key: "client.name", label: "Client Name" },
+  { key: "recipient_name", label: "Recipient Name" },
+  { key: "firm.name", label: "Firm Name (Auto)" },
+  { key: "signing_url", label: "Signing URL" },
+  { key: "today", label: "Today's Date" },
+  { key: "service.name", label: "Service Name" },
+  { key: "fee.amount", label: "Fee Amount" },
+];
+
 const renderPlaceholders = (text: string, firmName: string): string => {
   const ctx = { ...SAMPLE_CONTEXT, firm_name: firmName, "firm.name": firmName };
   return Object.entries(ctx).reduce(
@@ -106,7 +119,7 @@ export default function EngagementLetterVariants() {
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY>(EMPTY);
-  const [showPreview, setShowPreview] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: variants, isLoading } = useQuery({
     queryKey: ["engagement-letter-variants", organization?.id],
@@ -205,6 +218,37 @@ export default function EngagementLetterVariants() {
   const firmName = organization?.name || "Your Firm";
   const previewSubject = renderPlaceholders(form.subject || "(No Subject)", firmName);
   const previewBody = renderPlaceholders(form.body || "(No Body)", firmName);
+
+  const insertAtCursor = (text: string) => {
+    const ta = bodyRef.current;
+    if (!ta) {
+      setForm((f) => ({ ...f, body: f.body + text }));
+      return;
+    }
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    const next = ta.value.slice(0, start) + text + ta.value.slice(end);
+    setForm((f) => ({ ...f, body: next }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + text.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  const wrapSelection = (before: string, after: string = before) => {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    const selected = ta.value.slice(start, end) || "text";
+    const next = ta.value.slice(0, start) + before + selected + after + ta.value.slice(end);
+    setForm((f) => ({ ...f, body: next }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
+  };
 
   return (
     <DashboardLayout>
