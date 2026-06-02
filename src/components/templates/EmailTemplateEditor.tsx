@@ -23,9 +23,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface EmailTemplateEditorProps {
   content: any;
   onChange: (content: any) => void;
+  templateName?: string;
 }
 
-export default function EmailTemplateEditor({ content, onChange }: EmailTemplateEditorProps) {
+export default function EmailTemplateEditor({ content, onChange, templateName }: EmailTemplateEditorProps) {
   const { organization } = useOrganization();
   const [subject, setSubject] = useState(content.subject || "");
   const [body, setBody] = useState(content.body || "");
@@ -91,6 +92,13 @@ export default function EmailTemplateEditor({ content, onChange }: EmailTemplate
   };
 
   const groupedFields = mergeFields?.reduce((acc, field) => {
+    const types: string[] = (field as any).template_types ?? ["all"];
+    const isQuoteTemplate =
+      (templateName ?? "").toLowerCase().includes("quote proposal") ||
+      (content?.category ?? "").toLowerCase() === "quotes";
+    const allowed =
+      types.includes("all") || (isQuoteTemplate && types.includes("quote_proposal"));
+    if (!allowed) return acc;
     if (!acc[field.field_category]) {
       acc[field.field_category] = [];
     }
