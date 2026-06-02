@@ -531,8 +531,69 @@ serve(async (req: Request) => {
       );
     }
     
-    const { companyId, organizationId } = await req.json();
-    
+    const payload = await req.json();
+    const action: string = payload.action || "sync";
+
+    // Public lookup actions (sandbox mock data). These must work before any
+    // ch_sync_opt_in is recorded so leads/companies can be enriched at entry.
+    if (action === "search") {
+      const query: string = (payload.query || "").trim();
+      if (!query) {
+        return new Response(
+          JSON.stringify({ items: [], total_results: 0 }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const base = query.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6) || "SANDBX";
+      const items = Array.from({ length: 4 }).map((_, i) => {
+        const number = `${base}${i + 1}`.padEnd(8, "0").slice(0, 8);
+        return {
+          company_number: number,
+          title: `${query} Sandbox ${i + 1} Ltd`,
+          company_status: "active",
+          address_snippet: "123 Sandbox Street, London, EC1A 1BB",
+          date_of_creation: "2020-01-15",
+          company_type: "ltd",
+        };
+      });
+      return new Response(
+        JSON.stringify({ items, total_results: items.length }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "profile") {
+      const companyNumber: string = (payload.company_number || "").toString().trim().toUpperCase();
+      if (!companyNumber) {
+        return new Response(
+          JSON.stringify({ error: "company_number is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const profile = generateMockCompanyProfile(companyNumber);
+      const today = new Date();
+      const inDays = (n: number) =>
+        new Date(today.getTime() + n * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const enriched = {
+        ...profile,
+        accounts: {
+          next_made_up_to: inDays(180),
+          next_due: inDays(270),
+          last_accounts: { made_up_to: inDays(-180) },
+        },
+        confirmation_statement: {
+          last_made_up_to: inDays(-95),
+          next_due: inDays(270),
+        },
+      };
+      return new Response(
+        JSON.stringify(enriched),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { companyId, organizationId } = payload;
+
     if (!companyId || !organizationId) {
       return new Response(
         JSON.stringify({ error: "companyId and organizationId are required" }),
