@@ -88,6 +88,89 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const { data: folders = [] } = useQuery({
+    queryKey: ["client-document-folders", clientId, organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      const { data, error } = await supabase
+        .from("document_folders")
+        .select("id,name,parent_id")
+        .eq("organization_id", organization.id)
+        .eq("client_id", clientId)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data || []) as DocFolder[];
+    },
+    enabled: !!organization?.id && !!clientId,
+  });
+
+  const createFolder = useMutation({
+    mutationFn: async (name: string) => {
+      if (!organization?.id) throw new Error("No organization");
+      const { error } = await supabase.from("document_folders").insert({
+        organization_id: organization.id,
+        client_id: clientId,
+        name: name.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-document-folders"] });
+      setNewFolderName("");
+      setFolderDialogOpen(false);
+      toast({ title: "Folder created" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const renameFolder = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase
+        .from("document_folders")
+        .update({ name: name.trim() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-document-folders"] });
+      setRenameFolderId(null);
+      toast({ title: "Folder renamed" });
+    },
+  });
+
+  const deleteFolder = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("document_folders").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-document-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["client-documents"] });
+      if (selectedFolderId) setSelectedFolderId(null);
+      toast({ title: "Folder deleted. Documents moved to root." });
+    },
+  });
+
+  const moveToFolder = useMutation({
+    mutationFn: async ({ docIds, folderId }: { docIds: string[]; folderId: string | null }) => {
+      const { error } = await supabase
+        .from("job_documents")
+        .update({ folder_id: folderId })
+        .in("id", docIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-documents"] });
+      setSelectedDocs([]);
+      toast({ title: "Documents moved" });
+    },
+  });
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["client-documents", clientId, organization?.id],
