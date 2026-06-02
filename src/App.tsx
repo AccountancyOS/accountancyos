@@ -63,6 +63,7 @@ import CrmFollowupSequences from "./pages/settings/CrmFollowupSequences";
 import EngagementLetterPreview from "./pages/EngagementLetterPreview";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
+import PublicQuoteView from "./pages/PublicQuoteView";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -140,6 +141,7 @@ const App = () => (
               path="/confirm-email"
               element={<ConfirmEmail />}
             />
+            <Route path="/q/:token" element={<PublicQuoteView />} />
             <Route
               path="/color-comparison"
               element={<ColorComparison />}
