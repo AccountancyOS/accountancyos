@@ -51,7 +51,10 @@ export default function Templates() {
       template.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === "all" || template.type === typeFilter;
     const matchesStatus = statusFilter === "all" || template.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
+    const matchesSource = sourceFilter === "all"
+      || (sourceFilter === "library" && !template.organization_id)
+      || (sourceFilter === "practice" && !!template.organization_id);
+    return matchesSearch && matchesType && matchesStatus && matchesSource;
   });
 
   const getTemplateIcon = (type: string) => {
