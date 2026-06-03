@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, AlertCircle, Clock, Pause } from "lucide-react";
 import { useOrganization } from "@/lib/organization-context";
+import { formatStatus } from "@/lib/format-utils";
 
 interface Props {
   clientId?: string;
