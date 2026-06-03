@@ -16411,6 +16411,10 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
+      cancel_stale_onboarding_applications: {
+        Args: { p_organization_id: string }
+        Returns: number
+      }
       cancel_workflow_instance: {
         Args: { p_instance_id: string; p_reason?: string }
         Returns: undefined
