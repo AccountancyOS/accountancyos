@@ -1,59 +1,38 @@
-## Audit Of Every Step In "Approve & Create Client"
+## Root Cause
 
-When the approval RPC runs, the `onboarding_applications` row is UPDATEd to `status='approved'`. That fires five triggers, plus the RPC body inserts into several tables. I checked every column, every CHECK constraint, every status-transition trigger, and every nested function call against the live schema.
+Three problems compound, all triggered by the same approval:
 
-### 1. Trigger: `notify_onboarding_approved` — BROKEN (current error)
-Reads `organizations.custom_domain`. That column does not exist on the `organizations` table (verified via `information_schema.columns`). This is what aborts the transaction with `column "custom_domain" does not exist`.
-**Fix:** rewrite the trigger to drop the lookup and hard-code `https://client.accountancyos.com` (same URL `lifecycle_grant_portal_access` already uses).
+1. **`lifecycle_grant_portal_access` silently failed** with `function gen_random_bytes(integer) does not exist`. The RPC's `EXCEPTION WHEN OTHERS` block swallowed it, so approval reported success but no `portal_access` row + no `invite_token` was ever created. Confirmed: `SELECT * FROM portal_access WHERE organization_id = '<org>'` returns 0 rows.
+2. **Welcome email is untokenised.** `notify_onboarding_approved` links to `https://client.accountancyos.com` (root) instead of `/auth/portal-invite?token=<token>`. Even if step 1 worked, the client would not have arrived with a token.
+3. **Client Portal project** has no way to bind the new `auth.users` signup back to the practice's `portal_access` row, because no token arrived. This is why it asked the client to "link to an accountant".
 
-### 2. Trigger: `auto_verify_aml_on_approval` — OK
-Already corrected in the last migration. Sets `aml_status='verified'`, which matches the `onboarding_applications_aml_status_check` CHECK (`pending|verified|failed|manual_review`).
+## Fix (this project)
 
-### 3. Trigger: `link_onboarding_documents_on_approval` — OK
-Updates `onboarding_documents.client_id` / `company_id`. Both columns exist.
+1. **Resolve `gen_random_bytes`.**
+   - Ensure `pgcrypto` is installed in `extensions` schema (Supabase default).
+   - Update `public.generate_invite_token` and `public.lifecycle_grant_portal_access` so their `search_path` is `public, extensions` (or fully qualify as `extensions.gen_random_bytes`).
+2. **Stop swallowing portal-grant failures.** Modify `lifecycle_approve_onboarding` so the `EXCEPTION WHEN OTHERS` block around the portal grant still does not abort approval, but returns `{ portal_access: { ok: false, error: '...' } }` in the JSON result and the Approve & Create Client UI surfaces it as a warning toast. No more silent failures of this exact class.
+3. **Fix the welcome email URL.** Rewrite `notify_onboarding_approved` so the link is `https://client.accountancyos.com/auth/portal-invite?token=<invite_token>` — read the token from the `portal_access` row that `lifecycle_grant_portal_access` just inserted (function order in `lifecycle_approve_onboarding` must be: grant portal access first, then queue welcome email).
+4. **Backfill for Bassage Eyes Ltd.**
+   - Run `lifecycle_grant_portal_access` for the existing approved client so a `portal_access` row with token is created.
+   - Locate the `auth.users` row the client already created (`amyleestevens7@gmail.com`) and set `portal_access.user_id = <that uid>`, `status = 'accepted'`, `accepted_at = now()`. This retroactively links them so they do not have to re-sign-up.
+   - Send a one-off confirmation email so the client knows they are now linked.
 
-### 4. Trigger: `notify_onboarding_for_review` — OK
-Only fires when status transitions to `for_review`, not `approved`. Not on this path.
+## Fix (Client Portal project — separate task, separate Lovable project)
 
-### 5. Trigger: `tg_onboarding_status_audit` — OK
-Inserts into `onboarding_events` with required columns; all present.
+This project cannot edit the Client Portal repo. You will need to apply the matching change there:
 
-### 6. RPC body — `lifecycle_approve_onboarding`
+- Implement `/auth/portal-invite?token=<token>` so it:
+  1. Validates the token against `portal_access` (token exists, not expired, not revoked).
+  2. Shows signup / Google / magic-link options pre-bound to the email on the `portal_access` row.
+  3. On successful auth, updates `portal_access.user_id = auth.uid()`, `status = 'accepted'`, `accepted_at = now()`, then routes to the portal workspace.
+- Block plain self-signup at `/auth/signup` (or any route that does not arrive with a valid token), so future clients cannot create disconnected accounts.
 
-| Step | Table | Verified against live schema |
-|------|-------|------------------------------|
-| Update / Insert `clients` | clients | All referenced columns exist (`utr`, `aml_verified_by`, `aml_expiry_date`, etc.). `status='active'` matches `clients_status_check` |
-| Update / Insert `companies` | companies | All columns exist. `status='active'` matches `companies_status_check` |
-| Insert `engagements` | engagements | `frequency` ∈ {monthly, one_off} matches `engagements_frequency_check`. `status='active'` matches `engagements_status_check`. `client_id OR company_id` satisfies `engagements_check` |
-| Insert `jobs` | jobs | `status='blank'` matches `chk_jobs_status`. `priority='normal'` matches `jobs_priority_check`. `automation_source='template'` matches `jobs_automation_source_check`. `job_status_transition_check` trigger is BEFORE UPDATE only, so insert with `blank` is allowed |
-| Insert `email_queue` | email_queue | `status='pending'` ✓, `context` left NULL (CHECK allows NULL) ✓, `provider` left NULL ✓ |
-| Insert `client_tasks` | client_tasks | `status='not_started'` matches `client_tasks_status_check`. `visibility='client_visible'` matches `client_tasks_visibility_check`. `client_or_company_required` CHECK satisfied (only one of v_client_id / v_company_id is set in each path) |
-| Insert `audit_log` | audit_log | columns present |
-| Update `onboarding_applications` | columns `approved_at`, `approved_by`, `aml_expiry_date`, `aml_documents_migrated`, `status` all exist; `status='approved'` matches CHECK |
+## Verification (before reporting done)
 
-### 7. Nested call: `lifecycle_grant_portal_access` — OK
-- Insert `portal_access`: `status='invited'` ✓, `client_id XOR company_id` ✓.
-- Insert `email_queue`: `status='pending'` ✓, context NULL ✓.
-- Insert `audit_log`: ✓.
-- This call is wrapped in `BEGIN/EXCEPTION WHEN OTHERS` in the RPC, so even a failure here would not abort approval (it would only log).
-
-### 8. Notifications insert (inside `notify_onboarding_approved`, after fix)
-`type='onboarding_approved'` — `notifications.type` has no CHECK constraint.
-`entity_type='onboarding'` matches `notifications_entity_type_check` (which already lists `'onboarding'`).
-
-## Conclusion
-
-After fixing trigger #1, every column reference, every CHECK constraint, and every transition rule along the full approval path validates against the live schema. No other latent failures detected.
-
-## Migration
-
-Single trigger replacement — body identical to the current version except the `v_portal_url` lookup is removed and replaced with the canonical client portal URL.
-
-## Post-Migration Verification
-
-1. Re-run the live `pg_proc` scan for any other function bodies referencing nonexistent columns (`custom_domain`, `engagement_id` on jobs, AML `passed`, etc.) to confirm none remain.
-2. Click **Approve & Create Client** in the preview; confirm no error toast, and that:
-   - `onboarding_applications.status = 'approved'`
-   - a `clients` or `companies` row is active
-   - rows appear in `engagements`, `jobs`, `portal_access`, `email_queue` (welcome + portal invite), `notifications`.
-3. Report back only after those rows are observed.
+- Re-read `pg_proc` for both functions to confirm `search_path` includes `extensions`.
+- Approve a fresh test onboarding and confirm:
+  - `portal_access` has 1 new row with non-null `invite_token`.
+  - `email_queue` has 1 welcome email whose body contains `/auth/portal-invite?token=`.
+  - `audit_log` shows no `portal_access_failed`.
+- Confirm Bassage Eyes Ltd backfill: `portal_access.user_id` is set, `status='accepted'`, and the existing client login now lands in the practice's workspace instead of the "link an accountant" screen.
