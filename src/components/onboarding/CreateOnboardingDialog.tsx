@@ -102,11 +102,11 @@ const CreateOnboardingDialog = ({
         lead_id: leadId || null,
         application_type: applicationType,
         status: "in_progress" as const,
-        first_name: applicationType === "individual" ? (lead?.first_name ?? firstName.trim() || null) : null,
-        last_name: applicationType === "individual" ? (lead?.last_name ?? lastName.trim() || null) : null,
+        first_name: applicationType === "individual" ? (lead?.first_name ?? (firstName.trim() || null)) : null,
+        last_name: applicationType === "individual" ? (lead?.last_name ?? (lastName.trim() || null)) : null,
         company_name: applicationType === "company" ? (companyName.trim() || (lead ? `${lead.first_name ?? ""} ${lead.last_name ?? ""} Ltd`.trim() : null)) : null,
         company_number: applicationType === "company" ? (companyNumber.trim() || null) : null,
-        email: lead?.email ?? email.trim() || null,
+        email: lead?.email ?? (email.trim() || null),
         phone: lead?.phone ?? null,
       };
 
