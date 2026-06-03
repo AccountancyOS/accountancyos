@@ -13035,6 +13035,9 @@ export type Database = {
       quotes: {
         Row: {
           accepted_at: string | null
+          accepted_by_name: string | null
+          accepted_ip: string | null
+          accepted_snapshot: Json | null
           client_id: string | null
           company_id: string | null
           created_at: string
@@ -13052,12 +13055,16 @@ export type Database = {
           sent_at: string | null
           status: string
           supersedes_quote_id: string | null
+          terms_version: string | null
           total_amount: number
           updated_at: string
           valid_until: string | null
         }
         Insert: {
           accepted_at?: string | null
+          accepted_by_name?: string | null
+          accepted_ip?: string | null
+          accepted_snapshot?: Json | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string
@@ -13075,12 +13082,16 @@ export type Database = {
           sent_at?: string | null
           status?: string
           supersedes_quote_id?: string | null
+          terms_version?: string | null
           total_amount?: number
           updated_at?: string
           valid_until?: string | null
         }
         Update: {
           accepted_at?: string | null
+          accepted_by_name?: string | null
+          accepted_ip?: string | null
+          accepted_snapshot?: Json | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string
@@ -13098,6 +13109,7 @@ export type Database = {
           sent_at?: string | null
           status?: string
           supersedes_quote_id?: string | null
+          terms_version?: string | null
           total_amount?: number
           updated_at?: string
           valid_until?: string | null
