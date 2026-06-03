@@ -339,7 +339,7 @@ const OnboardingDetail = () => {
                       ) : (
                         <Check className="mr-2 h-4 w-4" />
                       )}
-                      Approve & Activate
+                      Approve & Create Client
                     </Button>
                   </div>
                 </CardContent>
