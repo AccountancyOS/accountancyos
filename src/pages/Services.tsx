@@ -197,7 +197,7 @@ const Services = () => {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Services Catalog</h1>
+          <h1 className="text-3xl font-semibold text-foreground">Services Catalogue</h1>
           <p className="text-muted-foreground mt-1">
             Manage your service offerings and pricing
           </p>
@@ -339,7 +339,7 @@ const Services = () => {
       </div>
 
       {isLoading ? (
-        <TableSkeleton columns={6} rows={6} />
+        <TableSkeleton columns={5} rows={6} />
       ) : !services?.length ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
           <p className="text-muted-foreground mb-4">No services yet</p>
@@ -353,7 +353,6 @@ const Services = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Billing Model</TableHead>
                 <TableHead className="text-right">Price</TableHead>
@@ -364,7 +363,6 @@ const Services = () => {
             <TableBody>
               {services.map((service) => (
                 <TableRow key={service.id}>
-                  <TableCell className="font-mono text-sm">{service.code}</TableCell>
                   <TableCell>
                     <div>
                       <div className="font-medium">{service.name}</div>
