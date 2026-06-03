@@ -59,7 +59,7 @@ export default function Jobs() {
   const [currentViewId, setCurrentViewId] = useState<string | undefined>();
 
   const { data: jobs, isLoading } = useQuery({
-    queryKey: queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>),
+    queryKey: [...queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>), companyFilter],
     queryFn: async () => {
       if (!organization?.id) return [];
       
@@ -71,6 +71,10 @@ export default function Jobs() {
           companies!fk_jobs_company (company_name)
         `)
         .eq("organization_id", organization.id);
+
+      if (companyFilter) {
+        query = query.eq("company_id", companyFilter);
+      }
 
       // Apply status filter
       if (filters.status?.length) {
