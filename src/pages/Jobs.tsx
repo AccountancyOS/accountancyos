@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useAuth } from "@/lib/auth-context";
@@ -38,6 +38,8 @@ export default function Jobs() {
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const companyFilter = searchParams.get("company");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   
   const {
