@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -13,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Eye, Search } from "lucide-react";
+import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +47,10 @@ const Quotes = () => {
   const navigate = useNavigate();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  type SortKey = "recipient" | "quote_number" | "status" | "total_amount" | "valid_until" | "created_at";
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { data: quotes, isLoading } = useQuery({
     queryKey: ["quotes", organization?.id],
@@ -85,8 +96,9 @@ const Quotes = () => {
   const filteredQuotes = useMemo(() => {
     if (!quotes) return [];
     const term = search.trim().toLowerCase();
-    if (!term) return quotes;
-    return quotes.filter((q) => {
+    let rows = quotes.filter((q) => {
+      if (statusFilter !== "all" && q.status !== statusFilter) return false;
+      if (!term) return true;
       const r = recipientFor(q);
       return (
         q.quote_number.toLowerCase().includes(term) ||
@@ -94,7 +106,71 @@ const Quotes = () => {
         (r.email && r.email.toLowerCase().includes(term))
       );
     });
-  }, [quotes, search]);
+    const dir = sortDir === "asc" ? 1 : -1;
+    const cmp = (a: Quote, b: Quote) => {
+      let av: string | number | null = null;
+      let bv: string | number | null = null;
+      switch (sortKey) {
+        case "recipient":
+          av = recipientFor(a).name?.toLowerCase() ?? "";
+          bv = recipientFor(b).name?.toLowerCase() ?? "";
+          break;
+        case "quote_number":
+          av = a.quote_number.toLowerCase();
+          bv = b.quote_number.toLowerCase();
+          break;
+        case "status":
+          av = a.status;
+          bv = b.status;
+          break;
+        case "total_amount":
+          av = a.total_amount ?? 0;
+          bv = b.total_amount ?? 0;
+          break;
+        case "valid_until":
+          av = a.valid_until ? new Date(a.valid_until).getTime() : 0;
+          bv = b.valid_until ? new Date(b.valid_until).getTime() : 0;
+          break;
+        case "created_at":
+          av = new Date(a.created_at).getTime();
+          bv = new Date(b.created_at).getTime();
+          break;
+      }
+      if (av! < bv!) return -1 * dir;
+      if (av! > bv!) return 1 * dir;
+      return 0;
+    };
+    return [...rows].sort(cmp);
+  }, [quotes, search, statusFilter, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "created_at" || key === "valid_until" || key === "total_amount" ? "desc" : "asc");
+    }
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 inline opacity-50" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1 inline" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1 inline" />;
+  };
+
+  const sortableHead = (label: string, k: SortKey, align?: "right") => (
+    <TableHead className={align === "right" ? "text-right" : undefined}>
+      <button
+        type="button"
+        onClick={() => toggleSort(k)}
+        className="inline-flex items-center font-medium hover:text-foreground"
+      >
+        {label}
+        <SortIcon k={k} />
+      </button>
+    </TableHead>
+  );
 
   return (
     <DashboardLayout>
@@ -124,25 +200,40 @@ const Quotes = () => {
         </div>
       ) : (
         <>
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by recipient or quote number"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative max-w-sm flex-1 min-w-[240px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by recipient or quote number"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="sent">Sent</SelectItem>
+              <SelectItem value="accepted">Accepted</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="expired">Expired</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="border rounded-lg">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Recipient</TableHead>
-                <TableHead>Quote #</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Valid Until</TableHead>
-                <TableHead>Created</TableHead>
+                {sortableHead("Recipient", "recipient")}
+                {sortableHead("Quote #", "quote_number")}
+                {sortableHead("Status", "status")}
+                {sortableHead("Amount", "total_amount", "right")}
+                {sortableHead("Valid Until", "valid_until")}
+                {sortableHead("Created", "created_at")}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
