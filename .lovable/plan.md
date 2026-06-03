@@ -1,130 +1,142 @@
-## Audit findings (verified against DB and code)
+## Quote Acceptance → Client Onboarding — End-to-End Workflow
 
-**Templates table (`public.templates`)**
-- 14 system templates already exist (`organization_id IS NULL`) with non-empty `subject`, `body`, `htmlBody`, `category`: Quote Proposal, CRM Follow-Up, Deadline Approaching, Engagement Letter Reminder, HMRC Authorisation Reminder, Invoice Payment Reminder, KYC Document Reminder, Message Follow-Up, New Service Welcome, Onboarding Reminder, Questionnaire Reminder, Records Request Reminder, Signature Request Reminder, Workpaper Review Reminder.
-- RLS: SELECT allowed when `organization_id IS NULL` OR caller belongs to that org. INSERT/UPDATE/DELETE restricted to org members. Correct.
-- No per-practice clones exist yet. Practices only get a row when they explicitly clone via the UI.
+A big audit + build. To keep it shippable and reviewable I'll deliver in 4 phases. Each phase is independently testable and leaves the app in a working state. Total scope matches your 16-point spec exactly — nothing is dropped — but Phase 1 is the smallest unblocker (fixes the manual-create bug and the client-side post-accept dead end), and Phases 2–4 build the full multi-step onboarding journey on top of the existing `onboarding_applications` / `engagement_letters` / `onboarding_documents` / `kyc_documents` / `client_portal_users` tables already in the project.
 
-**Templates page (`src/pages/Templates.tsx`)**
-- Lists both system and org-owned rows. Clicking a system card or the "Clone & Customise" button routes to `/templates/new?clone_from=<id>`.
+### Lifecycle (single source of truth)
 
-**Detail page (`src/pages/TemplateDetail.tsx`)**
-- `cloneSource` query fetches the system row and a `useEffect` pushes its content into local `content` state. Works correctly.
-- Two cosmetic bugs to fix while here: `setStatus("draft")` violates the status check constraint (must be `inactive`/`active`), and on save it would 23514. Use `"inactive"`.
-
-**Editor (`src/components/templates/EmailTemplateEditor.tsx`) — the real UI bug**
-```ts
-const [subject, setSubject]   = useState(content.subject  || "");
-const [body, setBody]         = useState(content.body     || "");
-const [htmlBody, setHtmlBody] = useState(content.htmlBody || "");
-const [category, setCategory] = useState(content.category || "");
+```text
+Quote Sent
+  → Quote Accepted              (public_accept_quote_by_token, today)
+  → Lead Won                    (CRM stage advance, today — to verify)
+  → Onboarding Created          (status: in_progress, today — to harden)
+  → Engagement Letter Signed    (NEW client-facing step)
+  → AML Documents Uploaded      (NEW client-facing step, auto-filed to Documents/AML)
+  → Billing Setup Complete      (NEW client-facing step, Stripe Connect / subscription)
+  → Portal Account Created      (NEW client-facing step)
+  → For Review                  (NEW status; all client-side steps done)
+  → Accountant Reviews          (review screen; verify AML, set up jobs/years/periods)
+  → Complete                    (NEW status; client becomes active, recurring jobs go live)
 ```
-`useState` initialises once. Editor mounts with empty `content` from the parent's initial render, then ignores the cloned payload when it arrives. Inputs stay blank — exactly what is on screen.
 
-**Merge fields**
-- `template_merge_fields` has 33 rows in real dot-notation (`{{client.first_name}}`, `{{organization.name}}`, `{{filing.period_end}}`, `{{deadline.filing_date}}`, etc.) plus 8 quote-scoped tokens (`{{accept_link}}`, `{{quote_total}}`…).
-- The runtime resolver (`src/lib/placeholder-resolver.ts` + `workflow-step-executor.ts`) supports the dot-notation keys.
-- The spec proposes underscore-style tokens (`{{practice_name}}`, `{{client_first_name}}`, `{{quote_acceptance_link}}`, `{{records_request_link}}`, `{{questionnaire_link}}`, `{{approval_link}}`, `{{client_portal_link}}`, `{{payment_*}}`, `{{filing_name}}`, `{{submission_*}}`). Most do **not** exist in the resolver. We will standardise seeded templates on the **existing dot-notation** and only add new resolver tokens for the genuinely missing concepts (links, payment, submission).
+`Needs Client Action` and `Rejected/Closed` are added as branches off `For Review`.
 
-## What we will build
+---
 
-### Part 1 — Editor bug (real, separate from seeding)
+### Phase 1 — Fix the existing bugs and the dead end on the public quote page
 
-`src/components/templates/EmailTemplateEditor.tsx`:
-- Delete the four `useState` hooks for `subject` / `body` / `htmlBody` / `category`.
-- Derive each value from the `content` prop: `const subject = content.subject ?? ""` etc.
-- Replace setters with a single `update(field, value)` that calls `onChange({ ...content, [field]: value })`.
-- Update `insertMergeField` and `insertQuestionnaireLink` (they already operate on whichever field is "active") to use `update(...)`.
-- Leave the merge-field panel, the rich/HTML toggle, and the Quote-scoped filter untouched.
+Goal: stop the bleeding. This alone gives you a working hand-off from quote acceptance into the existing onboarding record.
 
-`src/pages/TemplateDetail.tsx`:
-- Change the clone effect's `setStatus("draft")` to `setStatus("inactive")` so cloned rows save without violating the check constraint.
+1. **Fix the manual onboarding create error.** `onboarding_applications` has two competing CHECK constraints on `status`:
+   - `chk_onboarding_applications_status` (NOT VALID) — allows `draft, sent, in_progress, contracts_signed, approved, rejected, cancelled`.
+   - `onboarding_applications_status_check` (active) — allows `pending, in_progress, aml_review, approved, rejected`.
+   `CreateOnboardingDialog.tsx` inserts `status: 'pending'`, which violates the first constraint as soon as it is validated. Migration will:
+   - Drop both legacy constraints.
+   - Add a single new `onboarding_applications_status_check` covering the full new lifecycle: `draft, in_progress, engagement_pending, aml_pending, billing_pending, portal_pending, for_review, needs_client_action, approved, rejected, cancelled`.
+   - Backfill any rows still on legacy values.
+2. **Harden `CreateOnboardingDialog`.** Validate required fields client-side (name/email at minimum, plus company name+number for `company` type), surface Postgres error messages clearly, and prevent the silent failure path.
+3. **Add a "Continue Onboarding" handoff on the public quote page.** After `public_accept_quote_by_token` succeeds today the client just sees "your accountant will be in touch". Replace this with a CTA that routes to `/onboard/{onboarding_id}?token={...}` (new public route, see Phase 2). For Phase 1 the route renders a placeholder "Onboarding starting…" page so the link works end-to-end while Phase 2 builds the real wizard.
+4. **Audit the existing CRM → Lead Won update.** Confirm `public_accept_quote_by_token` is updating `leads.status` / `crm_stage` on every accept (idempotent), and is logging an `activity` entry. Fix any gap, add a regression check via `audit_log` entries.
+5. **Lock the accepted quote.** Add `accepted_snapshot jsonb` to `quotes` (full line-items, totals, billing frequency, valid_until, terms_version, accepted_by_name, accepted_ip) populated atomically inside `public_accept_quote_by_token`. Block UPDATE on quote_lines once `quotes.status = 'accepted'` via a trigger; allow only the accountant to "supersede" by creating a new draft quote.
 
-### Part 2 — Expand the system library and resolver
+Phase 1 deliverable: manual + auto onboarding records create cleanly, every quote acceptance produces an onboarding row, the locked quote snapshot is preserved, and the public quote page links the client into the next step.
 
-**Resolver additions (`src/lib/placeholder-resolver.ts`, `workflow-step-executor.ts`, `supabase/functions/workflow-tick/index.ts`):** add resolvers for the link/payment/submission concepts that the seeded templates reference but the engine does not yet support:
-- `{{client.portal_link}}`
-- `{{quote.accept_link}}` (alias of existing `{{accept_link}}` outside the quote-only scope)
-- `{{engagement.sign_link}}`
-- `{{records_request.link}}`
-- `{{questionnaire.link}}`
-- `{{approval.link}}`
-- `{{payment.name}}`, `{{payment.amount}}`, `{{payment.due_date}}`
-- `{{filing.name}}`, `{{filing.submission_reference}}`, `{{filing.submission_date}}`
-- `{{organization.email}}`, `{{organization.phone}}`
+---
 
-Mirror each new key as a row in `template_merge_fields` (data insert, not schema change) so the editor's merge-field panel exposes them, scoped via `template_types` where relevant.
+### Phase 2 — Client-facing onboarding wizard
 
-**System template upserts (data insert, idempotent by stable `id`):** keep the 14 existing rows where the content already passes review and upsert the missing categories from the spec so the library covers every workflow the spec lists. Final library, all `organization_id IS NULL`, all with `subject` + plain `body` + `htmlBody` + `category`:
+New route `/onboard/:applicationId` (public, token-gated), built as a 4-step wizard inside one shell so it feels continuous.
 
-| Category | Templates |
-|---|---|
-| Quotes | Quote Proposal (existing), Quote Reminder, Quote Final Reminder |
-| Onboarding | Welcome / Onboarding Started, Engagement Letter Ready, Engagement Letter Reminder (existing), HMRC Authorisation Reminder (existing), KYC Document Reminder (existing), New Service Welcome (existing), Onboarding Reminder (existing), Signature Request Reminder (existing) |
-| Records | Records Request, Records Request Reminder (existing), Records Request Final Reminder |
-| Questionnaires | Questionnaire Sent, Questionnaire Reminder (existing) |
-| Deadlines | Deadline Approaching (existing), Payment Reminder |
-| Workflows | Workpaper Review Reminder (existing), Approval Required, Filing Submitted, Job Completed |
-| CRM | CRM Follow-Up (existing), Message Follow-Up (existing) |
-| Billing | Invoice Payment Reminder (existing) |
+```text
+Step 1: Engagement Letter
+  - Auto-generate from accepted services (reuse existing engagement_letters table + EngagementLetterPreview)
+  - Pull service schedules from quote_lines → services_catalog
+  - In-browser scroll-to-sign (existing DocumentSignatureFlow)
+  - Save signed PDF to documents bucket → folder "Engagement Letters"
+  - Set onboarding_applications.contracts_signed_at + status = aml_pending
 
-Each template body uses the dot-notation tokens listed above and the existing professional/Title-Case house style (no emojis, no exclamations, Arial-15 / teal CTA HTML matching Quote Proposal). Stable IDs in the `00000000-0000-0000-0000-0000000000bXX` range so re-running the seed never duplicates.
+Step 2: AML Documents
+  - Required docs derived from application_type (individual vs company) + service mix
+  - Reuse kyc_documents + existing AML upload component
+  - Auto-create "AML" folder under client documents if missing
+  - Each upload writes a row to documents (linked to client) AND to onboarding_documents (linked to application) so files survive past onboarding
+  - When all required types present → status = billing_pending
 
-Every seeded row also gets a stable `tags` entry `["system_default","<slug>"]` so the backfill (Part 3) can match by slug rather than UUID.
+Step 3: Billing Setup
+  - Build Stripe Checkout session from accepted_snapshot:
+      - one-off subtotal → one-time line item
+      - monthly subtotal → recurring subscription (interval: month)
+      - VAT treatment from organisation_branding/practice settings
+  - On Checkout success webhook (or return_url polling, per Option A+ Polling memory) → status = portal_pending
+  - On abandon/decline → status stays billing_pending, accountant sees it stuck
 
-### Part 3 — Backfill for every existing practice + new-signup parity
+Step 4: Portal Account
+  - If client_portal_users row already exists for email → link, do not duplicate
+  - Otherwise issue magic-link/sign-up to portal app domain (uses existing portal infrastructure)
+  - On success → status = for_review, fire notification (Phase 3)
+```
 
-**No new table.** Practice copies live in the existing `templates` table, identified by:
-- a `source_template_id uuid` column pointing back to the system row, and
-- a unique index `(organization_id, source_template_id) where source_template_id is not null` to prevent duplicate clones.
+All step transitions go through one SECURITY DEFINER RPC `advance_onboarding_step(app_id, step, payload)` to guarantee idempotency: re-calling with the same step is a no-op; double-clicks, refreshes, and webhook retries cannot create duplicate clients/letters/folders/portal users.
 
-Schema migration:
-1. `alter table public.templates add column if not exists source_template_id uuid references public.templates(id) on delete set null;`
-2. Partial unique index above.
-3. No GRANT changes needed (covered by existing grants).
+Token gating: extend `quote_acceptance_tokens` model — on accept, mint an `onboarding_session_tokens` row tied to the application that the wizard uses for all reads/writes via a small set of `public_onboarding_*` RPCs (mirroring the existing public quote RPCs).
 
-Backfill function (security definer, idempotent):
-- `public.ensure_default_templates_for_org(_org_id uuid)` loops over every system template (`organization_id IS NULL`) and `INSERT … ON CONFLICT (organization_id, source_template_id) DO NOTHING` a `status='inactive'` copy with the same name/description/type/service/content/tags. Practice-edited rows are never touched because we only insert when no row with that `source_template_id` exists.
+---
 
-Wiring:
-- Call `ensure_default_templates_for_org(NEW.id)` from the existing `handle_new_organization` trigger / `create_organization` SECURITY DEFINER function (whichever already runs on org creation — verified in the org-creation memory).
-- One-shot backfill at the bottom of the migration: `select public.ensure_default_templates_for_org(id) from public.organizations;`
+### Phase 3 — Accountant side: notifications + review screen
 
-Safety:
-- Function is `security definer`, `search_path = public`.
-- Re-running the migration or calling the function repeatedly is a no-op on practices that already have copies.
-- Practice edits are preserved because we never `UPDATE` existing rows.
+1. **Notification on `for_review`.** Trigger on `onboarding_applications` status change → inserts into the existing `notifications` table, addressed to the assigned accountant (resolved via lead owner → assigned_user → org owner fallback). If the practice has email connected, also queue an email via `email_queue` using a new `onboarding_for_review` system template.
+2. **`/onboarding/:id` review screen rebuild.** Extend `OnboardingDetail.tsx` into a structured review with these collapsible sections:
+   - Commercial — pulls from `accepted_snapshot`
+   - Engagement Letter — preview + download signed PDF, signer + timestamp
+   - AML — list of uploaded docs with Verify / Reject (notes) buttons (writes to `kyc_documents.verification_status`)
+   - Billing — Stripe subscription status, first invoice/payment status
+   - Portal — account status, email, linked client
+   - **Client Setup Checklist** (new component `OnboardingReviewChecklist`) — interactive checklist that the accountant must complete before "Mark Complete" unlocks. Items pulled from accepted services:
+     - Year end / accounts production period
+     - Companies House number, UTR, VAT scheme + periods, PAYE scheme + periods, SA years, bookkeeping start date, CT period
+     - Recurring jobs created (links to job-template engine to spawn)
+     - Filing deadlines auto-generated (links to deadlines engine)
+     - Assigned accountant / client manager
+     - Tags / service package
+3. **Actions on the review screen:**
+   - "Send back to client" → status = `needs_client_action`, with a note; client gets emailed a fresh wizard link to the failing step
+   - "Reject" → status = `rejected`, reason required, quote remains accepted but no client/company gets activated
+   - "Mark Complete" → status = `approved`, runs `lifecycle_complete_onboarding(app_id)` RPC
 
-### Part 4 — UI distinction (minimal, no redesign)
+`lifecycle_complete_onboarding` is the single place that flips the client/company from "Onboarding" to active, activates the recurring jobs and deadlines that were drafted in the checklist, writes the engagement letter + AML docs into the permanent client document area (idempotent: skips if already there), and writes the final audit entries.
 
-`Templates.tsx`: the System badge already exists. Add one filter chip "Library" that defaults to showing the practice's own copies (`organization_id = currentOrg`) and a toggle to also reveal system originals. The current "Clone & Customise" affordance stays for any practice that wants a fresh fork.
+---
 
-No changes to category navigation, sidebar, or routing.
+### Phase 4 — Idempotency, audit, and regression
 
-### Part 5 — Automation linkage
+1. **Idempotency sweep.** Every RPC in the new flow (accept quote, advance step, complete onboarding) wrapped in `SELECT ... FOR UPDATE` on the application row; status transitions enforced by a trigger so out-of-order calls fail loudly.
+2. **Duplicate guards.**
+   - Clients: lookup by `(organization_id, lower(email))` before insert (extends existing `public_accept_quote_by_token` logic).
+   - Companies: lookup by `(organization_id, company_number)` then by name fallback.
+   - Engagement letters: unique on `(onboarding_application_id, version)`.
+   - Portal users: unique on `(client_id, email)`.
+   - AML folders: idempotent `ensure_client_document_folder(client_id, 'AML')` helper.
+3. **Audit trail.** Single `onboarding_events` log table (or extend `audit_log` with a typed metadata schema) capturing every named event in your spec §14. Surfaced as a timeline on the accountant review screen.
+4. **Regression coverage.**
+   - Smoke script: create lead → quote → accept → walk all 4 wizard steps → review → complete. Verify no duplicate clients/jobs/letters/portal users; verify quote stays locked; verify deadlines materialise.
+   - Re-run script with refresh/double-click at each step.
+   - Manual create path: individual, company, CRM-converted, accountant-direct.
 
-No code changes required to the chaser/automation engine: it already references templates by ID via `templates_id` on chaser policies. Once Part 3 runs, every practice has a complete set of clonable rows whose IDs can be selected in existing automation pickers.
+---
 
-Fix the misleading stop-condition copy in **two** places only (verified by grep earlier in the loop): the chaser-policy default labels in `src/lib/chaser-policy-service.ts` that currently read "ceases when records received" for non-records workflows. Use the deadline/job/filing/task completion language from the spec.
+### Technical notes
 
-## Acceptance verification
+- All new tables/columns get explicit `GRANT` + `RLS` blocks; `for_review` notifications and review actions all scope to `organization_id` via the existing `user_has_organization_access` helper.
+- Stripe billing uses the existing Stripe Connect practice billing infrastructure (per `mem://architecture/stripe-connect-client-billing`) so the practice receives funds, not the platform.
+- Portal account creation uses the existing dual-project portal architecture; we issue an invite, the portal sign-up lives in the portal app.
+- No parallel onboarding system: every new piece extends `onboarding_applications`, `engagement_letters`, `kyc_documents`, `documents`, `client_portal_users`, `notifications`, `email_queue`, `audit_log`.
+- The `accepted_snapshot` on `quotes` is the immutable commercial record referenced by billing, engagement letter, jobs, and review.
 
-1. Existing practice → `/templates` shows the full library with non-empty subject/body/HTML/category before any clicking.
-2. New practice (sign up Greenfield-style test user) → `/templates` already populated.
-3. Opening any system or practice template renders subject, category, plain body, HTML body. Insert merge field still works. Save persists.
-4. Re-running the migration adds zero rows and changes zero edited rows (verify with `select count(*) from templates`).
-5. Chaser pickers list the seeded templates by name.
-6. Records reminders' stop language references job/task completion; deadline reminders' stop language references deadline/filing/task completion.
+### What I need from you to start Phase 1
 
-## Files touched
+Quick confirmations only — none should block:
 
-- `src/components/templates/EmailTemplateEditor.tsx` — remove local state, derive from `content`.
-- `src/pages/TemplateDetail.tsx` — use `"inactive"` not `"draft"` on clone.
-- `src/pages/Templates.tsx` — add the Library/System filter chip.
-- `src/lib/placeholder-resolver.ts`, `src/lib/workflow-step-executor.ts`, `supabase/functions/workflow-tick/index.ts` — add the new dot-notation resolvers.
-- `src/lib/chaser-policy-service.ts` — correct stop-condition labels.
-- New schema migration — `source_template_id` column, unique index, `ensure_default_templates_for_org` function, hook into org-creation trigger, one-shot backfill.
-- New data insert — upsert system templates and new merge-field rows (idempotent by stable IDs).
-- Edge function redeploy after `workflow-tick` change.
+1. OK to drop the legacy `chk_onboarding_applications_status` (NOT VALID) constraint as part of the fix? It's not enforced today and is the root of the manual-create bug.
+2. For the public onboarding wizard route: `/onboard/:applicationId` on the accountant app domain is the simplest. Confirm OK, vs. hosting it on the client portal domain.
+3. Phase 2 billing step assumes Stripe Connect is already configured for the practice. If a practice has no Stripe connected, the wizard should skip billing and mark the step "Awaiting practice billing setup" rather than block. Confirm.
 
-Out of scope (confirm if you want them in): redesigning the Templates list page, building a separate System Library page, adding per-template version history beyond the existing `version_number` column.
+If all three are "yes", I'll start Phase 1 as soon as you flip me into build mode.
