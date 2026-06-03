@@ -302,7 +302,7 @@ const QuoteDetail = () => {
                     <div className="flex-1">
                       <div className="font-medium">{line.service.name}</div>
                       <div className="text-sm text-muted-foreground">
-                        {line.service.code} • {line.quantity} × £{displayPrice.toFixed(2)}
+                        {line.quantity} × £{displayPrice.toFixed(2)}
                         {isMonthly && "/month"}
                         <Badge variant="outline" className="ml-2">
                           {isMonthly ? "Monthly" : "Bill Now"}
