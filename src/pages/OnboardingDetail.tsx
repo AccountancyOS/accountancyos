@@ -89,7 +89,7 @@ const OnboardingDetail = () => {
         .from("onboarding_applications")
         .select(`
           *,
-          quote:quotes(quote_number, sent_at, accepted_at, accepted_snapshot, total_amount, billing_frequency)
+          quote:quotes(quote_number, sent_at, accepted_at, accepted_snapshot, total_amount)
         `)
         .eq("id", id)
         .single();
