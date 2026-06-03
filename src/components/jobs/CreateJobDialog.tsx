@@ -92,7 +92,7 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
         throw new Error("Please check the form for errors");
       }
 
-      const { error } = await supabase.from("jobs").insert({
+      const { data: jobRow, error } = await supabase.from("jobs").insert({
         organization_id: organization.id,
         job_name: jobName.trim(),
         [isCompany ? "company_id" : "client_id"]: clientId,
@@ -100,9 +100,33 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
         status,
         priority,
         filing_deadline: filingDeadline || null,
-      });
+      }).select("id").single();
 
       if (error) throw error;
+
+      // Best-effort: clone workpaper template (if any default exists for this job type)
+      if (jobRow?.id) {
+        try {
+          const { data: tmpl } = await supabase
+            .from("workpaper_templates")
+            .select("id, file_path")
+            .eq("job_type", serviceType)
+            .eq("is_default", true)
+            .eq("is_active", true)
+            .or(`organization_id.is.null,organization_id.eq.${organization.id}`)
+            .order("organization_id", { ascending: false, nullsFirst: false })
+            .limit(1)
+            .maybeSingle();
+          if (tmpl?.id && tmpl.file_path) {
+            await supabase.functions.invoke("clone-workpaper-template", {
+              body: { template_id: tmpl.id, job_id: jobRow.id },
+            });
+          }
+        } catch (e) {
+          // non-blocking
+          console.warn("Workpaper auto-clone failed:", e);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });

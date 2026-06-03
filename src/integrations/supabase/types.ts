@@ -9748,10 +9748,17 @@ export type Database = {
           company_id: string | null
           created_at: string
           created_by: string | null
+          file_name: string | null
+          file_path: string | null
+          file_size_bytes: number | null
+          file_version: number
           id: string
           instance_data_json: Json
           instance_schema_json: Json
           job_id: string
+          last_opened_at: string | null
+          last_uploaded_at: string | null
+          last_uploaded_by: string | null
           lock_reason: string | null
           locked_at: string | null
           locked_by: string | null
@@ -9771,10 +9778,17 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          file_version?: number
           id?: string
           instance_data_json?: Json
           instance_schema_json?: Json
           job_id: string
+          last_opened_at?: string | null
+          last_uploaded_at?: string | null
+          last_uploaded_by?: string | null
           lock_reason?: string | null
           locked_at?: string | null
           locked_by?: string | null
@@ -9794,10 +9808,17 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          file_version?: number
           id?: string
           instance_data_json?: Json
           instance_schema_json?: Json
           job_id?: string
+          last_opened_at?: string | null
+          last_uploaded_at?: string | null
+          last_uploaded_by?: string | null
           lock_reason?: string | null
           locked_at?: string | null
           locked_by?: string | null
@@ -16026,6 +16047,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          file_name: string | null
+          file_path: string | null
+          file_size_bytes: number | null
           id: string
           is_active: boolean
           is_default: boolean
@@ -16034,6 +16058,8 @@ export type Database = {
           name: string
           organization_id: string | null
           schema_json: Json
+          sheet_names: string[] | null
+          template_format: string
           updated_at: string
           version: number
         }
@@ -16041,6 +16067,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
           id?: string
           is_active?: boolean
           is_default?: boolean
@@ -16049,6 +16078,8 @@ export type Database = {
           name: string
           organization_id?: string | null
           schema_json?: Json
+          sheet_names?: string[] | null
+          template_format?: string
           updated_at?: string
           version?: number
         }
@@ -16056,6 +16087,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
           id?: string
           is_active?: boolean
           is_default?: boolean
@@ -16064,6 +16098,8 @@ export type Database = {
           name?: string
           organization_id?: string | null
           schema_json?: Json
+          sheet_names?: string[] | null
+          template_format?: string
           updated_at?: string
           version?: number
         }

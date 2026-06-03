@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/lib/organization-context";
 import {
@@ -7,12 +7,13 @@ import {
   deactivateWorkpaperTemplate,
   type WorkpaperTemplateRow,
 } from "@/lib/workpaper-template-service";
+import { supabase } from "@/integrations/supabase/client";
+import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Pencil, Trash2, Copy, Lock } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Lock, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 
@@ -58,12 +59,21 @@ export default function WorkpaperTemplateManager() {
   const queryClient = useQueryClient();
   const [editingTemplate, setEditingTemplate] = useState<WorkpaperTemplateRow | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<{
+    file: File;
+    sheetNames: string[];
+  } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [formState, setFormState] = useState({
     name: "",
     description: "",
     job_type: "SA_NON_MTD",
     is_default: false,
-    schema_json: '{"sections":[]}',
+    file_path: null as string | null,
+    file_name: null as string | null,
+    file_size_bytes: null as number | null,
+    sheet_names: [] as string[],
   });
 
   const { data: templates, isLoading } = useQuery({
@@ -74,18 +84,47 @@ export default function WorkpaperTemplateManager() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      let schema: any;
-      try {
-        schema = JSON.parse(formState.schema_json);
-      } catch {
-        throw new Error("Invalid JSON in schema");
+      if (!formState.name.trim()) throw new Error("Name is required");
+      if (!formState.file_path && !editingTemplate?.file_path && !pendingFile) {
+        throw new Error("Please upload an Excel (.xlsx) file");
       }
+
+      // Upload pending file (if any) before saving the row
+      let filePath = formState.file_path;
+      let fileName = formState.file_name;
+      let fileSize = formState.file_size_bytes;
+      let sheetNames = formState.sheet_names;
+
+      if (pendingFile) {
+        setUploading(true);
+        const tmpId = editingTemplate?.id ?? crypto.randomUUID();
+        const path = `templates/${organization!.id}/${tmpId}.xlsx`;
+        const { error: upErr } = await supabase.storage
+          .from("workpaper-files")
+          .upload(path, pendingFile.file, {
+            upsert: true,
+            contentType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          });
+        setUploading(false);
+        if (upErr) throw upErr;
+        filePath = path;
+        fileName = pendingFile.file.name;
+        fileSize = pendingFile.file.size;
+        sheetNames = pendingFile.sheetNames;
+      }
+
       return upsertWorkpaperTemplate(organization!.id, {
         id: editingTemplate?.id,
         job_type: formState.job_type,
         name: formState.name,
         description: formState.description || undefined,
-        schema_json: schema,
+        schema_json: {},
+        template_format: "xlsx",
+        file_path: filePath ?? undefined,
+        file_name: fileName ?? undefined,
+        file_size_bytes: fileSize ?? undefined,
+        sheet_names: sheetNames,
         is_default: formState.is_default,
       });
     },
@@ -108,7 +147,17 @@ export default function WorkpaperTemplateManager() {
 
   function openCreate() {
     setEditingTemplate(null);
-    setFormState({ name: "", description: "", job_type: "SA_NON_MTD", is_default: false, schema_json: '{"sections":[]}' });
+    setFormState({
+      name: "",
+      description: "",
+      job_type: "SA_NON_MTD",
+      is_default: false,
+      file_path: null,
+      file_name: null,
+      file_size_bytes: null,
+      sheet_names: [],
+    });
+    setPendingFile(null);
     setShowCreateDialog(true);
   }
 
@@ -119,14 +168,53 @@ export default function WorkpaperTemplateManager() {
       description: t.description ?? "",
       job_type: t.job_type,
       is_default: t.is_default,
-      schema_json: JSON.stringify(t.schema_json, null, 2),
+      file_path: (t as any).file_path ?? null,
+      file_name: (t as any).file_name ?? null,
+      file_size_bytes: (t as any).file_size_bytes ?? null,
+      sheet_names: (t as any).sheet_names ?? [],
     });
+    setPendingFile(null);
     setShowCreateDialog(true);
   }
 
   function closeDialog() {
     setShowCreateDialog(false);
     setEditingTemplate(null);
+    setPendingFile(null);
+  }
+
+  async function handleFileSelected(file: File) {
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      toast.error("Please upload an .xlsx file");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File must be 20 MB or smaller");
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", bookSheets: true });
+      const sheetNames = wb.SheetNames ?? [];
+      setPendingFile({ file, sheetNames });
+      // auto-fill name from filename if blank
+      setFormState((s) => ({
+        ...s,
+        name: s.name || file.name.replace(/\.xlsx$/i, ""),
+      }));
+    } catch (e) {
+      toast.error("Could not read Excel file", { description: (e as Error).message });
+    }
+  }
+
+  async function downloadTemplate(t: WorkpaperTemplateRow) {
+    const path = (t as any).file_path as string | null;
+    if (!path) return toast.error("No file attached");
+    const { data, error } = await supabase.storage
+      .from("workpaper-files")
+      .createSignedUrl(path, 60);
+    if (error || !data) return toast.error(error?.message ?? "Download failed");
+    window.open(data.signedUrl, "_blank");
   }
 
   return (
@@ -204,13 +292,27 @@ export default function WorkpaperTemplateManager() {
                               description: t.description ?? "",
                               job_type: t.job_type,
                               is_default: false,
-                              schema_json: JSON.stringify(t.schema_json, null, 2),
+                              file_path: t.file_path ?? null,
+                              file_name: t.file_name ?? null,
+                              file_size_bytes: t.file_size_bytes ?? null,
+                              sheet_names: t.sheet_names ?? [],
                             });
+                            setPendingFile(null);
                             setShowCreateDialog(true);
                           }}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
+                        {t.file_path && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Download Excel file"
+                            onClick={() => downloadTemplate(t)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -277,18 +379,90 @@ export default function WorkpaperTemplateManager() {
               <Label>Set as default for this job type</Label>
             </div>
             <div className="space-y-2">
-              <Label>Schema JSON</Label>
-              <Textarea
-                className="font-mono text-xs min-h-[200px]"
-                value={formState.schema_json}
-                onChange={(e) => setFormState((s) => ({ ...s, schema_json: e.target.value }))}
+              <Label>Excel Template (.xlsx)</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFileSelected(f);
+                  e.target.value = "";
+                }}
               />
+              <div className="rounded-md border border-dashed p-4 space-y-3">
+                {pendingFile ? (
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet className="h-5 w-5 text-primary mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{pendingFile.file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(pendingFile.file.size / 1024).toFixed(1)} KB — {pendingFile.sheetNames.length} tab(s)
+                      </p>
+                      {pendingFile.sheetNames.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {pendingFile.sheetNames.map((n) => (
+                            <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : formState.file_name ? (
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet className="h-5 w-5 text-primary mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{formState.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formState.file_size_bytes
+                          ? `${(formState.file_size_bytes / 1024).toFixed(1)} KB — `
+                          : ""}
+                        {formState.sheet_names.length} tab(s)
+                      </p>
+                      {formState.sheet_names.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {formState.sheet_names.map((n) => (
+                            <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Upload an Excel workbook. Tab names and structure are preserved exactly.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {formState.file_name || pendingFile ? "Replace File" : "Upload File"}
+                  </Button>
+                  {editingTemplate?.file_path && !pendingFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => downloadTemplate(editingTemplate)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving…" : "Save"}
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || uploading}>
+              {uploading ? "Uploading…" : saveMutation.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
