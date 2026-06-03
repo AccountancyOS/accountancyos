@@ -46,6 +46,7 @@ import { useEntityServices } from "@/hooks/useEntityServices";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { YearEndEditor } from "@/components/company/YearEndEditor";
 import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
+import { CompanyTextFieldEditor } from "@/components/company/CompanyTextFieldEditor";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
@@ -57,6 +58,8 @@ const CompanyDetail = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isYearEndOpen, setIsYearEndOpen] = useState(false);
+  const [isUtrOpen, setIsUtrOpen] = useState(false);
+  const [isAuthCodeOpen, setIsAuthCodeOpen] = useState(false);
 
   // Service gating for Payroll tab
   const { hasPayroll, isLoading: servicesLoading } = useEntityServices(
@@ -313,7 +316,17 @@ const CompanyDetail = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">UTR</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">UTR</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setIsUtrOpen(true)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <p className="font-medium font-mono">
                         {company.utr || "-"}
                       </p>
@@ -327,7 +340,17 @@ const CompanyDetail = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Auth Code</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">Auth Code</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setIsAuthCodeOpen(true)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <p className="font-medium font-mono">
                         {company.auth_code || company.companies_house_auth_code || "-"}
                       </p>
@@ -631,6 +654,35 @@ const CompanyDetail = () => {
           currentDay={company.year_end_day}
           open={isYearEndOpen}
           onOpenChange={setIsYearEndOpen}
+          onSaved={() => refetch()}
+        />
+
+        {/* UTR Editor */}
+        <CompanyTextFieldEditor
+          companyId={companyId!}
+          field="utr"
+          label="UTR"
+          description="HMRC Unique Taxpayer Reference for this company. Usually 10 digits."
+          currentValue={company.utr}
+          placeholder="1234567890"
+          validate={(v) => (/^\d{10}$/.test(v) ? null : "UTRs are normally 10 digits — please double-check this value.")}
+          open={isUtrOpen}
+          onOpenChange={setIsUtrOpen}
+          onSaved={() => refetch()}
+        />
+
+        {/* Auth Code Editor */}
+        <CompanyTextFieldEditor
+          companyId={companyId!}
+          field="auth_code"
+          label="Companies House Auth Code"
+          description="6-character authentication code issued by Companies House, used for online filings."
+          currentValue={company.auth_code || company.companies_house_auth_code}
+          placeholder="A1B2C3"
+          uppercase
+          validate={(v) => (/^[A-Z0-9]{6}$/.test(v) ? null : "Auth codes are normally 6 letters or digits — please double-check this value.")}
+          open={isAuthCodeOpen}
+          onOpenChange={setIsAuthCodeOpen}
           onSaved={() => refetch()}
         />
       </div>

@@ -18,6 +18,9 @@ interface StaffAssignmentFieldProps {
   label: string;
 }
 
+// Roles that may act as Partner in Charge. Staff in Charge is open to everyone.
+const PARTNER_ELIGIBLE_ROLES = new Set(["owner", "partner", "admin"]);
+
 export function StaffAssignmentField({ companyId, field, currentValue, label }: StaffAssignmentFieldProps) {
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
@@ -26,18 +29,29 @@ export function StaffAssignmentField({ companyId, field, currentValue, label }: 
     queryKey: ["org-users", organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
-      const { data, error } = await supabase
+
+      const { data: members, error: membersError } = await supabase
         .from("organization_users")
-        .select("user_id, role, profiles(first_name, last_name, email)")
+        .select("user_id, role")
         .eq("organization_id", organization.id);
-      if (error) throw error;
-      return (data || []).map((u: any) => ({
-        id: u.user_id,
-        name: u.profiles?.first_name && u.profiles?.last_name
-          ? `${u.profiles.first_name} ${u.profiles.last_name}`
-          : u.profiles?.email || u.user_id,
-        role: u.role,
-      }));
+      if (membersError) throw membersError;
+      if (!members || members.length === 0) return [];
+
+      const userIds = members.map((m) => m.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, first_name, last_name, email")
+        .in("id", userIds);
+      if (profilesError) throw profilesError;
+
+      const byId = new Map((profiles || []).map((p: any) => [p.id, p]));
+      return members.map((m) => {
+        const p: any = byId.get(m.user_id);
+        const name = p?.first_name && p?.last_name
+          ? `${p.first_name} ${p.last_name}`
+          : p?.email || m.user_id.slice(0, 8);
+        return { id: m.user_id, name, role: m.role || "member" };
+      });
     },
     enabled: !!organization?.id,
   });
@@ -59,6 +73,10 @@ export function StaffAssignmentField({ companyId, field, currentValue, label }: 
     },
   });
 
+  const eligibleUsers = (orgUsers || []).filter((u) =>
+    field === "partner_in_charge" ? PARTNER_ELIGIBLE_ROLES.has(u.role) : true,
+  );
+
   return (
     <div>
       <p className="text-sm text-muted-foreground mb-1">{label}</p>
@@ -71,7 +89,7 @@ export function StaffAssignmentField({ companyId, field, currentValue, label }: 
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="unassigned">Unassigned</SelectItem>
-          {orgUsers?.map((user) => (
+          {eligibleUsers.map((user) => (
             <SelectItem key={user.id} value={user.id}>
               {user.name} ({user.role})
             </SelectItem>
