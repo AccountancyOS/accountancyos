@@ -577,6 +577,12 @@ const CompanyDetail = () => {
             )}
           </TabsContent>
 
+          <TabsContent value="jobs" className="mt-6">
+            {organization?.id && companyId && (
+              <CompanyJobsTab companyId={companyId} organizationId={organization.id} />
+            )}
+          </TabsContent>
+
           <TabsContent value="cosec-jobs" className="mt-6">
             {organization?.id && (
               <CompanyCoSecJobsTab 
