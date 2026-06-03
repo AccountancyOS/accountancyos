@@ -1,18 +1,18 @@
 ## Problem
 
-The "Error loading application: column quotes.billing_frequency does not exist" appears on the Onboarding detail page. The query in `src/pages/OnboardingDetail.tsx` (line 92) selects `billing_frequency` from the `quotes` table, but that column exists on `quote_lines`, not on `quotes`. Per-line billing frequency is already captured inside `accepted_snapshot.lines`, which the page already reads.
+When a user re-opens an already-accepted quote link, `PublicQuoteView` shows "Proposal accepted. Continuing to your onboarding…" but never navigates anywhere. The auto-redirect only runs in the `accept()` handler from a fresh acceptance — when the page loads an existing accepted quote, `onboardingId` stays `null`, so neither the redirect nor the "Continue Onboarding" button appears.
 
 ## Fix
 
-Remove the non-existent column from the embedded select:
+1. **DB**: Update `public_get_quote_by_token` to also return `onboarding_application_id` — look up the latest non-cancelled onboarding application linked to `v_quote.id` and include it in the payload.
 
-```ts
-quote:quotes(quote_number, sent_at, accepted_at, accepted_snapshot, total_amount)
-```
-
-No other code path on this page reads `quote.billing_frequency` — line-level frequency is shown from `lines` (which come from `quote_lines` / `accepted_snapshot`).
+2. **Frontend (`src/pages/PublicQuoteView.tsx`)**:
+   - Extend the `QuotePayload` type with `onboarding_application_id?: string | null`.
+   - On load, if the payload includes `onboarding_application_id`, store it in `onboardingId`.
+   - When the quote is already accepted and we have `onboardingId`, auto-navigate to `/onboard/:id` after a short delay (same behaviour as fresh acceptance), and keep the visible "Continue Onboarding" button as a fallback.
 
 ## Scope
 
-- One-line change in `src/pages/OnboardingDetail.tsx`.
-- No DB migration, no other files affected.
+- One migration updating the SECURITY DEFINER RPC.
+- One file edit: `src/pages/PublicQuoteView.tsx`.
+- No schema changes, no other pages affected.

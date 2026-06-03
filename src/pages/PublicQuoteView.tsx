@@ -33,6 +33,7 @@ interface QuotePayload {
   recipient_name: string;
   lines: QuoteLine[];
   used: boolean;
+  onboarding_application_id?: string | null;
   error?: string;
 }
 
@@ -60,11 +61,25 @@ export default function PublicQuoteView() {
       } else {
         const payload = data as unknown as QuotePayload;
         if (payload?.error) setError(payload.error);
-        else setQuote(payload);
+        else {
+          setQuote(payload);
+          if (payload?.onboarding_application_id) {
+            setOnboardingId(payload.onboarding_application_id);
+          }
+        }
       }
       setLoading(false);
     })();
   }, [token]);
+
+  // If the quote is already accepted and we know the onboarding app, resume automatically.
+  useEffect(() => {
+    if (!quote) return;
+    if (quote.status === "accepted" && onboardingId) {
+      const t = setTimeout(() => navigate(`/onboard/${onboardingId}`), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [quote, onboardingId, navigate]);
 
   const accept = async () => {
     if (!token) return;
