@@ -43,8 +43,11 @@ interface ApprovalResult {
     portal_access_id?: string;
     invite_token?: string;
     email_queued?: boolean;
+    ok?: boolean;
     error?: string;
+    sqlstate?: string;
     skipped?: boolean;
+    reason?: string;
   };
   invitation_email_queued: boolean;
 }
@@ -245,14 +248,29 @@ const OnboardingDetail = () => {
         }
       }
 
-      toast({ 
-        title: "Application approved successfully",
-        description: result.client_id 
-          ? "Client created and portal access granted"
-          : result.company_id 
-          ? "Company created and portal access granted"
-          : "Application approved"
-      });
+      const portalOk = result.portal_access?.portal_access_id
+        && result.portal_access?.ok !== false;
+
+      if (portalOk) {
+        toast({
+          title: "Application Approved Successfully",
+          description: result.client_id
+            ? "Client created and portal access granted"
+            : result.company_id
+            ? "Company created and portal access granted"
+            : "Application approved",
+        });
+      } else {
+        // Approval itself succeeded but the portal invite did not. Surface clearly.
+        const reason = result.portal_access?.error
+          || result.portal_access?.reason
+          || "Portal invite was not issued";
+        toast({
+          title: "Approved — But Portal Invite Failed",
+          description: `${reason}. The client record was created, but no portal invite email was sent. Please retry portal access from the client record.`,
+          variant: "destructive",
+        });
+      }
 
       loadApplication();
     } catch (error: any) {
