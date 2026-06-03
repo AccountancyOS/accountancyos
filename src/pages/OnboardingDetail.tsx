@@ -4,13 +4,12 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Check, X, FileText, Users, Building2, AlertTriangle, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
+import { Loader2, ArrowLeft, Check, X, Users, Building2, AlertTriangle, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
 import { emitOnboardingApproved, emitClientOnboarded } from "@/lib/automation-triggers";
 import {
   AlertDialog,
@@ -24,9 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
 import EngagementLetterSection from "@/components/onboarding/EngagementLetterSection";
-import { OnboardingQuestionnaireSection } from "@/components/onboarding/OnboardingQuestionnaireSection";
 import { AMLVerificationPanel } from "@/components/onboarding/AMLVerificationPanel";
-import { ProfessionalClearanceSection } from "@/components/onboarding/ProfessionalClearanceSection";
 import OnboardingEventTimeline from "@/components/onboarding/OnboardingEventTimeline";
 import {
   Select,
@@ -58,13 +55,13 @@ const OnboardingDetail = () => {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [application, setApplication] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [engagementLetter, setEngagementLetter] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<any>(null);
+  const [services, setServices] = useState<Record<string, { name: string; billing_frequency: string | null }>>({});
   
   // Modal states
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -96,7 +93,26 @@ const OnboardingDetail = () => {
 
       if (error) throw error;
       setApplication(data);
-      setSnapshot((data?.quote as any)?.accepted_snapshot ?? null);
+      const snap = (data?.quote as any)?.accepted_snapshot ?? null;
+      setSnapshot(snap);
+      const serviceIds: string[] = Array.from(
+        new Set(((snap?.lines ?? []) as any[])
+          .map((l) => l?.service_id)
+          .filter((x): x is string => !!x))
+      );
+      if (serviceIds.length > 0) {
+        const { data: svc } = await supabase
+          .from("services")
+          .select("id,name,billing_frequency")
+          .in("id", serviceIds);
+        const map: Record<string, { name: string; billing_frequency: string | null }> = {};
+        (svc ?? []).forEach((s: any) => {
+          map[s.id] = { name: s.name, billing_frequency: s.billing_frequency ?? null };
+        });
+        setServices(map);
+      } else {
+        setServices({});
+      }
     } catch (error: any) {
       toast({
         title: "Error loading application",
@@ -155,60 +171,6 @@ const OnboardingDetail = () => {
       setEngagementLetter(data);
     } catch (error: any) {
       console.error("Error loading engagement letter:", error);
-    }
-  };
-
-  const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    documentType: string
-  ) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-
-    const file = e.target.files[0];
-    setUploading(true);
-
-    try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${organization!.id}/${id}/${documentType}-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("onboarding-documents")
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { error: docError } = await supabase
-        .from("onboarding_documents")
-        .insert({
-          organization_id: organization!.id,
-          application_id: id!,
-          document_type: documentType,
-          file_name: file.name,
-          file_path: fileName,
-          file_size: file.size,
-          mime_type: file.type,
-        });
-
-      if (docError) throw docError;
-
-      // Update application document flags
-      const updateField = `${documentType}_uploaded`;
-      await supabase
-        .from("onboarding_applications")
-        .update({ [updateField]: true })
-        .eq("id", id);
-
-      toast({ title: "Document uploaded successfully" });
-      loadDocuments();
-      loadApplication();
-    } catch (error: any) {
-      toast({
-        title: "Error uploading document",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
     }
   };
 
