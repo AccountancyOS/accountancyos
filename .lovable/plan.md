@@ -1,38 +1,49 @@
-## Root Cause
+## Two fixes on the Client (Company) detail page
 
-Three problems compound, all triggered by the same approval:
+### 1) UTR and Companies House Auth Code are read-only
 
-1. **`lifecycle_grant_portal_access` silently failed** with `function gen_random_bytes(integer) does not exist`. The RPC's `EXCEPTION WHEN OTHERS` block swallowed it, so approval reported success but no `portal_access` row + no `invite_token` was ever created. Confirmed: `SELECT * FROM portal_access WHERE organization_id = '<org>'` returns 0 rows.
-2. **Welcome email is untokenised.** `notify_onboarding_approved` links to `https://client.accountancyos.com` (root) instead of `/auth/portal-invite?token=<token>`. Even if step 1 worked, the client would not have arrived with a token.
-3. **Client Portal project** has no way to bind the new `auth.users` signup back to the practice's `portal_access` row, because no token arrived. This is why it asked the client to "link to an accountant".
+On `CompanyDetail.tsx`, the "Company Information" card shows `UTR` and `Auth Code` as plain text with no edit affordance — the only inline edit on this card is Year End. There is no dialog or input wired to update `companies.utr`, `companies.auth_code`, or `companies.companies_house_auth_code`.
 
-## Fix (this project)
+**Fix:** Add an inline edit control (small pencil button, same pattern as Year End) next to UTR and Auth Code. Clicking opens a tiny popover/dialog with a single text input and Save/Cancel. On save, `update companies set utr = ...` (or `auth_code = ...`) where `id = company.id`, then invalidate the `company` query. Light validation only (UTR: 10 digits; Auth Code: 6 alphanumeric — non-blocking warnings, not hard rejects, because formats vary).
 
-1. **Resolve `gen_random_bytes`.**
-   - Ensure `pgcrypto` is installed in `extensions` schema (Supabase default).
-   - Update `public.generate_invite_token` and `public.lifecycle_grant_portal_access` so their `search_path` is `public, extensions` (or fully qualify as `extensions.gen_random_bytes`).
-2. **Stop swallowing portal-grant failures.** Modify `lifecycle_approve_onboarding` so the `EXCEPTION WHEN OTHERS` block around the portal grant still does not abort approval, but returns `{ portal_access: { ok: false, error: '...' } }` in the JSON result and the Approve & Create Client UI surfaces it as a warning toast. No more silent failures of this exact class.
-3. **Fix the welcome email URL.** Rewrite `notify_onboarding_approved` so the link is `https://client.accountancyos.com/auth/portal-invite?token=<invite_token>` — read the token from the `portal_access` row that `lifecycle_grant_portal_access` just inserted (function order in `lifecycle_approve_onboarding` must be: grant portal access first, then queue welcome email).
-4. **Backfill for Bassage Eyes Ltd.**
-   - Run `lifecycle_grant_portal_access` for the existing approved client so a `portal_access` row with token is created.
-   - Locate the `auth.users` row the client already created (`amyleestevens7@gmail.com`) and set `portal_access.user_id = <that uid>`, `status = 'accepted'`, `accepted_at = now()`. This retroactively links them so they do not have to re-sign-up.
-   - Send a one-off confirmation email so the client knows they are now linked.
+### 2) Partner / Staff dropdowns are empty even though the owner exists
 
-## Fix (Client Portal project — separate task, separate Lovable project)
+`StaffAssignmentField` queries:
 
-This project cannot edit the Client Portal repo. You will need to apply the matching change there:
+```ts
+supabase.from("organization_users").select("user_id, role, profiles(first_name, last_name, email)")
+```
 
-- Implement `/auth/portal-invite?token=<token>` so it:
-  1. Validates the token against `portal_access` (token exists, not expired, not revoked).
-  2. Shows signup / Google / magic-link options pre-bound to the email on the `portal_access` row.
-  3. On successful auth, updates `portal_access.user_id = auth.uid()`, `status = 'accepted'`, `accepted_at = now()`, then routes to the portal workspace.
-- Block plain self-signup at `/auth/signup` (or any route that does not arrive with a valid token), so future clients cannot create disconnected accounts.
+But there is **no `profiles` table** in this project (confirmed against `information_schema`). The embedded join fails, the query throws, React Query swallows it, and the dropdown renders only "Unassigned". The same broken pattern exists in `PermissionsSettings.tsx`, `MyProfileSettings.tsx`, `StaffVarianceTable.tsx`, `WorkpaperDiffView.tsx`, `audit-service.ts`, `workflow-step-executor.ts`, and `app-context.tsx` — so the team page, "my profile", staff variance dashboard etc. are all silently nameless too.
 
-## Verification (before reporting done)
+**Fix (one migration, then point existing code at it):**
 
-- Re-read `pg_proc` for both functions to confirm `search_path` includes `extensions`.
-- Approve a fresh test onboarding and confirm:
-  - `portal_access` has 1 new row with non-null `invite_token`.
-  - `email_queue` has 1 welcome email whose body contains `/auth/portal-invite?token=`.
-  - `audit_log` shows no `portal_access_failed`.
-- Confirm Bassage Eyes Ltd backfill: `portal_access.user_id` is set, `status='accepted'`, and the existing client login now lands in the practice's workspace instead of the "link an accountant" screen.
+1. Create `public.profiles`:
+   - `id uuid primary key references auth.users(id) on delete cascade`
+   - `email text`, `first_name text`, `last_name text`, `avatar_url text`
+   - `created_at`, `updated_at` with the standard trigger
+   - GRANTs: `select` to `authenticated`; `update` to `authenticated` (own row only); `all` to `service_role`
+   - RLS: every authenticated user can `select` any profile inside their organization (joined via `organization_users`), and `update` only their own row.
+
+2. Trigger `on auth.users insert` → insert into `public.profiles` using `raw_user_meta_data->>'first_name'`, `last_name`, plus `email`. Trigger `on auth.users update of email` → keep `profiles.email` in sync.
+
+3. Backfill: insert one row per existing `auth.users` row that isn't already in `profiles`, pulling names from `raw_user_meta_data` and falling back to email.
+
+4. Leave the existing component queries alone — `profiles:user_id ( ... )` will start resolving once the table exists with a matching FK, so the dropdowns, team page, my-profile page, and staff variance table all start showing real names with no further code changes.
+
+5. While verifying, make `StaffAssignmentField` show only `partner`/`owner`/`admin` roles in the "Partner in Charge" dropdown and all roles in "Staff in Charge" (so the owner who set up the practice automatically appears as a valid Partner option — that's the specific case the user hit).
+
+### Technical notes
+
+- No edge function changes.
+- No changes to `companies` schema (UTR and both auth-code columns already exist).
+- Single migration for the `profiles` table + trigger + backfill + RLS + grants.
+- Frontend edits limited to `src/pages/CompanyDetail.tsx` (add the two inline edits) and `src/components/company/StaffAssignmentField.tsx` (filter roles for the Partner field).
+
+### Verification before declaring done
+
+- Re-query `profiles` and confirm one row per `auth.users` row.
+- Open Company → Practice Management: Partner in Charge dropdown lists the owner.
+- Assign a partner, reload page, confirm persistence.
+- Edit UTR inline, reload, confirm persistence; same for Auth Code.
+- Team page (`PermissionsSettings`) shows real names instead of "Unknown".
