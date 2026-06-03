@@ -1,52 +1,59 @@
-I’ve audited the current failure and I agree this should have been caught before the previous fix was presented as complete.
+## Audit Of Every Step In "Approve & Create Client"
 
-## What Is Wrong
+When the approval RPC runs, the `onboarding_applications` row is UPDATEd to `status='approved'`. That fires five triggers, plus the RPC body inserts into several tables. I checked every column, every CHECK constraint, every status-transition trigger, and every nested function call against the live schema.
 
-The approval RPC is out of sync with the current database schema.
+### 1. Trigger: `notify_onboarding_approved` — BROKEN (current error)
+Reads `organizations.custom_domain`. That column does not exist on the `organizations` table (verified via `information_schema.columns`). This is what aborts the transaction with `column "custom_domain" does not exist`.
+**Fix:** rewrite the trigger to drop the lookup and hard-code `https://client.accountancyos.com` (same URL `lifecycle_grant_portal_access` already uses).
 
-1. **Immediate Error In Your Screenshot**
-   - `lifecycle_approve_onboarding` tries to insert `engagement_id` into `public.jobs`.
-   - The live `jobs` table no longer has an `engagement_id` column.
-   - That is why approval fails with: `column "engagement_id" of relation "jobs" does not exist`.
+### 2. Trigger: `auto_verify_aml_on_approval` — OK
+Already corrected in the last migration. Sets `aml_status='verified'`, which matches the `onboarding_applications_aml_status_check` CHECK (`pending|verified|failed|manual_review`).
 
-2. **Additional Errors That Would Happen Next**
-   The same job insert also uses invalid/currently incompatible values:
-   - Inserts `name` instead of required `job_name`.
-   - Uses job status `not_started`, but the live constraint expects values like `blank`, `records_requested`, `records_received`, etc.
-   - Uses priority `medium`, but the live constraint expects `low`, `normal`, `high`, or `critical`.
+### 3. Trigger: `link_onboarding_documents_on_approval` — OK
+Updates `onboarding_documents.client_id` / `company_id`. Both columns exist.
 
-3. **AML Trigger Is Still Wrong**
-   - The earlier AML constraint was corrected to allow `verified`.
-   - But the existing `auto_verify_aml_on_approval` trigger still sets AML to `passed`.
-   - That means once the job insert is fixed, approval may then fail again on AML unless this trigger is fixed too.
+### 4. Trigger: `notify_onboarding_for_review` — OK
+Only fires when status transitions to `for_review`, not `approved`. Not on this path.
 
-## Fix Plan
+### 5. Trigger: `tg_onboarding_status_audit` — OK
+Inserts into `onboarding_events` with required columns; all present.
 
-1. **Replace The Approval RPC Safely**
-   - Update `public.lifecycle_approve_onboarding` so it matches the live schema.
-   - Remove `engagement_id` from `jobs` inserts.
-   - Insert `job_name` and optionally mirror the same value into nullable `name` for compatibility.
-   - Use valid job status `blank`.
-   - Use valid priority `normal`.
-   - Keep `engagement_id` only where it belongs, such as engagement records and deadline records.
+### 6. RPC body — `lifecycle_approve_onboarding`
 
-2. **Make Approval Idempotent Where Practical**
-   - Reuse an existing engagement for the quote/service/entity when one already exists.
-   - Reuse an existing job for the same organization, entity, service type, and period label where possible.
-   - This avoids duplicate jobs/engagements if quote acceptance already created records before client approval.
+| Step | Table | Verified against live schema |
+|------|-------|------------------------------|
+| Update / Insert `clients` | clients | All referenced columns exist (`utr`, `aml_verified_by`, `aml_expiry_date`, etc.). `status='active'` matches `clients_status_check` |
+| Update / Insert `companies` | companies | All columns exist. `status='active'` matches `companies_status_check` |
+| Insert `engagements` | engagements | `frequency` ∈ {monthly, one_off} matches `engagements_frequency_check`. `status='active'` matches `engagements_status_check`. `client_id OR company_id` satisfies `engagements_check` |
+| Insert `jobs` | jobs | `status='blank'` matches `chk_jobs_status`. `priority='normal'` matches `jobs_priority_check`. `automation_source='template'` matches `jobs_automation_source_check`. `job_status_transition_check` trigger is BEFORE UPDATE only, so insert with `blank` is allowed |
+| Insert `email_queue` | email_queue | `status='pending'` ✓, `context` left NULL (CHECK allows NULL) ✓, `provider` left NULL ✓ |
+| Insert `client_tasks` | client_tasks | `status='not_started'` matches `client_tasks_status_check`. `visibility='client_visible'` matches `client_tasks_visibility_check`. `client_or_company_required` CHECK satisfied (only one of v_client_id / v_company_id is set in each path) |
+| Insert `audit_log` | audit_log | columns present |
+| Update `onboarding_applications` | columns `approved_at`, `approved_by`, `aml_expiry_date`, `aml_documents_migrated`, `status` all exist; `status='approved'` matches CHECK |
 
-3. **Fix The AML Approval Trigger**
-   - Replace `auto_verify_aml_on_approval` so it writes `verified`, not `passed`.
-   - Keep `aml_verified_at` populated on approval.
-   - Confirm the trigger and the table constraint use the same canonical AML statuses.
+### 7. Nested call: `lifecycle_grant_portal_access` — OK
+- Insert `portal_access`: `status='invited'` ✓, `client_id XOR company_id` ✓.
+- Insert `email_queue`: `status='pending'` ✓, context NULL ✓.
+- Insert `audit_log`: ✓.
+- This call is wrapped in `BEGIN/EXCEPTION WHEN OTHERS` in the RPC, so even a failure here would not abort approval (it would only log).
 
-4. **Post-Fix Verification**
-   - Re-check the live `jobs`, `deadlines`, `onboarding_applications`, and trigger schemas.
-   - Run SQL assertions to verify the approval RPC no longer references missing columns or invalid enum/check values.
-   - Check the browser/network signal for the approval action after the change.
-   - Run targeted searches for other backend functions still inserting invalid job fields or AML statuses.
+### 8. Notifications insert (inside `notify_onboarding_approved`, after fix)
+`type='onboarding_approved'` — `notifications.type` has no CHECK constraint.
+`entity_type='onboarding'` matches `notifications_entity_type_check` (which already lists `'onboarding'`).
 
-5. **Going Forward QA Standard**
-   - For each fix, I will audit the full click path, not only the first error.
-   - I will check database constraints, triggers, RPCs, frontend calls, and likely next-failure points before saying a flow is fixed.
-   - I will only report completion after validating the relevant runtime signal, not merely after applying a migration.
+## Conclusion
+
+After fixing trigger #1, every column reference, every CHECK constraint, and every transition rule along the full approval path validates against the live schema. No other latent failures detected.
+
+## Migration
+
+Single trigger replacement — body identical to the current version except the `v_portal_url` lookup is removed and replaced with the canonical client portal URL.
+
+## Post-Migration Verification
+
+1. Re-run the live `pg_proc` scan for any other function bodies referencing nonexistent columns (`custom_domain`, `engagement_id` on jobs, AML `passed`, etc.) to confirm none remain.
+2. Click **Approve & Create Client** in the preview; confirm no error toast, and that:
+   - `onboarding_applications.status = 'approved'`
+   - a `clients` or `companies` row is active
+   - rows appear in `engagements`, `jobs`, `portal_access`, `email_queue` (welcome + portal invite), `notifications`.
+3. Report back only after those rows are observed.
