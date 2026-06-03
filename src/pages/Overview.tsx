@@ -5,6 +5,7 @@ import { DeadlineWidget } from "@/components/dashboard/DeadlineWidget";
 import { OverdueActionsPanel } from "@/components/dashboard/OverdueActionsPanel";
 import { StaffVarianceTable } from "@/components/dashboard/StaffVarianceTable";
 import { FeeAggregationPanel } from "@/components/dashboard/FeeAggregationPanel";
+import { OnboardingPipelineWidget } from "@/components/dashboard/OnboardingPipelineWidget";
 import { useCurrentUserRole } from "@/hooks/usePermissions";
 import { roleIsAtLeast } from "@/lib/permissions";
 
@@ -31,6 +32,7 @@ const Overview = () => {
             <DeadlineWidget />
           </div>
           <div className="space-y-6">
+            <OnboardingPipelineWidget />
             {isOwnerOrAdmin && <FeeAggregationPanel />}
             {isOwnerOrAdmin && <StaffVarianceTable />}
           </div>
