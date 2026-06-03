@@ -93,15 +93,12 @@ export function ServiceStatusDashboard({ clientId, companyId }: Props) {
                       <p className="font-medium truncate">
                         {eng.services_catalog?.name || "Service"}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {eng.frequency} · since {eng.start_date}
-                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {eng.latestJob && (
                       <div className="text-right text-xs text-muted-foreground">
-                        <div>Latest job: <span className="font-medium text-foreground">{eng.latestJob.status}</span></div>
+                        <div>Latest Job: <span className="font-medium text-foreground">{!eng.latestJob.status || eng.latestJob.status === "blank" ? "None" : formatStatus(eng.latestJob.status)}</span></div>
                         {eng.latestJob.filing_deadline && <div>Due {eng.latestJob.filing_deadline}</div>}
                       </div>
                     )}
