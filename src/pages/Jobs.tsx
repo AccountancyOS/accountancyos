@@ -248,6 +248,22 @@ export default function Jobs() {
           />
           
           <div className="flex items-center gap-2 ml-auto">
+            {companyFilter && (
+              <Badge variant="secondary" className="gap-1">
+                Company: {companyFilterRecord?.company_name || "Selected"}
+                <button
+                  type="button"
+                  className="ml-1 hover:text-foreground"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.delete("company");
+                    setSearchParams(next);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             <SavedViewsDropdown
               savedViews={savedViews}
               currentViewId={currentViewId}
