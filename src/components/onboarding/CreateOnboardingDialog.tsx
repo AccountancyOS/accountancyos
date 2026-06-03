@@ -3,6 +3,7 @@ import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -40,6 +41,11 @@ const CreateOnboardingDialog = ({
   const navigate = useNavigate();
   const [applicationType, setApplicationType] = useState<"individual" | "company">("individual");
   const [leadId, setLeadId] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [companyNumber, setCompanyNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const { data: leads } = useQuery({
@@ -60,32 +66,53 @@ const CreateOnboardingDialog = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!organization?.id) {
+      toast({ title: "No organization selected", variant: "destructive" });
+      return;
+    }
+
+    // Manual mode validation (no lead picked)
+    if (!leadId) {
+      if (applicationType === "individual" && (!firstName.trim() || !lastName.trim() || !email.trim())) {
+        toast({ title: "Missing details", description: "First name, last name and email are required.", variant: "destructive" });
+        return;
+      }
+      if (applicationType === "company" && (!companyName.trim() || !email.trim())) {
+        toast({ title: "Missing details", description: "Company name and email are required.", variant: "destructive" });
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     try {
-      // Get lead details
-      const { data: lead, error: leadError } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("id", leadId)
-        .single();
+      let lead: { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null = null;
+      if (leadId) {
+        const { data, error: leadError } = await supabase
+          .from("leads")
+          .select("first_name, last_name, email, phone")
+          .eq("id", leadId)
+          .single();
+        if (leadError) throw leadError;
+        lead = data;
+      }
 
-      if (leadError) throw leadError;
+      const payload = {
+        organization_id: organization.id,
+        lead_id: leadId || null,
+        application_type: applicationType,
+        status: "in_progress" as const,
+        first_name: applicationType === "individual" ? (lead?.first_name ?? (firstName.trim() || null)) : null,
+        last_name: applicationType === "individual" ? (lead?.last_name ?? (lastName.trim() || null)) : null,
+        company_name: applicationType === "company" ? (companyName.trim() || (lead ? `${lead.first_name ?? ""} ${lead.last_name ?? ""} Ltd`.trim() : null)) : null,
+        company_number: applicationType === "company" ? (companyNumber.trim() || null) : null,
+        email: lead?.email ?? (email.trim() || null),
+        phone: lead?.phone ?? null,
+      };
 
-      // Create onboarding application
       const { data: application, error: appError } = await supabase
         .from("onboarding_applications")
-        .insert({
-          organization_id: organization!.id,
-          lead_id: leadId,
-          application_type: applicationType,
-          first_name: applicationType === "individual" ? lead.first_name : null,
-          last_name: applicationType === "individual" ? lead.last_name : null,
-          company_name: applicationType === "company" ? `${lead.first_name} ${lead.last_name} Ltd` : null,
-          email: lead.email,
-          phone: lead.phone,
-          status: "pending",
-        })
+        .insert(payload)
         .select()
         .single();
 
@@ -102,7 +129,7 @@ const CreateOnboardingDialog = ({
     } catch (error: any) {
       toast({
         title: "Error creating application",
-        description: error.message,
+        description: error?.message || error?.details || "Unknown error",
         variant: "destructive",
       });
     } finally {
@@ -149,7 +176,7 @@ const CreateOnboardingDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="lead">Select Lead *</Label>
+            <Label htmlFor="lead">Select Lead (Optional)</Label>
             <Select value={leadId} onValueChange={setLeadId} required>
               <SelectTrigger>
                 <SelectValue placeholder="Select a won lead..." />
@@ -163,9 +190,43 @@ const CreateOnboardingDialog = ({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Only leads marked as "Won" in CRM are available
+              Only leads marked as "Won" in CRM are listed. Leave blank to enter details manually.
             </p>
           </div>
+
+          {!leadId && applicationType === "individual" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="first_name">First Name *</Label>
+                <Input id="first_name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="last_name">Last Name *</Label>
+                <Input id="last_name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {!leadId && applicationType === "company" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="company_name">Company Name *</Label>
+                <Input id="company_name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company_number">Company Number</Label>
+                <Input id="company_number" value={companyNumber} onChange={(e) => setCompanyNumber(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Contact Email *</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button
@@ -176,7 +237,7 @@ const CreateOnboardingDialog = ({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!leadId || submitting}>
+            <Button type="submit" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

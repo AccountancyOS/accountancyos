@@ -64,6 +64,7 @@ import EngagementLetterPreview from "./pages/EngagementLetterPreview";
 import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import PublicQuoteView from "./pages/PublicQuoteView";
+import PublicOnboarding from "./pages/PublicOnboarding";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
@@ -142,6 +143,7 @@ const App = () => (
               element={<ConfirmEmail />}
             />
             <Route path="/q/:token" element={<PublicQuoteView />} />
+            <Route path="/onboard/:applicationId" element={<PublicOnboarding />} />
             <Route
               path="/color-comparison"
               element={<ColorComparison />}
