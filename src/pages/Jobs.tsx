@@ -58,6 +58,20 @@ export default function Jobs() {
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
   const [currentViewId, setCurrentViewId] = useState<string | undefined>();
 
+  const { data: companyFilterRecord } = useQuery({
+    queryKey: ["company-filter-name", companyFilter],
+    queryFn: async () => {
+      if (!companyFilter) return null;
+      const { data } = await supabase
+        .from("companies")
+        .select("company_name")
+        .eq("id", companyFilter)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!companyFilter,
+  });
+
   const { data: jobs, isLoading } = useQuery({
     queryKey: [...queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>), companyFilter],
     queryFn: async () => {
