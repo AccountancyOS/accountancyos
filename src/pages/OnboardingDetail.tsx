@@ -27,6 +27,7 @@ import EngagementLetterSection from "@/components/onboarding/EngagementLetterSec
 import { OnboardingQuestionnaireSection } from "@/components/onboarding/OnboardingQuestionnaireSection";
 import { AMLVerificationPanel } from "@/components/onboarding/AMLVerificationPanel";
 import { ProfessionalClearanceSection } from "@/components/onboarding/ProfessionalClearanceSection";
+import OnboardingEventTimeline from "@/components/onboarding/OnboardingEventTimeline";
 import {
   Select,
   SelectContent,
@@ -812,6 +813,9 @@ const OnboardingDetail = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Audit Timeline */}
+            <OnboardingEventTimeline applicationId={application.id} />
           </div>
         </div>
       </div>
