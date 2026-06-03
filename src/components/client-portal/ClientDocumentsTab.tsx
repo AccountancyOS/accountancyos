@@ -755,6 +755,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                         )}
                         Download
                       </DropdownMenuItem>
+                      {doc.source !== "onboarding" && (
                       <DropdownMenuItem 
                         onClick={() => toggleVisibilityMutation.mutate({ 
                           docIds: [doc.id], 
@@ -773,14 +774,17 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                           </>
                         )}
                       </DropdownMenuItem>
-                      {doc.signature_required && !doc.signed_at && (
+                      )}
+                      {doc.source !== "onboarding" && doc.signature_required && !doc.signed_at && (
                         <DropdownMenuItem onClick={() => setSignatureDoc(doc)}>
                           <PenLine className="h-4 w-4 mr-2" />
                           Sign Document
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      {doc.source !== "onboarding" && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
                         className="text-destructive"
                         onClick={() => {
                           setSelectedDocs([doc.id]);
@@ -789,7 +793,9 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
-                      </DropdownMenuItem>
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
