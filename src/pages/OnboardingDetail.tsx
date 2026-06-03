@@ -365,10 +365,20 @@ const OnboardingDetail = () => {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setShowSendBackDialog(true)}>
-                    <Send className="mr-2 h-4 w-4" />
-                    Send Back to Client
-                  </Button>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => setShowSendBackDialog(true)}>
+                      <Send className="mr-2 h-4 w-4" />
+                      Send Back
+                    </Button>
+                    <Button size="sm" onClick={handleApproveClick} disabled={!canApprove || approving}>
+                      {approving ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="mr-2 h-4 w-4" />
+                      )}
+                      Approve & Activate
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}
