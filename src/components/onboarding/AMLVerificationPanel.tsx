@@ -80,7 +80,7 @@ export function AMLVerificationPanel({
   const downloadDocument = async (storagePath: string, fileName: string) => {
     try {
       const { data, error } = await supabase.storage
-        .from("documents")
+        .from("onboarding-documents")
         .download(storagePath);
 
       if (error) throw error;
