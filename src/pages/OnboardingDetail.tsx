@@ -874,6 +874,51 @@ const OnboardingDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Send Back Dialog */}
+      <AlertDialog open={showSendBackDialog} onOpenChange={setShowSendBackDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send back to client</AlertDialogTitle>
+            <AlertDialogDescription>
+              Choose the step the client should revisit and add a short note. They will receive an email with a link to resume.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2 space-y-3">
+            <div>
+              <Label>Step to revisit</Label>
+              <Select value={sendBackStep} onValueChange={setSendBackStep}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="engagement">Engagement letter</SelectItem>
+                  <SelectItem value="aml">AML documents</SelectItem>
+                  <SelectItem value="billing">Billing</SelectItem>
+                  <SelectItem value="portal">Portal details</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="send-back-reason">Feedback for the client</Label>
+              <Textarea
+                id="send-back-reason"
+                className="mt-2"
+                value={sendBackReason}
+                onChange={(e) => setSendBackReason(e.target.value)}
+                placeholder="e.g. proof of address is older than 3 months — please re-upload"
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSendBack} disabled={sendingBack}>
+              {sendingBack ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Send Back
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };
