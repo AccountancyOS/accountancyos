@@ -17102,6 +17102,16 @@ export type Database = {
         Returns: undefined
       }
       reissue_quote: { Args: { p_quote_id: string }; Returns: string }
+      resolve_company_director: {
+        Args: { p_company_id: string; p_lead_id: string; p_org_id: string }
+        Returns: {
+          email: string
+          first_name: string
+          last_name: string
+          phone: string
+          source: string
+        }[]
+      }
       resolve_engagement_letter_variant: {
         Args: {
           p_client_type: string
