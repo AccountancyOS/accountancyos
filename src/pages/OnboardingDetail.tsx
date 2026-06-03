@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Check, X, FileText, Users, Building2, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, Check, X, FileText, Users, Building2, AlertTriangle, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
 import { emitOnboardingApproved, emitClientOnboarded } from "@/lib/automation-triggers";
 import {
   AlertDialog,
@@ -27,6 +27,13 @@ import EngagementLetterSection from "@/components/onboarding/EngagementLetterSec
 import { OnboardingQuestionnaireSection } from "@/components/onboarding/OnboardingQuestionnaireSection";
 import { AMLVerificationPanel } from "@/components/onboarding/AMLVerificationPanel";
 import { ProfessionalClearanceSection } from "@/components/onboarding/ProfessionalClearanceSection";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ApprovalResult {
   onboarding_id: string;
@@ -56,11 +63,16 @@ const OnboardingDetail = () => {
   const [application, setApplication] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [engagementLetter, setEngagementLetter] = useState<any>(null);
+  const [snapshot, setSnapshot] = useState<any>(null);
   
   // Modal states
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showAmlWarningDialog, setShowAmlWarningDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [showSendBackDialog, setShowSendBackDialog] = useState(false);
+  const [sendBackStep, setSendBackStep] = useState<string>("engagement");
+  const [sendBackReason, setSendBackReason] = useState("");
+  const [sendingBack, setSendingBack] = useState(false);
 
   useEffect(() => {
     if (organization && id) {
@@ -76,13 +88,14 @@ const OnboardingDetail = () => {
         .from("onboarding_applications")
         .select(`
           *,
-          quote:quotes(quote_number, sent_at, accepted_at)
+          quote:quotes(quote_number, sent_at, accepted_at, accepted_snapshot, total_amount, billing_frequency)
         `)
         .eq("id", id)
         .single();
 
       if (error) throw error;
       setApplication(data);
+      setSnapshot((data?.quote as any)?.accepted_snapshot ?? null);
     } catch (error: any) {
       toast({
         title: "Error loading application",
@@ -91,6 +104,26 @@ const OnboardingDetail = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendBack = async () => {
+    setSendingBack(true);
+    try {
+      const { error } = await supabase.rpc("lifecycle_send_back_onboarding" as any, {
+        p_application_id: id,
+        p_step: sendBackStep,
+        p_reason: sendBackReason,
+      });
+      if (error) throw error;
+      toast({ title: "Sent back to client", description: "The client has been notified by email." });
+      setShowSendBackDialog(false);
+      setSendBackReason("");
+      loadApplication();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setSendingBack(false);
     }
   };
 
@@ -313,6 +346,46 @@ const OnboardingDetail = () => {
           </Button>
 
           <div className="grid gap-6">
+            {/* For Review banner */}
+            {application.status === "for_review" && (
+              <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800">
+                <CardContent className="py-4 flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <ClipboardList className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                        Ready for your review
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
+                        The client has completed all onboarding steps
+                        {application.submitted_for_review_at
+                          ? ` on ${new Date(application.submitted_for_review_at).toLocaleString()}`
+                          : ""}
+                        . Verify the items below before marking complete.
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowSendBackDialog(true)}>
+                    <Send className="mr-2 h-4 w-4" />
+                    Send Back to Client
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {application.status === "needs_client_action" && application.review_feedback && (
+              <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/40 dark:border-orange-800">
+                <CardContent className="py-4">
+                  <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
+                    Sent back to client
+                  </p>
+                  <p className="text-xs text-orange-800 dark:text-orange-200 mt-1">
+                    {application.review_feedback}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Header Card */}
             <Card>
               <CardHeader>
@@ -347,6 +420,92 @@ const OnboardingDetail = () => {
                 </div>
               </CardHeader>
             </Card>
+
+            {/* Commercial Snapshot */}
+            {snapshot && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Commercial Snapshot</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="text-sm text-muted-foreground">
+                    From accepted quote {application.quote?.quote_number}
+                    {application.quote?.accepted_at
+                      ? ` on ${new Date(application.quote.accepted_at).toLocaleDateString()}`
+                      : ""}
+                  </div>
+                  <div className="rounded-md border divide-y">
+                    {(snapshot.lines || []).map((line: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <div>
+                          <div className="font-medium">{line.description || line.service_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {line.billing_frequency || "one-off"}
+                            {line.quantity ? ` · qty ${line.quantity}` : ""}
+                          </div>
+                        </div>
+                        <div className="font-mono">
+                          £{Number(line.amount ?? line.unit_amount ?? 0).toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between text-sm pt-2 border-t">
+                    <span className="text-muted-foreground">Total</span>
+                    <span className="font-semibold">
+                      £{Number(snapshot.total ?? application.quote?.total_amount ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Billing & Portal status (visible once for review) */}
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" /> Billing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status</span>
+                    <Badge variant={application.billing_status === "completed" ? "default" : "secondary"}>
+                      {(application.billing_status || "not_started").replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  {application.billing_amount != null && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Amount</span>
+                      <span className="font-mono">£{Number(application.billing_amount).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {application.stripe_checkout_session_id && (
+                    <div className="text-xs text-muted-foreground break-all">
+                      Session: {application.stripe_checkout_session_id}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Mail className="h-4 w-4" /> Portal
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Portal email</span>
+                    <span className="font-medium">{application.portal_email || application.email || "—"}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A portal account will be created when you mark this application complete.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Status Stepper */}
             <Card>
