@@ -12,6 +12,7 @@ import { WorkpaperDocumentPanel } from "@/components/workpaper/WorkpaperDocument
 import { WorkpaperStatusActions } from "@/components/workpaper/WorkpaperStatusActions";
 import { AddAdjustmentDialog } from "@/components/workpaper/AddAdjustmentDialog";
 import { WorkpaperDiffView } from "@/components/workpaper/WorkpaperDiffView";
+import { JobWorkpaperFilePanel } from "@/components/workpaper/JobWorkpaperFilePanel";
 
 interface JobWorkpaperTabProps {
   jobId: string;
@@ -209,14 +210,7 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
 
   if (!workpaper) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <FileSpreadsheet className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">
-            Workpaper will be created from Trial Balance snapshot or questionnaire
-          </p>
-        </CardContent>
-      </Card>
+      <JobWorkpaperFilePanel jobId={jobId} />
     );
   }
 
@@ -227,6 +221,8 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
 
   return (
     <div className="space-y-6">
+      <JobWorkpaperFilePanel jobId={jobId} />
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
