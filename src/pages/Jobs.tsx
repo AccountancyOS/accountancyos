@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useAuth } from "@/lib/auth-context";
@@ -38,6 +38,8 @@ export default function Jobs() {
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const companyFilter = searchParams.get("company");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   
   const {
@@ -56,8 +58,22 @@ export default function Jobs() {
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
   const [currentViewId, setCurrentViewId] = useState<string | undefined>();
 
+  const { data: companyFilterRecord } = useQuery({
+    queryKey: ["company-filter-name", companyFilter],
+    queryFn: async () => {
+      if (!companyFilter) return null;
+      const { data } = await supabase
+        .from("companies")
+        .select("company_name")
+        .eq("id", companyFilter)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!companyFilter,
+  });
+
   const { data: jobs, isLoading } = useQuery({
-    queryKey: queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>),
+    queryKey: [...queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>), companyFilter],
     queryFn: async () => {
       if (!organization?.id) return [];
       
@@ -69,6 +85,10 @@ export default function Jobs() {
           companies!fk_jobs_company (company_name)
         `)
         .eq("organization_id", organization.id);
+
+      if (companyFilter) {
+        query = query.eq("company_id", companyFilter);
+      }
 
       // Apply status filter
       if (filters.status?.length) {
@@ -228,6 +248,22 @@ export default function Jobs() {
           />
           
           <div className="flex items-center gap-2 ml-auto">
+            {companyFilter && (
+              <Badge variant="secondary" className="gap-1">
+                Company: {companyFilterRecord?.company_name || "Selected"}
+                <button
+                  type="button"
+                  className="ml-1 hover:text-foreground"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.delete("company");
+                    setSearchParams(next);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             <SavedViewsDropdown
               savedViews={savedViews}
               currentViewId={currentViewId}
