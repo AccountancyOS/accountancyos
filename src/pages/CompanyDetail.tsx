@@ -251,6 +251,10 @@ const CompanyDetail = () => {
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="jobs" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden sm:inline">Jobs</span>
+            </TabsTrigger>
             <TabsTrigger value="cosec-jobs" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">CoSec Jobs</span>
