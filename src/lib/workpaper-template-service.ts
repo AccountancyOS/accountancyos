@@ -18,6 +18,11 @@ export interface WorkpaperTemplateRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  template_format?: string | null;
+  file_path?: string | null;
+  file_name?: string | null;
+  file_size_bytes?: number | null;
+  sheet_names?: string[] | null;
 }
 
 export interface JobWorkpaperInstance {
@@ -101,6 +106,11 @@ export async function upsertWorkpaperTemplate(
     description?: string;
     schema_json: any;
     is_default?: boolean;
+    template_format?: string;
+    file_path?: string;
+    file_name?: string;
+    file_size_bytes?: number;
+    sheet_names?: string[];
   }
 ): Promise<WorkpaperTemplateRow> {
   const user = (await supabase.auth.getUser()).data.user;
@@ -118,6 +128,11 @@ export async function upsertWorkpaperTemplate(
         schema_json: template.schema_json,
         is_default: template.is_default ?? false,
         version: newVersion,
+        template_format: template.template_format ?? undefined,
+        file_path: template.file_path ?? undefined,
+        file_name: template.file_name ?? undefined,
+        file_size_bytes: template.file_size_bytes ?? undefined,
+        sheet_names: template.sheet_names ?? undefined,
       })
       .eq("id", template.id)
       .eq("organization_id", organizationId)
@@ -150,6 +165,11 @@ export async function upsertWorkpaperTemplate(
         version: 1,
         is_active: true,
         created_by: user?.id ?? null,
+        template_format: template.template_format ?? "xlsx",
+        file_path: template.file_path ?? null,
+        file_name: template.file_name ?? null,
+        file_size_bytes: template.file_size_bytes ?? null,
+        sheet_names: template.sheet_names ?? null,
       })
       .select()
       .single();
