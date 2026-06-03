@@ -11158,6 +11158,8 @@ export type Database = {
       onboarding_documents: {
         Row: {
           application_id: string
+          client_id: string | null
+          company_id: string | null
           created_at: string
           document_type: string
           file_name: string
@@ -11170,6 +11172,8 @@ export type Database = {
         }
         Insert: {
           application_id: string
+          client_id?: string | null
+          company_id?: string | null
           created_at?: string
           document_type: string
           file_name: string
@@ -11182,6 +11186,8 @@ export type Database = {
         }
         Update: {
           application_id?: string
+          client_id?: string | null
+          company_id?: string | null
           created_at?: string
           document_type?: string
           file_name?: string
@@ -11198,6 +11204,20 @@ export type Database = {
             columns: ["application_id"]
             isOneToOne: false
             referencedRelation: "onboarding_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "onboarding_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {

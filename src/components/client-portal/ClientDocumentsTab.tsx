@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { Shield } from "lucide-react";
 import { 
   Upload, 
   FileText, 
@@ -68,6 +69,10 @@ interface JobDocument {
   job_id: string;
   folder_id: string | null;
   jobs?: { name: string } | null;
+  // Identifies onboarding-sourced documents so download routes to the
+  // onboarding-documents storage bucket and edit/delete is disabled.
+  source?: "job" | "onboarding";
+  document_type?: string | null;
 }
 
 interface DocFolder {
@@ -184,36 +189,70 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
         .eq("organization_id", organization.id)
         .eq("client_id", clientId);
 
-      if (!jobs || jobs.length === 0) return [];
+      const jobIds = (jobs || []).map(j => j.id);
 
-      const jobIds = jobs.map(j => j.id);
-      
-      const { data, error } = await supabase
-        .from("job_documents")
-        .select(`
-          id,
-          file_name,
-          file_path,
-          file_size,
-          mime_type,
-          uploaded_at,
-          client_visible,
-          signature_required,
-          signed_at,
-          signed_by,
-          signature_typed_name,
-          archived,
-          job_id,
-          folder_id,
-          jobs:job_id (name)
-        `)
+      // Job documents (only fetch when there are jobs)
+      let jobDocs: JobDocument[] = [];
+      if (jobIds.length > 0) {
+        const { data, error } = await supabase
+          .from("job_documents")
+          .select(`
+            id,
+            file_name,
+            file_path,
+            file_size,
+            mime_type,
+            uploaded_at,
+            client_visible,
+            signature_required,
+            signed_at,
+            signed_by,
+            signature_typed_name,
+            archived,
+            job_id,
+            folder_id,
+            jobs:job_id (name)
+          `)
+          .eq("organization_id", organization.id)
+          .in("job_id", jobIds)
+          .eq("archived", false)
+          .order("uploaded_at", { ascending: false });
+        if (error) throw error;
+        jobDocs = ((data || []) as any[]).map((d) => ({ ...d, source: "job" as const }));
+      }
+
+      // Onboarding (AML) documents linked to this client after approval
+      const { data: onboardingDocs, error: obErr } = await supabase
+        .from("onboarding_documents")
+        .select("id,file_name,file_path,file_size,mime_type,created_at,document_type")
         .eq("organization_id", organization.id)
-        .in("job_id", jobIds)
-        .eq("archived", false)
-        .order("uploaded_at", { ascending: false });
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+      if (obErr) throw obErr;
 
-      if (error) throw error;
-      return (data || []) as JobDocument[];
+      const onboardingMapped: JobDocument[] = (onboardingDocs || []).map((d: any) => ({
+        id: d.id,
+        file_name: d.file_name,
+        file_path: d.file_path,
+        file_size: d.file_size ?? null,
+        mime_type: d.mime_type ?? null,
+        uploaded_at: d.created_at,
+        client_visible: true,
+        signature_required: false,
+        signed_at: null,
+        signed_by: null,
+        signature_typed_name: null,
+        archived: false,
+        job_id: "",
+        folder_id: null,
+        jobs: { name: "Onboarding / AML" },
+        source: "onboarding",
+        document_type: d.document_type ?? null,
+      }));
+
+      return [...jobDocs, ...onboardingMapped].sort(
+        (a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+      );
     },
     enabled: !!organization?.id && !!clientId,
   });
@@ -322,7 +361,28 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
 
   const handleDownload = async (doc: JobDocument) => {
     setDownloading(doc.id);
-    const { success, error } = await downloadDocument(doc.file_path, doc.file_name);
+    let result: { success: boolean; error?: string };
+    if (doc.source === "onboarding") {
+      const { data, error } = await supabase.storage
+        .from("onboarding-documents")
+        .download(doc.file_path);
+      if (error || !data) {
+        result = { success: false, error: error?.message || "Download failed" };
+      } else {
+        const url = URL.createObjectURL(data);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = doc.file_name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        result = { success: true };
+      }
+    } else {
+      result = await downloadDocument(doc.file_path, doc.file_name);
+    }
+    const { success, error } = result;
     if (!success) {
       toast({ title: "Download failed", description: error, variant: "destructive" });
     }
@@ -627,14 +687,24 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                   key={doc.id}
                   className="flex items-center gap-4 px-3 py-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
                 >
-                  <Checkbox
-                    checked={selectedDocs.includes(doc.id)}
-                    onCheckedChange={() => toggleSelect(doc.id)}
-                  />
+                  {doc.source === "onboarding" ? (
+                    <div className="w-4" />
+                  ) : (
+                    <Checkbox
+                      checked={selectedDocs.includes(doc.id)}
+                      onCheckedChange={() => toggleSelect(doc.id)}
+                    />
+                  )}
                   <div className="flex-1 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium truncate">{doc.file_name}</span>
-                    {doc.client_visible && (
+                    {doc.source === "onboarding" && (
+                      <Badge variant="secondary" className="text-xs shrink-0">
+                        <Shield className="h-3 w-3 mr-1" />
+                        AML
+                      </Badge>
+                    )}
+                    {doc.source !== "onboarding" && doc.client_visible && (
                       <Badge variant="outline" className="text-xs shrink-0">
                         <Eye className="h-3 w-3 mr-1" />
                         Visible
@@ -685,6 +755,7 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                         )}
                         Download
                       </DropdownMenuItem>
+                      {doc.source !== "onboarding" && (
                       <DropdownMenuItem 
                         onClick={() => toggleVisibilityMutation.mutate({ 
                           docIds: [doc.id], 
@@ -703,14 +774,17 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                           </>
                         )}
                       </DropdownMenuItem>
-                      {doc.signature_required && !doc.signed_at && (
+                      )}
+                      {doc.source !== "onboarding" && doc.signature_required && !doc.signed_at && (
                         <DropdownMenuItem onClick={() => setSignatureDoc(doc)}>
                           <PenLine className="h-4 w-4 mr-2" />
                           Sign Document
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      {doc.source !== "onboarding" && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
                         className="text-destructive"
                         onClick={() => {
                           setSelectedDocs([doc.id]);
@@ -719,7 +793,9 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
-                      </DropdownMenuItem>
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

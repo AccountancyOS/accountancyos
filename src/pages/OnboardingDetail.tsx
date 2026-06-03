@@ -4,13 +4,12 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Check, X, FileText, Users, Building2, AlertTriangle, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
+import { Loader2, ArrowLeft, Check, X, Users, Building2, AlertTriangle, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
 import { emitOnboardingApproved, emitClientOnboarded } from "@/lib/automation-triggers";
 import {
   AlertDialog,
@@ -24,9 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
 import EngagementLetterSection from "@/components/onboarding/EngagementLetterSection";
-import { OnboardingQuestionnaireSection } from "@/components/onboarding/OnboardingQuestionnaireSection";
 import { AMLVerificationPanel } from "@/components/onboarding/AMLVerificationPanel";
-import { ProfessionalClearanceSection } from "@/components/onboarding/ProfessionalClearanceSection";
 import OnboardingEventTimeline from "@/components/onboarding/OnboardingEventTimeline";
 import {
   Select,
@@ -58,13 +55,13 @@ const OnboardingDetail = () => {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [application, setApplication] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [engagementLetter, setEngagementLetter] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<any>(null);
+  const [services, setServices] = useState<Record<string, { name: string; billing_frequency: string | null }>>({});
   
   // Modal states
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -96,7 +93,26 @@ const OnboardingDetail = () => {
 
       if (error) throw error;
       setApplication(data);
-      setSnapshot((data?.quote as any)?.accepted_snapshot ?? null);
+      const snap = (data?.quote as any)?.accepted_snapshot ?? null;
+      setSnapshot(snap);
+      const serviceIds: string[] = Array.from(
+        new Set(((snap?.lines ?? []) as any[])
+          .map((l) => l?.service_id)
+          .filter((x): x is string => !!x))
+      );
+      if (serviceIds.length > 0) {
+      const { data: svc } = await supabase
+          .from("services_catalog")
+          .select("id,name")
+          .in("id", serviceIds);
+        const map: Record<string, { name: string; billing_frequency: string | null }> = {};
+        (svc ?? []).forEach((s: any) => {
+          map[s.id] = { name: s.name, billing_frequency: null };
+        });
+        setServices(map);
+      } else {
+        setServices({});
+      }
     } catch (error: any) {
       toast({
         title: "Error loading application",
@@ -155,60 +171,6 @@ const OnboardingDetail = () => {
       setEngagementLetter(data);
     } catch (error: any) {
       console.error("Error loading engagement letter:", error);
-    }
-  };
-
-  const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    documentType: string
-  ) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-
-    const file = e.target.files[0];
-    setUploading(true);
-
-    try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${organization!.id}/${id}/${documentType}-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("onboarding-documents")
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { error: docError } = await supabase
-        .from("onboarding_documents")
-        .insert({
-          organization_id: organization!.id,
-          application_id: id!,
-          document_type: documentType,
-          file_name: file.name,
-          file_path: fileName,
-          file_size: file.size,
-          mime_type: file.type,
-        });
-
-      if (docError) throw docError;
-
-      // Update application document flags
-      const updateField = `${documentType}_uploaded`;
-      await supabase
-        .from("onboarding_applications")
-        .update({ [updateField]: true })
-        .eq("id", id);
-
-      toast({ title: "Document uploaded successfully" });
-      loadDocuments();
-      loadApplication();
-    } catch (error: any) {
-      toast({
-        title: "Error uploading document",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -446,25 +408,37 @@ const OnboardingDetail = () => {
                       : ""}
                   </div>
                   <div className="rounded-md border divide-y">
-                    {(snapshot.lines || []).map((line: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div>
-                          <div className="font-medium">{line.description || line.service_name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {line.billing_frequency || "one-off"}
-                            {line.quantity ? ` · qty ${line.quantity}` : ""}
+                    {(snapshot.lines || []).map((line: any, idx: number) => {
+                      const svcName = line.service_id ? services[line.service_id]?.name : null;
+                      const name = line.description || svcName || line.service_name || "Service";
+                      const qty = Number(line.quantity ?? 1);
+                      const unit = Number(line.unit_price ?? line.unit_amount ?? line.amount ?? 0);
+                      const amount = Number(
+                        line.subtotal != null ? line.subtotal : unit * qty
+                      );
+                      const freq = String(line.billing_frequency || "one_off")
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                      return (
+                        <div key={idx} className="flex items-center justify-between px-3 py-2 text-sm">
+                          <div>
+                            <div className="font-medium">{name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {freq}
+                              {qty > 1 ? ` · × ${qty}` : ""}
+                            </div>
                           </div>
+                          <div className="font-mono">£{amount.toFixed(2)}</div>
                         </div>
-                        <div className="font-mono">
-                          £{Number(line.amount ?? line.unit_amount ?? 0).toFixed(2)}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="flex items-center justify-between text-sm pt-2 border-t">
                     <span className="text-muted-foreground">Total</span>
                     <span className="font-semibold">
-                      £{Number(snapshot.total ?? application.quote?.total_amount ?? 0).toFixed(2)}
+                      £{Number(
+                        snapshot?.totals?.subtotal ?? snapshot?.total ?? application.quote?.total_amount ?? 0
+                      ).toFixed(2)}
                     </span>
                   </div>
                 </CardContent>
@@ -535,17 +509,6 @@ const OnboardingDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Onboarding Questionnaire */}
-            <OnboardingQuestionnaireSection
-              onboardingId={id!}
-              organizationId={organization!.id}
-              questionnaireInstanceId={application.onboarding_questionnaire_instance_id}
-              questionnaireSubmittedAt={application.questionnaire_submitted_at}
-              recipientEmail={application.email}
-              recipientName={recipientName}
-              onQuestionnaireSent={loadApplication}
-            />
-
             <div className="grid gap-6 md:grid-cols-2">
               {/* Engagement Letter */}
               <EngagementLetterSection
@@ -584,149 +547,6 @@ const OnboardingDetail = () => {
                 onVerified={loadApplication}
               />
             </div>
-
-            {/* Professional Clearance */}
-            <ProfessionalClearanceSection
-              onboardingId={id!}
-              previousAccountantRequired={application.previous_accountant_required || false}
-              previousAccountantFirmName={application.previous_accountant_firm_name}
-              previousAccountantEmail={application.previous_accountant_email}
-              clearanceReceived={application.clearance_received || false}
-              clearanceReceivedAt={application.clearance_received_at}
-              clearanceNotes={application.clearance_notes}
-              onUpdate={loadApplication}
-            />
-
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Application Status Info */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Approval Requirements</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    {/* Engagement Letter - Required */}
-                    <div className="flex items-center justify-between p-3 rounded-md border">
-                      <span className="text-sm font-medium">Engagement Letter Signed</span>
-                      {engagementSigned ? (
-                        <Badge variant="default" className="bg-green-600">
-                          <Check className="h-3 w-3 mr-1" />
-                          Complete
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">
-                          <X className="h-3 w-3 mr-1" />
-                          Required
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* AML Documents - Recommended */}
-                    <div className="flex items-center justify-between p-3 rounded-md border">
-                      <span className="text-sm font-medium">AML Documents</span>
-                      {amlComplete ? (
-                        <Badge variant="default" className="bg-green-600">
-                          <Check className="h-3 w-3 mr-1" />
-                          Complete
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          Recommended
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {!engagementSigned && (
-                    <p className="text-xs text-muted-foreground">
-                      The engagement letter must be signed before you can approve this application.
-                    </p>
-                  )}
-
-                  {engagementSigned && !amlComplete && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      AML documents are incomplete. You can still approve, but it's recommended to collect them first.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Documents */}
-            <Card>
-              <CardHeader>
-                <CardTitle>AML Documents</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>ID Document</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.png"
-                        onChange={(e) => handleFileUpload(e, "id_document")}
-                        disabled={uploading}
-                      />
-                      {application.id_document_uploaded && (
-                        <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Proof of Address</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.png"
-                        onChange={(e) => handleFileUpload(e, "proof_of_address")}
-                        disabled={uploading}
-                      />
-                      {application.proof_of_address_uploaded && (
-                        <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Additional Documents</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.png"
-                        onChange={(e) => handleFileUpload(e, "other")}
-                        disabled={uploading}
-                      />
-                      {application.additional_documents_uploaded && (
-                        <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {documents.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <Label>Uploaded Files</Label>
-                    <div className="space-y-1">
-                      {documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center gap-2 text-sm text-muted-foreground"
-                        >
-                          <FileText className="h-4 w-4" />
-                          {doc.file_name}
-                          <Badge variant="outline" className="text-xs">
-                            {doc.document_type.replace(/_/g, " ")}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Actions */}
             {application.status !== "approved" && application.status !== "rejected" && (

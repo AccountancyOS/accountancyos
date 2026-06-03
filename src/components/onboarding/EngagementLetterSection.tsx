@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Eye, FileSignature, Clock, CheckCircle, Loader2, AlertCircle } from "lucide-react";
+import { Send, Eye, FileSignature, Clock, CheckCircle, Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 
 interface EngagementLetterSectionProps {
@@ -228,8 +228,20 @@ const EngagementLetterSection = ({
         </div>
 
         {/* Actions */}
-        {status !== "signed" && (
-          <div className="pt-2">
+        <div className="pt-2 flex flex-wrap gap-2">
+          {letter?.signature_token && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                window.open(`/engagement/${letter.signature_token}`, "_blank", "noopener")
+              }
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              View Letter
+            </Button>
+          )}
+          {status !== "signed" && (
             <Button
               onClick={sendEngagementLetter}
               disabled={sending || hasMailbox === false}
@@ -243,12 +255,12 @@ const EngagementLetterSection = ({
               )}
               {letter?.sent_at ? "Resend Letter" : "Send Engagement Letter"}
             </Button>
-            {!letter?.sent_at && hasMailbox !== false && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Will be sent to: {recipientEmail}
-              </p>
-            )}
-          </div>
+          )}
+        </div>
+        {status !== "signed" && !letter?.sent_at && hasMailbox !== false && (
+          <p className="text-xs text-muted-foreground">
+            Will be sent to: {recipientEmail}
+          </p>
         )}
 
         {/* Token expiry warning */}
