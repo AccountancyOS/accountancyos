@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,11 +41,13 @@ const fmt = (currency: string, n: number) =>
 
 export default function PublicQuoteView() {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<"accept" | "reject" | null>(null);
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<"accepted" | "rejected" | null>(null);
+  const [onboardingId, setOnboardingId] = useState<string | null>(null);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -69,12 +71,17 @@ export default function PublicQuoteView() {
     setSubmitting("accept");
     const { data, error } = await supabase.rpc("public_accept_quote_by_token", { p_token: token });
     setSubmitting(null);
-    const payload = data as unknown as { success?: boolean; error?: string };
+    const payload = data as unknown as { success?: boolean; error?: string; onboarding_application_id?: string };
     if (error || payload?.error) {
       toast({ title: "Could not accept quote", description: error?.message || payload?.error, variant: "destructive" });
       return;
     }
     setDone("accepted");
+    if (payload?.onboarding_application_id) {
+      setOnboardingId(payload.onboarding_application_id);
+      // Hand off to the onboarding wizard shortly after the confirmation renders
+      setTimeout(() => navigate(`/onboard/${payload.onboarding_application_id}`), 1200);
+    }
   };
 
   const confirmDecline = async () => {
