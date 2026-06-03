@@ -1,20 +1,20 @@
 ## Problem
-The public onboarding screens (header "Welcome to …" and the final success card "Thank you. Your onboarding has been submitted to …") show the organization's legal/account name rather than the Trading Name configured in Practice Details → Branding.
 
-Root cause: `public.public_get_onboarding` returns `organization.name` directly from `organizations.name`, ignoring `organization_branding.trading_name`. The frontend (`src/pages/PublicOnboarding.tsx`) faithfully renders whatever the RPC returns.
+On the onboarding detail page, the AML Verification panel's download button fails with "download could not be completed".
+
+Root cause: client AML files are uploaded into the `onboarding-documents` storage bucket (see `OnboardingDetail.handleFileUpload`), but `AMLVerificationPanel.downloadDocument` calls `supabase.storage.from("documents")` — a bucket that does not exist. Every download therefore errors out.
 
 ## Fix
-Single database migration. No frontend changes.
 
-Update `public.public_get_onboarding(p_application_id uuid)` so the returned `organization.name` resolves to:
+Single-line change in `src/components/onboarding/AMLVerificationPanel.tsx`:
 
-```
-COALESCE(NULLIF(ob.trading_name,''), NULLIF(ob.legal_name,''), o.name)
-```
+- In `downloadDocument`, change `.from("documents")` to `.from("onboarding-documents")` so the signed download targets the same private bucket the files were uploaded to.
 
-by joining `organization_branding ob` on `organization_id = o.id`. This matches the same precedence already used by other RPCs (e.g. the snapshot helpers in earlier migrations) and by `WelcomeDashboard.tsx`, so the Trading Name flows through consistently to every onboarding surface (welcome header, engagement step's "Practice:" line, billing step, and the final "submitted to {practice}" success message).
+No schema, RLS, or upload-side changes are needed — the bucket already exists and is private, and the staff user opening this panel is authenticated against the same org that owns the file path.
 
 ## Verification
-After the migration runs:
-1. Call `public_get_onboarding` for the Churchills London application and confirm `organization.name` equals Greenfield & Co's Trading Name from Practice Details.
-2. Reload the public onboarding URL and confirm the heading, engagement summary, and DoneCard all show the Trading Name.
+
+After the change, on the Churchills London onboarding (or any application with uploaded AML docs):
+1. Open the onboarding detail page.
+2. In the AML Verification panel, click the download icon next to each uploaded document.
+3. Confirm the file downloads with its original filename and no toast error.
