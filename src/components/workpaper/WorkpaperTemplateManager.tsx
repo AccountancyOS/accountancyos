@@ -292,13 +292,27 @@ export default function WorkpaperTemplateManager() {
                               description: t.description ?? "",
                               job_type: t.job_type,
                               is_default: false,
-                              schema_json: JSON.stringify(t.schema_json, null, 2),
+                              file_path: t.file_path ?? null,
+                              file_name: t.file_name ?? null,
+                              file_size_bytes: t.file_size_bytes ?? null,
+                              sheet_names: t.sheet_names ?? [],
                             });
+                            setPendingFile(null);
                             setShowCreateDialog(true);
                           }}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
+                        {t.file_path && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Download Excel file"
+                            onClick={() => downloadTemplate(t)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -365,18 +379,90 @@ export default function WorkpaperTemplateManager() {
               <Label>Set as default for this job type</Label>
             </div>
             <div className="space-y-2">
-              <Label>Schema JSON</Label>
-              <Textarea
-                className="font-mono text-xs min-h-[200px]"
-                value={formState.schema_json}
-                onChange={(e) => setFormState((s) => ({ ...s, schema_json: e.target.value }))}
+              <Label>Excel Template (.xlsx)</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFileSelected(f);
+                  e.target.value = "";
+                }}
               />
+              <div className="rounded-md border border-dashed p-4 space-y-3">
+                {pendingFile ? (
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet className="h-5 w-5 text-primary mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{pendingFile.file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(pendingFile.file.size / 1024).toFixed(1)} KB — {pendingFile.sheetNames.length} tab(s)
+                      </p>
+                      {pendingFile.sheetNames.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {pendingFile.sheetNames.map((n) => (
+                            <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : formState.file_name ? (
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet className="h-5 w-5 text-primary mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{formState.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formState.file_size_bytes
+                          ? `${(formState.file_size_bytes / 1024).toFixed(1)} KB — `
+                          : ""}
+                        {formState.sheet_names.length} tab(s)
+                      </p>
+                      {formState.sheet_names.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {formState.sheet_names.map((n) => (
+                            <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Upload an Excel workbook. Tab names and structure are preserved exactly.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {formState.file_name || pendingFile ? "Replace File" : "Upload File"}
+                  </Button>
+                  {editingTemplate?.file_path && !pendingFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => downloadTemplate(editingTemplate)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving…" : "Save"}
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || uploading}>
+              {uploading ? "Uploading…" : saveMutation.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
