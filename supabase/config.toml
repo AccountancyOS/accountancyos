@@ -75,6 +75,10 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = true
   [functions.stripe-webhook]
     verify_jwt = false
+  [functions.onboarding-stripe-checkout]
+    verify_jwt = false
+  [functions.onboarding-stripe-verify]
+    verify_jwt = false
   [functions.truelayer-auth]
     verify_jwt = true
   [functions.truelayer-callback]
