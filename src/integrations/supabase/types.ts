@@ -11209,6 +11209,53 @@ export type Database = {
           },
         ]
       }
+      onboarding_events: {
+        Row: {
+          actor_kind: string
+          actor_user_id: string | null
+          application_id: string
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          organization_id: string
+          to_status: string | null
+        }
+        Insert: {
+          actor_kind?: string
+          actor_user_id?: string | null
+          application_id: string
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          organization_id: string
+          to_status?: string | null
+        }
+        Update: {
+          actor_kind?: string
+          actor_user_id?: string | null
+          application_id?: string
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          organization_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_events_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "onboarding_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_settings: {
         Row: {
           automation_max_actions_org_day: number | null
@@ -16528,6 +16575,10 @@ export type Database = {
         Args: { p_category?: string; p_email: string; p_org_id: string }
         Returns: string
       }
+      ensure_client_document_folder: {
+        Args: { p_client_id: string; p_folder_name: string }
+        Returns: string
+      }
       ensure_default_templates_for_org: {
         Args: { _org_id: string }
         Returns: number
@@ -16820,6 +16871,17 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      log_onboarding_event: {
+        Args: {
+          p_actor_kind?: string
+          p_application_id: string
+          p_event_type: string
+          p_from_status?: string
+          p_metadata?: Json
+          p_to_status?: string
+        }
+        Returns: string
+      }
       mark_lead_dormant: {
         Args: { p_lead_id: string; p_reason?: string }
         Returns: undefined
