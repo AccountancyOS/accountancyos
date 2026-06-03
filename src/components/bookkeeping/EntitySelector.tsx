@@ -74,13 +74,13 @@ export function EntitySelector({ value, onValueChange }: EntitySelectorProps) {
       type: "company" as const,
       id: c.id,
       name: c.company_name,
-      displayName: `${c.company_name} (company)`,
+      displayName: `${c.company_name} (Company)`,
     })),
     ...(clients || []).map((c) => ({
       type: "client" as const,
       id: c.id,
       name: `${c.first_name} ${c.last_name}`,
-      displayName: `${c.first_name} ${c.last_name} (individual)`,
+      displayName: `${c.first_name} ${c.last_name} (Individual)`,
     })),
   ];
 
