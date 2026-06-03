@@ -32,13 +32,15 @@ import {
   Wallet,
   Lock,
   Send,
-  Pencil
+  Pencil,
+  Briefcase
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatStatus } from "@/lib/format-utils";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
 import { CS01WorkpaperTab } from "@/components/cosec/CS01WorkpaperTab";
 import { CompanyCoSecJobsTab } from "@/components/cosec/CompanyCoSecJobsTab";
+import { CompanyJobsTab } from "@/components/cosec/CompanyJobsTab";
 import { CompanyDetailSkeleton } from "@/components/cosec/CompanyDetailSkeleton";
 import { CompanyPayrollTab } from "@/components/cosec/CompanyPayrollTab";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
