@@ -27,6 +27,12 @@ const statusColors = {
   pending: "bg-gray-500",
   in_progress: "bg-blue-500",
   aml_review: "bg-yellow-500",
+  engagement_pending: "bg-blue-500",
+  aml_pending: "bg-yellow-500",
+  billing_pending: "bg-yellow-500",
+  portal_pending: "bg-yellow-500",
+  for_review: "bg-amber-500",
+  needs_client_action: "bg-orange-500",
   approved: "bg-green-500",
   rejected: "bg-red-500",
 };

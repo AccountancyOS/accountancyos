@@ -10983,6 +10983,8 @@ export type Database = {
           questionnaire_submitted_at: string | null
           quote_id: string | null
           rejection_reason: string | null
+          review_feedback: string | null
+          sent_back_at: string | null
           signature_data: Json | null
           status: string
           stripe_checkout_session_id: string | null
@@ -11040,6 +11042,8 @@ export type Database = {
           questionnaire_submitted_at?: string | null
           quote_id?: string | null
           rejection_reason?: string | null
+          review_feedback?: string | null
+          sent_back_at?: string | null
           signature_data?: Json | null
           status?: string
           stripe_checkout_session_id?: string | null
@@ -11097,6 +11101,8 @@ export type Database = {
           questionnaire_submitted_at?: string | null
           quote_id?: string | null
           rejection_reason?: string | null
+          review_feedback?: string | null
+          sent_back_at?: string | null
           signature_data?: Json | null
           status?: string
           stripe_checkout_session_id?: string | null
@@ -16807,6 +16813,10 @@ export type Database = {
           p_entity_type: string
           p_role?: string
         }
+        Returns: Json
+      }
+      lifecycle_send_back_onboarding: {
+        Args: { p_application_id: string; p_reason: string; p_step: string }
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
