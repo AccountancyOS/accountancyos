@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ type Step = "engagement" | "aml" | "billing" | "portal" | "done";
 
 interface AppBundle {
   application: any;
-  organization: { id: string; name: string; logo_url?: string | null };
+  organization: { id: string; name: string; logo_url?: string | null; has_stripe_connect?: boolean };
   quote: { id: string; quote_number: string; currency: string; accepted_snapshot: any } | null;
   documents: Array<{ id: string; document_type: string; file_name: string; file_path: string }>;
   engagement_letter: { id: string; signed_at: string | null } | null;
@@ -33,6 +33,7 @@ function deriveStep(app: any): Step {
 
 export default function PublicOnboarding() {
   const { applicationId } = useParams<{ applicationId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<AppBundle | null>(null);
   const [step, setStep] = useState<Step>("engagement");
@@ -52,6 +53,30 @@ export default function PublicOnboarding() {
   }, [applicationId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Handle Stripe Checkout return
+  useEffect(() => {
+    const billing = searchParams.get("billing");
+    const sessionId = searchParams.get("session_id");
+    if (!applicationId || !billing) return;
+    if (billing === "success" && sessionId) {
+      (async () => {
+        const { data, error } = await supabase.functions.invoke("onboarding-stripe-verify", {
+          body: { application_id: applicationId, session_id: sessionId },
+        });
+        if (error || !data?.paid) {
+          toast.error("Payment not confirmed yet. Refresh in a moment.");
+        } else {
+          toast.success("Payment received");
+        }
+        setSearchParams({}, { replace: true });
+        load();
+      })();
+    } else if (billing === "cancelled") {
+      toast.info("Payment cancelled. You can try again.");
+      setSearchParams({}, { replace: true });
+    }
+  }, [applicationId, searchParams, setSearchParams, load]);
 
   if (loading) {
     return (
@@ -345,12 +370,24 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
   const totalNow = Number(snapshot?.total_now ?? 0);
   const totalMonthly = Number(snapshot?.total_monthly ?? 0);
   const currency = bundle.quote?.currency ?? "GBP";
+  const hasConnect = !!bundle.organization.has_stripe_connect;
   const [submitting, setSubmitting] = useState(false);
 
-  const acknowledge = async () => {
+  const payWithStripe = async () => {
     setSubmitting(true);
-    // Stripe Connect may not be configured per-practice yet; mark as skipped so
-    // the practice can set up billing on their side, but advance the wizard.
+    const { data, error } = await supabase.functions.invoke("onboarding-stripe-checkout", {
+      body: { application_id: bundle.application.id },
+    });
+    if (error || !data?.url) {
+      setSubmitting(false);
+      toast.error(error?.message ?? data?.error ?? "Could not start checkout");
+      return;
+    }
+    window.location.href = data.url as string;
+  };
+
+  const skip = async () => {
+    setSubmitting(true);
     const { error } = await supabase.rpc("public_skip_billing", {
       p_application_id: bundle.application.id,
     });
@@ -364,21 +401,38 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
     <Card>
       <CardHeader>
         <CardTitle>Step 3 — Billing</CardTitle>
-        <CardDescription>Review and acknowledge the fees from your accepted proposal.</CardDescription>
+        <CardDescription>Review the fees from your accepted proposal and set up payment.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="border rounded-md p-4 bg-background text-sm space-y-1">
           <div className="flex justify-between"><span>Payable now</span><strong>{currency} {totalNow.toFixed(2)}</strong></div>
           <div className="flex justify-between"><span>Payable monthly</span><strong>{currency} {totalMonthly.toFixed(2)}</strong></div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {bundle.organization.name} will send you a payment link or direct debit mandate after reviewing your onboarding.
-          Continue to set up your client portal account.
-        </p>
-        <Button onClick={acknowledge} disabled={submitting} className="w-full">
-          {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
-          Acknowledge & Continue
-        </Button>
+
+        {hasConnect ? (
+          <>
+            <p className="text-xs text-muted-foreground">
+              You will be redirected to a secure Stripe checkout to enter your payment details.
+              {totalMonthly > 0 ? " A recurring monthly subscription will be created" : ""}
+              {totalMonthly > 0 && totalNow > 0 ? "; any one-off services will be added to your first invoice." : "."}
+            </p>
+            <Button onClick={payWithStripe} disabled={submitting} className="w-full">
+              {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+              Pay With Stripe
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              {bundle.organization.name} has not yet connected an online payment account, so they will
+              arrange billing with you directly (invoice or direct debit). Acknowledge to continue.
+            </p>
+            <Button onClick={skip} disabled={submitting} className="w-full" variant="secondary">
+              {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+              Acknowledge & Continue
+            </Button>
+          </>
+        )}
       </CardContent>
     </Card>
   );
