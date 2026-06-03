@@ -10946,6 +10946,9 @@ export type Database = {
           application_type: string
           approved_at: string | null
           approved_by: string | null
+          billing_amount: number | null
+          billing_completed_at: string | null
+          billing_status: string
           city: string | null
           clearance_notes: string | null
           clearance_received: boolean | null
@@ -10971,6 +10974,7 @@ export type Database = {
           onboarding_questionnaire_instance_id: string | null
           organization_id: string
           phone: string | null
+          portal_email: string | null
           postcode: string | null
           previous_accountant_email: string | null
           previous_accountant_firm_name: string | null
@@ -10981,6 +10985,8 @@ export type Database = {
           rejection_reason: string | null
           signature_data: Json | null
           status: string
+          stripe_checkout_session_id: string | null
+          submitted_for_review_at: string | null
           updated_at: string
           vat_number: string | null
         }
@@ -10997,6 +11003,9 @@ export type Database = {
           application_type: string
           approved_at?: string | null
           approved_by?: string | null
+          billing_amount?: number | null
+          billing_completed_at?: string | null
+          billing_status?: string
           city?: string | null
           clearance_notes?: string | null
           clearance_received?: boolean | null
@@ -11022,6 +11031,7 @@ export type Database = {
           onboarding_questionnaire_instance_id?: string | null
           organization_id: string
           phone?: string | null
+          portal_email?: string | null
           postcode?: string | null
           previous_accountant_email?: string | null
           previous_accountant_firm_name?: string | null
@@ -11032,6 +11042,8 @@ export type Database = {
           rejection_reason?: string | null
           signature_data?: Json | null
           status?: string
+          stripe_checkout_session_id?: string | null
+          submitted_for_review_at?: string | null
           updated_at?: string
           vat_number?: string | null
         }
@@ -11048,6 +11060,9 @@ export type Database = {
           application_type?: string
           approved_at?: string | null
           approved_by?: string | null
+          billing_amount?: number | null
+          billing_completed_at?: string | null
+          billing_status?: string
           city?: string | null
           clearance_notes?: string | null
           clearance_received?: boolean | null
@@ -11073,6 +11088,7 @@ export type Database = {
           onboarding_questionnaire_instance_id?: string | null
           organization_id?: string
           phone?: string | null
+          portal_email?: string | null
           postcode?: string | null
           previous_accountant_email?: string | null
           previous_accountant_firm_name?: string | null
@@ -11083,6 +11099,8 @@ export type Database = {
           rejection_reason?: string | null
           signature_data?: Json | null
           status?: string
+          stripe_checkout_session_id?: string | null
+          submitted_for_review_at?: string | null
           updated_at?: string
           vat_number?: string | null
         }
@@ -16762,6 +16780,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      is_active_onboarding_path: { Args: { p_name: string }; Returns: boolean }
       is_period_locked: {
         Args: {
           p_client_id: string
@@ -16846,10 +16865,42 @@ export type Database = {
         Returns: Json
       }
       public_accept_quote_by_token: { Args: { p_token: string }; Returns: Json }
+      public_complete_billing: {
+        Args: {
+          p_amount: number
+          p_application_id: string
+          p_stripe_session_id: string
+        }
+        Returns: Json
+      }
+      public_get_onboarding: {
+        Args: { p_application_id: string }
+        Returns: Json
+      }
       public_get_quote_by_token: { Args: { p_token: string }; Returns: Json }
+      public_record_aml_upload: {
+        Args: {
+          p_application_id: string
+          p_document_type: string
+          p_file_name: string
+          p_file_path: string
+          p_file_size: number
+          p_mime_type: string
+        }
+        Returns: Json
+      }
       public_reject_quote_by_token:
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
+      public_sign_engagement_letter: {
+        Args: { p_application_id: string; p_signature_data: Json }
+        Returns: Json
+      }
+      public_skip_billing: { Args: { p_application_id: string }; Returns: Json }
+      public_submit_onboarding_for_review: {
+        Args: { p_application_id: string; p_portal_email: string }
+        Returns: Json
+      }
       queue_email_safe: {
         Args: {
           p_body_html?: string
