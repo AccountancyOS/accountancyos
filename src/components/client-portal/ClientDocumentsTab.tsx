@@ -687,14 +687,24 @@ export default function ClientDocumentsTab({ clientId }: ClientDocumentsTabProps
                   key={doc.id}
                   className="flex items-center gap-4 px-3 py-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
                 >
-                  <Checkbox
-                    checked={selectedDocs.includes(doc.id)}
-                    onCheckedChange={() => toggleSelect(doc.id)}
-                  />
+                  {doc.source === "onboarding" ? (
+                    <div className="w-4" />
+                  ) : (
+                    <Checkbox
+                      checked={selectedDocs.includes(doc.id)}
+                      onCheckedChange={() => toggleSelect(doc.id)}
+                    />
+                  )}
                   <div className="flex-1 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium truncate">{doc.file_name}</span>
-                    {doc.client_visible && (
+                    {doc.source === "onboarding" && (
+                      <Badge variant="secondary" className="text-xs shrink-0">
+                        <Shield className="h-3 w-3 mr-1" />
+                        AML
+                      </Badge>
+                    )}
+                    {doc.source !== "onboarding" && doc.client_visible && (
                       <Badge variant="outline" className="text-xs shrink-0">
                         <Eye className="h-3 w-3 mr-1" />
                         Visible
