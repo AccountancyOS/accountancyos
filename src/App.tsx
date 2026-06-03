@@ -20,6 +20,7 @@ import QuoteDetail from "./pages/QuoteDetail";
 import Onboarding from "./pages/Onboarding";
 import OnboardingDetail from "./pages/OnboardingDetail";
 import OnboardingWizard from "./pages/OnboardingWizard";
+import OnboardingDiagnostics from "./pages/OnboardingDiagnostics";
 import Subscription from "./pages/Subscription";
 import ColorComparison from "./pages/ColorComparison";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -257,6 +258,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <OnboardingWizard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/onboarding/diagnostics"
+              element={
+                <ProtectedRoute>
+                  <OnboardingDiagnostics />
                 </ProtectedRoute>
               }
             />
