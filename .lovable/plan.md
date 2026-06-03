@@ -1,12 +1,15 @@
-Remove the machine-readable service code (e.g. `company_accounts`) from the Services list on the Quote Detail page so accountants/clients only see the human-readable name.
+Fix the AML and Approve-Client errors caused by a stale check constraint on `onboarding_applications.aml_status`.
 
-## Change
-- `src/pages/QuoteDetail.tsx` line 305: drop the `{line.service.code} • ` prefix so the line reads `{quantity} × £{displayPrice}` only.
+## Root Cause
+The DB constraint `onboarding_applications_aml_status_check` only permits `('pending', 'passed', 'failed', 'manual_review')`. Every code path (the `verify_aml` RPC, `lifecycle_approve_onboarding`, the React panel, badges, list view) uses the value `'verified'`. Any write that sets `aml_status = 'verified'` therefore violates the constraint, which is what the screenshot shows. This blocks both AML verification and approval (approval re-updates the row and re-checks the constraint).
 
-## Scope check
-- `Services.tsx` admin table intentionally shows the code in its own column — leave it.
-- `FeeAggregationPanel.tsx` uses `service.code` only as a React key, not rendered.
-- `EngagementLetterVariants.tsx` already runs the code through `formatServiceType()` for a human label.
-- No other component renders raw service codes to end users.
+## Fix (single migration)
+1. Drop `onboarding_applications_aml_status_check`.
+2. Recreate it as `CHECK (aml_status IN ('pending','verified','failed','manual_review'))` — the canonical set the app actually uses.
+3. Backfill any legacy rows where `aml_status = 'passed'` to `'verified'` so historic data conforms (safe: `passed` was never written by current code).
 
-Single one-line frontend edit.
+No frontend or RPC changes needed — they already use `'verified'`.
+
+## Verification
+- Re-run AML verification on the affected onboarding application: badge flips to "Verified", no error.
+- Click "Approve & Create Client": completes without the constraint error, client/company is created, portal access granted.
