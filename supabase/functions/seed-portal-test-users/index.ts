@@ -200,12 +200,18 @@ async function seedQuestionnaire(sr: SR, scope: { client_id?: string | null; com
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
-    const secret = req.headers.get("x-seed-secret");
-    const expected = Deno.env.get("PORTAL_SEED_SECRET");
-    if (!expected || secret !== expected) {
-      return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
-    }
+    // Authn: must be a logged-in owner of the target organization.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    if (!token) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
     const sr = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: userRes } = await sr.auth.getUser(token);
+    const caller = userRes?.user;
+    if (!caller) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+    const { data: orgMembership } = await sr.from("organization_users").select("user_id").eq("organization_id", ORG).eq("user_id", caller.id).limit(1);
+    if (!orgMembership || !orgMembership[0]) {
+      return new Response(JSON.stringify({ error: "forbidden: not a member of target org" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     // Pick any existing accountant user in org for sender_id of accountant-originated messages.
     const { data: orgUsers } = await sr.from("organization_users").select("user_id").eq("organization_id", ORG).limit(1);
