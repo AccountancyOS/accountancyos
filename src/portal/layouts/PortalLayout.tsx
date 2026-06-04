@@ -13,6 +13,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { usePortalEntity } from "../contexts/PortalEntityContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const navItems = [
   { to: "/portal/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -26,6 +34,7 @@ const navItems = [
 
 export function PortalLayout() {
   const navigate = useNavigate();
+  const { entities, currentEntity, setCurrentEntity } = usePortalEntity();
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -35,16 +44,42 @@ export function PortalLayout() {
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
-        <div className="flex h-16 items-center gap-3 px-4 border-b border-sidebar-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-            <Building2 className="h-5 w-5 text-sidebar-primary-foreground" />
+        <div className="px-4 py-4 border-b border-sidebar-border space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
+              <Building2 className="h-5 w-5 text-sidebar-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sidebar-foreground text-sm truncate">
+                Client Portal
+              </p>
+              <p className="text-xs text-sidebar-foreground/60 truncate">AccountancyOS</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-sidebar-foreground text-sm truncate">
-              Client Portal
+          {entities.length > 1 ? (
+            <Select
+              value={currentEntity ? `${currentEntity.type}:${currentEntity.id}` : undefined}
+              onValueChange={(v) => {
+                const found = entities.find((e) => `${e.type}:${e.id}` === v);
+                if (found) setCurrentEntity(found);
+              }}
+            >
+              <SelectTrigger className="w-full h-9 text-xs">
+                <SelectValue placeholder="Select Entity" />
+              </SelectTrigger>
+              <SelectContent>
+                {entities.map((e) => (
+                  <SelectItem key={`${e.type}:${e.id}`} value={`${e.type}:${e.id}`}>
+                    {e.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : currentEntity ? (
+            <p className="text-xs text-sidebar-foreground/70 truncate">
+              {currentEntity.displayName}
             </p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">AccountancyOS</p>
-          </div>
+          ) : null}
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
