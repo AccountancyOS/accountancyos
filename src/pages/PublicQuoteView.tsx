@@ -92,10 +92,23 @@ export default function PublicQuoteView() {
       return;
     }
     setDone("accepted");
-    if (payload?.onboarding_application_id) {
-      setOnboardingId(payload.onboarding_application_id);
-      // Hand off to the onboarding wizard shortly after the confirmation renders
-      setTimeout(() => navigate(`/onboard/${payload.onboarding_application_id}`), 1200);
+    let appId = payload?.onboarding_application_id ?? null;
+    // The accept RPC does not always include the onboarding id; re-query the
+    // public quote endpoint, which self-heals and returns it.
+    if (!appId) {
+      for (let i = 0; i < 3 && !appId; i++) {
+        const { data: qd } = await supabase.rpc("public_get_quote_by_token", { p_token: token });
+        const qp = qd as unknown as QuotePayload | null;
+        if (qp?.onboarding_application_id) {
+          appId = qp.onboarding_application_id;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+    if (appId) {
+      setOnboardingId(appId);
+      setTimeout(() => navigate(`/onboard/${appId}`), 1000);
     }
   };
 
