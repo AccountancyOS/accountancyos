@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { PortalConversation, PortalEntity, PortalMessage } from "../types";
+import { isUnread } from "../utils/readState";
 
 /**
  * Conversations are derived from public.client_messages, grouped by the root
@@ -13,7 +14,7 @@ export async function listPortalConversations(
   const col = entity.type === "client" ? "client_id" : "company_id";
   const { data, error } = await supabase
     .from("client_messages")
-    .select("id, subject, content, parent_message_id, created_at")
+    .select("id, subject, content, parent_message_id, created_at, sender_type")
     .eq(col, entity.id)
     .eq("visibility", "client_visible")
     .order("created_at", { ascending: false });
@@ -23,6 +24,7 @@ export async function listPortalConversations(
   type Acc = Record<string, { subject: string; lastMessageAt: string }>;
   const acc: Acc = {};
   const rootOrder: string[] = [];
+  const lastSender: Record<string, string> = {};
   for (const m of data) {
     const rootId = (m.parent_message_id as string | null) ?? m.id;
     if (!acc[rootId]) {
@@ -30,9 +32,11 @@ export async function listPortalConversations(
         subject: m.subject ?? (m.content?.slice(0, 60) ?? "Conversation"),
         lastMessageAt: m.created_at,
       };
+      lastSender[rootId] = (m.sender_type as string | null) ?? "accountant";
       rootOrder.push(rootId);
     } else if (m.created_at > acc[rootId].lastMessageAt) {
       acc[rootId].lastMessageAt = m.created_at;
+      lastSender[rootId] = (m.sender_type as string | null) ?? "accountant";
     }
   }
 
@@ -41,7 +45,7 @@ export async function listPortalConversations(
     type: "general",
     subject: acc[id].subject,
     lastMessageAt: acc[id].lastMessageAt,
-    unreadCount: 0,
+    unreadCount: isUnread(id, acc[id].lastMessageAt, lastSender[id] ?? "accountant") ? 1 : 0,
     relatedJobId: null,
   }));
 }
