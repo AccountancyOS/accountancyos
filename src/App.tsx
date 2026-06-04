@@ -67,6 +67,7 @@ import ConfirmEmail from "./pages/ConfirmEmail";
 import PublicQuoteView from "./pages/PublicQuoteView";
 import PublicOnboarding from "./pages/PublicOnboarding";
 import { Loader2 } from "lucide-react";
+import PortalRoutes from "./portal/routes/PortalRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -539,6 +540,10 @@ const App = () => (
               }
             />
             <Route path="/engagement/:token" element={<EngagementLetterPreview />} />
+            {/* Client Portal — isolated under src/portal/, mounted at /portal/*.
+                Note: /portal/preview/:entityType/:entityId above is the accountant
+                preview surface and remains owned by the accountant app. */}
+            <Route path="/portal/*" element={<PortalRoutes />} />
             <Route
               path="/ops/health"
               element={
