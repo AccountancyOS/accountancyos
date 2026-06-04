@@ -79,11 +79,30 @@ const Services = () => {
     enabled: !!organization?.id,
   });
 
+  const generateCodeFromName = async (name: string): Promise<string> => {
+    const base = (name || "service")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "SERVICE";
+    const { data: existing } = await supabase
+      .from("services_catalog")
+      .select("code")
+      .eq("organization_id", organization!.id)
+      .ilike("code", `${base}%`);
+    const taken = new Set((existing ?? []).map((r) => r.code));
+    if (!taken.has(base)) return base;
+    let i = 2;
+    while (taken.has(`${base}_${i}`)) i++;
+    return `${base}_${i}`;
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      const code = data.code?.trim() || (await generateCodeFromName(data.name));
       const { error } = await supabase.from("services_catalog").insert({
         organization_id: organization!.id,
         ...data,
+        code,
         default_price: parseFloat(data.default_price),
       });
       if (error) throw error;
@@ -222,39 +241,6 @@ const Services = () => {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="code">Service Code</Label>
-                  <Input
-                    id="code"
-                    value={formData.code}
-                    onChange={(e) =>
-                      setFormData({ ...formData, code: e.target.value.toUpperCase() })
-                    }
-                    placeholder="SA_RETURN"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="billing_model">Billing Model</Label>
-                  <Select
-                    value={formData.billing_model}
-                    onValueChange={(value: any) =>
-                      setFormData({ ...formData, billing_model: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fixed">Fixed Price</SelectItem>
-                      <SelectItem value="monthly">Monthly Recurring</SelectItem>
-                      <SelectItem value="hourly">Hourly Rate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="name">Service Name</Label>
                 <Input
@@ -266,6 +252,25 @@ const Services = () => {
                   placeholder="Self Assessment Tax Return"
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing_model">Billing Model</Label>
+                <Select
+                  value={formData.billing_model}
+                  onValueChange={(value: any) =>
+                    setFormData({ ...formData, billing_model: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fixed Price</SelectItem>
+                    <SelectItem value="monthly">Monthly Recurring</SelectItem>
+                    <SelectItem value="hourly">Hourly Rate</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
