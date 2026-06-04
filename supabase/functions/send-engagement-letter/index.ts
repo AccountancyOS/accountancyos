@@ -148,7 +148,8 @@ serve(async (req: Request) => {
           company_name,
           email,
           application_type,
-          organization_id
+          organization_id,
+          client_id
         )
       `)
       .eq('id', body.engagement_letter_id)
@@ -211,10 +212,19 @@ serve(async (req: Request) => {
       );
     }
 
-    // Prepare recipient details
-    const recipientName = application.application_type === 'individual'
-      ? `${application.first_name} ${application.last_name}`
-      : application.company_name;
+    // Prepare recipient details — always prefer the personal name (preferred_name, then first+last)
+    // and only fall back to company_name when no personal name is available.
+    let preferredName: string | null = null;
+    if (application.client_id) {
+      const { data: client } = await serviceSupabase
+        .from('clients')
+        .select('preferred_name')
+        .eq('id', application.client_id)
+        .maybeSingle();
+      preferredName = client?.preferred_name?.trim() || null;
+    }
+    const fullName = `${application.first_name ?? ''} ${application.last_name ?? ''}`.trim();
+    const recipientName = preferredName || fullName || application.company_name;
     const recipientEmail = application.email;
 
     if (!recipientEmail) {

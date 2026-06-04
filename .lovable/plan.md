@@ -1,42 +1,33 @@
-# Fix Quote Acceptance → Engagement Letter Flow
+# Use Recipient's Personal Name in All Outbound Emails
 
-## Problems
+## Problem
 
-1. After clicking Accept, the page stalls on "Continuing to your onboarding…" — navigation never fires.
-2. The engagement letter shows no services listed.
-3. There is no actual letter body for the user to read before signing.
+Some emails address the recipient by company name (e.g. "Dear Churchills London") instead of the human contact's name. The engagement letter, quote-acceptance preview, and quote-send email all fall back to `company_name` when a company is attached.
 
-## Root Causes
+## Rule
 
-- `public_accept_quote_by_token` returns only `{ success, client_id, company_id }` — no `onboarding_application_id`, so the frontend redirect target is `undefined`.
-- The same RPC never writes `quotes.accepted_snapshot`, so the downstream `public_sign_engagement_letter` has no services to render.
-- `public_get_onboarding` returns only `{ id, signed_at }` for the engagement letter — no document body exists pre-signature; the HTML is built inside the sign RPC.
+Always address the recipient by their personal name. Resolution order, used everywhere:
+
+1. `clients.preferred_name` (when a client is linked and the column is set)
+2. `first_name` (+ `last_name` for full-name slots) from the lead, client, or onboarding application
+3. `company_name` only as a last resort when no personal name exists
+
+`preferred_name` already exists on `clients`. No new columns needed; leads and onboarding applications keep first/last name only.
 
 ## Changes
 
-### 1. Database migration
+### Database functions (single migration)
 
-- Patch `public_accept_quote_by_token` to:
-  - Build `accepted_snapshot` JSONB from `quote_lines` (service_id, code, name, quantity, unit_price, subtotal, billing_frequency) plus `total_now`, `total_monthly`, `total_amount`, `currency`, `quote_number`, `accepted_at`, `valid_until`.
-  - Persist it to `quotes.accepted_snapshot`.
-  - Look up or create the matching `onboarding_applications` row.
-  - Return `onboarding_application_id` in the result.
-- Add `public_preview_engagement_letter(p_application_id uuid) returns text` — SECURITY DEFINER, builds the same HTML as the sign RPC but performs no writes.
-- Patch `public_get_onboarding` to also return `engagement_letter.document_content` (preview HTML if unsigned, stored content if signed).
+- `public.lifecycle_send_quote` — when resolving the recipient name and first name, take `clients.preferred_name` over `first_name` if present; for company-only quotes, fall back to the linked director/contact's first name before using `company_name`.
+- `public.public_get_quote_by_token` — `recipient_name` follows the same order: preferred_name → first+last → company_name.
+- `public.public_sign_engagement_letter` and `public.public_preview_engagement_letter` — replace `v_client_name := COALESCE(v_app.company_name, first+last)` with the new order: look up `clients.preferred_name` via `onboarding_applications.client_id` when present, then first+last from the application, then `company_name`.
 
-### 2. `src/pages/PublicQuoteView.tsx`
+### Edge function
 
-- Use `onboarding_application_id` from the accept response when present.
-- If absent, re-call `public_get_quote_by_token` once to pick up the self-healed id.
-- After ~1.5s with no id, render a "Continue Onboarding" button as a safety net instead of a perpetual spinner.
-
-### 3. `src/pages/PublicOnboarding.tsx` (EngagementStep)
-
-- On mount, call `public_preview_engagement_letter` (or use `bundle.engagement_letter.document_content` if already signed).
-- Render the returned HTML through `sanitizeHtml` in a scrollable, bordered container above the signature input.
-- Keep the existing bullet list beneath, relabelled as "Scope summary".
+- `supabase/functions/send-engagement-letter/index.ts` — `recipientName` currently picks `first+last` only for individual applications, otherwise `company_name`. Change to: preferred_name (if `client_id` set) → `first+last` (if either is set) → `company_name`. Apply for both the email body and the `{{recipient_name}}` placeholder substitution.
 
 ## Out of scope
 
-- Per-practice letter templating, PDF export, e-signature versioning, Stripe Connect changes.
-- Existing accepted quotes without snapshots are already self-healed by `public_get_quote_by_token`.
+- Adding `preferred_name` to leads or onboarding_applications.
+- Changing chaser templates — those already use `{{client.first_name}}` placeholders, which are unaffected.
+- Tone/copy of the templates themselves.
