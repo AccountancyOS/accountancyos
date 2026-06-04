@@ -1,12 +1,17 @@
-The client row showing as Self-Assessment (MTD) with email `amyleestevens7@gmail.com` was created with the company name in the individual's name fields. SA-MTD is for individuals, so the name should reflect the person.
+Hide the Service Code field from the Edit/Add Service dialog so accountants only see Service Name + Billing Model (and the rest of the user-facing fields).
 
-## Change
+## Why hide rather than remove
 
-Update the `clients` record (id `7a43f7bf-c49e-4716-97f6-8f85d2a7a45e`):
-- `first_name`: "Bassage Eyes Ltd" → "Amy-Lee"
-- `last_name`: "" → "Stevens"
+Service Code is the machine-readable identifier that drives automations, chasers, and conditional logic across the app (15 standard codes). It must still exist on the record — we just don't expose it in the UI.
 
-No code changes — data-only fix via an UPDATE.
+## Changes
 
-## Note
-If "Bassage Eyes Ltd" is actually a related limited company that should also exist as a separate Limited Company client (with Amy-Lee as a director), let me know and I can create that record too. Otherwise I'll just rename this one.
+`src/pages/Services.tsx` — Add/Edit Service dialog:
+- Remove the Service Code `<Input>` and its label.
+- Collapse the 2-column grid so Billing Model sits on its own row (or pair it with Default Price).
+- On submit:
+  - **Edit**: keep the existing `code` value untouched.
+  - **Create**: auto-generate `code` from the Service Name (uppercase, non-alphanumerics → `_`, trimmed). If a service with that code already exists in the org, append a numeric suffix (`_2`, `_3`, …).
+- Drop the `required` validation tied to the field.
+
+No schema changes — `code` remains NOT NULL in the DB and is still populated on every insert.
