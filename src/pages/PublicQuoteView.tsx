@@ -189,10 +189,32 @@ export default function PublicQuoteView() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr>
-                    <td colSpan={4} className="pt-4 text-right font-semibold">Total</td>
-                    <td className="pt-4 pl-2 text-right font-semibold">{fmt(quote.currency, quote.total_amount)}</td>
-                  </tr>
+                  {(() => {
+                    const monthly = quote.lines
+                      .filter((l) => l.billing_frequency === "monthly")
+                      .reduce((s, l) => s + Number(l.subtotal || 0), 0);
+                    const oneOff = quote.lines
+                      .filter((l) => l.billing_frequency !== "monthly")
+                      .reduce((s, l) => s + Number(l.subtotal || 0), 0);
+                    return (
+                      <>
+                        {oneOff > 0 && (
+                          <tr>
+                            <td colSpan={4} className="pt-4 text-right font-semibold">Due Now</td>
+                            <td className="pt-4 pl-2 text-right font-semibold">{fmt(quote.currency, oneOff)}</td>
+                          </tr>
+                        )}
+                        {monthly > 0 && (
+                          <tr>
+                            <td colSpan={4} className="pt-2 text-right font-semibold">Monthly Recurring</td>
+                            <td className="pt-2 pl-2 text-right font-semibold">
+                              {fmt(quote.currency, monthly)}<span className="text-muted-foreground font-normal">/month</span>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })()}
                 </tfoot>
               </table>
             </div>
