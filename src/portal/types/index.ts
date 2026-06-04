@@ -116,11 +116,14 @@ export interface PortalFinancialSummary {
 
 export interface PortalVisibilitySettings {
   showRevenue: boolean;
-  showNetProfit: boolean;
-  showCashBalance: boolean;
+  showProfit: boolean;
+  showCash: boolean;
   showVatPosition: boolean;
-  showCorporationTaxEstimate: boolean;
+  showCtEstimate: boolean;
+  showReceivablesPayables: boolean;
   showTransactions: boolean;
   showBankAccounts: boolean;
-  showBookkeeping: boolean;
+  showInvoices: boolean;
+  showTrialBalance: boolean;
+  showDetailedLedger: boolean;
 }
