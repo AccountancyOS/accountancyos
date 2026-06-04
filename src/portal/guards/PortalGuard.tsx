@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { getPortalUserContext } from "../services/portalContextService";
-import type { PortalUserContext } from "../types";
+import {
+  getPortalUserContext,
+  listPortalEntities,
+} from "../services/portalContextService";
+import { PortalEntityProvider } from "../contexts/PortalEntityContext";
+import type { PortalEntity, PortalUserContext } from "../types";
 
 /**
  * PortalGuard
@@ -19,7 +23,7 @@ export function PortalGuard() {
     | { status: "loading" }
     | { status: "unauth" }
     | { status: "no-access" }
-    | { status: "ok"; ctx: PortalUserContext }
+    | { status: "ok"; ctx: PortalUserContext; entities: PortalEntity[] }
   >({ status: "loading" });
 
   useEffect(() => {
@@ -37,7 +41,9 @@ export function PortalGuard() {
         setState({ status: "no-access" });
         return;
       }
-      setState({ status: "ok", ctx });
+      const entities = await listPortalEntities();
+      if (cancelled) return;
+      setState({ status: "ok", ctx, entities });
     })();
     return () => {
       cancelled = true;
@@ -56,5 +62,9 @@ export function PortalGuard() {
     return <Navigate to="/portal/login" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <PortalEntityProvider ctx={state.ctx} entities={state.entities}>
+      <Outlet />
+    </PortalEntityProvider>
+  );
 }

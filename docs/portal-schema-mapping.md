@@ -2,7 +2,7 @@
 
 Status legend:
 
-- **TBD** — needs decision before Batch 2 wiring
+- **TBD** — needs decision before Batch 2 wiring (none remaining as of Batch 2)
 - **Adapt** — use existing accountant table/RPC as-is
 - **RPC** — add a minimal SECURITY DEFINER RPC for the portal scope
 - **New** — add a minimal new table (only when no existing object fits)
@@ -16,33 +16,38 @@ Status legend:
 | Accountant-side link to client | — | `accountant_client_links` | Adapt | Used to scope which accountant org owns a portal user's data |
 | Entities visible to portal user | local `clients` + virtual `companies` | `clients` + `companies` joined via `portal_access` | Adapt | Honour `client_id` XOR `company_id` per portal_access row |
 | Auth session | local Supabase project auth | Shared Supabase auth (this project) | Adapt | Single client; portal uses `@/integrations/supabase/client` |
-| Invite acceptance | local invitation tables | `pending_practice_signups` + edge function `accept-portal-invite-signup` | TBD | Confirm whether a portal-specific invite table is required or if existing flow covers it |
-| Tasks | local `tasks` | `job_tasks` (job-bound) and `client_tasks` (client-bound) | TBD | Decide union vs only `client_tasks`; portal must only see items flagged client-visible |
-| Documents | local `documents` | `job_documents` + `questionnaire_files` + `engagement_letters` + `onboarding_documents` + `receipts` | TBD | Union view + signed URL helper; honour per-source visibility rules |
+| Invite acceptance | local invitation tables | `portal_access` rows + edge function `accept-portal-invite-signup` | Adapt | UI posts `{token, password, name}` to the existing edge fn; no portal-specific invite table |
+| Tasks | local `tasks` | `client_tasks` WHERE `visibility='client_visible'` scoped to entity | Adapt | `job_tasks` stays internal — portal only ever shows client-visible items |
+| Documents | local `documents` | Union of `job_documents` (`client_visible=true`, `archived=false`), `questionnaire_files`, `onboarding_documents` scoped to entity | Adapt | Signed URLs resolved on click via 15-min `createSignedUrl`; buckets: `job-documents`, `questionnaire-files`, `onboarding-documents` |
 | Document folders | local `documents` folders | `document_folders` | Adapt | If folder grouping is exposed in portal UI |
-| Questionnaire list | local `questionnaires` | `questionnaire_instances` | Adapt | Filter to instances assigned to the portal user's client/company |
-| Questionnaire questions/answers | local `questionnaire_questions` + `questionnaire_answers` | `questionnaire_responses` (via existing public-link flow) | Adapt | Reuse existing token-based response page when possible |
-| Conversations (threads) | `conversation_threads` | Grouping over `client_messages` | TBD | No dedicated threads table; group client_messages by job_id or thread_id. Add `RPC list_portal_conversations` if needed |
-| Messages | local `messages` | `client_messages` | Adapt | Insert via RPC that enforces portal scope; do not allow free-form INSERT |
-| Payments / invoices | local `invoices`, `invoice_lines`, `payments` | `invoices` + `invoice_lines` + `invoice_payments` | Adapt | Read-only in portal; "Pay" CTA links to existing payment-link flow |
-| Financial summary KPIs | local `financial_snapshots`, `monthly_financials` | Derived from `ledger_entries` / `trial_balance_snapshots`, gated by `portal_visibility_settings` | TBD | Decide between live derivation and a cached snapshot table |
+| Questionnaire list | local `questionnaires` | `questionnaire_instances` scoped to entity | Adapt | `responseUrl = /questionnaire/:id?token=<access_token>` (existing public response page) |
+| Questionnaire questions/answers | local `questionnaire_questions` + `questionnaire_answers` | `questionnaire_responses` (via existing public-link flow) | Adapt | Portal questionnaire response route 301s to the public response page; no fork |
+| Conversations (threads) | `conversation_threads` | Derived grouping over `client_messages` (root = `parent_message_id IS NULL`) | Adapt | No threads table; client-side grouping. Unread counts return 0 in Batch 2 |
+| Messages (read) | local `messages` | `client_messages` WHERE `visibility='client_visible'`, scoped to entity | Adapt | Existing RLS already filters reads to the portal user's entity |
+| Messages (send) | local INSERT | RPC `public.portal_send_message(p_client_id, p_company_id, p_body, p_subject, p_parent_message_id)` | RPC | SECURITY DEFINER; re-validates `portal_access`; forces `sender_type='client'`, `visibility='client_visible'`, `sender_id=auth.uid()` |
+| Payments / invoices | local `invoices`, `invoice_lines`, `payments` | `invoices` + `invoice_payments` scoped to entity | Adapt | Read-only; hosted-pay-link CTA deferred to Batch 3 (no `payment_link_url` column today) |
+| Financial summary KPIs | local `financial_snapshots`, `monthly_financials` | Latest finalised `trial_balance_snapshots` + `portal_visibility_settings` | Adapt | Returns `asOf` + nulls until CoA-mapping helper is exposed in a portal-safe shape; visibility flags still drive which tiles render |
 | Visibility flags | none | `portal_visibility_settings` | Adapt | Existing flags drive what the portal shows |
 | Deadlines | local `deadlines` | `deadlines` | Adapt | Filter to client/company in portal scope |
-| Bookkeeping read view | local `bookkeeping_accounts`, `ledger_entries`, `bank_accounts`, `bank_transactions` | Same accountant-side tables, read-only via portal-scoped RPC | TBD | All write paths stay disabled |
+| Bookkeeping read view | local `bookkeeping_accounts`, `ledger_entries`, `bank_accounts`, `bank_transactions` | Bookkeeping page only renders KPIs derived from TB + visibility flags | Adapt | Line-level reads stay deferred; all write paths remain disabled |
 | Bookkeeping write paths | local `invoices/bills/payments/transactions` writes | — | Disabled | See `portal-disabled-features.md` |
 | TrueLayer bank connection | local TrueLayer tables + edge fns | — | Disabled | See `portal-disabled-features.md` |
-| Director's loan account | `directors_loan_accounts` | — | TBD | Decide if portal needs it; otherwise drop |
-| Director insights / monthly financials | `monthly_financials` | Derivation over ledger | TBD | Likely drop hardcoded percentages, derive properly or hide |
-| Notification preferences | local `profiles` flags | `email_preferences` (org-level) | TBD | Either bind real persistence or remove the UI |
+| Director's loan account | `directors_loan_accounts` | — | Drop | Not surfaced in the portal; revisit if a client explicitly requests it |
+| Director insights / monthly financials | `monthly_financials` | — | Drop | Hardcoded trend % removed; only TB-derived KPIs are shown |
+| Notification preferences | local `profiles` flags | — | Drop | UI removed; no per-portal-user persistence target exists |
 | User profile | local `profiles` | `profiles` | Adapt | Name/avatar only; role lives in `user_roles` (accountant side) and `portal_access` (portal side) |
 | Mock dashboard data | `mockData.ts` | — | Drop | No mock content in the portal |
 | Hardcoded financial trends | dashboard `trend %` literals | Real derivation or hidden | Drop | Show neutral empty state until data is real |
-| Activity feed | `ActivityFeed.tsx` mock | Real events or hidden | TBD | If kept, source from `audit_log` filtered to portal-visible events |
+| Activity feed | `ActivityFeed.tsx` mock | — | Drop | Removed; reintroduce only when a portal-safe event source exists |
 
 ## Process
 
-1. Before Batch 2 wiring starts, every **TBD** row must be resolved to an
-   explicit action.
+1. Every row above is resolved; new portal features must add a row here before wiring.
 2. Any **New** or **RPC** row requires a migration that follows the
    accountant project's RLS + GRANT conventions.
 3. No portal service is allowed to query an unmapped row.
+
+## Batch 2 migration summary
+
+- Added `public.portal_send_message(uuid, uuid, text, text, uuid)` — SECURITY DEFINER, `EXECUTE` granted only to `authenticated`.
+- No new tables, no new RLS policies on existing tables.

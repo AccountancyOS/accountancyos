@@ -17004,6 +17004,16 @@ export type Database = {
         Returns: undefined
       }
       port_quote_to_client: { Args: { p_quote_id: string }; Returns: string }
+      portal_send_message: {
+        Args: {
+          p_body: string
+          p_client_id: string
+          p_company_id: string
+          p_parent_message_id?: string
+          p_subject?: string
+        }
+        Returns: string
+      }
       post_to_ledger: {
         Args: {
           p_client_id: string
