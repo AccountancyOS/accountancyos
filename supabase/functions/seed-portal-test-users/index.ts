@@ -82,10 +82,10 @@ async function seedTasks(sr: SR, scope: { client_id?: string | null; company_id?
   await del;
   const now = Date.now();
   const rows = [
-    { title: `${titlePrefix} Open task`, status: "pending", visibility: "client_visible", due_date: new Date(now + 7 * 86400e3).toISOString() },
-    { title: `${titlePrefix} Overdue task`, status: "pending", visibility: "client_visible", due_date: new Date(now - 3 * 86400e3).toISOString() },
-    { title: `${titlePrefix} Completed task`, status: "completed", visibility: "client_visible", completed_at: new Date(now - 86400e3).toISOString() },
-    { title: `${titlePrefix} Internal task (must NOT show)`, status: "pending", visibility: "internal" },
+    { title: `${titlePrefix} Open task`, status: "not_started", visibility: "client_visible", due_date: new Date(now + 7 * 86400e3).toISOString() },
+    { title: `${titlePrefix} Overdue task`, status: "in_progress", visibility: "client_visible", due_date: new Date(now - 3 * 86400e3).toISOString() },
+    { title: `${titlePrefix} Completed task`, status: "complete", visibility: "client_visible", completed_at: new Date(now - 86400e3).toISOString() },
+    { title: `${titlePrefix} Internal task (must NOT show)`, status: "not_started", visibility: "internal_only" },
   ].map((r) => ({
     ...r,
     organization_id: ORG,
@@ -103,8 +103,8 @@ async function seedMessages(sr: SR, accountantUserId: string, scope: { client_id
   if (scope.company_id) del = del.eq("company_id", scope.company_id);
   await del;
   const rows = [
-    { subject: `${subjPrefix} Welcome`, content: "Hello from your accountant.", sender_type: "accountant", visibility: "client_visible", message_type: "message", sender_id: accountantUserId },
-    { subject: `${subjPrefix} Internal note (must NOT show)`, content: "Internal accountant note.", sender_type: "accountant", visibility: "internal", message_type: "note", sender_id: accountantUserId },
+    { subject: `${subjPrefix} Welcome`, content: "Hello from your accountant.", sender_type: "staff", visibility: "client_visible", message_type: "message", sender_id: accountantUserId },
+    { subject: `${subjPrefix} Internal note (must NOT show)`, content: "Internal accountant note.", sender_type: "staff", visibility: "internal_only", message_type: "note", sender_id: accountantUserId },
   ].map((r) => ({
     ...r,
     organization_id: ORG,
@@ -134,6 +134,7 @@ async function seedInvoices(sr: SR, scope: { client_id?: string | null; company_
     issue_date: today,
     due_date: due,
     currency: "GBP",
+    contact_name: `QA ${scope.label}`,
   };
   const { data: unpaid, error: e1 } = await sr.from("invoices").insert({
     ...baseInv,
@@ -149,10 +150,10 @@ async function seedInvoices(sr: SR, scope: { client_id?: string | null; company_
     total_net: 500, total_vat: 100, total_gross: 600, amount_paid: 600, status: "paid",
   }).select("id").single();
   if (e2) throw new Error(`invoice paid ${scope.label}: ${e2.message}`);
-  const { error: e3 } = await sr.from("invoice_payments").insert({
-    invoice_id: paid!.id, payment_date: today, amount: 600, payment_method: "bank_transfer", reference: `${refPrefix}PAY`,
-  });
-  if (e3) throw new Error(`payment ${scope.label}: ${e3.message}`);
+  // NOTE: trigger update_invoice_payment_status writes UPPER-CASE statuses
+  // ('PAID' / 'AWAITING_PAYMENT') which violate chk_invoices_status (lowercase).
+  // Bug logged in QA report. Skip invoice_payments insert; leave invoice as 'paid'
+  // with amount_paid pre-set so the portal still surfaces a paid invoice.
 }
 
 async function seedJobDocs(sr: SR, jobId: string, label: string) {
@@ -178,23 +179,11 @@ async function seedVisibility(sr: SR, scope: { client_id?: string | null; compan
   });
 }
 
-async function seedQuestionnaire(sr: SR, scope: { client_id?: string | null; company_id?: string | null; label: string }) {
-  const namePrefix = `[QA-${scope.label}]`;
-  let del = sr.from("questionnaire_instances").delete().eq("organization_id", ORG).like("name", `${namePrefix}%`);
-  if (scope.client_id) del = del.eq("client_id", scope.client_id);
-  if (scope.company_id) del = del.eq("company_id", scope.company_id);
-  await del;
-  const rows = [
-    { name: `${namePrefix} In Progress`, status: "in_progress", questions: [] },
-    { name: `${namePrefix} Submitted`, status: "submitted", submitted_at: new Date().toISOString(), questions: [] },
-  ].map((r) => ({
-    ...r,
-    organization_id: ORG,
-    client_id: scope.client_id ?? null,
-    company_id: scope.company_id ?? null,
-  }));
-  const { error } = await sr.from("questionnaire_instances").insert(rows);
-  if (error) throw new Error(`questionnaires ${scope.label}: ${error.message}`);
+async function seedQuestionnaire(_sr: SR, _scope: { client_id?: string | null; company_id?: string | null; label: string }) {
+  // Skipped: questionnaire_instances requires template_id (FK to a questionnaire
+  // template) and access_token/token_expires_at NOT NULL. Seeding meaningful
+  // questionnaire data requires a template-builder seed flow not in scope of
+  // this one-shot QA seed. Tracked in QA report.
 }
 
 Deno.serve(async (req) => {
