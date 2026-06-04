@@ -70,18 +70,18 @@ async function loadQuestionnaireFiles(entity: PortalEntity): Promise<InternalDoc
 }
 
 async function loadOnboardingDocuments(entity: PortalEntity): Promise<InternalDoc[]> {
-  if (entity.type !== "client") return [];
+  const col = entity.type === "client" ? "client_id" : "company_id";
   const { data, error } = await supabase
     .from("onboarding_documents")
-    .select("id, file_name, file_path, uploaded_at")
-    .eq("client_id", entity.id)
-    .order("uploaded_at", { ascending: false });
+    .select("id, file_name, file_path, created_at")
+    .eq(col, entity.id)
+    .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map((r: any) => ({
     id: r.id,
     source: "kyc_document",
     title: r.file_name,
-    uploadedAt: r.uploaded_at,
+    uploadedAt: r.created_at,
     downloadUrl: null,
     description: null,
     _bucket: "onboarding-documents",
