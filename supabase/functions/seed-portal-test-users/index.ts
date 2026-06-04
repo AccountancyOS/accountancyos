@@ -82,10 +82,10 @@ async function seedTasks(sr: SR, scope: { client_id?: string | null; company_id?
   await del;
   const now = Date.now();
   const rows = [
-    { title: `${titlePrefix} Open task`, status: "pending", visibility: "client_visible", due_date: new Date(now + 7 * 86400e3).toISOString() },
-    { title: `${titlePrefix} Overdue task`, status: "pending", visibility: "client_visible", due_date: new Date(now - 3 * 86400e3).toISOString() },
-    { title: `${titlePrefix} Completed task`, status: "completed", visibility: "client_visible", completed_at: new Date(now - 86400e3).toISOString() },
-    { title: `${titlePrefix} Internal task (must NOT show)`, status: "pending", visibility: "internal" },
+    { title: `${titlePrefix} Open task`, status: "not_started", visibility: "client_visible", due_date: new Date(now + 7 * 86400e3).toISOString() },
+    { title: `${titlePrefix} Overdue task`, status: "in_progress", visibility: "client_visible", due_date: new Date(now - 3 * 86400e3).toISOString() },
+    { title: `${titlePrefix} Completed task`, status: "complete", visibility: "client_visible", completed_at: new Date(now - 86400e3).toISOString() },
+    { title: `${titlePrefix} Internal task (must NOT show)`, status: "not_started", visibility: "internal_only" },
   ].map((r) => ({
     ...r,
     organization_id: ORG,
@@ -103,8 +103,8 @@ async function seedMessages(sr: SR, accountantUserId: string, scope: { client_id
   if (scope.company_id) del = del.eq("company_id", scope.company_id);
   await del;
   const rows = [
-    { subject: `${subjPrefix} Welcome`, content: "Hello from your accountant.", sender_type: "accountant", visibility: "client_visible", message_type: "message", sender_id: accountantUserId },
-    { subject: `${subjPrefix} Internal note (must NOT show)`, content: "Internal accountant note.", sender_type: "accountant", visibility: "internal", message_type: "note", sender_id: accountantUserId },
+    { subject: `${subjPrefix} Welcome`, content: "Hello from your accountant.", sender_type: "staff", visibility: "client_visible", message_type: "message", sender_id: accountantUserId },
+    { subject: `${subjPrefix} Internal note (must NOT show)`, content: "Internal accountant note.", sender_type: "staff", visibility: "internal_only", message_type: "note", sender_id: accountantUserId },
   ].map((r) => ({
     ...r,
     organization_id: ORG,
