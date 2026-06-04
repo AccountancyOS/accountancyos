@@ -134,6 +134,7 @@ async function seedInvoices(sr: SR, scope: { client_id?: string | null; company_
     issue_date: today,
     due_date: due,
     currency: "GBP",
+    contact_name: `QA ${scope.label}`,
   };
   const { data: unpaid, error: e1 } = await sr.from("invoices").insert({
     ...baseInv,
