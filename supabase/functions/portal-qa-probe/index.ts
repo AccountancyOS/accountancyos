@@ -96,11 +96,11 @@ Deno.serve(async (req) => {
         return { rows: data?.length ?? 0, sample: data, err: error?.message };
       }));
       results.A.push(await probe("A: send message via RPC for own client", async () => {
-        const { data, error } = await a.rpc("portal_send_message", { p_client_id: CLIENT_A, p_company_id: null, p_subject: "[QA-A] portal probe", p_content: "hello", p_parent_message_id: null });
+        const { data, error } = await a.rpc("portal_send_message", { p_client_id: CLIENT_A, p_company_id: null, p_subject: "[QA-A] portal probe", p_body: "hello", p_parent_message_id: null });
         return { rows: data ? 1 : 0, sample: data, err: error?.message };
       }));
       results.A.push(await probe("A: send message via RPC for OTHER client B (must error)", async () => {
-        const { data, error } = await a.rpc("portal_send_message", { p_client_id: CLIENT_B, p_company_id: null, p_subject: "[QA-A] should fail", p_content: "x", p_parent_message_id: null });
+        const { data, error } = await a.rpc("portal_send_message", { p_client_id: CLIENT_B, p_company_id: null, p_subject: "[QA-A] should fail", p_body: "x", p_parent_message_id: null });
         return { rows: data ? 1 : 0, sample: data, err: error?.message };
       }));
     }
@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
         return { rows: data?.length ?? 0, err: error?.message };
       }));
       results.D.push(await probe("D: send message via RPC for revoked company (must error)", async () => {
-        const { data, error } = await d.rpc("portal_send_message", { p_client_id: null, p_company_id: COMPANY_D, p_subject: "[QA-D] should fail", p_content: "x", p_parent_message_id: null });
+        const { data, error } = await d.rpc("portal_send_message", { p_client_id: null, p_company_id: COMPANY_D, p_subject: "[QA-D] should fail", p_body: "x", p_parent_message_id: null });
         return { rows: data ? 1 : 0, sample: data, err: error?.message };
       }));
       results.D.push(await probe("D: cross-tenant tasks for client A (must be 0)", async () => {
