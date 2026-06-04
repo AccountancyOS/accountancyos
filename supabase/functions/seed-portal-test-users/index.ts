@@ -150,10 +150,10 @@ async function seedInvoices(sr: SR, scope: { client_id?: string | null; company_
     total_net: 500, total_vat: 100, total_gross: 600, amount_paid: 600, status: "paid",
   }).select("id").single();
   if (e2) throw new Error(`invoice paid ${scope.label}: ${e2.message}`);
-  const { error: e3 } = await sr.from("invoice_payments").insert({
-    invoice_id: paid!.id, payment_date: today, amount: 600, payment_method: "bank_transfer", reference: `${refPrefix}PAY`,
-  });
-  if (e3) throw new Error(`payment ${scope.label}: ${e3.message}`);
+  // NOTE: trigger update_invoice_payment_status writes UPPER-CASE statuses
+  // ('PAID' / 'AWAITING_PAYMENT') which violate chk_invoices_status (lowercase).
+  // Bug logged in QA report. Skip invoice_payments insert; leave invoice as 'paid'
+  // with amount_paid pre-set so the portal still surfaces a paid invoice.
 }
 
 async function seedJobDocs(sr: SR, jobId: string, label: string) {
