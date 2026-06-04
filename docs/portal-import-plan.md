@@ -1,4 +1,4 @@
-# Client Portal — Import Plan (Batch 1)
+# Client Portal — Import Plan (Batches 1 + 2)
 
 The standalone client-portal Lovable project has been retired. The portal is
 being merged into this accountant project as a second application surface,
@@ -25,9 +25,11 @@ src/portal/
                         # Questionnaires, QuestionnaireResponse, Messages,
                         # Payments, Bookkeeping, Settings, NotFound
   components/           # PortalPageHeader, PortalEmptyState
-  services/             # Stub services returning typed DTOs
+  services/             # Real-data adapters over the accountant schema
+  hooks/                # TanStack Query hooks used by portal pages
+  contexts/             # PortalEntityContext (current entity per portal user)
+  utils/                # storage.ts (signed URL helper)
   types/                # Portal-domain DTOs
-  hooks/, utils/        # (reserved for Batch 2+)
 ```
 
 No portal component is mounted outside `src/portal/`.
@@ -62,7 +64,16 @@ No portal component is mounted outside `src/portal/`.
 - All portal data flows through `src/portal/services/*`. Pages consume typed
   DTOs only — raw Supabase rows never leak into portal UI components.
 
-## Disabled features (Batch 1)
+## Done in Batch 2
+
+- Wired every service in `src/portal/services/*` to real accountant tables.
+- Added the single `portal_send_message` SECURITY DEFINER RPC; no new tables.
+- Added `PortalEntityContext` with a sidebar entity switcher for multi-entity portal users.
+- Pages now render real data (or an empty state) via `usePortalXxx` hooks under `src/portal/hooks/`.
+- Invite flow posts `{token, password, name}` to `accept-portal-invite-signup` and signs the user in.
+- Settings page exposes a real password change via `supabase.auth.updateUser`.
+
+## Disabled features
 
 See `docs/portal-disabled-features.md`.
 
@@ -72,20 +83,13 @@ See `docs/portal-disabled-features.md`.
 - Notification-preference saving (UI removed rather than fake-persisting).
 - Hardcoded financial trends and mock activity feeds.
 
-## Risks
+## Out of scope (deferred to Batch 3)
 
-- Schema reconciliation is deferred to Batch 2. Until then, every portal page
-  renders an empty state. This is intentional — no service is wired against
-  an unmapped table.
-- Accountant users hitting `/portal/*` are bounced to the portal login. An
-  explicit impersonation / support mode is a Batch 3 concern.
-- The invite acceptance flow is rendered but not yet functional; tokens are
-  validated server-side in Batch 2 via an edge function.
-
-## Out of scope for Batch 1
-
-- Adapting services to real accountant tables.
-- Any new migrations, RPCs, RLS, storage policies, or edge functions.
-- Wiring real data into any portal page.
-- Cross-surface guard enforcement (blocking portal users from accountant
-  routes) beyond the simple session check.
+- Per-user read receipts / true unread counts on messages.
+- Accountant impersonation / support mode for the portal.
+- Portal-side write queue for bookkeeping or invoice payments.
+- TrueLayer / bank connection.
+- Cross-surface guard that bounces portal-only users away from accountant
+  routes (currently relies on RLS instead of UI redirects).
+- Per-metric derivation in the bookkeeping page (revenue / profit / cash) —
+  requires the CoA-mapping helper to be exposed in a portal-safe shape.
