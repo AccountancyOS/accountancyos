@@ -1,33 +1,27 @@
-# Use Recipient's Personal Name in All Outbound Emails
+# Confirm Portal Invitees Skipped Email Verification
 
-## Problem
+## Status of the code fix
 
-Some emails address the recipient by company name (e.g. "Dear Churchills London") instead of the human contact's name. The engagement letter, quote-acceptance preview, and quote-send email all fall back to `company_name` when a company is attached.
+`supabase/functions/accept-portal-invite-signup/index.ts` already passes `email_confirm: true` to `admin.auth.admin.createUser` (line 115). The code change requested is therefore a no-op. The remaining symptom (test invitee unable to log in) is from a user row created before the flag was added, or a stale edge function deploy.
 
-## Rule
+## Plan
 
-Always address the recipient by their personal name. Resolution order, used everywhere:
+1. **Redeploy the edge function** so production matches the current code. This guards against a stale build where `email_confirm: true` had not yet shipped when the test invitee signed up.
 
-1. `clients.preferred_name` (when a client is linked and the column is set)
-2. `first_name` (+ `last_name` for full-name slots) from the lead, client, or onboarding application
-3. `company_name` only as a last resort when no personal name exists
+2. **One-off backfill migration** to confirm any existing portal invitees who are still flagged unverified. Scope tightly to users linked through `public.portal_access`, never blanket-confirm.
 
-`preferred_name` already exists on `clients`. No new columns needed; leads and onboarding applications keep first/last name only.
+```sql
+UPDATE auth.users
+SET email_confirmed_at = COALESCE(email_confirmed_at, now()),
+    confirmed_at       = COALESCE(confirmed_at, now())
+WHERE email_confirmed_at IS NULL
+  AND id IN (SELECT user_id FROM public.portal_access WHERE user_id IS NOT NULL);
+```
 
-## Changes
-
-### Database functions (single migration)
-
-- `public.lifecycle_send_quote` — when resolving the recipient name and first name, take `clients.preferred_name` over `first_name` if present; for company-only quotes, fall back to the linked director/contact's first name before using `company_name`.
-- `public.public_get_quote_by_token` — `recipient_name` follows the same order: preferred_name → first+last → company_name.
-- `public.public_sign_engagement_letter` and `public.public_preview_engagement_letter` — replace `v_client_name := COALESCE(v_app.company_name, first+last)` with the new order: look up `clients.preferred_name` via `onboarding_applications.client_id` when present, then first+last from the application, then `company_name`.
-
-### Edge function
-
-- `supabase/functions/send-engagement-letter/index.ts` — `recipientName` currently picks `first+last` only for individual applications, otherwise `company_name`. Change to: preferred_name (if `client_id` set) → `first+last` (if either is set) → `company_name`. Apply for both the email body and the `{{recipient_name}}` placeholder substitution.
+I cannot list the affected `auth.users` rows from this session (the sandbox role has no `auth` schema access), so the backfill runs as a migration and the count is reported back from the migration output.
 
 ## Out of scope
 
-- Adding `preferred_name` to leads or onboarding_applications.
-- Changing chaser templates — those already use `{{client.first_name}}` placeholders, which are unaffected.
-- Tone/copy of the templates themselves.
+- No portal frontend changes (`signInWithPassword` already correct).
+- No change to the `{status: "created" | "already_exists" | "invalid_token" | "error"}` response contract.
+- No bulk confirmation of unrelated `auth.users` rows.
