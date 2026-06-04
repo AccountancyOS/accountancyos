@@ -17040,6 +17040,10 @@ export type Database = {
         Returns: Json
       }
       public_get_quote_by_token: { Args: { p_token: string }; Returns: Json }
+      public_preview_engagement_letter: {
+        Args: { p_application_id: string }
+        Returns: string
+      }
       public_record_aml_upload: {
         Args: {
           p_application_id: string

@@ -1,22 +1,42 @@
-## Fix Quote Total Display
+# Fix Quote Acceptance → Engagement Letter Flow
 
-The public proposal view (`src/pages/PublicQuoteView.tsx`) currently shows a single `Total` row that sums every line regardless of billing frequency. When a quote mixes monthly and one-off services, this number is misleading (e.g. £2,175 implies a single payment when it's actually recurring + upfront).
+## Problems
 
-### Change
+1. After clicking Accept, the page stalls on "Continuing to your onboarding…" — navigation never fires.
+2. The engagement letter shows no services listed.
+3. There is no actual letter body for the user to read before signing.
 
-Replace the single `Total` row in the proposal table footer with up to two rows, derived client-side from `quote.lines`:
+## Root Causes
 
-- **Due Now (One-off):** sum of `subtotal` where `billing_frequency !== 'monthly'`
-- **Monthly Recurring:** sum of `subtotal` where `billing_frequency === 'monthly'`, suffixed with `/month`
+- `public_accept_quote_by_token` returns only `{ success, client_id, company_id }` — no `onboarding_application_id`, so the frontend redirect target is `undefined`.
+- The same RPC never writes `quotes.accepted_snapshot`, so the downstream `public_sign_engagement_letter` has no services to render.
+- `public_get_onboarding` returns only `{ id, signed_at }` for the engagement letter — no document body exists pre-signature; the HTML is built inside the sign RPC.
 
-Rules:
-- Only render rows whose total is > 0 (a pure monthly quote shows only the monthly line; a pure one-off quote shows only Due Now).
-- If both exist, show both stacked, with Monthly Recurring as the more prominent/bold line.
-- Keep currency formatting via the existing `fmt()` helper.
-- No changes to the underlying `quote.total_amount` field, RPC, or accountant-side quote builder — purely a presentation fix in `PublicQuoteView.tsx`.
+## Changes
 
-### Out of scope
+### 1. Database migration
 
-- Engagement letter / PDF rendering (separate template)
-- Accountant-side quote detail view
-- Any change to how `total_amount` is stored or computed in the DB
+- Patch `public_accept_quote_by_token` to:
+  - Build `accepted_snapshot` JSONB from `quote_lines` (service_id, code, name, quantity, unit_price, subtotal, billing_frequency) plus `total_now`, `total_monthly`, `total_amount`, `currency`, `quote_number`, `accepted_at`, `valid_until`.
+  - Persist it to `quotes.accepted_snapshot`.
+  - Look up or create the matching `onboarding_applications` row.
+  - Return `onboarding_application_id` in the result.
+- Add `public_preview_engagement_letter(p_application_id uuid) returns text` — SECURITY DEFINER, builds the same HTML as the sign RPC but performs no writes.
+- Patch `public_get_onboarding` to also return `engagement_letter.document_content` (preview HTML if unsigned, stored content if signed).
+
+### 2. `src/pages/PublicQuoteView.tsx`
+
+- Use `onboarding_application_id` from the accept response when present.
+- If absent, re-call `public_get_quote_by_token` once to pick up the self-healed id.
+- After ~1.5s with no id, render a "Continue Onboarding" button as a safety net instead of a perpetual spinner.
+
+### 3. `src/pages/PublicOnboarding.tsx` (EngagementStep)
+
+- On mount, call `public_preview_engagement_letter` (or use `bundle.engagement_letter.document_content` if already signed).
+- Render the returned HTML through `sanitizeHtml` in a scrollable, bordered container above the signature input.
+- Keep the existing bullet list beneath, relabelled as "Scope summary".
+
+## Out of scope
+
+- Per-practice letter templating, PDF export, e-signature versioning, Stripe Connect changes.
+- Existing accepted quotes without snapshots are already self-healed by `public_get_quote_by_token`.
