@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, Loader2, FileSignature, ShieldCheck, CreditCard, UserPlus, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 
 type Step = "engagement" | "aml" | "billing" | "portal" | "done";
 
@@ -17,7 +18,7 @@ interface AppBundle {
   organization: { id: string; name: string; logo_url?: string | null; has_stripe_connect?: boolean };
   quote: { id: string; quote_number: string; currency: string; accepted_snapshot: any } | null;
   documents: Array<{ id: string; document_type: string; file_name: string; file_path: string }>;
-  engagement_letter: { id: string; signed_at: string | null } | null;
+  engagement_letter: { id: string; signed_at: string | null; document_content?: string | null } | null;
 }
 
 const stepOrder: Step[] = ["engagement", "aml", "billing", "portal"];
@@ -171,10 +172,32 @@ function EngagementStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => v
   const [signature, setSignature] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [letterHtml, setLetterHtml] = useState<string | null>(
+    bundle.engagement_letter?.document_content ?? null
+  );
+  const [loadingLetter, setLoadingLetter] = useState(!bundle.engagement_letter?.document_content);
 
   const snapshot = bundle.quote?.accepted_snapshot;
   const lines = (snapshot?.lines ?? []) as any[];
   const currency = bundle.quote?.currency ?? "GBP";
+
+  useEffect(() => {
+    if (letterHtml) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc("public_preview_engagement_letter", {
+        p_application_id: bundle.application.id,
+      });
+      if (cancelled) return;
+      if (error) {
+        toast.error(error.message);
+      } else if (typeof data === "string") {
+        setLetterHtml(data);
+      }
+      setLoadingLetter(false);
+    })();
+    return () => { cancelled = true; };
+  }, [bundle.application.id, letterHtml]);
 
   const sign = async () => {
     if (!signature.trim() || !confirmed) {
@@ -205,11 +228,25 @@ function EngagementStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => v
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="border rounded-md bg-background">
+          <div className="max-h-[420px] overflow-y-auto p-5 text-sm prose prose-sm dark:prose-invert max-w-none [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-0 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-4">
+            {loadingLetter ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading engagement letter…
+              </div>
+            ) : letterHtml ? (
+              <div dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(letterHtml) }} />
+            ) : (
+              <p className="text-muted-foreground">Engagement letter unavailable.</p>
+            )}
+          </div>
+        </div>
+
         <div className="border rounded-md p-4 bg-background text-sm space-y-2">
           <p><strong>Practice:</strong> {bundle.organization.name}</p>
           <p><strong>Client:</strong> {bundle.application.company_name || `${bundle.application.first_name ?? ""} ${bundle.application.last_name ?? ""}`}</p>
           <Separator />
-          <p className="font-medium">Scope of services</p>
+          <p className="font-medium">Scope Summary</p>
           <ul className="list-disc pl-5 space-y-1">
             {lines.length === 0 && <li className="text-muted-foreground">No services listed.</li>}
             {lines.map((l, i) => (
