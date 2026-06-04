@@ -54,7 +54,7 @@ async function loadQuestionnaireFiles(entity: PortalEntity): Promise<InternalDoc
   const { data, error } = await supabase
     .from("questionnaire_files")
     .select("id, file_name, file_path, uploaded_at")
-    .in("instance_id", ids)
+    .in("questionnaire_instance_id", ids as string[])
     .order("uploaded_at", { ascending: false });
   if (error || !data) return [];
   return data.map((r: any) => ({
