@@ -3,6 +3,8 @@ project_id = "moxpdejnucjjcplleefn"
 [functions]
   [functions.auth-email-hook]
     verify_jwt = false
+  [functions.accept-portal-invite-signup]
+    verify_jwt = false
   [functions.ch-submit]
     verify_jwt = true
   [functions.chaser-tick]
