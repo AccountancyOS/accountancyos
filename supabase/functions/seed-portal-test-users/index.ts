@@ -179,23 +179,11 @@ async function seedVisibility(sr: SR, scope: { client_id?: string | null; compan
   });
 }
 
-async function seedQuestionnaire(sr: SR, scope: { client_id?: string | null; company_id?: string | null; label: string }) {
-  const namePrefix = `[QA-${scope.label}]`;
-  let del = sr.from("questionnaire_instances").delete().eq("organization_id", ORG).like("name", `${namePrefix}%`);
-  if (scope.client_id) del = del.eq("client_id", scope.client_id);
-  if (scope.company_id) del = del.eq("company_id", scope.company_id);
-  await del;
-  const rows = [
-    { name: `${namePrefix} In Progress`, status: "in_progress", questions: [] },
-    { name: `${namePrefix} Submitted`, status: "submitted", submitted_at: new Date().toISOString(), questions: [] },
-  ].map((r) => ({
-    ...r,
-    organization_id: ORG,
-    client_id: scope.client_id ?? null,
-    company_id: scope.company_id ?? null,
-  }));
-  const { error } = await sr.from("questionnaire_instances").insert(rows);
-  if (error) throw new Error(`questionnaires ${scope.label}: ${error.message}`);
+async function seedQuestionnaire(_sr: SR, _scope: { client_id?: string | null; company_id?: string | null; label: string }) {
+  // Skipped: questionnaire_instances requires template_id (FK to a questionnaire
+  // template) and access_token/token_expires_at NOT NULL. Seeding meaningful
+  // questionnaire data requires a template-builder seed flow not in scope of
+  // this one-shot QA seed. Tracked in QA report.
 }
 
 Deno.serve(async (req) => {
