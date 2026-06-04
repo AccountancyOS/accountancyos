@@ -1,5 +1,7 @@
 import { CheckSquare, ClipboardList, CreditCard, MessageSquare } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PortalPageHeader } from "../components/PortalPageHeader";
 import {
   usePortalConversations,
@@ -13,23 +15,33 @@ function Tile({
   label,
   value,
   icon: Icon,
+  to,
+  loading,
 }: {
   label: string;
   value: number | string;
   icon: typeof CheckSquare;
+  to: string;
+  loading?: boolean;
 }) {
   return (
-    <Card>
-      <CardContent className="p-6 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-3xl font-semibold mt-1">{value}</p>
-        </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-          <Icon className="h-5 w-5 text-muted-foreground" />
-        </div>
-      </CardContent>
-    </Card>
+    <Link to={to} className="block focus:outline-none focus:ring-2 focus:ring-ring rounded-lg">
+      <Card className="hover:border-primary/40 hover:shadow-sm transition">
+        <CardContent className="p-6 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            {loading ? (
+              <Skeleton className="h-8 w-12 mt-2" />
+            ) : (
+              <p className="text-3xl font-semibold mt-1">{value}</p>
+            )}
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+            <Icon className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -60,10 +72,10 @@ export default function PortalDashboard() {
         }
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Tile label="Open Tasks" value={openTasks} icon={CheckSquare} />
-        <Tile label="Open Questionnaires" value={openQuestionnaires} icon={ClipboardList} />
-        <Tile label="Unpaid Invoices" value={unpaidInvoices} icon={CreditCard} />
-        <Tile label="Conversations" value={conversationCount} icon={MessageSquare} />
+        <Tile label="Open Tasks" value={openTasks} icon={CheckSquare} to="/portal/tasks" loading={tasks.isLoading} />
+        <Tile label="Open Questionnaires" value={openQuestionnaires} icon={ClipboardList} to="/portal/questionnaires" loading={questionnaires.isLoading} />
+        <Tile label="Unpaid Invoices" value={unpaidInvoices} icon={CreditCard} to="/portal/payments" loading={payments.isLoading} />
+        <Tile label="Conversations" value={conversationCount} icon={MessageSquare} to="/portal/messages" loading={conversations.isLoading} />
       </div>
     </div>
   );

@@ -14,6 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { usePortalEntity } from "../contexts/PortalEntityContext";
+import { usePortalConversations } from "../hooks/usePortalData";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -35,6 +37,8 @@ const navItems = [
 export function PortalLayout() {
   const navigate = useNavigate();
   const { entities, currentEntity, setCurrentEntity } = usePortalEntity();
+  const conversations = usePortalConversations();
+  const unreadConversations = (conversations.data ?? []).filter((c) => c.unreadCount > 0).length;
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -83,7 +87,9 @@ export function PortalLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
+          {navItems.map((item) => {
+            const isMessages = item.to === "/portal/messages";
+            return (
             <NavLink
               key={item.to}
               to={item.to}
@@ -96,9 +102,15 @@ export function PortalLayout() {
               }
             >
               <item.icon className="h-5 w-5 shrink-0" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {isMessages && unreadConversations > 0 && (
+                <Badge variant="default" className="h-5 px-1.5 text-[10px]">
+                  {unreadConversations}
+                </Badge>
+              )}
             </NavLink>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="px-3 py-4 border-t border-sidebar-border space-y-1">

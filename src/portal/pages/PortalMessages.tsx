@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MessageSquare, Send } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PortalPageHeader } from "../components/PortalPageHeader";
@@ -14,6 +15,8 @@ import {
   usePortalMessages,
   useSendPortalMessage,
 } from "../hooks/usePortalData";
+import { markConversationRead } from "../utils/readState";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function PortalMessages() {
   const conversations = usePortalConversations();
@@ -23,6 +26,15 @@ export default function PortalMessages() {
   const [replyBody, setReplyBody] = useState("");
   const messages = usePortalMessages(activeId);
   const send = useSendPortalMessage();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (activeId && messages.data && messages.data.length > 0) {
+      const last = messages.data[messages.data.length - 1].sentAt;
+      markConversationRead(activeId, last);
+      qc.invalidateQueries({ queryKey: ["portal", "conversations"] });
+    }
+  }, [activeId, messages.data, qc]);
 
   const list = conversations.data ?? [];
   const composing = activeId === null;
@@ -90,7 +102,16 @@ export default function PortalMessages() {
                       activeId === c.id && "bg-muted",
                     )}
                   >
-                    <p className="font-medium truncate text-sm">{c.subject}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={cn("truncate text-sm", c.unreadCount > 0 ? "font-semibold" : "font-medium")}>
+                        {c.subject}
+                      </p>
+                      {c.unreadCount > 0 && (
+                        <Badge variant="default" className="h-5 px-1.5 text-[10px]">
+                          New
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       {new Date(c.lastMessageAt).toLocaleString("en-GB")}
                     </p>
