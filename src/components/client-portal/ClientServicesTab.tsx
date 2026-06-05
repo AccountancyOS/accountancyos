@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Plus, FileText, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Plus, FileText, CheckCircle, Clock, AlertCircle, PowerOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DeactivateBookkeepingDialog } from "./DeactivateBookkeepingDialog";
 
 interface ClientServicesTabProps {
   clientId: string;
@@ -14,6 +16,12 @@ interface ClientServicesTabProps {
 
 export function ClientServicesTab({ clientId }: ClientServicesTabProps) {
   const { organization } = useOrganization();
+  const [deactivateTarget, setDeactivateTarget] = useState<{
+    id: string;
+    name: string;
+    clientId: string | null;
+    companyId: string | null;
+  } | null>(null);
 
   const { data: engagements, isLoading } = useQuery({
     queryKey: ["client-engagements", clientId],
@@ -22,7 +30,7 @@ export function ClientServicesTab({ clientId }: ClientServicesTabProps) {
         .from("engagements")
         .select(`
           *,
-          services (
+          services_catalog (
             id,
             name,
             code,
@@ -106,10 +114,10 @@ export function ClientServicesTab({ clientId }: ClientServicesTabProps) {
                   </div>
                   <div>
                     <p className="font-medium">
-                      {(engagement.services as any)?.name || "Unnamed Service"}
+                      {(engagement.services_catalog as any)?.name || "Unnamed Service"}
                     </p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>{(engagement.services as any)?.code || "-"}</span>
+                      <span>{(engagement.services_catalog as any)?.code || "-"}</span>
                       {engagement.start_date && (
                         <>
                           <span>•</span>
@@ -130,12 +138,43 @@ export function ClientServicesTab({ clientId }: ClientServicesTabProps) {
                     </span>
                   )}
                   {getStatusBadge(engagement.status || "active")}
+                  {engagement.status === "active" &&
+                    ["BOOKKEEPING", "BK-MONTHLY", "BK-QUARTERLY"].includes(
+                      (engagement.services_catalog as any)?.code,
+                    ) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setDeactivateTarget({
+                            id: engagement.id,
+                            name: (engagement.services_catalog as any)?.name || "Bookkeeping",
+                            clientId: engagement.client_id,
+                            companyId: engagement.company_id,
+                          })
+                        }
+                      >
+                        <PowerOff className="h-4 w-4 mr-1" />
+                        Deactivate
+                      </Button>
+                    )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </CardContent>
+      {deactivateTarget && organization?.id && (
+        <DeactivateBookkeepingDialog
+          open={!!deactivateTarget}
+          onOpenChange={(open) => !open && setDeactivateTarget(null)}
+          engagementId={deactivateTarget.id}
+          organizationId={organization.id}
+          clientId={deactivateTarget.clientId}
+          companyId={deactivateTarget.companyId}
+          serviceName={deactivateTarget.name}
+        />
+      )}
     </Card>
   );
 }

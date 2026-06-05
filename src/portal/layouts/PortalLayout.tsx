@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { usePortalConversations } from "../hooks/usePortalData";
+import { useAnyPortalBookkeepingAccess } from "../hooks/usePortalBookkeepingAccess";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -24,14 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const navItems = [
+const baseNavItems = [
   { to: "/portal/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/portal/tasks", icon: CheckSquare, label: "Tasks" },
   { to: "/portal/documents", icon: FolderOpen, label: "Documents" },
   { to: "/portal/questionnaires", icon: ClipboardList, label: "Questionnaires" },
   { to: "/portal/messages", icon: MessageSquare, label: "Messages" },
   { to: "/portal/payments", icon: CreditCard, label: "Payments" },
-  { to: "/portal/bookkeeping", icon: BarChart3, label: "Bookkeeping" },
 ];
 
 export function PortalLayout() {
@@ -39,6 +39,10 @@ export function PortalLayout() {
   const { entities, currentEntity, setCurrentEntity } = usePortalEntity();
   const conversations = usePortalConversations();
   const unreadConversations = (conversations.data ?? []).filter((c) => c.unreadCount > 0).length;
+  const bookkeepingAccess = useAnyPortalBookkeepingAccess();
+  const navItems = bookkeepingAccess.data
+    ? [...baseNavItems, { to: "/portal/bookkeeping", icon: BarChart3, label: "Bookkeeping" }]
+    : baseNavItems;
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();

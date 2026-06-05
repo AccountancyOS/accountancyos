@@ -68,7 +68,7 @@ const defaultContext: AppContextType = {
   checkSubscription: async () => {},
 };
 
-const AppContext = createContext<AppContextType>(defaultContext);
+export const AppContext = createContext<AppContextType>(defaultContext);
 
 export const useApp = () => useContext(AppContext);
 
