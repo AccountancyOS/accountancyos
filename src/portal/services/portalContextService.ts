@@ -53,7 +53,7 @@ export async function listPortalEntities(): Promise<PortalEntity[]> {
     clientIds.length
       ? supabase
           .from("clients")
-          .select("id, organization_id, name, utr")
+          .select("id, organization_id, first_name, last_name, utr")
           .in("id", clientIds)
       : Promise.resolve({ data: [], error: null } as const),
     companyIds.length
@@ -66,10 +66,11 @@ export async function listPortalEntities(): Promise<PortalEntity[]> {
 
   const out: PortalEntity[] = [];
   for (const c of (clientsRes.data ?? []) as any[]) {
+    const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
     out.push({
       id: c.id,
       type: "client",
-      displayName: c.name ?? "Client",
+      displayName: fullName || "Client",
       organizationId: c.organization_id,
       taxReference: c.utr ?? null,
       registrationNumber: null,
