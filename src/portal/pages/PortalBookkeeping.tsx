@@ -1,12 +1,15 @@
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PortalPageHeader } from "../components/PortalPageHeader";
 import { PortalEmptyState } from "../components/PortalEmptyState";
 import {
   usePortalFinancialSummary,
   usePortalVisibility,
 } from "../hooks/usePortalData";
+import { usePortalBookkeepingAccess } from "../hooks/usePortalBookkeepingAccess";
+import PortalBookkeepingFull from "./PortalBookkeepingFull";
 
 /**
  * Bookkeeping in the portal is strictly read-only.
@@ -26,8 +29,27 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 export default function PortalBookkeeping() {
+  const access = usePortalBookkeepingAccess();
   const visibility = usePortalVisibility();
   const summary = usePortalFinancialSummary();
+
+  // While we determine service status, show a skeleton.
+  if (access.isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <PortalPageHeader title="Bookkeeping" description="Loading…" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+
+  // Bookkeeping service active → render the full module.
+  if (access.data === true) {
+    return <PortalBookkeepingFull />;
+  }
+
+  // Otherwise fall back to the legacy read-only summary (preserves any
+  // previously published figures so historical context is not lost).
 
   const v = visibility.data;
   const anyVisible =
@@ -52,6 +74,13 @@ export default function PortalBookkeeping() {
     return (
       <div className="p-6 space-y-6">
         <PortalPageHeader title="Bookkeeping" description="View-only financial summary." />
+        <Alert>
+          <Lock className="h-4 w-4" />
+          <AlertTitle>Bookkeeping Service Not Active</AlertTitle>
+          <AlertDescription>
+            The bookkeeping service is not currently active on your account. Contact your accountant to enable it and unlock bank feeds, invoicing, and transaction categorisation. Any prior data is retained and will reappear here if the service is reactivated.
+          </AlertDescription>
+        </Alert>
         <PortalEmptyState
           icon={BarChart3}
           title="No Financial Data Available"
