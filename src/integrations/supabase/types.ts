@@ -16711,6 +16711,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      entity_has_active_bookkeeping: {
+        Args: { _client_id: string; _company_id: string }
+        Returns: boolean
+      }
       finalize_workpaper_safe: {
         Args: { p_workpaper_id: string }
         Returns: Json
@@ -16972,6 +16976,15 @@ export type Database = {
         }
         Returns: string
       }
+      log_portal_bookkeeping_revocation: {
+        Args: {
+          _client_id: string
+          _company_id: string
+          _organization_id: string
+          _reason: string
+        }
+        Returns: undefined
+      }
       mark_lead_dormant: {
         Args: { p_lead_id: string; p_reason?: string }
         Returns: undefined
@@ -17004,6 +17017,14 @@ export type Database = {
         Returns: undefined
       }
       port_quote_to_client: { Args: { p_quote_id: string }; Returns: string }
+      portal_can_access_bookkeeping: {
+        Args: { _client_id: string; _company_id: string }
+        Returns: boolean
+      }
+      portal_has_bookkeeping: {
+        Args: { _entity_id: string; _entity_type: string }
+        Returns: boolean
+      }
       portal_send_message: {
         Args: {
           p_body: string
@@ -17013,6 +17034,10 @@ export type Database = {
           p_subject?: string
         }
         Returns: string
+      }
+      portal_user_has_entity_access: {
+        Args: { _client_id: string; _company_id: string; _user_id: string }
+        Returns: boolean
       }
       post_to_ledger: {
         Args: {
