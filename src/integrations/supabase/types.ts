@@ -2028,7 +2028,12 @@ export type Database = {
           balance: number | null
           bank_account_id: string
           category: string | null
+          client_explained_at: string | null
+          client_explained_by: string | null
+          client_explained_status: string | null
+          client_explanation: string | null
           client_id: string | null
+          client_suggested_account_id: string | null
           company_id: string | null
           created_at: string | null
           currency: string | null
@@ -2051,7 +2056,12 @@ export type Database = {
           balance?: number | null
           bank_account_id: string
           category?: string | null
+          client_explained_at?: string | null
+          client_explained_by?: string | null
+          client_explained_status?: string | null
+          client_explanation?: string | null
           client_id?: string | null
+          client_suggested_account_id?: string | null
           company_id?: string | null
           created_at?: string | null
           currency?: string | null
@@ -2074,7 +2084,12 @@ export type Database = {
           balance?: number | null
           bank_account_id?: string
           category?: string | null
+          client_explained_at?: string | null
+          client_explained_by?: string | null
+          client_explained_status?: string | null
+          client_explanation?: string | null
           client_id?: string | null
+          client_suggested_account_id?: string | null
           company_id?: string | null
           created_at?: string | null
           currency?: string | null
@@ -12645,60 +12660,96 @@ export type Database = {
       }
       portal_visibility_settings: {
         Row: {
+          allow_bank_connect: boolean
+          allow_bill_create: boolean
+          allow_invoice_create: boolean
+          allow_invoice_send: boolean
+          allow_receipt_upload: boolean
+          allow_reports_download: boolean
+          allow_transaction_explain: boolean
+          allow_vat_approval: boolean
           client_id: string | null
           company_id: string | null
           created_at: string
           id: string
           organization_id: string
           show_bank_accounts: boolean
+          show_bills: boolean
           show_cash: boolean
           show_ct_estimate: boolean
           show_detailed_ledger: boolean
           show_invoices: boolean
           show_profit: boolean
           show_receivables_payables: boolean
+          show_reports_detail: boolean
+          show_reports_summary: boolean
           show_revenue: boolean
           show_transactions: boolean
           show_trial_balance: boolean
           show_vat_position: boolean
+          show_vat_returns: boolean
           updated_at: string
         }
         Insert: {
+          allow_bank_connect?: boolean
+          allow_bill_create?: boolean
+          allow_invoice_create?: boolean
+          allow_invoice_send?: boolean
+          allow_receipt_upload?: boolean
+          allow_reports_download?: boolean
+          allow_transaction_explain?: boolean
+          allow_vat_approval?: boolean
           client_id?: string | null
           company_id?: string | null
           created_at?: string
           id?: string
           organization_id: string
           show_bank_accounts?: boolean
+          show_bills?: boolean
           show_cash?: boolean
           show_ct_estimate?: boolean
           show_detailed_ledger?: boolean
           show_invoices?: boolean
           show_profit?: boolean
           show_receivables_payables?: boolean
+          show_reports_detail?: boolean
+          show_reports_summary?: boolean
           show_revenue?: boolean
           show_transactions?: boolean
           show_trial_balance?: boolean
           show_vat_position?: boolean
+          show_vat_returns?: boolean
           updated_at?: string
         }
         Update: {
+          allow_bank_connect?: boolean
+          allow_bill_create?: boolean
+          allow_invoice_create?: boolean
+          allow_invoice_send?: boolean
+          allow_receipt_upload?: boolean
+          allow_reports_download?: boolean
+          allow_transaction_explain?: boolean
+          allow_vat_approval?: boolean
           client_id?: string | null
           company_id?: string | null
           created_at?: string
           id?: string
           organization_id?: string
           show_bank_accounts?: boolean
+          show_bills?: boolean
           show_cash?: boolean
           show_ct_estimate?: boolean
           show_detailed_ledger?: boolean
           show_invoices?: boolean
           show_profit?: boolean
           show_receivables_payables?: boolean
+          show_reports_detail?: boolean
+          show_reports_summary?: boolean
           show_revenue?: boolean
           show_transactions?: boolean
           show_trial_balance?: boolean
           show_vat_position?: boolean
+          show_vat_returns?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -15688,6 +15739,9 @@ export type Database = {
           box_7_total_purchases: number
           box_8_total_supplies_eu: number
           box_9_total_acquisitions_eu: number
+          client_approval_required: boolean
+          client_approved_at: string | null
+          client_approved_by: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
@@ -15713,6 +15767,9 @@ export type Database = {
           box_7_total_purchases?: number
           box_8_total_supplies_eu?: number
           box_9_total_acquisitions_eu?: number
+          client_approval_required?: boolean
+          client_approved_at?: string | null
+          client_approved_by?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -15738,6 +15795,9 @@ export type Database = {
           box_7_total_purchases?: number
           box_8_total_supplies_eu?: number
           box_9_total_acquisitions_eu?: number
+          client_approval_required?: boolean
+          client_approved_at?: string | null
+          client_approved_by?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -16976,6 +17036,15 @@ export type Database = {
         }
         Returns: string
       }
+      log_portal_bookkeeping_action: {
+        Args: {
+          _action: string
+          _details?: Json
+          _entity_id: string
+          _entity_type: string
+        }
+        Returns: string
+      }
       log_portal_bookkeeping_revocation: {
         Args: {
           _client_id: string
@@ -17017,12 +17086,28 @@ export type Database = {
         Returns: undefined
       }
       port_quote_to_client: { Args: { p_quote_id: string }; Returns: string }
+      portal_approve_vat_return: {
+        Args: { _vat_return_id: string }
+        Returns: string
+      }
       portal_can_access_bookkeeping: {
         Args: { _client_id: string; _company_id: string }
         Returns: boolean
       }
+      portal_explain_transaction: {
+        Args: {
+          _explanation: string
+          _suggested_account_id?: string
+          _transaction_id: string
+        }
+        Returns: string
+      }
       portal_has_bookkeeping: {
         Args: { _entity_id: string; _entity_type: string }
+        Returns: boolean
+      }
+      portal_has_perm: {
+        Args: { _client_id: string; _company_id: string; _permission: string }
         Returns: boolean
       }
       portal_send_message: {
