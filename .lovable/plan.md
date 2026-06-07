@@ -81,6 +81,109 @@ No schema deletes. Deactivation only toggles the service row. Test plan verifies
 
 ## Open questions
 
-1. **Write permissions** — Confirm clients should be able to create/edit invoices, bills, customers, suppliers, categorisations, and bank rules (Xero parity). Default in plan: yes for all except journals/ledger/period-locks.
-2. **VAT Returns visibility** — Should clients see VAT Returns tab (review only) or also submit? Default: view-only; submission stays with accountant.
 3. **Multi-entity portal users** — For users with several entities, should bookkeeping be per-entity-selected inside the page (current proposal) or hidden entirely if any one entity lacks the service?
+
+---
+
+## Audit: TrueLayer Bank Connection (2026-06-07)
+
+### Findings
+
+The TrueLayer edge functions exist and are largely correct, but the integration is broken in several places that together prevent any client from connecting a bank:
+
+1. **`ConnectBankDialog` is never rendered anywhere.** `BankingTab.tsx` only opens `AddBankAccountDialog` (manual entry). There is no "Connect bank via Open Banking" button in either the accountant or portal UI. This is the single biggest gap.
+2. **Hard-coded accountant redirect path.** `ConnectBankDialog` calls `truelayer-auth` without `redirect_path`, so the callback always redirects to `/bookkeeping`. From the portal, the user lands on an accountant route they cannot access (and PortalGuard kicks them out).
+3. **Callback `APP_URL` defaults to `https://lovable.dev`.** `truelayer-callback` reads `Deno.env.get('APP_URL')`, and we already have `APP_PUBLIC_URL` configured — they don't match, so the OAuth callback either redirects to lovable.dev or a stale URL.
+4. **`truelayer-auth` only checks that the caller is logged in.** It accepts any authenticated user and lets them initiate a bank-connect flow against any `entity_id` they pass. It must additionally verify the caller is either an org member of that entity OR has portal access to it (and, for portal users, that the bookkeeping service is active).
+5. **`truelayer-sync` status casing inconsistency.** Insert uses `'ACTIVE'`, sync update uses `'active'`, errors use `'error'`. Causes the "Connected" badge logic in `BankingTab` to flicker. Normalise to upper-case to match insert + UI.
+6. **Portal entry point.** `PortalBookkeepingFull` reuses `BankingTab` directly, so wiring the connect button into `BankingTab` is enough — the portal automatically inherits it via the `PortalAppShim` (which already supplies `useOrganization` → org id from `PortalEntityContext`).
+7. **RLS sanity check.** `bank_connections` already has a portal-scoped policy (`portal_can_access_bookkeeping`). `truelayer_auth_states` writes happen via service role so RLS does not block them. No schema changes needed for these tables.
+
+### Required Changes
+
+#### 1. UI — render the Connect Bank dialog
+
+**`src/components/bookkeeping/BankingTab.tsx`**
+- Import `ConnectBankDialog` and add `connectDialogOpen` state.
+- Add a primary "Connect Bank" button next to the existing "Add Manually" button in both the header and the empty state.
+- Accept an optional `redirectPath` prop (defaults to `/bookkeeping`) so the portal can pass `/portal/bookkeeping?tab=banking`.
+- Render `<ConnectBankDialog … redirectPath={redirectPath} />`.
+
+**`src/components/bookkeeping/ConnectBankDialog.tsx`**
+- Accept and forward a `redirectPath` prop on the `truelayer-auth` invoke body.
+- Keep using `useOrganization()` (resolves through `PortalAppShim` for portal users).
+- On `?connection=success` query param after redirect, fire a toast and invalidate the bank-accounts query.
+
+**`src/portal/pages/PortalBookkeepingFull.tsx`**
+- Pass `redirectPath="/portal/bookkeeping?tab=banking"` into `<BankingTab entity={entity} redirectPath=… />`.
+
+#### 2. Edge function — `truelayer-auth`
+
+- Accept `redirect_path` from the body (already does) and pass it through into the `truelayer_auth_states` row (already does).
+- Add an authorisation check before inserting state: call a new SECURITY DEFINER RPC `can_initiate_bank_connect(_user uuid, _entity_type text, _entity_id uuid)` that returns `true` when the caller is either an org member of the entity's `organization_id` OR has an active `portal_access` row for it AND `portal_has_bookkeeping(entity_type, entity_id)` returns true. Return 403 if not allowed.
+
+#### 3. Edge function — `truelayer-callback`
+
+- Read both `APP_URL` and `APP_PUBLIC_URL` (prefer `APP_PUBLIC_URL`); fall back to the request's `Origin`/`Referer` only if both are unset.
+- Validate `redirect_path` is one of the allowed prefixes (`/bookkeeping`, `/portal/bookkeeping`) before redirecting; default to `/bookkeeping` otherwise.
+- Insert `bank_connections.status = 'ACTIVE'` (already correct); add a defensive `upper()` on any later status writes in `truelayer-sync`.
+
+#### 4. Edge function — `truelayer-sync`
+
+- Normalise status writes to upper-case: `'ACTIVE'` on success, `'ERROR'` on failure.
+- No behavioural changes otherwise.
+
+#### 5. Migration — `can_initiate_bank_connect` RPC
+
+```sql
+create or replace function public.can_initiate_bank_connect(
+  _user uuid, _entity_type text, _entity_id uuid
+) returns boolean
+language plpgsql stable security definer set search_path = public as $$
+declare _org uuid;
+begin
+  if _entity_type = 'client' then
+    select organization_id into _org from clients where id = _entity_id;
+  elsif _entity_type = 'company' then
+    select organization_id into _org from companies where id = _entity_id;
+  else
+    return false;
+  end if;
+  if _org is null then return false; end if;
+
+  -- accountant path
+  if exists (
+    select 1 from organization_users
+     where user_id = _user and organization_id = _org
+  ) then return true; end if;
+
+  -- portal path: must have access AND bookkeeping service active
+  if exists (
+    select 1 from portal_access pa
+     where pa.user_id = _user
+       and pa.revoked_at is null
+       and ((_entity_type = 'client' and pa.client_id = _entity_id)
+         or (_entity_type = 'company' and pa.company_id = _entity_id))
+  ) and public.portal_has_bookkeeping(_entity_type, _entity_id) then
+    return true;
+  end if;
+  return false;
+end $$;
+
+grant execute on function public.can_initiate_bank_connect(uuid, text, uuid)
+  to authenticated, service_role;
+```
+
+### Verification
+
+1. Deploy `truelayer-auth`, `truelayer-callback`, `truelayer-sync` and run migration.
+2. As accountant: open Bookkeeping → Banking → click "Connect Bank" → TrueLayer sandbox login (`mock-uk` provider) → confirm redirect lands back on `/bookkeeping?connection=success` and a row appears in Banking.
+3. As `portal-a`: open `/portal/bookkeeping?tab=banking` → click "Connect Bank" → confirm redirect lands on `/portal/bookkeeping?tab=banking&connection=success` and the new bank account is listed.
+4. As `portal-b` (no access): direct-invoke `truelayer-auth` with portal-a's client id → expect 403.
+5. Trigger a manual sync from BankingTab; confirm transactions populate and `status` stays `'ACTIVE'`.
+
+### Out of scope
+
+- Switching from TrueLayer sandbox to production (separate env-flag work).
+- Bank reconnect/refresh-consent UI beyond the existing flow.
+- Hiding the manual "Add Bank Account" path.
