@@ -4,12 +4,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { BusinessOverviewTab } from "@/components/bookkeeping/BusinessOverviewTab";
-import { ChartOfAccountsTab } from "@/components/bookkeeping/ChartOfAccountsTab";
-import { JournalsTab } from "@/components/bookkeeping/JournalsTab";
 import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import { SalesModule } from "@/components/bookkeeping/SalesModule";
 import { PurchasesModule } from "@/components/bookkeeping/PurchasesModule";
-import { BankRulesTab } from "@/components/bookkeeping/BankRulesTab";
 import { ReportsTab } from "@/components/bookkeeping/ReportsTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
@@ -17,6 +14,7 @@ import type { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector"
 import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { PortalAppShim } from "../contexts/PortalAppShim";
 import { PortalPageHeader } from "../components/PortalPageHeader";
+import { usePortalBookkeepingPermissions } from "../hooks/usePortalBookkeepingPermissions";
 
 /**
  * Full bookkeeping module inside the client portal. Reuses the accountant-side
@@ -29,6 +27,7 @@ import { PortalPageHeader } from "../components/PortalPageHeader";
  */
 function PortalBookkeepingFullInner() {
   const { currentEntity } = usePortalEntity();
+  const { data: perms } = usePortalBookkeepingPermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") || "overview";
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -48,12 +47,31 @@ function PortalBookkeepingFullInner() {
     };
   }, [currentEntity]);
 
-  // VAT visibility — treat company entities as potentially VAT-registered.
-  const isVATRegistered = currentEntity?.type === "company";
+  // Tab visibility driven by accountant-controlled permissions. Server-side
+  // RLS via `portal_has_perm` is the source of truth; this only hides UI.
+  const showBanking = !!perms?.showBankAccounts;
+  const showSales = !!perms?.showInvoices;
+  const showPurchases = !!perms?.showBills;
+  const showReceipts = !!perms?.allowReceiptUpload;
+  const showReports = !!(perms?.showReportsSummary || perms?.showReportsDetail);
+  const showVAT = !!perms?.showVATReturns && currentEntity?.type === "company";
 
+  // If the active tab gets hidden by a permission change, fall back to overview.
   useEffect(() => {
-    // No payroll/CIS tabs in portal — nothing to reset.
-  }, [entity?.id]);
+    const allowed: Record<string, boolean> = {
+      overview: true,
+      reports: showReports,
+      banking: showBanking,
+      sales: showSales,
+      purchases: showPurchases,
+      receipts: showReceipts,
+      "vat-returns": showVAT,
+    };
+    if (allowed[activeTab] === false) {
+      setActiveTab("overview");
+      setSearchParams({ tab: "overview" });
+    }
+  }, [activeTab, showReports, showBanking, showSales, showPurchases, showReceipts, showVAT, setSearchParams]);
 
   if (!entity) {
     return (
@@ -78,18 +96,23 @@ function PortalBookkeepingFullInner() {
           <ScrollArea className="w-full whitespace-nowrap pb-2">
             <TabsList className="inline-flex h-auto p-1 gap-0.5">
               <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-              <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
-              <TabsTrigger value="chart-of-accounts" className="text-xs sm:text-sm">Chart of Accounts</TabsTrigger>
-              <TabsTrigger value="journals" className="text-xs sm:text-sm">Journals</TabsTrigger>
-              <Separator orientation="vertical" className="mx-1 h-6" />
-              <TabsTrigger value="banking" className="text-xs sm:text-sm">Banking</TabsTrigger>
-              <TabsTrigger value="bank-rules" className="text-xs sm:text-sm">Bank Rules</TabsTrigger>
-              <Separator orientation="vertical" className="mx-1 h-6" />
-              <TabsTrigger value="sales" className="text-xs sm:text-sm">Sales</TabsTrigger>
-              <TabsTrigger value="purchases" className="text-xs sm:text-sm">Purchases</TabsTrigger>
-              <Separator orientation="vertical" className="mx-1 h-6" />
-              <TabsTrigger value="receipts" className="text-xs sm:text-sm">Receipts</TabsTrigger>
-              {isVATRegistered && (
+              {showReports && <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>}
+              {showBanking && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-6" />
+                  <TabsTrigger value="banking" className="text-xs sm:text-sm">Banking</TabsTrigger>
+                </>
+              )}
+              {(showSales || showPurchases) && <Separator orientation="vertical" className="mx-1 h-6" />}
+              {showSales && <TabsTrigger value="sales" className="text-xs sm:text-sm">Sales</TabsTrigger>}
+              {showPurchases && <TabsTrigger value="purchases" className="text-xs sm:text-sm">Purchases</TabsTrigger>}
+              {showReceipts && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-6" />
+                  <TabsTrigger value="receipts" className="text-xs sm:text-sm">Receipts</TabsTrigger>
+                </>
+              )}
+              {showVAT && (
                 <TabsTrigger value="vat-returns" className="text-xs sm:text-sm">VAT Returns</TabsTrigger>
               )}
             </TabsList>
@@ -101,31 +124,32 @@ function PortalBookkeepingFullInner() {
         <TabsContent value="overview" className="space-y-4">
           <BusinessOverviewTab entity={entity} onTabChange={handleTabChange} />
         </TabsContent>
-        <TabsContent value="reports" className="space-y-4">
-          <ReportsTab entity={entity} />
-        </TabsContent>
-        <TabsContent value="chart-of-accounts" className="space-y-4">
-          <ChartOfAccountsTab entity={entity} />
-        </TabsContent>
-        <TabsContent value="journals" className="space-y-4">
-          <JournalsTab entity={entity} />
-        </TabsContent>
-        <TabsContent value="banking" className="space-y-4">
-          <BankingTab entity={entity} />
-        </TabsContent>
-        <TabsContent value="bank-rules" className="space-y-4">
-          <BankRulesTab entity={entity} />
-        </TabsContent>
-        <TabsContent value="sales" className="space-y-4">
-          <SalesModule entity={entity} />
-        </TabsContent>
-        <TabsContent value="purchases" className="space-y-4">
-          <PurchasesModule entity={entity} />
-        </TabsContent>
-        <TabsContent value="receipts" className="space-y-4">
-          <ReceiptsTab entityType={entity.type} entityId={entity.id} />
-        </TabsContent>
-        {isVATRegistered && (
+        {showReports && (
+          <TabsContent value="reports" className="space-y-4">
+            <ReportsTab entity={entity} />
+          </TabsContent>
+        )}
+        {showBanking && (
+          <TabsContent value="banking" className="space-y-4">
+            <BankingTab entity={entity} />
+          </TabsContent>
+        )}
+        {showSales && (
+          <TabsContent value="sales" className="space-y-4">
+            <SalesModule entity={entity} />
+          </TabsContent>
+        )}
+        {showPurchases && (
+          <TabsContent value="purchases" className="space-y-4">
+            <PurchasesModule entity={entity} />
+          </TabsContent>
+        )}
+        {showReceipts && (
+          <TabsContent value="receipts" className="space-y-4">
+            <ReceiptsTab entityType={entity.type} entityId={entity.id} />
+          </TabsContent>
+        )}
+        {showVAT && (
           <TabsContent value="vat-returns" className="space-y-4">
             <VATReturnsTab entityType={entity.type} entityId={entity.id} />
           </TabsContent>
