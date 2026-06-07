@@ -69,7 +69,7 @@ export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
       };
       const { error } = await supabase
         .from("portal_visibility_settings")
-        .upsert(payload, { onConflict: "organization_id,client_id,company_id" });
+        .upsert(payload as any, { onConflict: "organization_id,client_id,company_id" });
       if (error) throw error;
     },
     onSuccess: () => {
