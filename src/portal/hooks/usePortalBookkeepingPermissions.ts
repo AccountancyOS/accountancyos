@@ -89,7 +89,7 @@ export function usePortalBookkeepingPermissions() {
         .maybeSingle();
 
       if (error || !data) return DEFAULTS;
-      const r = data as Record<string, boolean | null>;
+      const r = data as unknown as Record<string, boolean | null>;
       return {
         showBankAccounts: !!r.show_bank_accounts,
         showTransactions: !!r.show_transactions,
