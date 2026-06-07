@@ -15,6 +15,7 @@ import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { PortalAppShim } from "../contexts/PortalAppShim";
 import { PortalPageHeader } from "../components/PortalPageHeader";
 import { usePortalBookkeepingPermissions } from "../hooks/usePortalBookkeepingPermissions";
+import { PortalBookkeepingActions } from "../components/bookkeeping/PortalBookkeepingActions";
 
 /**
  * Full bookkeeping module inside the client portal. Reuses the accountant-side
@@ -122,6 +123,7 @@ function PortalBookkeepingFullInner() {
         </div>
 
         <TabsContent value="overview" className="space-y-4">
+          <PortalBookkeepingActions />
           <BusinessOverviewTab entity={entity} onTabChange={handleTabChange} />
         </TabsContent>
         {showReports && (
