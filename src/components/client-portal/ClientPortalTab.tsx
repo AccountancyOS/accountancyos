@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { AddTaskDialog } from "./AddTaskDialog";
 import { ServiceStatusDashboard } from "./ServiceStatusDashboard";
+import { BookkeepingPermissionsPanel } from "./BookkeepingPermissionsPanel";
 
 interface ClientPortalTabProps {
   clientId: string;
@@ -240,6 +241,10 @@ export default function ClientPortalTab({ clientId, onViewConversations }: Clien
       </div>
 
       <ServiceStatusDashboard clientId={clientId} />
+
+      {!viewAsClient && (
+        <BookkeepingPermissionsPanel entityKind="client" entityId={clientId} />
+      )}
     </div>
   );
 }
