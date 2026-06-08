@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { BusinessOverviewTab } from "@/components/bookkeeping/BusinessOverviewTab";
-import { BankingTab } from "@/components/bookkeeping/BankingTab";
+import { PortalBankingTab } from "../components/bookkeeping/PortalBankingTab";
 import { SalesModule } from "@/components/bookkeeping/SalesModule";
 import { PurchasesModule } from "@/components/bookkeeping/PurchasesModule";
 import { ReportsTab } from "@/components/bookkeeping/ReportsTab";
@@ -57,6 +57,7 @@ function PortalBookkeepingFullInner() {
   const showReceipts = !!perms?.allowReceiptUpload;
   const showReports = !!(perms?.showReportsSummary || perms?.showReportsDetail);
   const showVAT = !!perms?.showVATReturns && currentEntity?.type === "company";
+  const allowBankConnect = !!perms?.allowBankConnect;
 
   // If the active tab gets hidden by a permission change, fall back to overview.
   useEffect(() => {
@@ -135,7 +136,7 @@ function PortalBookkeepingFullInner() {
         )}
         {showBanking && (
           <TabsContent value="banking" className="space-y-4">
-            <BankingTab entity={entity} />
+            <PortalBankingTab entity={entity} allowBankConnect={allowBankConnect} />
           </TabsContent>
         )}
         {showSales && (

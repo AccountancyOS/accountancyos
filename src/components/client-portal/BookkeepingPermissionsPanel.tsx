@@ -7,6 +7,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ShieldCheck } from "lucide-react";
 
 interface Props {
   entityKind: "client" | "company";
@@ -82,17 +84,21 @@ export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
   });
 
   const renderRow = (key: string, label: string, help: string) => {
-    const checked = !!row?.[key];
+    const masterOn = !!row?.full_bookkeeping_access;
+    const checked = masterOn ? true : !!row?.[key];
     return (
       <div key={key} className="flex items-start justify-between gap-4 py-2">
         <div className="space-y-0.5">
-          <Label htmlFor={`perm-${key}`} className="text-sm font-medium">{label}</Label>
+          <Label htmlFor={`perm-${key}`} className="text-sm font-medium">
+            {label}
+            {masterOn && <span className="ml-2 text-xs text-muted-foreground">(included)</span>}
+          </Label>
           <p className="text-xs text-muted-foreground">{help}</p>
         </div>
         <Switch
           id={`perm-${key}`}
           checked={checked}
-          disabled={isLoading || mutation.isPending}
+          disabled={isLoading || mutation.isPending || masterOn}
           onCheckedChange={(val) => mutation.mutate({ [key]: val })}
         />
       </div>
@@ -105,7 +111,7 @@ export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
         <CardTitle>Bookkeeping Portal Permissions</CardTitle>
         <CardDescription>
           Control what this {entityKind === "client" ? "client" : "company"} can see and do in the
-          bookkeeping area of the client portal. All actions remain subject to accountant review.
+          bookkeeping area of the client portal.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -117,6 +123,36 @@ export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
           </div>
         ) : (
           <>
+            <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="h-5 w-5 text-primary mt-0.5" />
+                  <div>
+                    <Label htmlFor="perm-full_bookkeeping_access" className="text-sm font-semibold">
+                      Full Bookkeeping Access
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Treat the client as a self-serve bookkeeper. Unlocks bank connection, categorisation, invoice
+                      and bill creation, payment matching and VAT approval in one switch. All entries are tagged as
+                      client-posted in the audit log.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="perm-full_bookkeeping_access"
+                  checked={!!row?.full_bookkeeping_access}
+                  disabled={isLoading || mutation.isPending}
+                  onCheckedChange={(val) => mutation.mutate({ full_bookkeeping_access: val })}
+                />
+              </div>
+              {!!row?.full_bookkeeping_access && (
+                <Alert>
+                  <AlertDescription className="text-xs">
+                    Granular toggles below are overridden while Full Bookkeeping Access is on.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
             <div>
               <h4 className="text-sm font-semibold mb-2">What They Can See</h4>
               <div className="divide-y">
