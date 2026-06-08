@@ -17809,6 +17809,14 @@ export type Database = {
         Args: { p_dry_run?: boolean; p_org_id: string }
         Returns: Json
       }
+      seed_standard_chart_of_accounts: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+        }
+        Returns: Json
+      }
       send_onboarding_questionnaire: {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
