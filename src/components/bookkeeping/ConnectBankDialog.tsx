@@ -19,9 +19,10 @@ interface ConnectBankDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entity: BookkeepingEntity;
+  redirectPath?: string;
 }
 
-export function ConnectBankDialog({ open, onOpenChange, entity }: ConnectBankDialogProps) {
+export function ConnectBankDialog({ open, onOpenChange, entity, redirectPath = "/bookkeeping" }: ConnectBankDialogProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const { organization } = useOrganization();
 
@@ -37,7 +38,7 @@ export function ConnectBankDialog({ open, onOpenChange, entity }: ConnectBankDia
           entity_type: entity.type,
           entity_id: entity.id,
           organization_id: organization.id,
-          redirect_path: '/bookkeeping',
+          redirect_path: redirectPath,
         },
       });
 

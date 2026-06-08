@@ -13,6 +13,8 @@ import { usePortalEntity } from "../contexts/PortalEntityContext";
  * the user could not perform anyway, but RLS is the source of truth.
  */
 export interface PortalBookkeepingPermissions {
+  // Master toggle — when true, all flags below are forced to true
+  allowFullBookkeeping: boolean;
   // View toggles
   showBankAccounts: boolean;
   showTransactions: boolean;
@@ -33,6 +35,7 @@ export interface PortalBookkeepingPermissions {
 }
 
 const DEFAULTS: PortalBookkeepingPermissions = {
+  allowFullBookkeeping: false,
   showBankAccounts: false,
   showTransactions: false,
   showInvoices: false,
@@ -68,6 +71,7 @@ export function usePortalBookkeepingPermissions() {
         .from("portal_visibility_settings")
         .select(
           [
+            "full_bookkeeping_access",
             "show_bank_accounts",
             "show_transactions",
             "show_invoices",
@@ -90,22 +94,27 @@ export function usePortalBookkeepingPermissions() {
 
       if (error || !data) return DEFAULTS;
       const r = data as unknown as Record<string, boolean | null>;
+      const master = !!r.full_bookkeeping_access;
+      // Master flag short-circuit: every per-flag becomes true server-side
+      // via portal_has_perm; mirror that here so the UI lights up too.
+      const on = (key: string) => master || !!r[key];
       return {
-        showBankAccounts: !!r.show_bank_accounts,
-        showTransactions: !!r.show_transactions,
-        showInvoices: !!r.show_invoices,
-        showBills: !!r.show_bills,
-        showVATReturns: !!r.show_vat_returns,
-        showReportsSummary: !!r.show_reports_summary,
-        showReportsDetail: !!r.show_reports_detail,
-        allowBankConnect: !!r.allow_bank_connect,
-        allowTransactionExplain: !!r.allow_transaction_explain,
-        allowReceiptUpload: !!r.allow_receipt_upload,
-        allowInvoiceCreate: !!r.allow_invoice_create,
-        allowInvoiceSend: !!r.allow_invoice_send,
-        allowBillCreate: !!r.allow_bill_create,
-        allowVATApproval: !!r.allow_vat_approval,
-        allowReportsDownload: !!r.allow_reports_download,
+        allowFullBookkeeping: master,
+        showBankAccounts: on("show_bank_accounts"),
+        showTransactions: on("show_transactions"),
+        showInvoices: on("show_invoices"),
+        showBills: on("show_bills"),
+        showVATReturns: on("show_vat_returns"),
+        showReportsSummary: on("show_reports_summary"),
+        showReportsDetail: on("show_reports_detail"),
+        allowBankConnect: on("allow_bank_connect"),
+        allowTransactionExplain: on("allow_transaction_explain"),
+        allowReceiptUpload: on("allow_receipt_upload"),
+        allowInvoiceCreate: on("allow_invoice_create"),
+        allowInvoiceSend: on("allow_invoice_send"),
+        allowBillCreate: on("allow_bill_create"),
+        allowVATApproval: on("allow_vat_approval"),
+        allowReportsDownload: on("allow_reports_download"),
       };
     },
     enabled: !!currentEntity,
