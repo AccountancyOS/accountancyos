@@ -8,8 +8,11 @@ import {
   usePortalPayments,
   usePortalQuestionnaires,
   usePortalTasks,
+  usePortalUpcomingDeadlines,
+  usePortalTaxPayments,
 } from "../hooks/usePortalData";
 import { usePortalEntity } from "../contexts/PortalEntityContext";
+import { DeadlineListCard } from "../components/dashboard/DeadlineListCard";
 
 function Tile({
   label,
@@ -51,6 +54,8 @@ export default function PortalDashboard() {
   const questionnaires = usePortalQuestionnaires();
   const payments = usePortalPayments();
   const conversations = usePortalConversations();
+  const deadlines = usePortalUpcomingDeadlines();
+  const taxPayments = usePortalTaxPayments();
 
   const openTasks = (tasks.data ?? []).filter(
     (t) => t.status !== "completed" && t.status !== "done",
@@ -76,6 +81,27 @@ export default function PortalDashboard() {
         <Tile label="Open Questionnaires" value={openQuestionnaires} icon={ClipboardList} to="/portal/questionnaires" loading={questionnaires.isLoading} />
         <Tile label="Unpaid Invoices" value={unpaidInvoices} icon={CreditCard} to="/portal/payments" loading={payments.isLoading} />
         <Tile label="Conversations" value={conversationCount} icon={MessageSquare} to="/portal/messages" loading={conversations.isLoading} />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DeadlineListCard
+          title="Upcoming Deadlines"
+          emptyMessage="No Upcoming Deadlines In The Next 90 Days."
+          viewAllLabel="View All Deadlines"
+          viewAllTo="/portal/tasks"
+          loading={deadlines.isLoading}
+          rows={deadlines.data ?? []}
+          dateField="dueDate"
+        />
+        <DeadlineListCard
+          title="Tax Payments Due"
+          emptyMessage="No Tax Payments Due In The Next 90 Days."
+          viewAllLabel="View All Payments"
+          viewAllTo="/portal/payments"
+          loading={taxPayments.isLoading}
+          rows={taxPayments.data ?? []}
+          dateField="paymentDate"
+          showAmount
+        />
       </div>
     </div>
   );
