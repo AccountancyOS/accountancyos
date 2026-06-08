@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { BankRuleEditorDialog } from "./BankRuleEditorDialog";
 import { RuleTestRunDialog } from "./RuleTestRunDialog";
 import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
+import { BankRulesPreviewPanel } from "./BankRulesPreviewPanel";
 
 interface BankRulesTabProps {
   entity: BookkeepingEntity | null;
@@ -350,6 +351,9 @@ export function BankRulesTab({ entity }: BankRulesTabProps) {
           </Table>
         </div>
       )}
+
+      {/* Dry-run preview of rules against un-categorised transactions */}
+      <BankRulesPreviewPanel entity={entity} />
 
       <BankRuleEditorDialog
         open={editorOpen}

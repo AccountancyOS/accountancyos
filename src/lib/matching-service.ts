@@ -233,162 +233,31 @@ export async function applyMatch(
   matchPlan: MatchPlan,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: transaction } = await supabase
-    .from("bank_transactions")
-    .select("*")
-    .eq("id", transactionId)
-    .single();
-
-  if (!transaction) {
-    return { success: false, error: "Transaction not found" };
-  }
-
-  if (transaction.status === "MATCHED") {
-    return { success: false, error: "Transaction already matched" };
-  }
-
-  const entityType = transaction.client_id ? "client" : "company";
-  const entityId = transaction.client_id || transaction.company_id;
-  const isMoneyIn = transaction.amount > 0;
-
+  // All matching now routes through the hardened apply_bank_match RPC,
+  // which posts the journal via post_to_ledger and updates the documents
+  // atomically server-side.
   try {
-    for (const allocation of matchPlan.allocations) {
-      if (allocation.documentType === "invoice") {
-        // Record payment against invoice
-        const { data: invoice } = await supabase
-          .from("invoices")
-          .select("*")
-          .eq("id", allocation.documentId)
-          .single();
+    const allocations = matchPlan.allocations
+      .filter((a) => a.documentType === "invoice" || a.documentType === "bill")
+      .map((a) => ({
+        document_id: a.documentId,
+        document_type: a.documentType,
+        amount: a.amount,
+      }));
 
-        if (!invoice) continue;
-
-        // Create payment record
-        await supabase.from("invoice_payments").insert({
-          invoice_id: allocation.documentId,
-          amount: allocation.amount,
-          payment_date: transaction.transaction_date,
-          bank_account_id: transaction.bank_account_id,
-          bank_transaction_id: transactionId,
-          reference: `Bank: ${transaction.description?.substring(0, 50)}`,
-          payment_type: "normal",
-          created_by: userId,
-        });
-
-        // Update invoice
-        const newPaid = Number(invoice.amount_paid || 0) + allocation.amount;
-        const newRemaining = Number(invoice.total_gross) - newPaid;
-        await supabase.from("invoices").update({
-          amount_paid: newPaid,
-          remaining_balance: newRemaining,
-          status: newRemaining <= 0 ? "PAID" : "PART_PAID",
-        }).eq("id", allocation.documentId);
-
-        // Post ledger entry
-        const debtorsAccountId = await getControlAccount(
-          transaction.organization_id,
-          entityType as "client" | "company",
-          entityId,
-          "TRADE_DEBTORS"
-        );
-
-        if (debtorsAccountId) {
-          const entries: LedgerEntry[] = [
-            {
-              accountId: transaction.bank_account_id,
-              debit: allocation.amount,
-              credit: null,
-              description: `Payment: Invoice ${invoice.invoice_number || allocation.documentId.substring(0, 8)}`,
-            },
-            {
-              accountId: debtorsAccountId,
-              debit: null,
-              credit: allocation.amount,
-              description: `Payment: Invoice ${invoice.invoice_number || allocation.documentId.substring(0, 8)}`,
-            },
-          ];
-
-          await postToLedger({
-            organizationId: transaction.organization_id,
-            entityType: entityType as "client" | "company",
-            entityId,
-            transactionDate: transaction.transaction_date,
-            sourceType: "BANK_TRANSACTION",
-            sourceId: transactionId,
-            userId,
-          }, entries);
-        }
-      } else if (allocation.documentType === "bill") {
-        // Record payment against bill
-        const { data: bill } = await supabase
-          .from("bills")
-          .select("*")
-          .eq("id", allocation.documentId)
-          .single();
-
-        if (!bill) continue;
-
-        await supabase.from("bill_payments").insert({
-          bill_id: allocation.documentId,
-          amount: allocation.amount,
-          payment_date: transaction.transaction_date,
-          bank_account_id: transaction.bank_account_id,
-          bank_transaction_id: transactionId,
-          reference: `Bank: ${transaction.description?.substring(0, 50)}`,
-          payment_type: "normal",
-          created_by: userId,
-        });
-
-        const newPaid = Number(bill.amount_paid || 0) + allocation.amount;
-        const newRemaining = Number(bill.total_gross) - newPaid;
-        await supabase.from("bills").update({
-          amount_paid: newPaid,
-          remaining_balance: newRemaining,
-          status: newRemaining <= 0 ? "PAID" : "PART_PAID",
-        }).eq("id", allocation.documentId);
-
-        const creditorsAccountId = await getControlAccount(
-          transaction.organization_id,
-          entityType as "client" | "company",
-          entityId,
-          "TRADE_CREDITORS"
-        );
-
-        if (creditorsAccountId) {
-          const entries: LedgerEntry[] = [
-            {
-              accountId: creditorsAccountId,
-              debit: allocation.amount,
-              credit: null,
-              description: `Payment: Bill ${bill.bill_number || allocation.documentId.substring(0, 8)}`,
-            },
-            {
-              accountId: transaction.bank_account_id,
-              debit: null,
-              credit: allocation.amount,
-              description: `Payment: Bill ${bill.bill_number || allocation.documentId.substring(0, 8)}`,
-            },
-          ];
-
-          await postToLedger({
-            organizationId: transaction.organization_id,
-            entityType: entityType as "client" | "company",
-            entityId,
-            transactionDate: transaction.transaction_date,
-            sourceType: "BANK_TRANSACTION",
-            sourceId: transactionId,
-            userId,
-          }, entries);
-        }
-      }
+    if (allocations.length === 0) {
+      return { success: false, error: "No supported allocations in match plan" };
     }
 
-    // Mark transaction as matched
-    await supabase
-      .from("bank_transactions")
-      .update({ status: "MATCHED" })
-      .eq("id", transactionId);
+    const { data, error } = await supabase.rpc("apply_bank_match", {
+      p_bank_transaction_id: transactionId,
+      p_allocations: allocations as any,
+    });
 
+    if (error) return { success: false, error: error.message };
+    if (data && typeof data === "object" && (data as any).success === false) {
+      return { success: false, error: (data as any).error || "Match failed" };
+    }
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

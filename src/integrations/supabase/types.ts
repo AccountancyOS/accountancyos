@@ -2101,6 +2101,7 @@ export type Database = {
           description: string
           id: string
           import_batch_id: string | null
+          import_hash: string | null
           import_source: string | null
           matched_ledger_entry_id: string | null
           organization_id: string
@@ -2137,6 +2138,7 @@ export type Database = {
           description: string
           id?: string
           import_batch_id?: string | null
+          import_hash?: string | null
           import_source?: string | null
           matched_ledger_entry_id?: string | null
           organization_id: string
@@ -2173,6 +2175,7 @@ export type Database = {
           description?: string
           id?: string
           import_batch_id?: string | null
+          import_hash?: string | null
           import_source?: string | null
           matched_ledger_entry_id?: string | null
           organization_id?: string
@@ -16742,6 +16745,10 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      apply_bank_match: {
+        Args: { p_allocations: Json; p_bank_transaction_id: string }
+        Returns: Json
       }
       apply_ch_diff: {
         Args: { p_decision: string; p_diff_id: string; p_notes?: string }
