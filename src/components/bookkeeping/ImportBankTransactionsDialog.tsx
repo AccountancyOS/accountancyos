@@ -31,6 +31,16 @@ interface ParsedTransaction {
   balance?: number;
 }
 
+function computeImportHash(t: ParsedTransaction): string {
+  // Stable de-dup key per bank account. Stored in bank_transactions.import_hash
+  // and enforced by the unique index (bank_account_id, import_hash).
+  return [
+    (t.date || "").trim(),
+    Number(t.amount).toFixed(2),
+    (t.description || "").trim().toLowerCase().replace(/\s+/g, " "),
+  ].join("|");
+}
+
 export function ImportBankTransactionsDialog({
   open,
   onOpenChange,
@@ -79,7 +89,17 @@ export function ImportBankTransactionsDialog({
 
       const batchId = crypto.randomUUID();
 
-      const transactions = parsedData.map((tx) => ({
+      // Dedup within the parsed file
+      const seen = new Set<string>();
+      const rows = parsedData
+        .map((tx) => ({ tx, hash: computeImportHash(tx) }))
+        .filter(({ hash }) => {
+          if (seen.has(hash)) return false;
+          seen.add(hash);
+          return true;
+        });
+
+      const transactions = rows.map(({ tx, hash }) => ({
         organization_id: organization.id,
         client_id: entity.type === "client" ? entity.id : null,
         company_id: entity.type === "company" ? entity.id : null,
@@ -90,20 +110,31 @@ export function ImportBankTransactionsDialog({
         balance: tx.balance,
         import_source: "CSV",
         import_batch_id: batchId,
+        import_hash: hash,
         status: "UNREVIEWED",
       }));
 
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from("bank_transactions")
-        .insert(transactions);
+        .upsert(transactions, {
+          onConflict: "bank_account_id,import_hash",
+          ignoreDuplicates: true,
+        })
+        .select("id");
 
       if (error) throw error;
 
-      return transactions.length;
+      const insertedCount = inserted?.length ?? 0;
+      const skipped = transactions.length - insertedCount;
+      return { insertedCount, skipped, total: parsedData.length };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ insertedCount, skipped, total }) => {
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-      toast.success(`Imported ${count} transactions`);
+      toast.success(
+        `Imported ${insertedCount} transactions` +
+          (skipped > 0 ? ` (skipped ${skipped} duplicates)` : "") +
+          (total !== insertedCount + skipped ? ` of ${total}` : "")
+      );
       setFile(null);
       setParsedData([]);
       onOpenChange(false);
