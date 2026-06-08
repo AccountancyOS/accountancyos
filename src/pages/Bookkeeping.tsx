@@ -15,6 +15,7 @@ import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
 import { COATaxMappingEditor } from "@/components/bookkeeping/COATaxMappingEditor";
+import { ReviewQueueTab } from "@/components/bookkeeping/ReviewQueueTab";
 import { PayrollModule } from "@/components/payroll/PayrollModule";
 import { CISModule } from "@/components/cis/CISModule";
 import { useEntityServices } from "@/hooks/useEntityServices";
@@ -116,6 +117,8 @@ export default function Bookkeeping() {
                     <TabsTrigger value="cis" className="text-xs sm:text-sm">CIS</TabsTrigger>
                   )}
                   <TabsTrigger value="period-lock" className="text-xs sm:text-sm">Period Lock</TabsTrigger>
+                  <Separator orientation="vertical" className="mx-1 h-6" />
+                  <TabsTrigger value="review-queue" className="text-xs sm:text-sm">Review Queue</TabsTrigger>
                 </TabsList>
                 <ScrollBar orientation="horizontal" className="h-2.5 mt-1" />
               </ScrollArea>
@@ -189,6 +192,10 @@ export default function Bookkeeping() {
 
             <TabsContent value="period-lock" className="space-y-4">
               <PeriodLockTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
+            </TabsContent>
+
+            <TabsContent value="review-queue" className="space-y-4">
+              <ReviewQueueTab entity={selectedEntity} />
             </TabsContent>
           </Tabs>
         )}

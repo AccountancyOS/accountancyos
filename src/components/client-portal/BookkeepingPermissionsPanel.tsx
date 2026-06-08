@@ -9,13 +9,14 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ShieldCheck } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface Props {
   entityKind: "client" | "company";
   entityId: string;
 }
 
-type PermRow = Record<string, boolean | null>;
+type PermRow = Record<string, boolean | string | null>;
 
 const VIEW_FLAGS: { key: string; label: string; help: string }[] = [
   { key: "show_bank_accounts", label: "Bank Accounts", help: "Banking tab and connected feeds." },
@@ -35,6 +36,19 @@ const ACTION_FLAGS: { key: string; label: string; help: string }[] = [
   { key: "allow_bill_create", label: "Create Bills", help: "Client can draft and edit supplier bills." },
   { key: "allow_vat_approval", label: "Approve VAT Returns", help: "Client can sign off VAT returns before filing." },
   { key: "allow_reports_download", label: "Download Reports", help: "Client can export reports to PDF/CSV." },
+  { key: "allow_customer_create", label: "Create Customers", help: "Client can add their own customer records." },
+  { key: "allow_supplier_create", label: "Create Suppliers", help: "Client can add their own supplier records." },
+  { key: "allow_receipt_match", label: "Match Receipts", help: "Client can match receipts to transactions." },
+  { key: "allow_query_respond", label: "Respond To Queries", help: "Client can answer accountant bookkeeping queries." },
+  { key: "allow_client_reconcile", label: "Reconcile Bank", help: "Client can run bank reconciliation." },
+];
+
+const REVIEW_FLAGS: { key: string; label: string; help: string }[] = [
+  { key: "require_review_for_transaction_explanations", label: "Review Transaction Explanations", help: "Hold client explanations as pending review before VAT close." },
+  { key: "require_review_for_invoice_sending", label: "Approve Before Invoice Send", help: "Client invoices need accountant sign-off before being sent." },
+  { key: "require_review_for_bill_approval", label: "Review Bills Before Posting", help: "Client-entered bills go to the review queue first." },
+  { key: "require_review_for_receipt_matching", label: "Review Receipt Matches", help: "Receipts matched by client need accountant confirmation." },
+  { key: "require_vat_client_approval", label: "Require Client VAT Approval", help: "Ask the client to approve VAT returns before submission." },
 ];
 
 export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
@@ -153,6 +167,44 @@ export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
                 </Alert>
               )}
             </div>
+
+            <div className="rounded-lg border p-4 space-y-3">
+              <div>
+                <Label className="text-sm font-semibold">Bookkeeping Mode</Label>
+                <p className="text-xs text-muted-foreground">
+                  Controls how client writes flow into the ledger. Per-surface review flags below override individual
+                  workflows.
+                </p>
+              </div>
+              <RadioGroup
+                value={(row?.client_bookkeeping_mode as unknown as string) ?? "operational"}
+                onValueChange={(val) => mutation.mutate({ client_bookkeeping_mode: val } as any)}
+                className="grid gap-2"
+                disabled={mutation.isPending}
+              >
+                {[
+                  { v: "operational", t: "Operational", d: "Client writes post immediately, accountant reviews later." },
+                  { v: "review_required", t: "Review Required", d: "Client writes wait in the accountant review queue." },
+                  { v: "accountant_only", t: "Accountant Only", d: "Client can view and respond only." },
+                ].map((o) => (
+                  <Label key={o.v} className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+                    <RadioGroupItem value={o.v} className="mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">{o.t}</p>
+                      <p className="text-xs text-muted-foreground">{o.d}</p>
+                    </div>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Per-Surface Review</h4>
+              <div className="divide-y">
+                {REVIEW_FLAGS.map((f) => renderRow(f.key, f.label, f.help))}
+              </div>
+            </div>
+            <Separator />
             <div>
               <h4 className="text-sm font-semibold mb-2">What They Can See</h4>
               <div className="divide-y">

@@ -15,6 +15,16 @@ import { usePortalEntity } from "../contexts/PortalEntityContext";
 export interface PortalBookkeepingPermissions {
   // Master toggle — when true, all flags below are forced to true
   allowFullBookkeeping: boolean;
+  // Operating mode for this entity
+  mode: "operational" | "review_required" | "accountant_only";
+  // Per-surface review requirements
+  requireReviewForTransactionExplanations: boolean;
+  requireReviewForInvoiceSending: boolean;
+  requireReviewForBillApproval: boolean;
+  requireReviewForReceiptMatching: boolean;
+  requireVATClientApproval: boolean;
+  allowClientReconcile: boolean;
+  allowClientPostToLedger: boolean;
   // View toggles
   showBankAccounts: boolean;
   showTransactions: boolean;
@@ -32,10 +42,22 @@ export interface PortalBookkeepingPermissions {
   allowBillCreate: boolean;
   allowVATApproval: boolean;
   allowReportsDownload: boolean;
+  allowCustomerCreate: boolean;
+  allowSupplierCreate: boolean;
+  allowReceiptMatch: boolean;
+  allowQueryRespond: boolean;
 }
 
 const DEFAULTS: PortalBookkeepingPermissions = {
   allowFullBookkeeping: false,
+  mode: "operational",
+  requireReviewForTransactionExplanations: false,
+  requireReviewForInvoiceSending: false,
+  requireReviewForBillApproval: true,
+  requireReviewForReceiptMatching: false,
+  requireVATClientApproval: false,
+  allowClientReconcile: false,
+  allowClientPostToLedger: false,
   showBankAccounts: false,
   showTransactions: false,
   showInvoices: false,
@@ -51,6 +73,10 @@ const DEFAULTS: PortalBookkeepingPermissions = {
   allowBillCreate: false,
   allowVATApproval: false,
   allowReportsDownload: false,
+  allowCustomerCreate: false,
+  allowSupplierCreate: false,
+  allowReceiptMatch: false,
+  allowQueryRespond: false,
 };
 
 export function usePortalBookkeepingPermissions() {
@@ -72,6 +98,14 @@ export function usePortalBookkeepingPermissions() {
         .select(
           [
             "full_bookkeeping_access",
+            "client_bookkeeping_mode",
+            "require_review_for_transaction_explanations",
+            "require_review_for_invoice_sending",
+            "require_review_for_bill_approval",
+            "require_review_for_receipt_matching",
+            "require_vat_client_approval",
+            "allow_client_reconcile",
+            "allow_client_post_to_ledger",
             "show_bank_accounts",
             "show_transactions",
             "show_invoices",
@@ -87,19 +121,32 @@ export function usePortalBookkeepingPermissions() {
             "allow_bill_create",
             "allow_vat_approval",
             "allow_reports_download",
+            "allow_customer_create",
+            "allow_supplier_create",
+            "allow_receipt_match",
+            "allow_query_respond",
           ].join(","),
         )
         .eq(col, currentEntity.id)
         .maybeSingle();
 
       if (error || !data) return DEFAULTS;
-      const r = data as unknown as Record<string, boolean | null>;
+      const r = data as unknown as Record<string, any>;
       const master = !!r.full_bookkeeping_access;
       // Master flag short-circuit: every per-flag becomes true server-side
       // via portal_has_perm; mirror that here so the UI lights up too.
       const on = (key: string) => master || !!r[key];
+      const mode = (r.client_bookkeeping_mode as PortalBookkeepingPermissions["mode"]) ?? "operational";
       return {
         allowFullBookkeeping: master,
+        mode,
+        requireReviewForTransactionExplanations: !!r.require_review_for_transaction_explanations,
+        requireReviewForInvoiceSending: !!r.require_review_for_invoice_sending,
+        requireReviewForBillApproval: r.require_review_for_bill_approval ?? true,
+        requireReviewForReceiptMatching: !!r.require_review_for_receipt_matching,
+        requireVATClientApproval: !!r.require_vat_client_approval,
+        allowClientReconcile: master || !!r.allow_client_reconcile,
+        allowClientPostToLedger: master || !!r.allow_client_post_to_ledger,
         showBankAccounts: on("show_bank_accounts"),
         showTransactions: on("show_transactions"),
         showInvoices: on("show_invoices"),
@@ -115,6 +162,10 @@ export function usePortalBookkeepingPermissions() {
         allowBillCreate: on("allow_bill_create"),
         allowVATApproval: on("allow_vat_approval"),
         allowReportsDownload: on("allow_reports_download"),
+        allowCustomerCreate: master || r.allow_customer_create !== false,
+        allowSupplierCreate: master || r.allow_supplier_create !== false,
+        allowReceiptMatch: master || r.allow_receipt_match !== false,
+        allowQueryRespond: master || r.allow_query_respond !== false,
       };
     },
     enabled: !!currentEntity,
