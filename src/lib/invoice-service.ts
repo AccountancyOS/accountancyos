@@ -4,15 +4,9 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import {
-  postToLedger,
-  reverseLedgerEntries,
-  isPeriodLocked,
-  getControlAccount,
-  calculateFXGainLoss,
-  LedgerEntry,
-  PostingContext,
-} from "./posting-service";
+// Posting now goes through atomic Phase 3 RPCs:
+// approve_invoice, record_invoice_payment, void_invoice.
+// Legacy helpers retained only for non-posting reads.
 
 export interface InvoiceInput {
   customerId?: string;
@@ -209,133 +203,14 @@ export async function approveInvoice(
   invoiceId: string,
   userId: string
 ): Promise<{ success: boolean; journalId?: string; error?: string }> {
-  // Fetch invoice with lines
-  const { data: invoice, error: fetchError } = await supabase
-    .from("invoices")
-    .select(`
-      *,
-      invoice_lines(*)
-    `)
-    .eq("id", invoiceId)
-    .single();
-
-  if (fetchError || !invoice) {
-    return { success: false, error: "Invoice not found" };
-  }
-
-  if (invoice.status !== "DRAFT") {
-    return { success: false, error: "Invoice is not in draft status" };
-  }
-
-  if (invoice.is_posted) {
-    return { success: false, error: "Invoice already posted" };
-  }
-
-  const entityType = invoice.client_id ? "client" : "company";
-  const entityId = invoice.client_id || invoice.company_id;
-
-  // Check period lock
-  const lockCheck = await isPeriodLocked(
-    invoice.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    invoice.issue_date
-  );
-
-  if (lockCheck.locked) {
-    return { success: false, error: `Period locked until ${lockCheck.lockDate}` };
-  }
-
-  // Get control accounts
-  const debtorsAccountId = await getControlAccount(
-    invoice.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    "TRADE_DEBTORS"
-  );
-
-  const vatAccountId = await getControlAccount(
-    invoice.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    "VAT_CONTROL"
-  );
-
-  if (!debtorsAccountId) {
-    return { success: false, error: "Trade Debtors control account not found" };
-  }
-
-  // Build ledger entries per CTO spec:
-  // DR Trade Debtors (gross)
-  // CR Sales accounts (net per line)
-  // CR VAT Control (total VAT)
-  const entries: LedgerEntry[] = [];
-
-  // DR Trade Debtors for gross
-  entries.push({
-    accountId: debtorsAccountId,
-    debit: invoice.total_gross,
-    credit: null,
-    description: `Sales Invoice ${invoice.invoice_number || invoiceId.substring(0, 8)}: ${invoice.contact_name}`,
+  const { data, error } = await supabase.rpc("approve_invoice", {
+    p_invoice_id: invoiceId,
+    p_user_id: userId,
   });
-
-  // CR Sales accounts for each line (net)
-  for (const line of invoice.invoice_lines || []) {
-    entries.push({
-      accountId: line.account_id,
-      debit: null,
-      credit: line.net_amount,
-      description: `${invoice.invoice_number || ""}: ${line.description}`,
-      vatCodeId: line.vat_code_id,
-    });
-  }
-
-  // CR VAT Control for total VAT
-  if (invoice.total_vat > 0 && vatAccountId) {
-    entries.push({
-      accountId: vatAccountId,
-      debit: null,
-      credit: invoice.total_vat,
-      description: `VAT on Invoice ${invoice.invoice_number || invoiceId.substring(0, 8)}`,
-    });
-  }
-
-  // Post to ledger
-  const postingContext: PostingContext = {
-    organizationId: invoice.organization_id,
-    entityType: entityType as "client" | "company",
-    entityId,
-    transactionDate: invoice.issue_date,
-    reference: invoice.invoice_number || undefined,
-    sourceType: "INVOICE",
-    sourceId: invoiceId,
-    currency: invoice.currency || "GBP",
-    fxRate: Number(invoice.exchange_rate) || 1.0,
-    userId,
-  };
-
-  const postResult = await postToLedger(postingContext, entries);
-
-  if (!postResult.success) {
-    return { success: false, error: postResult.error };
-  }
-
-  // Update invoice status
-  const { error: updateError } = await supabase
-    .from("invoices")
-    .update({
-      status: "AWAITING_PAYMENT",
-      is_posted: true,
-      posted_at: new Date().toISOString(),
-      posted_by: userId,
-    })
-    .eq("id", invoiceId);
-
-  if (updateError) {
-    return { success: false, error: updateError.message };
-  }
-
-  return { success: true, journalId: postResult.journalId };
+  if (error) return { success: false, error: error.message };
+  const result = data as { success: boolean; journal_id?: string; error_message?: string };
+  if (!result?.success) return { success: false, error: result?.error_message || "Invoice approval failed" };
+  return { success: true, journalId: result.journal_id };
 }
 
 /**
@@ -346,74 +221,14 @@ export async function voidInvoice(
   userId: string,
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("id", invoiceId)
-    .single();
-
-  if (!invoice) {
-    return { success: false, error: "Invoice not found" };
-  }
-
-  if (invoice.status === "VOIDED") {
-    return { success: false, error: "Invoice already voided" };
-  }
-
-  if (Number(invoice.amount_paid || 0) > 0) {
-    return { success: false, error: "Cannot void invoice with payments. Refund first." };
-  }
-
-  // If posted, create reversing ledger entries to maintain TB integrity
-  if (invoice.is_posted) {
-    // Find the journal created when this invoice was posted
-    const { data: ledgerEntries } = await supabase
-      .from("ledger_entries")
-      .select("journal_id")
-      .eq("source_type", "INVOICE")
-      .eq("source_id", invoiceId)
-      .limit(1);
-
-    const journalId = ledgerEntries?.[0]?.journal_id;
-
-    if (journalId) {
-      const entityType = invoice.client_id ? "client" : "company";
-      const entityId = invoice.client_id || invoice.company_id;
-
-      const reverseResult = await reverseLedgerEntries(
-        journalId,
-        {
-          organizationId: invoice.organization_id,
-          entityType: entityType as "client" | "company",
-          entityId,
-          transactionDate: new Date().toISOString().split("T")[0],
-          reference: `VOID-${invoice.invoice_number || invoiceId.substring(0, 8)}`,
-          sourceType: "INVOICE",
-          currency: invoice.currency || "GBP",
-          fxRate: Number(invoice.exchange_rate) || 1.0,
-          userId,
-        },
-        reason || "Invoice voided"
-      );
-
-      if (!reverseResult.success) {
-        return { success: false, error: `Failed to reverse ledger entries: ${reverseResult.error}` };
-      }
-    }
-  }
-
-  const { error } = await supabase
-    .from("invoices")
-    .update({
-      status: "VOIDED",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", invoiceId);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
+  const { data, error } = await supabase.rpc("void_invoice", {
+    p_invoice_id: invoiceId,
+    p_reason: reason ?? null,
+    p_user_id: userId,
+  });
+  if (error) return { success: false, error: error.message };
+  const result = data as { success: boolean; error_message?: string };
+  if (!result?.success) return { success: false, error: result?.error_message || "Void failed" };
   return { success: true };
 }
 
@@ -425,133 +240,20 @@ export async function recordInvoicePayment(
   payment: PaymentInput,
   userId: string
 ): Promise<{ success: boolean; paymentId?: string; error?: string }> {
-  // Fetch invoice
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("id", invoiceId)
-    .single();
-
-  if (!invoice) {
-    return { success: false, error: "Invoice not found" };
-  }
-
-  if (!invoice.is_posted) {
-    return { success: false, error: "Invoice must be posted before recording payment" };
-  }
-
-  const entityType = invoice.client_id ? "client" : "company";
-  const entityId = invoice.client_id || invoice.company_id;
-
-  // Check period lock
-  const lockCheck = await isPeriodLocked(
-    invoice.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    payment.paymentDate
-  );
-
-  if (lockCheck.locked) {
-    return { success: false, error: `Period locked until ${lockCheck.lockDate}` };
-  }
-
-  const remainingBalance = Number(invoice.remaining_balance || invoice.total_gross) - Number(invoice.amount_paid || 0);
-  const isOverpayment = payment.amount > remainingBalance;
-  const allocationAmount = Math.min(payment.amount, remainingBalance);
-  const overpaymentAmount = isOverpayment ? payment.amount - remainingBalance : 0;
-
-  // Get control accounts
-  const debtorsAccountId = await getControlAccount(
-    invoice.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    "TRADE_DEBTORS"
-  );
-
-  if (!debtorsAccountId) {
-    return { success: false, error: "Trade Debtors account not found" };
-  }
-
-  // Create payment record
-  const { data: paymentRecord, error: paymentError } = await supabase
-    .from("invoice_payments")
-    .insert({
-      invoice_id: invoiceId,
-      amount: payment.amount,
-      payment_date: payment.paymentDate,
-      bank_account_id: payment.bankAccountId || null,
-      bank_transaction_id: payment.bankTransactionId || null,
-      reference: payment.reference || null,
-      payment_method: payment.paymentMethod || null,
-      payment_type: isOverpayment ? "overpayment" : "normal",
-      unallocated_amount: overpaymentAmount,
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-
-  if (paymentError) {
-    return { success: false, error: paymentError.message };
-  }
-
-  // Post ledger entries: DR Bank, CR Trade Debtors
-  if (payment.bankAccountId) {
-    const entries: LedgerEntry[] = [
-      {
-        accountId: payment.bankAccountId,
-        debit: payment.amount,
-        credit: null,
-        description: `Payment received: Invoice ${invoice.invoice_number || invoiceId.substring(0, 8)}`,
-      },
-      {
-        accountId: debtorsAccountId,
-        debit: null,
-        credit: allocationAmount,
-        description: `Payment received: Invoice ${invoice.invoice_number || invoiceId.substring(0, 8)}`,
-      },
-    ];
-
-    // If overpayment, credit the debtors for the full amount (creates credit balance)
-    if (overpaymentAmount > 0) {
-      entries[1].credit = payment.amount;
-    }
-
-    const postResult = await postToLedger(
-      {
-        organizationId: invoice.organization_id,
-        entityType: entityType as "client" | "company",
-        entityId,
-        transactionDate: payment.paymentDate,
-        reference: payment.reference,
-        sourceType: "PAYMENT",
-        sourceId: paymentRecord.id,
-        userId,
-      },
-      entries
-    );
-
-    if (!postResult.success) {
-      // Rollback payment record
-      await supabase.from("invoice_payments").delete().eq("id", paymentRecord.id);
-      return { success: false, error: postResult.error };
-    }
-  }
-
-  // Update invoice balances (trigger should handle this, but explicit update for safety)
-  const newAmountPaid = Number(invoice.amount_paid || 0) + allocationAmount;
-  const newRemainingBalance = Number(invoice.total_gross) - newAmountPaid;
-  const newStatus = newRemainingBalance <= 0 ? "PAID" : "PART_PAID";
-
-  await supabase
-    .from("invoices")
-    .update({
-      amount_paid: newAmountPaid,
-      remaining_balance: newRemainingBalance,
-      status: newStatus,
-    })
-    .eq("id", invoiceId);
-
-  return { success: true, paymentId: paymentRecord.id };
+  const { data, error } = await supabase.rpc("record_invoice_payment", {
+    p_invoice_id: invoiceId,
+    p_amount: payment.amount,
+    p_payment_date: payment.paymentDate,
+    p_bank_account_id: payment.bankAccountId ?? null,
+    p_bank_transaction_id: payment.bankTransactionId ?? null,
+    p_reference: payment.reference ?? null,
+    p_payment_method: payment.paymentMethod ?? null,
+    p_user_id: userId,
+  });
+  if (error) return { success: false, error: error.message };
+  const result = data as { success: boolean; payment_id?: string; error_message?: string };
+  if (!result?.success) return { success: false, error: result?.error_message || "Payment failed" };
+  return { success: true, paymentId: result.payment_id };
 }
 
 /**
