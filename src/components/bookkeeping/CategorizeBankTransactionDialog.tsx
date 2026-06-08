@@ -111,43 +111,19 @@ export function CategorizeBankTransactionDialog({
     mutationFn: async (data: CategorizeFormData) => {
       if (!organization?.id || !transaction) throw new Error("Missing data");
 
-      // Create ledger entry
-      const isDebit = transaction.amount < 0;
-      const absAmount = Math.abs(transaction.amount);
-
-      const ledgerEntry: any = {
-        organization_id: organization.id,
-        client_id: entity.type === "client" ? entity.id : null,
-        company_id: entity.type === "company" ? entity.id : null,
-        transaction_date: transaction.transaction_date,
-        account_id: data.account_id,
-        debit: isDebit ? absAmount : null,
-        credit: !isDebit ? absAmount : null,
-        vat_code_id: data.vat_code_id || null,
-        description: data.description,
-        source_type: "BANK_FEED",
-        source_id: transaction.id,
-        created_by: user?.id,
-      };
-
-      const { data: createdEntry, error: ledgerError } = await supabase
-        .from("ledger_entries")
-        .insert(ledgerEntry)
-        .select()
-        .single();
-
-      if (ledgerError) throw ledgerError;
-
-      // Update bank transaction status
-      const { error: updateError } = await supabase
-        .from("bank_transactions")
-        .update({
-          status: "MATCHED",
-          matched_ledger_entry_id: createdEntry.id,
-        })
-        .eq("id", transaction.id);
-
-      if (updateError) throw updateError;
+      // Route through hardened RPC — no direct writes to ledger_entries.
+      const { data: result, error } = await supabase.rpc("post_bank_transaction", {
+        p_bank_transaction_id: transaction.id,
+        p_contra_account_id: data.account_id,
+        p_vat_code_id: data.vat_code_id || null,
+        p_vat_amount: 0,
+        p_description: data.description,
+      });
+      if (error) throw error;
+      const res = result as { success: boolean; error_message?: string };
+      if (!res?.success) {
+        throw new Error(res?.error_message ?? "Posting was rejected");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
