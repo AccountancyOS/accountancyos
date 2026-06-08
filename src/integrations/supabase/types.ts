@@ -2235,6 +2235,7 @@ export type Database = {
           bill_id: string
           created_at: string | null
           created_by: string | null
+          created_by_portal: boolean
           id: string
           notes: string | null
           payment_date: string
@@ -2250,6 +2251,7 @@ export type Database = {
           bill_id: string
           created_at?: string | null
           created_by?: string | null
+          created_by_portal?: boolean
           id?: string
           notes?: string | null
           payment_date: string
@@ -2265,6 +2267,7 @@ export type Database = {
           bill_id?: string
           created_at?: string | null
           created_by?: string | null
+          created_by_portal?: boolean
           id?: string
           notes?: string | null
           payment_date?: string
@@ -8980,6 +8983,7 @@ export type Database = {
           bank_transaction_id: string | null
           created_at: string | null
           created_by: string | null
+          created_by_portal: boolean
           id: string
           invoice_id: string
           ledger_entry_id: string | null
@@ -8994,6 +8998,7 @@ export type Database = {
           bank_transaction_id?: string | null
           created_at?: string | null
           created_by?: string | null
+          created_by_portal?: boolean
           id?: string
           invoice_id: string
           ledger_entry_id?: string | null
@@ -9008,6 +9013,7 @@ export type Database = {
           bank_transaction_id?: string | null
           created_at?: string | null
           created_by?: string | null
+          created_by_portal?: boolean
           id?: string
           invoice_id?: string
           ledger_entry_id?: string | null
@@ -10553,6 +10559,7 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           created_by: string | null
+          created_by_portal: boolean
           credit: number | null
           debit: number | null
           description: string | null
@@ -10592,6 +10599,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
+          created_by_portal?: boolean
           credit?: number | null
           debit?: number | null
           description?: string | null
@@ -10631,6 +10639,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
+          created_by_portal?: boolean
           credit?: number | null
           debit?: number | null
           description?: string | null
@@ -12671,6 +12680,7 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           created_at: string
+          full_bookkeeping_access: boolean
           id: string
           organization_id: string
           show_bank_accounts: boolean
@@ -12702,6 +12712,7 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          full_bookkeeping_access?: boolean
           id?: string
           organization_id: string
           show_bank_accounts?: boolean
@@ -12733,6 +12744,7 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          full_bookkeeping_access?: boolean
           id?: string
           organization_id?: string
           show_bank_accounts?: boolean
@@ -17001,6 +17013,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_portal_user: { Args: never; Returns: boolean }
       issue_invoice_safe: { Args: { p_invoice_id: string }; Returns: Json }
       lifecycle_accept_portal_invitation: {
         Args: { p_token: string }
