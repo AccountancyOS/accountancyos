@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { BankRuleEditorDialog } from "./BankRuleEditorDialog";
 import { RuleTestRunDialog } from "./RuleTestRunDialog";
 import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
+import { BankRulesPreviewPanel } from "./BankRulesPreviewPanel";
 
 interface BankRulesTabProps {
   entity: BookkeepingEntity | null;
