@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BookkeepingEntity } from "./EntitySelector";
-import { Check, Edit3, MessageCircle, X } from "lucide-react";
+import { Check, MessageCircle, X, CheckCheck } from "lucide-react";
+import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Props {
   entity: BookkeepingEntity;
@@ -35,6 +37,8 @@ export function ReviewQueueTab({ entity }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const col = entity.type === "client" ? "client_id" : "company_id";
+  const [answerOpen, setAnswerOpen] = useState<string | null>(null);
+  const [answerText, setAnswerText] = useState("");
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ["bk-review-queue", entity.type, entity.id],
@@ -98,6 +102,25 @@ export function ReviewQueueTab({ entity }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bk-review-queue", entity.type, entity.id] });
       toast({ title: "Review Updated" });
+    },
+    onError: (e: any) => toast({ title: "Action Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const queryAction = useMutation({
+    mutationFn: async (p: { id: string; action: "answer" | "resolve"; response?: string }) => {
+      const { data: u } = await supabase.auth.getUser();
+      const patch: any =
+        p.action === "answer"
+          ? { status: "answered", response: p.response, answered_by: u.user?.id, answered_at: new Date().toISOString() }
+          : { status: "resolved", resolved_by: u.user?.id, resolved_at: new Date().toISOString() };
+      const { error } = await supabase.from("bookkeeping_queries" as any).update(patch).eq("id", p.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bk-review-queue", entity.type, entity.id] });
+      toast({ title: "Query Updated" });
+      setAnswerOpen(null);
+      setAnswerText("");
     },
     onError: (e: any) => toast({ title: "Action Failed", description: e.message, variant: "destructive" }),
   });
