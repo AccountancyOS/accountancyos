@@ -276,6 +276,17 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
                     <FileText className="h-4 w-4" />
                   </Button>
                   {vr.status === 'draft' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title={vr.client_approval_required ? 'Awaiting client approval' : 'Request client approval'}
+                      onClick={() => requestClientApprovalMutation.mutate(vr.id)}
+                      disabled={requestClientApprovalMutation.isPending}
+                    >
+                      <UserCheck className={`h-4 w-4 ${vr.client_approval_required && !vr.client_approved_at ? 'text-amber-600' : ''}`} />
+                    </Button>
+                  )}
+                  {vr.status === 'draft' && (
                     <Button 
                       variant="ghost" 
                       size="sm"
