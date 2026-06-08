@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Building2, Plus } from "lucide-react";
 import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import { ConnectBankDialog } from "@/components/bookkeeping/ConnectBankDialog";
+import { PortalBankHealthBanner } from "./PortalBankHealthBanner";
 import type { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
 
 interface Props {
@@ -45,6 +46,8 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
 
   return (
     <div className="space-y-4">
+      <PortalBankHealthBanner entity={entity} onReconnect={() => setConnectOpen(true)} />
+
       {allowBankConnect && (
         <div className="flex items-center justify-between rounded-lg border bg-card p-4">
           <div className="flex items-start gap-3">

@@ -18,6 +18,7 @@ import { COATaxMappingEditor } from "@/components/bookkeeping/COATaxMappingEdito
 import { ReviewQueueTab } from "@/components/bookkeeping/ReviewQueueTab";
 import { PayrollModule } from "@/components/payroll/PayrollModule";
 import { CISModule } from "@/components/cis/CISModule";
+import { PracticeBankingOverview } from "@/components/bookkeeping/PracticeBankingOverview";
 import { useEntityServices } from "@/hooks/useEntityServices";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -71,12 +72,15 @@ export default function Bookkeeping() {
         </div>
 
         {!selectedEntity ? (
-          <div className="flex items-center justify-center h-[400px] border border-dashed rounded-lg">
-            <div className="text-center space-y-2">
-              <p className="text-lg font-medium">No entity selected</p>
-              <p className="text-sm text-muted-foreground">
-                Select a client or company above to view their books
-              </p>
+          <div className="space-y-6">
+            <PracticeBankingOverview />
+            <div className="flex items-center justify-center h-[300px] border border-dashed rounded-lg">
+              <div className="text-center space-y-2">
+                <p className="text-lg font-medium">No entity selected</p>
+                <p className="text-sm text-muted-foreground">
+                  Select a client or company above to view their books
+                </p>
+              </div>
             </div>
           </div>
         ) : (
