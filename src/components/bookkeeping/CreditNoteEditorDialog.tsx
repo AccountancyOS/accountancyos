@@ -285,10 +285,11 @@ export function CreditNoteEditorDialog({
         vat_total: totals.vat,
         total: totals.gross,
         remaining_allocation: totals.gross,
-        status: approve ? "APPROVED" : "DRAFT",
-        is_posted: approve,
+        status: "DRAFT",
+        is_posted: false,
       };
 
+      let savedId: string | null = null;
       if (creditNote?.id) {
         // Update existing
         const { error } = await supabase
@@ -299,6 +300,22 @@ export function CreditNoteEditorDialog({
 
         // Delete and re-insert lines
         await supabase.from("credit_note_lines").delete().eq("credit_note_id", creditNote.id);
+        savedId = creditNote.id;
+        const lineData = lines.map((line, idx) => ({
+          credit_note_id: savedId!,
+          line_number: idx + 1,
+          description: line.description,
+          quantity: line.quantity,
+          unit_price: line.unitPrice,
+          account_id: line.accountId || null,
+          vat_code_id: line.vatCodeId || null,
+          vat_rate: line.vatRate,
+          net_amount: line.quantity * line.unitPrice,
+          vat_amount: line.quantity * line.unitPrice * (line.vatRate / 100),
+          gross_amount: line.quantity * line.unitPrice * (1 + line.vatRate / 100),
+        }));
+        const { error: linesError } = await supabase.from("credit_note_lines").insert(lineData);
+        if (linesError) throw linesError;
       } else {
         // Insert new
         const { data, error } = await supabase
@@ -307,6 +324,7 @@ export function CreditNoteEditorDialog({
           .select("id")
           .single();
         if (error) throw error;
+        savedId = data.id;
 
         // Insert lines
         const lineData = lines.map((line, idx) => ({
@@ -325,6 +343,16 @@ export function CreditNoteEditorDialog({
 
         const { error: linesError } = await supabase.from("credit_note_lines").insert(lineData);
         if (linesError) throw linesError;
+      }
+
+      if (approve && savedId) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc("approve_credit_note", {
+          p_credit_note_id: savedId,
+          p_user_id: user?.id ?? null,
+        });
+        if (rpcError) throw rpcError;
+        const result = rpcData as { success: boolean; error_message?: string };
+        if (!result?.success) throw new Error(result?.error_message || "Approval failed");
       }
     },
     onSuccess: (_, approve) => {

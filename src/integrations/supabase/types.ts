@@ -16746,6 +16746,14 @@ export type Database = {
         }
         Returns: string
       }
+      allocate_credit_note: {
+        Args: {
+          p_allocations: Json
+          p_credit_note_id: string
+          p_user_id?: string
+        }
+        Returns: Json
+      }
       apply_bank_match: {
         Args: { p_allocations: Json; p_bank_transaction_id: string }
         Returns: Json
@@ -16796,6 +16804,10 @@ export type Database = {
         Returns: Json
       }
       approve_bill_safe: { Args: { p_bill_id: string }; Returns: Json }
+      approve_credit_note: {
+        Args: { p_credit_note_id: string; p_user_id?: string }
+        Returns: Json
+      }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       approve_invoice: {
         Args: { p_invoice_id: string; p_user_id?: string }
