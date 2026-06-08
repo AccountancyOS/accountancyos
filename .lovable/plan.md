@@ -1,157 +1,236 @@
-## Client Bookkeeping — Operational Layer (Risk-Based Review Model)
+# TrueLayer Production Hardening Plan (Revised)
 
-Reset of the previous review-heavy plan. The portal must behave like Xero/QBO for the client: ordinary actions happen immediately. Accountant control comes from configurable risk-based review modes, period locks, VAT/filing gates and a review queue — **not** from forcing every write into an approval pipeline.
+Treat as core production infrastructure. Sandbox stays available; live enabled via env. No hardcoded URLs, no silent failures, no cross-tenant leakage, no token exposure.
 
-### Operating model
+## 1. Centralised, override-friendly TrueLayer config
 
-```text
-Client operational bookkeeping
-      ↓ (audit + provenance)
-Accountant visibility & review controls
-      ↓ (queries, edits, accepts)
-Accountant period close / VAT / accounts / filings
+New `supabase/functions/_shared/truelayer-config.ts`:
+
+- `getTrueLayerConfig()` reads:
+  - `TRUELAYER_ENV` (`sandbox` | `live`) — required
+  - `TRUELAYER_CLIENT_ID`, `TRUELAYER_CLIENT_SECRET` — required
+  - `TRUELAYER_PROVIDERS` — optional override (priority over env default)
+  - `TRUELAYER_REDIRECT_URI` — optional override; otherwise `${SUPABASE_URL}/functions/v1/truelayer-callback`
+- Returns `{ env, authBase, apiBase, providers, clientId, clientSecret, redirectUri }`.
+- Throws typed `TrueLayerConfigError` with safe message (`Open Banking is not configured for this environment`) when any required secret is missing. Never logs secret values.
+- Env defaults:
+  - sandbox → `auth.truelayer-sandbox.com`, `api.truelayer-sandbox.com`, providers `uk-cs-mock uk-ob-all uk-oauth-all`
+  - live → `auth.truelayer.com`, `api.truelayer.com`, default providers verified against current TrueLayer docs at build time; `TRUELAYER_PROVIDERS` always wins so we can change providers without redeploy.
+
+Refactor `truelayer-auth`, `truelayer-callback`, `truelayer-sync` (and the new scheduled function) to use this module. Remove all hardcoded URLs.
+
+## 2. Token storage audit (gate before further work)
+
+Before changing schema, audit current storage of TrueLayer `access_token` / `refresh_token` on `bank_connections`:
+
+- Confirm columns are not exposed via any RLS SELECT policy reachable by `authenticated` or portal users.
+- If currently plaintext and reachable: lock down with policy denying SELECT on token columns to all roles except `service_role`, and route reads via a `security definer` RPC used only by edge functions. Prefer column-level revocation: `REVOKE SELECT (access_token, refresh_token, ...) ... ; GRANT SELECT (...non-token cols...) ...`.
+- Tokens must never be returned to the frontend, never logged, never included in error payloads.
+
+Flag explicitly in the PR if anything needs hardening here.
+
+## 3. Auth-state row + reconnect semantics
+
+Migrate `truelayer_auth_states` to carry full intent:
+
+```
+state (pk), organization_id,
+client_id, company_id,
+portal_user_id, accountant_user_id,
+bank_connection_id NULL,
+mode TEXT CHECK (mode IN ('connect','reconnect')) DEFAULT 'connect',
+return_url, expires_at, created_at, used_at
 ```
 
-Three accountant-configurable modes per surface:
-- **Operational** — client writes post immediately. Accountant reviews later.
-- **Review-required** — client writes are saved but flagged `pending_review`; effects on VAT/send/post deferred until accountant accepts.
-- **Accountant-only** — client view/respond/upload only.
+Callback rules (enforced in `truelayer-callback`):
 
-Default profile (recommended, accountant can change):
+- `mode='connect'` → insert new `bank_connections` row scoped to org + entity.
+- `mode='reconnect'` → update existing row ONLY IF:
+  - `bank_connection_id` present and exists
+  - belongs to same `organization_id`
+  - belongs to same `client_id`/`company_id`
+  - initiating user passes permission check (accountant in org, or portal user with `allow_bank_connect` on that entity)
+- Any check fail → reject, redirect to safe failure URL, write audit log row.
+- States are single-use (`used_at` set) and expire after 10 minutes.
 
-| Surface | Default mode | Why |
+## 4. Bank sync log table
+
+New `public.bank_sync_logs`:
+
+```
+id, organization_id, bank_connection_id,
+client_id, company_id,
+started_at, completed_at,
+status (running|success|partial|failed),
+records_imported, records_updated,
+error_code, error_message,         -- internal, accountant-visible
+client_safe_message,               -- mapped, portal-visible
+triggered_by (manual|scheduled|reconnect|callback),
+triggered_by_user_id
+```
+
+Standard GRANTs, RLS:
+- Accountant: org-scoped read.
+- Portal: read via RPC only, returning a stripped projection (status, last sync time, `client_safe_message`).
+- Write: `service_role` only.
+
+## 5. Connection health: RPCs, not a broad view
+
+Drop the idea of a public `bank_connection_status_v`. Replace with two `security definer` RPCs:
+
+- `get_bank_connection_health_for_org(org_id)` — accountant only; enforces org membership; returns full detail across the practice.
+- `get_bank_connection_health_for_entity(entity_type, entity_id)` — portal-callable; enforces `portal_can_access_bookkeeping(entity)` AND `portal_has_perm('show_bank_accounts', entity)`; returns simplified per-entity health.
+
+Status derivation (shared SQL helper): `connected | expiring_soon (<=7d) | expired | disconnected | sync_failed | action_required`.
+
+This guarantees the view layer cannot leak across tenants regardless of column-level access.
+
+## 6. Portal permission granularity
+
+Confirm/add separate flags on `portal_visibility_settings`:
+
+- `show_bank_accounts` (existing)
+- `show_bank_transactions` (new if missing — gates transaction list/explain)
+- `allow_bank_connect` (existing)
+- `allow_bank_manual_sync` (new)
+- `allow_transaction_explain` (existing or new)
+
+RLS on `bank_transactions` and the explain RPC must check `show_bank_transactions`, not `show_bank_accounts`.
+
+## 7. Scheduled sync — protected, idempotent, bounded
+
+New edge function `truelayer-sync-scheduled` (`verify_jwt = false`):
+
+- Reads `CRON_SECRET`. Missing secret → function refuses to start. Missing/invalid `x-cron-secret` header → 401. Never log secret.
+- Iterates active, non-expired `bank_connections` in bounded batches (configurable env `TL_SCHED_BATCH_SIZE`, default 25; `TL_SCHED_MAX_CONCURRENCY`, default 5).
+- Per-connection try/catch; per-call timeout; rate-limit aware (honour TrueLayer 429s with backoff).
+- Writes one `bank_sync_logs` row per connection per run (`triggered_by='scheduled'`).
+- Deduplicates via stable provider IDs (see §10).
+
+Cron setup performed via `supabase--insert` (NOT migration), wrapped idempotently:
+
+```sql
+select cron.unschedule('truelayer-hourly-sync')
+  where exists (select 1 from cron.job where jobname='truelayer-hourly-sync');
+select cron.schedule('truelayer-hourly-sync', '0 * * * *',
+  $$ select net.http_post(
+       url:='.../functions/v1/truelayer-sync-scheduled',
+       headers:='{"x-cron-secret":"...","Content-Type":"application/json"}'::jsonb,
+       body:='{}'::jsonb) $$);
+```
+
+Cadence is the cron schedule string — changeable without code edits. Documented in `docs/truelayer-production-readiness.md`.
+
+## 8. Manual sync
+
+Keep/expose:
+
+- Accountant: button on connection card → invokes `truelayer-sync` with `triggered_by='manual'`.
+- Portal: button visible only if `allow_bank_manual_sync = true`; same edge function path; permission re-checked server-side.
+
+## 9. Error mapping
+
+Shared mapper `mapTrueLayerError(err) → { internal_code, client_safe_message, status }`:
+
+| Provider signal | Internal status | Client message |
 |---|---|---|
-| Transaction explain | Operational (review before VAT close) | Volume; review at period end |
-| Receipts upload + match | Operational | Low risk |
-| Sales invoices create | Operational | Client owns sales |
-| Sales invoices send | Operational, gated by `requires_send_approval` setting (off by default) | Some practices want sign-off |
-| Bills create/upload | Review-required | Affect VAT/costs; clients miscode |
-| VAT view | Operational | View only |
-| VAT approval | Review-required when accountant requests it | Sign-off flow |
-| VAT submit | Accountant-only | Never client |
-| Period close / lock dates | Accountant-only | Never client |
-| Journals / workpapers / filings | Accountant-only | Never client |
+| `invalid_grant` / token revoked | `action_required` | Reconnect required |
+| consent expired | `expired` | Bank connection expired. Reconnect bank. |
+| provider 5xx / unavailable | `sync_failed` | Sync failed — try later |
+| 429 rate limited | `sync_delayed` | Sync delayed |
+| config missing | `not_configured` | Open Banking is not configured |
+| other | `sync_failed` | Sync failed — contact your accountant |
 
-### Data model — operational vs review status (kept separate)
+Accountant UI shows `internal_code` + `error_message`. Portal UI shows only `client_safe_message`. Never surface tokens/secrets in any path.
 
-Do not overload existing operational statuses (invoice `draft|sent|paid`, bill `draft|approved|paid`, transaction `unexplained|explained|matched|reconciled`). Add a parallel review layer.
+## 10. Data integrity constraints
 
-**New columns on `invoices`, `bills`, `bank_transactions`, `receipts`, `vat_returns`:**
-- `review_status` enum: `not_required | pending_review | approved | queried | rejected | edited_by_accountant` (default `not_required`)
-- `reviewed_by uuid`, `reviewed_at timestamptz`, `review_notes text`, `review_action text`
-- `source text` (`portal` | `accountant`), `created_by_contact_id uuid`, `created_by_portal boolean` (already exists on some)
+Migration adds (or confirms):
 
-**New `bookkeeping_query` table** (lightweight join over existing `client_messages` + `message_entity_links` where possible — only add a dedicated table if those can't carry status/resolution):
-- `object_type`, `object_id`, `client_id`/`company_id`, `status` (`open|answered|resolved|closed`), `assigned_to`, `priority`, links to `job_id`/`task_id`/`deadline_id` when relevant.
+- `bank_accounts`: UNIQUE `(bank_connection_id, provider_account_id)`
+- `bank_transactions`: UNIQUE `(bank_account_id, provider_transaction_id)`
+- `bank_connections`: UNIQUE `(organization_id, entity_key, provider, provider_connection_id)` where `entity_key = coalesce(client_id::text, company_id::text)`; allows intentional multiple consents only if `provider_connection_id` differs.
 
-### Settings — per org, per client/entity, per service
+If TrueLayer transaction IDs ever rotate, document fallback identifier strategy (`meta` JSON + amount/date/desc hash) in the readiness doc.
 
-Extend `portal_visibility_settings` (and an org-level defaults row in `org_settings`):
+## 11. Callback failure UX
 
-```
-client_bookkeeping_mode: operational | review_required | accountant_only
-require_review_for_transaction_explanations: bool
-require_review_for_invoice_sending: bool      -- gates 'send' only, not 'create'
-require_review_for_bill_approval: bool        -- default true
-require_review_for_receipt_matching: bool     -- default false
-require_vat_client_approval: bool
-allow_client_reconcile: bool
-allow_client_post_to_ledger: bool             -- default false
-```
+`truelayer-callback` failure paths redirect to:
 
-Resolution order: contact → client/entity → service → org default. The existing `Full Bookkeeping Access` master toggle is repurposed as a shortcut that sets all surfaces to **Operational** with review flags off (kept for backward compatibility with the previous turn's row).
+- Portal: `/portal/bookkeeping?tab=banking&connection=failed&reason=<code>`
+- Accountant: `/bookkeeping?tab=banking&connection=failed&reason=<code>`
 
-### Permissions — extend, enforce in RLS/RPCs
+Banking tabs render:
 
-Add to `portal_has_perm` and corresponding RLS:
-```
-bookkeeping.transactions.explain / .reconcile
-bookkeeping.invoices.create / .send
-bookkeeping.bills.create / .approve
-bookkeeping.receipts.upload / .match
-bookkeeping.customers.create / .suppliers.create
-bookkeeping.vat.view / .approve            -- submit is never portal
-bookkeeping.queries.respond
-bookkeeping.reports.view_summary / .view_detail / .download
-```
-Accountant-only (no portal grant ever):
-```
-periods.close, lock_dates.manage, journals.create,
-vat.submit, filings.submit, workpapers.finalise, org.settings
-```
+> We couldn't connect your bank. Please try again or contact your accountant.
 
-RLS enforces both the permission and the operational/review-mode setting (e.g. an invoice with `require_review_for_invoice_sending=true` cannot transition `status` to `sent` from a portal session; only `pending_review` accepted by an accountant unlocks it).
+`reason` is a safe internal code only (no provider raw text, no token fragments).
 
-### Audit / provenance
+## 12. UI surfaces
 
-Every portal mutation writes to `bookkeeping_audit_log` with: `object_type`, `object_id`, `entity_id`, `organisation_id`, `created_by_portal=true`, `created_by_contact_id`, `created_by_user_id`, `source='portal'`, `previous_value`, `new_value`, timestamps. Accountant edits to client-created rows also capture `reviewed_by`, `reviewed_at`, `review_action`, `review_notes`.
+### Accountant
+- `src/components/bookkeeping/BankingTab.tsx` — per-entity connection health card.
+- New `src/components/bookkeeping/PracticeBankingOverview.tsx` mounted in `src/pages/Bookkeeping.tsx` — practice-wide list with filters (client, entity, status, expiring, failed); drill-down to `bank_sync_logs`.
 
-### Portal UX language
+### Portal
+- `src/portal/components/bookkeeping/PortalBankingTab.tsx` — health banner above existing `BankingTab` using `get_bank_connection_health_for_entity`; reconnect CTA when expiring/expired (gated by `allow_bank_connect`); manual refresh button (gated by `allow_bank_manual_sync`).
+- Client-friendly language only.
 
-Status pills use plain operational language. Review chip only appears when review is actually required:
-`Saved · Submitted For Review · With Accountant · Query From Accountant · Approved · Rejected`
+Shared hook `src/hooks/useBankConnectionHealth.ts` chooses the right RPC by surface.
 
-The portal never shows a "submitted into a black hole" empty state — operational records appear normally; review chip is supplementary.
+## 13. RLS test matrix
 
-### Accountant review queue (control surface, not bottleneck)
+Document and verify (in `docs/truelayer-production-readiness.md`):
 
-New `Review Queue` tab on `Bookkeeping.tsx`. Sections, each filterable by client/entity, type, date, VAT period, assigned staff, risk:
-- Client-submitted bills (`pending_review`)
-- Queried transactions
-- Unreviewed transaction explanations (only when mode requires)
-- Receipts requiring attention
-- Invoices awaiting send approval (only when `requires_send_approval`)
-- VAT returns awaiting client approval
-- Open bookkeeping queries (client responses)
+- Client A cannot see Client B accounts/transactions/logs.
+- Multi-entity portal user sees only linked entities.
+- Revoked portal user loses access immediately.
+- `allow_bank_connect=false` blocks connect and reconnect.
+- `show_bank_accounts=false` blocks account list.
+- `show_bank_transactions=false` blocks transaction list even if accounts visible.
+- Tokens never returned to any non-`service_role` query.
+- Reconnect cannot retarget another client's connection.
 
-Row actions: Accept · Edit And Accept · Reject · Query Client · Mark Reviewed · Open Source Record.
+## 14. Acceptance criteria
 
-### Audit of current state (to confirm in build step 1)
+Original 14 plus:
 
-| Area | Current portal write | Permission-gated | RLS enforced | Audit logged | Reviewable | Action |
-|---|---|---|---|---|---|---|
-| Bank connect | Yes | Yes | Yes | Partial | n/a | Keep operational |
-| Transaction explain | Yes (direct post) | Yes | Yes | Partial | No | Add review_status + provenance |
-| Receipts upload/match | Reused UI, unclear | Partial | Partial | Partial | No | Confirm + audit |
-| Invoices create/send | Yes if perm | Yes | Yes | Partial | No | Add `requires_send_approval` gate |
-| Bills create | Yes if perm | Yes | Yes | Partial | No | Add default review-required |
-| VAT view/approve | View ok; approve missing | Partial | Partial | No | n/a | Build approval action |
-| Queries | `PortalQueriesPanel` exists | n/a | n/a | n/a | n/a | Wire two-way + entity links |
-| Period locks / journals / VAT submit / filings | No portal write | n/a | n/a | n/a | n/a | Keep accountant-only |
+15. No duplicate cron jobs created on repeat builds.
+16. Reconnect cannot overwrite another client/entity connection.
+17. Tokens are never visible to portal or accountant frontend queries.
+18. Health RPC does not leak other client bank data.
+19. Manual sync works for accountant; gated for portal.
+20. Callback failure redirects to safe URL with safe reason code.
+21. Client sees only simplified sync errors; accountant sees detail.
+22. Unique constraints prevent duplicate accounts/transactions.
+23. `TRUELAYER_PROVIDERS` override changes behaviour without redeploy.
+24. Scheduled function refuses to run without `CRON_SECRET`.
 
-### Out of scope
+## Files
 
-- Client-side bank rules editor
-- Recurring invoices in portal
-- Multi-currency UI changes
-- Production TrueLayer keys
-- New report templates
+New:
+- `supabase/functions/_shared/truelayer-config.ts`
+- `supabase/functions/_shared/truelayer-errors.ts` (mapper)
+- `supabase/functions/truelayer-sync-scheduled/index.ts`
+- Migration: token column lockdown, `truelayer_auth_states` columns, `bank_sync_logs`, unique constraints, RPCs, granular portal perms.
+- `src/hooks/useBankConnectionHealth.ts`
+- `src/components/bookkeeping/BankConnectionHealthCard.tsx`
+- `src/components/bookkeeping/PracticeBankingOverview.tsx`
+- `src/portal/components/bookkeeping/PortalBankHealthBanner.tsx`
+- `docs/truelayer-production-readiness.md`
 
-### Technical notes
+Edited:
+- `supabase/functions/truelayer-auth/index.ts` (config, mode, validation, audit-state fields)
+- `supabase/functions/truelayer-callback/index.ts` (config, reconnect guards, failure redirect, log row)
+- `supabase/functions/truelayer-sync/index.ts` (config, error mapper, log row, dedup verify)
+- `supabase/config.toml` (add `truelayer-sync-scheduled` only)
+- `src/components/bookkeeping/BankingTab.tsx`, `src/pages/Bookkeeping.tsx`
+- `src/portal/components/bookkeeping/PortalBankingTab.tsx`
 
-- Operational status columns are untouched; review columns added in parallel.
-- Mode resolution implemented as a SQL function `portal_bookkeeping_mode(_client_id, _company_id, _surface)` used by both RLS and the portal hook so client and server agree.
-- `portal_has_perm` extended with the new keys; the existing master toggle short-circuit remains.
-- `vat.submit`, `filings.submit`, `periods.close`, `lock_dates.manage`, `journals.create`, `workpapers.finalise` are hard-coded `false` in `portal_has_perm` regardless of settings — defensive against future bugs.
-- Trigger guards on `vat_returns`, `period_locks`, `journals` reject any update made under `is_portal_user()`.
+Secrets requested in build mode: `TRUELAYER_ENV`, `CRON_SECRET`, optional `TRUELAYER_PROVIDERS`, optional `TRUELAYER_REDIRECT_URI`. Existing `TRUELAYER_CLIENT_ID` / `TRUELAYER_CLIENT_SECRET` validated, not overwritten.
 
-### Build order
+## Non-goals
 
-1. **Audit pass** — produce a short report in `docs/portal-bookkeeping-write-audit.md` filling the table above with verified RLS/audit findings before writing migrations.
-2. **Migration A — settings & modes**: add mode + per-surface review settings to `portal_visibility_settings` and org defaults; add `portal_bookkeeping_mode()` resolver.
-3. **Migration B — review layer**: add `review_status` + reviewer columns to invoices, bills, bank_transactions, receipts, vat_returns. Add the `bookkeeping_query` table (or extend `message_entity_links`) with grants + RLS.
-4. **Migration C — RLS hardening**: extend `portal_has_perm` with new keys; harden write policies; add accountant-only guards; add provenance triggers across all surfaces (currently only on `ledger_entries`/`invoice_payments`/`bill_payments`).
-5. **Accountant UI**: settings panel reorganised into modes + per-surface review toggles; Review Queue tab with the seven sections and the row actions; "Request Client Approval" action on VAT returns.
-6. **Portal UI**: status pills, plain operational labels, surface review chip only when applicable; wire two-way queries with attachments and status; VAT approval action.
-7. **Notifications**: handoffs both directions.
-8. **Docs & memory**: update `docs/portal-disabled-features.md`; replace `mem://constraints/portal-bookkeeping-write-policy` with a new memory describing the risk-based model and the hard accountant-only list.
-9. **QA**: log in as Amy-Lee and run two passes — Operational defaults (Xero-like) and Review-required mode — verifying RLS, audit rows, queue population, and the accountant-only guardrails.
-
-### Acceptance
-
-- Client can do day-to-day bookkeeping without an approval gate when accountant leaves defaults.
-- Accountant can flip any surface into review-required and the portal honours it without breaking operational status fields.
-- VAT submission, period close, lock dates, journals, workpaper finalisation and filings cannot be performed from a portal session — verified by RLS test and trigger guard.
-- Every portal mutation has a row in `bookkeeping_audit_log` with full provenance.
-- Review queue lists all items the accountant should see and nothing they should not.
-- Existing accountant bookkeeping flows unchanged.
+- No changes to bookkeeping ledger, VAT, workpaper, or filing logic.
+- No new bank-feed model for the portal — single shared schema.
+- Sandbox testing remains fully functional; switch is env-driven only.
