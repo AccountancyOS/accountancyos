@@ -16791,8 +16791,16 @@ export type Database = {
         }
         Returns: Json
       }
+      approve_bill: {
+        Args: { p_bill_id: string; p_user_id?: string }
+        Returns: Json
+      }
       approve_bill_safe: { Args: { p_bill_id: string }; Returns: Json }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
+      approve_invoice: {
+        Args: { p_invoice_id: string; p_user_id?: string }
+        Returns: Json
+      }
       automation_dry_run: {
         Args: { p_rule_id: string; p_sample_event?: Json }
         Returns: Json
@@ -17723,6 +17731,19 @@ export type Database = {
         }
         Returns: string
       }
+      record_bill_payment: {
+        Args: {
+          p_amount: number
+          p_bank_account_id?: string
+          p_bank_transaction_id?: string
+          p_bill_id: string
+          p_payment_date: string
+          p_payment_method?: string
+          p_reference?: string
+          p_user_id?: string
+        }
+        Returns: Json
+      }
       record_bill_payment_safe: {
         Args: {
           p_amount: number
@@ -17731,6 +17752,19 @@ export type Database = {
           p_payment_date: string
           p_payment_method?: string
           p_reference?: string
+        }
+        Returns: Json
+      }
+      record_invoice_payment: {
+        Args: {
+          p_amount: number
+          p_bank_account_id?: string
+          p_bank_transaction_id?: string
+          p_invoice_id: string
+          p_payment_date: string
+          p_payment_method?: string
+          p_reference?: string
+          p_user_id?: string
         }
         Returns: Json
       }
@@ -17975,8 +18009,16 @@ export type Database = {
         Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
+      void_bill: {
+        Args: { p_bill_id: string; p_reason?: string; p_user_id?: string }
+        Returns: Json
+      }
       void_bill_safe: {
         Args: { p_bill_id: string; p_reason: string }
+        Returns: Json
+      }
+      void_invoice: {
+        Args: { p_invoice_id: string; p_reason?: string; p_user_id?: string }
         Returns: Json
       }
       void_invoice_safe: {
