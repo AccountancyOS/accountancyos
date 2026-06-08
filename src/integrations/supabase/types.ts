@@ -2323,6 +2323,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           created_by_portal: boolean
+          exchange_rate: number
           id: string
           notes: string | null
           payment_date: string
@@ -2339,6 +2340,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           created_by_portal?: boolean
+          exchange_rate?: number
           id?: string
           notes?: string | null
           payment_date: string
@@ -2355,6 +2357,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           created_by_portal?: boolean
+          exchange_rate?: number
           id?: string
           notes?: string | null
           payment_date?: string
@@ -9170,6 +9173,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           created_by_portal: boolean
+          exchange_rate: number
           id: string
           invoice_id: string
           ledger_entry_id: string | null
@@ -9185,6 +9189,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           created_by_portal?: boolean
+          exchange_rate?: number
           id?: string
           invoice_id: string
           ledger_entry_id?: string | null
@@ -9200,6 +9205,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           created_by_portal?: boolean
+          exchange_rate?: number
           id?: string
           invoice_id?: string
           ledger_entry_id?: string | null
@@ -17743,19 +17749,34 @@ export type Database = {
         }
         Returns: string
       }
-      record_bill_payment: {
-        Args: {
-          p_amount: number
-          p_bank_account_id?: string
-          p_bank_transaction_id?: string
-          p_bill_id: string
-          p_payment_date: string
-          p_payment_method?: string
-          p_reference?: string
-          p_user_id?: string
-        }
-        Returns: Json
-      }
+      record_bill_payment:
+        | {
+            Args: {
+              p_amount: number
+              p_bank_account_id?: string
+              p_bank_transaction_id?: string
+              p_bill_id: string
+              p_payment_date: string
+              p_payment_method?: string
+              p_reference?: string
+              p_user_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_amount: number
+              p_bank_account_id?: string
+              p_bank_transaction_id?: string
+              p_bill_id: string
+              p_payment_date: string
+              p_payment_fx_rate?: number
+              p_payment_method?: string
+              p_reference?: string
+              p_user_id?: string
+            }
+            Returns: Json
+          }
       record_bill_payment_safe: {
         Args: {
           p_amount: number
@@ -17767,19 +17788,34 @@ export type Database = {
         }
         Returns: Json
       }
-      record_invoice_payment: {
-        Args: {
-          p_amount: number
-          p_bank_account_id?: string
-          p_bank_transaction_id?: string
-          p_invoice_id: string
-          p_payment_date: string
-          p_payment_method?: string
-          p_reference?: string
-          p_user_id?: string
-        }
-        Returns: Json
-      }
+      record_invoice_payment:
+        | {
+            Args: {
+              p_amount: number
+              p_bank_account_id?: string
+              p_bank_transaction_id?: string
+              p_invoice_id: string
+              p_payment_date: string
+              p_payment_method?: string
+              p_reference?: string
+              p_user_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_amount: number
+              p_bank_account_id?: string
+              p_bank_transaction_id?: string
+              p_invoice_id: string
+              p_payment_date: string
+              p_payment_fx_rate?: number
+              p_payment_method?: string
+              p_reference?: string
+              p_user_id?: string
+            }
+            Returns: Json
+          }
       record_invoice_payment_safe: {
         Args: {
           p_amount: number
