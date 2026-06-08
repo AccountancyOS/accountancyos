@@ -352,6 +352,9 @@ export function BankRulesTab({ entity }: BankRulesTabProps) {
         </div>
       )}
 
+      {/* Dry-run preview of rules against un-categorised transactions */}
+      <BankRulesPreviewPanel entity={entity} />
+
       <BankRuleEditorDialog
         open={editorOpen}
         onOpenChange={setEditorOpen}
