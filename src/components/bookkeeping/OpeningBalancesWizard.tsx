@@ -52,11 +52,12 @@ export function OpeningBalancesWizard({
   );
   const [lockPeriod, setLockPeriod] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [balances, setBalances] = useState<Record<string, { debit: string; credit: string }>>(
     {}
   );
 
-  const { data: accounts = [] } = useQuery({
+  const { data: accounts = [], refetch: refetchAccounts } = useQuery({
     queryKey: ["ob-accounts", organization?.id, entity.type, entity.id],
     queryFn: async () => {
       if (!organization?.id) return [];
@@ -74,6 +75,29 @@ export function OpeningBalancesWizard({
     },
     enabled: open && !!organization?.id,
   });
+
+  const handleSeedChart = async () => {
+    if (!organization?.id) return;
+    setSeeding(true);
+    const { data, error } = await supabase.rpc("seed_standard_chart_of_accounts", {
+      p_organization_id: organization.id,
+      p_client_id: entity.type === "client" ? entity.id : null,
+      p_company_id: entity.type === "company" ? entity.id : null,
+    });
+    setSeeding(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const res = data as { success: boolean; inserted?: number };
+    toast.success(
+      res?.inserted
+        ? `Seeded ${res.inserted} standard accounts`
+        : "Standard chart is already in place"
+    );
+    refetchAccounts();
+    qc.invalidateQueries({ queryKey: ["bookkeeping-accounts"] });
+  };
 
   const totals = useMemo(() => {
     let d = 0;
@@ -172,9 +196,24 @@ export function OpeningBalancesWizard({
             />
             <span className="text-sm">Lock period at opening date</span>
           </label>
+          <div className="flex-1" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSeedChart}
+            disabled={seeding}
+          >
+            {seeding ? "Seeding…" : "Seed Standard UK Chart"}
+          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto border rounded-md">
+          {accounts.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No accounts yet for this entity. Click <strong>Seed Standard UK Chart</strong>
+              {" "}above to create the default chart.
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -209,6 +248,7 @@ export function OpeningBalancesWizard({
               ))}
             </TableBody>
           </Table>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-2 text-sm">
