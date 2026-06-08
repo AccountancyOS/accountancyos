@@ -2101,6 +2101,7 @@ export type Database = {
           description: string
           id: string
           import_batch_id: string | null
+          import_hash: string | null
           import_source: string | null
           matched_ledger_entry_id: string | null
           organization_id: string
@@ -2137,6 +2138,7 @@ export type Database = {
           description: string
           id?: string
           import_batch_id?: string | null
+          import_hash?: string | null
           import_source?: string | null
           matched_ledger_entry_id?: string | null
           organization_id: string
@@ -2173,6 +2175,7 @@ export type Database = {
           description?: string
           id?: string
           import_batch_id?: string | null
+          import_hash?: string | null
           import_source?: string | null
           matched_ledger_entry_id?: string | null
           organization_id?: string
@@ -16743,6 +16746,10 @@ export type Database = {
         }
         Returns: string
       }
+      apply_bank_match: {
+        Args: { p_allocations: Json; p_bank_transaction_id: string }
+        Returns: Json
+      }
       apply_ch_diff: {
         Args: { p_decision: string; p_diff_id: string; p_notes?: string }
         Returns: undefined
@@ -17622,6 +17629,25 @@ export type Database = {
           p_source_type: string
         }
         Returns: Json
+      }
+      preview_bank_rules: {
+        Args: {
+          p_bank_account_id?: string
+          p_limit?: number
+          p_organization_id: string
+        }
+        Returns: {
+          amount: number
+          bank_transaction_id: string
+          description: string
+          match_reason: string
+          proposed_contra_account_code: string
+          proposed_contra_account_id: string
+          proposed_contra_account_name: string
+          rule_id: string
+          rule_name: string
+          transaction_date: string
+        }[]
       }
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
