@@ -2036,6 +2036,7 @@ export type Database = {
           client_suggested_account_id: string | null
           company_id: string | null
           created_at: string | null
+          created_by_contact_id: string | null
           currency: string | null
           description: string
           id: string
@@ -2045,11 +2046,18 @@ export type Database = {
           organization_id: string
           provider: string | null
           raw_json: Json | null
+          review_action: string | null
+          review_notes: string | null
+          review_status: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at: string | null
+          reviewed_by: string | null
           rule_id: string | null
+          source: string | null
           status: string
           transaction_date: string
           truelayer_transaction_id: string | null
           updated_at: string | null
+          updated_by_portal: boolean
         }
         Insert: {
           amount: number
@@ -2064,6 +2072,7 @@ export type Database = {
           client_suggested_account_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          created_by_contact_id?: string | null
           currency?: string | null
           description: string
           id?: string
@@ -2073,11 +2082,18 @@ export type Database = {
           organization_id: string
           provider?: string | null
           raw_json?: Json | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           rule_id?: string | null
+          source?: string | null
           status?: string
           transaction_date: string
           truelayer_transaction_id?: string | null
           updated_at?: string | null
+          updated_by_portal?: boolean
         }
         Update: {
           amount?: number
@@ -2092,6 +2108,7 @@ export type Database = {
           client_suggested_account_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          created_by_contact_id?: string | null
           currency?: string | null
           description?: string
           id?: string
@@ -2101,11 +2118,18 @@ export type Database = {
           organization_id?: string
           provider?: string | null
           raw_json?: Json | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           rule_id?: string | null
+          source?: string | null
           status?: string
           transaction_date?: string
           truelayer_transaction_id?: string | null
           updated_at?: string | null
+          updated_by_portal?: boolean
         }
         Relationships: [
           {
@@ -2309,6 +2333,8 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           created_at: string | null
+          created_by_contact_id: string | null
+          created_by_portal: boolean
           currency: string | null
           due_date: string
           exchange_rate: number | null
@@ -2324,6 +2350,12 @@ export type Database = {
           receipt_path: string | null
           reference: string | null
           remaining_balance: number | null
+          review_action: string | null
+          review_notes: string | null
+          review_status: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string | null
           status: string | null
           supplier_id: string | null
           total_gross: number | null
@@ -2342,6 +2374,8 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          created_by_contact_id?: string | null
+          created_by_portal?: boolean
           currency?: string | null
           due_date: string
           exchange_rate?: number | null
@@ -2357,6 +2391,12 @@ export type Database = {
           receipt_path?: string | null
           reference?: string | null
           remaining_balance?: number | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string | null
           status?: string | null
           supplier_id?: string | null
           total_gross?: number | null
@@ -2375,6 +2415,8 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          created_by_contact_id?: string | null
+          created_by_portal?: boolean
           currency?: string | null
           due_date?: string
           exchange_rate?: number | null
@@ -2390,6 +2432,12 @@ export type Database = {
           receipt_path?: string | null
           reference?: string | null
           remaining_balance?: number | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string | null
           status?: string | null
           supplier_id?: string | null
           total_gross?: number | null
@@ -2571,6 +2619,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      bookkeeping_queries: {
+        Row: {
+          answered_at: string | null
+          answered_by: string | null
+          asked_at: string
+          asked_by: string | null
+          attachment_path: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          deadline_id: string | null
+          id: string
+          job_id: string | null
+          object_id: string
+          object_type: string
+          organization_id: string
+          priority: string | null
+          question: string
+          resolved_at: string | null
+          resolved_by: string | null
+          response: string | null
+          status: string
+          task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          answered_at?: string | null
+          answered_by?: string | null
+          asked_at?: string
+          asked_by?: string | null
+          attachment_path?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          deadline_id?: string | null
+          id?: string
+          job_id?: string | null
+          object_id: string
+          object_type: string
+          organization_id: string
+          priority?: string | null
+          question: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          response?: string | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          answered_at?: string | null
+          answered_by?: string | null
+          asked_at?: string
+          asked_by?: string | null
+          attachment_path?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          deadline_id?: string | null
+          id?: string
+          job_id?: string | null
+          object_id?: string
+          object_type?: string
+          organization_id?: string
+          priority?: string | null
+          question?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          response?: string | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       ca_rate_tables: {
         Row: {
@@ -9056,6 +9179,8 @@ export type Database = {
           contact_email: string | null
           contact_name: string
           created_at: string | null
+          created_by_contact_id: string | null
+          created_by_portal: boolean
           currency: string | null
           customer_id: string | null
           document_id: string | null
@@ -9078,8 +9203,14 @@ export type Database = {
           posted_by: string | null
           reference: string | null
           remaining_balance: number | null
+          review_action: string | null
+          review_notes: string | null
+          review_status: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at: string | null
+          reviewed_by: string | null
           send_status: string | null
           sent_at: string | null
+          source: string | null
           status: string
           supplier_id: string | null
           total_gross: number
@@ -9098,6 +9229,8 @@ export type Database = {
           contact_email?: string | null
           contact_name: string
           created_at?: string | null
+          created_by_contact_id?: string | null
+          created_by_portal?: boolean
           currency?: string | null
           customer_id?: string | null
           document_id?: string | null
@@ -9120,8 +9253,14 @@ export type Database = {
           posted_by?: string | null
           reference?: string | null
           remaining_balance?: number | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           send_status?: string | null
           sent_at?: string | null
+          source?: string | null
           status?: string
           supplier_id?: string | null
           total_gross?: number
@@ -9140,6 +9279,8 @@ export type Database = {
           contact_email?: string | null
           contact_name?: string
           created_at?: string | null
+          created_by_contact_id?: string | null
+          created_by_portal?: boolean
           currency?: string | null
           customer_id?: string | null
           document_id?: string | null
@@ -9162,8 +9303,14 @@ export type Database = {
           posted_by?: string | null
           reference?: string | null
           remaining_balance?: number | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           send_status?: string | null
           sent_at?: string | null
+          source?: string | null
           status?: string
           supplier_id?: string | null
           total_gross?: number
@@ -12671,18 +12818,30 @@ export type Database = {
         Row: {
           allow_bank_connect: boolean
           allow_bill_create: boolean
+          allow_client_post_to_ledger: boolean
+          allow_client_reconcile: boolean
+          allow_customer_create: boolean
           allow_invoice_create: boolean
           allow_invoice_send: boolean
+          allow_query_respond: boolean
+          allow_receipt_match: boolean
           allow_receipt_upload: boolean
           allow_reports_download: boolean
+          allow_supplier_create: boolean
           allow_transaction_explain: boolean
           allow_vat_approval: boolean
+          client_bookkeeping_mode: Database["public"]["Enums"]["bk_mode"]
           client_id: string | null
           company_id: string | null
           created_at: string
           full_bookkeeping_access: boolean
           id: string
           organization_id: string
+          require_review_for_bill_approval: boolean
+          require_review_for_invoice_sending: boolean
+          require_review_for_receipt_matching: boolean
+          require_review_for_transaction_explanations: boolean
+          require_vat_client_approval: boolean
           show_bank_accounts: boolean
           show_bills: boolean
           show_cash: boolean
@@ -12703,18 +12862,30 @@ export type Database = {
         Insert: {
           allow_bank_connect?: boolean
           allow_bill_create?: boolean
+          allow_client_post_to_ledger?: boolean
+          allow_client_reconcile?: boolean
+          allow_customer_create?: boolean
           allow_invoice_create?: boolean
           allow_invoice_send?: boolean
+          allow_query_respond?: boolean
+          allow_receipt_match?: boolean
           allow_receipt_upload?: boolean
           allow_reports_download?: boolean
+          allow_supplier_create?: boolean
           allow_transaction_explain?: boolean
           allow_vat_approval?: boolean
+          client_bookkeeping_mode?: Database["public"]["Enums"]["bk_mode"]
           client_id?: string | null
           company_id?: string | null
           created_at?: string
           full_bookkeeping_access?: boolean
           id?: string
           organization_id: string
+          require_review_for_bill_approval?: boolean
+          require_review_for_invoice_sending?: boolean
+          require_review_for_receipt_matching?: boolean
+          require_review_for_transaction_explanations?: boolean
+          require_vat_client_approval?: boolean
           show_bank_accounts?: boolean
           show_bills?: boolean
           show_cash?: boolean
@@ -12735,18 +12906,30 @@ export type Database = {
         Update: {
           allow_bank_connect?: boolean
           allow_bill_create?: boolean
+          allow_client_post_to_ledger?: boolean
+          allow_client_reconcile?: boolean
+          allow_customer_create?: boolean
           allow_invoice_create?: boolean
           allow_invoice_send?: boolean
+          allow_query_respond?: boolean
+          allow_receipt_match?: boolean
           allow_receipt_upload?: boolean
           allow_reports_download?: boolean
+          allow_supplier_create?: boolean
           allow_transaction_explain?: boolean
           allow_vat_approval?: boolean
+          client_bookkeeping_mode?: Database["public"]["Enums"]["bk_mode"]
           client_id?: string | null
           company_id?: string | null
           created_at?: string
           full_bookkeeping_access?: boolean
           id?: string
           organization_id?: string
+          require_review_for_bill_approval?: boolean
+          require_review_for_invoice_sending?: boolean
+          require_review_for_receipt_matching?: boolean
+          require_review_for_transaction_explanations?: boolean
+          require_vat_client_approval?: boolean
           show_bank_accounts?: boolean
           show_bills?: boolean
           show_cash?: boolean
@@ -13370,6 +13553,8 @@ export type Database = {
           category: string | null
           client_id: string | null
           company_id: string | null
+          created_by_contact_id: string | null
+          created_by_portal: boolean
           currency: string | null
           file_name: string
           file_path: string
@@ -13384,6 +13569,12 @@ export type Database = {
           organization_id: string
           processed_at: string | null
           receipt_date: string | null
+          review_action: string | null
+          review_notes: string | null
+          review_status: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string | null
           total_amount: number | null
           uploaded_at: string
           uploaded_by: string | null
@@ -13395,6 +13586,8 @@ export type Database = {
           category?: string | null
           client_id?: string | null
           company_id?: string | null
+          created_by_contact_id?: string | null
+          created_by_portal?: boolean
           currency?: string | null
           file_name: string
           file_path: string
@@ -13409,6 +13602,12 @@ export type Database = {
           organization_id: string
           processed_at?: string | null
           receipt_date?: string | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string | null
           total_amount?: number | null
           uploaded_at?: string
           uploaded_by?: string | null
@@ -13420,6 +13619,8 @@ export type Database = {
           category?: string | null
           client_id?: string | null
           company_id?: string | null
+          created_by_contact_id?: string | null
+          created_by_portal?: boolean
           currency?: string | null
           file_name?: string
           file_path?: string
@@ -13434,6 +13635,12 @@ export type Database = {
           organization_id?: string
           processed_at?: string | null
           receipt_date?: string | null
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string | null
           total_amount?: number | null
           uploaded_at?: string
           uploaded_by?: string | null
@@ -15764,6 +15971,11 @@ export type Database = {
           organization_id: string
           period_end: string
           period_start: string
+          review_action: string | null
+          review_notes: string | null
+          review_status: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at: string | null
+          reviewed_by: string | null
           status: string
           submitted_at: string | null
           submitted_by: string | null
@@ -15792,6 +16004,11 @@ export type Database = {
           organization_id: string
           period_end: string
           period_start: string
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -15820,6 +16037,11 @@ export type Database = {
           organization_id?: string
           period_end?: string
           period_start?: string
+          review_action?: string | null
+          review_notes?: string | null
+          review_status?: Database["public"]["Enums"]["bk_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -17527,6 +17749,14 @@ export type Database = {
         | "active"
         | "past_due"
         | "canceled"
+      bk_mode: "operational" | "review_required" | "accountant_only"
+      bk_review_status:
+        | "not_required"
+        | "pending_review"
+        | "approved"
+        | "queried"
+        | "rejected"
+        | "edited_by_accountant"
       email_direction: "inbound" | "outbound"
       email_match_type: "auto" | "manual"
       link_initiator: "client" | "practice"
@@ -17675,6 +17905,15 @@ export const Constants = {
         "active",
         "past_due",
         "canceled",
+      ],
+      bk_mode: ["operational", "review_required", "accountant_only"],
+      bk_review_status: [
+        "not_required",
+        "pending_review",
+        "approved",
+        "queried",
+        "rejected",
+        "edited_by_accountant",
       ],
       email_direction: ["inbound", "outbound"],
       email_match_type: ["auto", "manual"],
