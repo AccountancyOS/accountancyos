@@ -16,7 +16,7 @@ interface Props {
   entityId: string;
 }
 
-type PermRow = Record<string, boolean | null>;
+type PermRow = Record<string, boolean | string | null>;
 
 const VIEW_FLAGS: { key: string; label: string; help: string }[] = [
   { key: "show_bank_accounts", label: "Bank Accounts", help: "Banking tab and connected feeds." },
@@ -177,7 +177,7 @@ export function BookkeepingPermissionsPanel({ entityKind, entityId }: Props) {
                 </p>
               </div>
               <RadioGroup
-                value={(row?.client_bookkeeping_mode as string) ?? "operational"}
+                value={(row?.client_bookkeeping_mode as unknown as string) ?? "operational"}
                 onValueChange={(val) => mutation.mutate({ client_bookkeeping_mode: val } as any)}
                 className="grid gap-2"
                 disabled={mutation.isPending}
