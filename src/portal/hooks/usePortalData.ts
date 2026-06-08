@@ -11,6 +11,10 @@ import {
 import { listPortalPayments } from "../services/portalPaymentsService";
 import { getPortalVisibilitySettings } from "../services/portalVisibilityService";
 import { getPortalFinancialSummary } from "../services/portalFinancialService";
+import {
+  listPortalUpcomingDeadlines,
+  listPortalTaxPayments,
+} from "../services/portalDeadlinesService";
 
 function entityKey(e: ReturnType<typeof usePortalEntity>["currentEntity"]) {
   return e ? `${e.type}:${e.id}` : "none";
@@ -102,5 +106,23 @@ export function usePortalFinancialSummary() {
     queryKey: ["portal", "financial", entityKey(currentEntity)],
     queryFn: () => getPortalFinancialSummary(currentEntity, visibility.data!),
     enabled: !!currentEntity && !!visibility.data,
+  });
+}
+
+export function usePortalUpcomingDeadlines() {
+  const { currentEntity } = usePortalEntity();
+  return useQuery({
+    queryKey: ["portal", "deadlines-upcoming", entityKey(currentEntity)],
+    queryFn: () => listPortalUpcomingDeadlines(currentEntity),
+    enabled: !!currentEntity,
+  });
+}
+
+export function usePortalTaxPayments() {
+  const { currentEntity } = usePortalEntity();
+  return useQuery({
+    queryKey: ["portal", "tax-payments", entityKey(currentEntity)],
+    queryFn: () => listPortalTaxPayments(currentEntity),
+    enabled: !!currentEntity,
   });
 }
