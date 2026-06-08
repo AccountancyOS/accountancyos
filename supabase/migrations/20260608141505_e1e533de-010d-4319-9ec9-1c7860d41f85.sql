@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.post_to_ledger(uuid, uuid, uuid, date, text, text, text, text, uuid, text, numeric, uuid, jsonb);

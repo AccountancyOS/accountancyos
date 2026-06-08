@@ -17585,45 +17585,26 @@ export type Database = {
         Args: { _client_id: string; _company_id: string; _user_id: string }
         Returns: boolean
       }
-      post_to_ledger:
-        | {
-            Args: {
-              p_client_id: string
-              p_company_id: string
-              p_created_by?: string
-              p_currency?: string
-              p_description: string
-              p_entries?: Json
-              p_fx_rate?: number
-              p_journal_date: string
-              p_journal_type: string
-              p_organization_id: string
-              p_reference: string
-              p_source_id: string
-              p_source_type: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_client_id: string
-              p_company_id: string
-              p_created_by?: string
-              p_currency?: string
-              p_description: string
-              p_entries?: Json
-              p_fx_rate?: number
-              p_idempotency_key?: string
-              p_journal_date: string
-              p_journal_type: string
-              p_lock_override_reason?: string
-              p_organization_id: string
-              p_reference: string
-              p_source_id: string
-              p_source_type: string
-            }
-            Returns: Json
-          }
+      post_to_ledger: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_created_by?: string
+          p_currency?: string
+          p_description: string
+          p_entries?: Json
+          p_fx_rate?: number
+          p_idempotency_key?: string
+          p_journal_date: string
+          p_journal_type: string
+          p_lock_override_reason?: string
+          p_organization_id: string
+          p_reference: string
+          p_source_id: string
+          p_source_type: string
+        }
+        Returns: Json
+      }
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
