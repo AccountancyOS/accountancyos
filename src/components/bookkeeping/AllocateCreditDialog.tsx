@@ -169,80 +169,19 @@ export function AllocateCreditDialog({
         throw new Error("No allocations to apply");
       }
 
-      // Insert allocation records
-      const allocationRecords = allocationsToApply.map((a) => ({
-        organization_id: organization.id,
-        credit_note_id: creditNote.id,
-        invoice_id: isSalesCredit ? a.documentId : null,
-        bill_id: !isSalesCredit ? a.documentId : null,
+      const payload = allocationsToApply.map((a) => ({
+        document_id: a.documentId,
         amount: a.allocation,
-        allocation_date: new Date().toISOString().split("T")[0],
-        created_by: user.id,
       }));
 
-      const { error: allocError } = await supabase
-        .from("credit_note_allocations")
-        .insert(allocationRecords);
-
-      if (allocError) throw allocError;
-
-      // Update document balances
-      for (const alloc of allocationsToApply) {
-        if (isSalesCredit) {
-          // Update invoice
-          const { data: inv } = await supabase
-            .from("invoices")
-            .select("amount_paid, total_gross")
-            .eq("id", alloc.documentId)
-            .single();
-
-          if (inv) {
-            const newPaid = Number(inv.amount_paid || 0) + alloc.allocation;
-            const newRemaining = Number(inv.total_gross) - newPaid;
-            await supabase
-              .from("invoices")
-              .update({
-                amount_paid: newPaid,
-                remaining_balance: newRemaining,
-                status: newRemaining <= 0 ? "PAID" : "PART_PAID",
-              })
-              .eq("id", alloc.documentId);
-          }
-        } else {
-          // Update bill
-          const { data: bill } = await supabase
-            .from("bills")
-            .select("amount_paid, total_gross")
-            .eq("id", alloc.documentId)
-            .single();
-
-          if (bill) {
-            const newPaid = Number(bill.amount_paid || 0) + alloc.allocation;
-            const newRemaining = Number(bill.total_gross) - newPaid;
-            await supabase
-              .from("bills")
-              .update({
-                amount_paid: newPaid,
-                remaining_balance: newRemaining,
-                status: newRemaining <= 0 ? "PAID" : "PART_PAID",
-              })
-              .eq("id", alloc.documentId);
-          }
-        }
-      }
-
-      // Update credit note
-      // Update credit note remaining_allocation
-      const newRemaining = remainingCredit - totalAllocated;
-      const newStatus = newRemaining <= 0 ? "FULLY_ALLOCATED" : "PARTIALLY_ALLOCATED";
-
-      await supabase
-        .from("credit_notes")
-        .update({
-          remaining_allocation: Math.max(0, newRemaining),
-          status: newStatus,
-        })
-        .eq("id", creditNote.id);
+      const { data, error } = await supabase.rpc("allocate_credit_note", {
+        p_credit_note_id: creditNote.id,
+        p_allocations: payload,
+        p_user_id: user.id,
+      });
+      if (error) throw error;
+      const result = data as { success: boolean; error_message?: string };
+      if (!result?.success) throw new Error(result?.error_message || "Allocation failed");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit-notes"] });
