@@ -17630,25 +17630,6 @@ export type Database = {
         }
         Returns: Json
       }
-      preview_bank_rules: {
-        Args: {
-          p_bank_account_id?: string
-          p_limit?: number
-          p_organization_id: string
-        }
-        Returns: {
-          amount: number
-          bank_transaction_id: string
-          description: string
-          match_reason: string
-          proposed_contra_account_code: string
-          proposed_contra_account_id: string
-          proposed_contra_account_name: string
-          rule_id: string
-          rule_name: string
-          transaction_date: string
-        }[]
-      }
       process_questionnaire_submission: {
         Args: { p_questionnaire_instance_id: string }
         Returns: Json
