@@ -87,5 +87,7 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = false
   [functions.truelayer-sync]
     verify_jwt = true
+  [functions.truelayer-sync-scheduled]
+    verify_jwt = false
   [functions.workflow-tick]
     verify_jwt = false

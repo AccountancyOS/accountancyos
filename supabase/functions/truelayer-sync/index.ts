@@ -1,19 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getTrueLayerConfig, TrueLayerConfigError } from "../_shared/truelayer-config.ts";
+import { mapTrueLayerError } from "../_shared/truelayer-errors.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const TRUELAYER_API_URL = 'https://api.truelayer-sandbox.com';
-const TRUELAYER_AUTH_URL = 'https://auth.truelayer-sandbox.com';
-const TRUELAYER_CLIENT_ID = Deno.env.get('TRUELAYER_CLIENT_ID');
-const TRUELAYER_CLIENT_SECRET = Deno.env.get('TRUELAYER_CLIENT_SECRET');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<string | null> {
+async function refreshTokenIfNeeded(supabase: any, connection: any, tl: { authBase: string; clientId: string; clientSecret: string }): Promise<string | null> {
   // Check if token needs refresh (if consent is expiring soon or we get a 401)
   const expiresAt = new Date(connection.consent_expires_at);
   const now = new Date();
@@ -24,15 +22,15 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
     console.log('Token expiring soon, attempting refresh');
     
     try {
-      const refreshResponse = await fetch(`${TRUELAYER_AUTH_URL}/connect/token`, {
+      const refreshResponse = await fetch(`${tl.authBase}/connect/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
           grant_type: 'refresh_token',
-          client_id: TRUELAYER_CLIENT_ID!,
-          client_secret: TRUELAYER_CLIENT_SECRET!,
+          client_id: tl.clientId,
+          client_secret: tl.clientSecret,
           refresh_token: connection.refresh_token,
         }),
       });
@@ -57,7 +55,7 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
         console.log('Token refreshed successfully');
         return tokens.access_token;
       } else {
-        console.error('Token refresh failed:', await refreshResponse.text());
+        console.error('Token refresh failed:', (await refreshResponse.text()).slice(0, 200));
       }
     } catch (error) {
       console.error('Error refreshing token:', error);
@@ -73,6 +71,19 @@ serve(async (req) => {
   }
 
   try {
+    let tlConfig;
+    try {
+      tlConfig = getTrueLayerConfig();
+    } catch (e) {
+      if (e instanceof TrueLayerConfigError) {
+        return new Response(JSON.stringify({ error: e.clientMessage, code: e.code }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw e;
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -95,7 +106,7 @@ serve(async (req) => {
       });
     }
 
-    const { bank_account_id, connection_id } = await req.json();
+    const { bank_account_id, connection_id, triggered_by = 'manual' } = await req.json();
 
     if (!bank_account_id && !connection_id) {
       return new Response(JSON.stringify({ error: 'Either bank_account_id or connection_id is required' }), {
@@ -173,7 +184,7 @@ serve(async (req) => {
     }
 
     // Refresh token if needed
-    const accessToken = await refreshTokenIfNeeded(supabase, connection);
+    const accessToken = await refreshTokenIfNeeded(supabase, connection, tlConfig);
     if (!accessToken) {
       // Mark connection as error
       await supabase
@@ -189,6 +200,21 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Open a sync log row up front; updated on completion.
+    const { data: syncLog } = await supabase
+      .from('bank_sync_logs')
+      .insert({
+        organization_id: connection.organization_id,
+        bank_connection_id: connection.id,
+        client_id: connection.client_id || null,
+        company_id: connection.company_id || null,
+        triggered_by,
+        triggered_by_user_id: user.id,
+        status: 'running',
+      })
+      .select('id')
+      .single();
 
     // Get all bank accounts for this connection
     const bankAccountsQuery = supabase
@@ -207,6 +233,15 @@ serve(async (req) => {
 
     if (bankAccountsError) {
       console.error('Error fetching bank accounts:', bankAccountsError);
+      if (syncLog?.id) {
+        await supabase.from('bank_sync_logs').update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          error_code: 'sync_failed',
+          error_message: bankAccountsError.message,
+          client_safe_message: 'Sync failed - contact your accountant.',
+        }).eq('id', syncLog.id);
+      }
       return new Response(JSON.stringify({ error: 'Failed to fetch bank accounts' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -215,6 +250,8 @@ serve(async (req) => {
 
     let totalNewTransactions = 0;
     let totalUpdatedTransactions = 0;
+    let anyAccountFailed = false;
+    let firstMappedError: ReturnType<typeof mapTrueLayerError> | null = null;
 
     // Sync transactions for each bank account
     for (const ba of bankAccounts || []) {
@@ -227,7 +264,7 @@ serve(async (req) => {
           : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days ago
         const toDate = new Date().toISOString().split('T')[0];
 
-        const transactionsUrl = `${TRUELAYER_API_URL}/data/v1/accounts/${ba.truelayer_account_id}/transactions?from=${fromDate}&to=${toDate}`;
+        const transactionsUrl = `${tlConfig.apiBase}/data/v1/accounts/${ba.truelayer_account_id}/transactions?from=${fromDate}&to=${toDate}`;
         
         const transactionsResponse = await fetch(transactionsUrl, {
           headers: {
@@ -237,17 +274,17 @@ serve(async (req) => {
 
         if (!transactionsResponse.ok) {
           const errorText = await transactionsResponse.text();
-          console.error('Failed to fetch transactions for account:', ba.truelayer_account_id, errorText);
-          
-          // Update connection with error status
+          const mapped = mapTrueLayerError({ message: errorText, status: transactionsResponse.status });
+          anyAccountFailed = true;
+          firstMappedError = firstMappedError || mapped;
+          console.error('Failed to fetch transactions for account:', ba.truelayer_account_id, mapped.internal_code);
           await supabase
             .from('bank_connections')
             .update({
-              status: 'error',
-              last_error: `Failed to fetch transactions: ${errorText}`,
+              status: mapped.internal_code === 'action_required' || mapped.internal_code === 'expired' ? 'error' : connection.status,
+              last_error: `[${mapped.internal_code}] failed to fetch transactions`,
             })
             .eq('id', connection.id);
-          
           continue;
         }
 
@@ -316,28 +353,45 @@ serve(async (req) => {
           .eq('id', ba.id);
 
       } catch (accountError) {
-        console.error('Error syncing account:', ba.id, accountError);
-        
-        // Update connection with error
+        const mapped = mapTrueLayerError(accountError);
+        anyAccountFailed = true;
+        firstMappedError = firstMappedError || mapped;
+        console.error('Error syncing account:', ba.id, mapped.internal_code);
         await supabase
           .from('bank_connections')
           .update({
             status: 'error',
-            last_error: accountError instanceof Error ? accountError.message : 'Unknown sync error',
+            last_error: `[${mapped.internal_code}] ${mapped.client_safe_message}`,
           })
           .eq('id', connection.id);
       }
     }
 
-    // Update connection last_synced_at and clear any error status on success
-    await supabase
-      .from('bank_connections')
-      .update({
-        last_synced_at: new Date().toISOString(),
-        status: 'active',
-        last_error: null,
-      })
-      .eq('id', connection.id);
+    // Only clear error state if every account succeeded.
+    if (!anyAccountFailed) {
+      await supabase
+        .from('bank_connections')
+        .update({
+          last_synced_at: new Date().toISOString(),
+          status: 'ACTIVE',
+          last_error: null,
+        })
+        .eq('id', connection.id);
+    }
+
+    if (syncLog?.id) {
+      await supabase.from('bank_sync_logs').update({
+        status: anyAccountFailed
+          ? (totalNewTransactions + totalUpdatedTransactions > 0 ? 'partial' : 'failed')
+          : 'success',
+        completed_at: new Date().toISOString(),
+        records_imported: totalNewTransactions,
+        records_updated: totalUpdatedTransactions,
+        error_code: firstMappedError?.internal_code || null,
+        error_message: anyAccountFailed ? 'One or more accounts failed to sync.' : null,
+        client_safe_message: firstMappedError?.client_safe_message || null,
+      }).eq('id', syncLog.id);
+    }
 
     console.log(`Sync complete: ${totalNewTransactions} new, ${totalUpdatedTransactions} updated`);
 

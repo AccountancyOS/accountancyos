@@ -1,13 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getTrueLayerConfig, TrueLayerConfigError } from "../_shared/truelayer-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const TRUELAYER_AUTH_URL = 'https://auth.truelayer-sandbox.com';
-const TRUELAYER_CLIENT_ID = Deno.env.get('TRUELAYER_CLIENT_ID');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -17,6 +16,20 @@ serve(async (req) => {
   }
 
   try {
+    let tlConfig;
+    try {
+      tlConfig = getTrueLayerConfig();
+    } catch (e) {
+      if (e instanceof TrueLayerConfigError) {
+        console.error('TrueLayer config error:', e.message);
+        return new Response(JSON.stringify({ error: e.clientMessage, code: e.code }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw e;
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -39,10 +52,24 @@ serve(async (req) => {
       });
     }
 
-    const { entity_type, entity_id, organization_id: providedOrgId, redirect_path = '/bookkeeping' } = await req.json();
+    const {
+      entity_type,
+      entity_id,
+      organization_id: providedOrgId,
+      redirect_path = '/bookkeeping',
+      mode = 'connect',
+      bank_connection_id = null,
+      surface = 'accountant', // 'accountant' | 'portal'
+    } = await req.json();
 
     if (!entity_type || !entity_id) {
       return new Response(JSON.stringify({ error: 'Missing required parameters: entity_type, entity_id' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (mode !== 'connect' && mode !== 'reconnect') {
+      return new Response(JSON.stringify({ error: "Invalid mode" }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -67,6 +94,39 @@ serve(async (req) => {
       organization_id = entity.organization_id;
     }
 
+    // For reconnect, verify the target connection exists, belongs to the
+    // same org + entity, and the requesting user has rights to manage it.
+    if (mode === 'reconnect') {
+      if (!bank_connection_id) {
+        return new Response(JSON.stringify({ error: 'bank_connection_id required for reconnect' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: existing, error: existingErr } = await supabase
+        .from('bank_connections')
+        .select('id, organization_id, client_id, company_id')
+        .eq('id', bank_connection_id)
+        .maybeSingle();
+      if (existingErr || !existing) {
+        return new Response(JSON.stringify({ error: 'Bank connection not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const sameOrg = existing.organization_id === organization_id;
+      const sameEntity = entity_type === 'client'
+        ? existing.client_id === entity_id
+        : existing.company_id === entity_id;
+      if (!sameOrg || !sameEntity) {
+        console.warn('Reconnect attempt with mismatched org/entity rejected', { user: user.id });
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Generate a secure random state
     const stateArray = new Uint8Array(32);
     crypto.getRandomValues(stateArray);
@@ -77,7 +137,15 @@ serve(async (req) => {
       state,
       organization_id,
       redirect_path,
+      mode,
+      bank_connection_id,
+      return_url: redirect_path,
     };
+    if (surface === 'portal') {
+      stateData.portal_user_id = user.id;
+    } else {
+      stateData.accountant_user_id = user.id;
+    }
     
     if (entity_type === 'client') {
       stateData.client_id = entity_id;
@@ -97,19 +165,23 @@ serve(async (req) => {
       });
     }
 
-    // Build the TrueLayer authorization URL
-    const redirectUri = `${SUPABASE_URL}/functions/v1/truelayer-callback`;
+    // Build the TrueLayer authorization URL from centralised, env-driven config.
     const scopes = ['info', 'accounts', 'balance', 'transactions', 'offline_access'];
-    
-    const authUrl = new URL(`${TRUELAYER_AUTH_URL}/`);
+    const authUrl = new URL(`${tlConfig.authBase}/`);
     authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('client_id', TRUELAYER_CLIENT_ID!);
-    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('client_id', tlConfig.clientId);
+    authUrl.searchParams.set('redirect_uri', tlConfig.redirectUri);
     authUrl.searchParams.set('scope', scopes.join(' '));
     authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('providers', 'uk-ob-all uk-oauth-all');
+    authUrl.searchParams.set('providers', tlConfig.providers);
 
-    console.log('Generated TrueLayer auth URL for user:', user.id, 'entity:', entity_type, entity_id);
+    console.log('Generated TrueLayer auth URL', {
+      env: tlConfig.env,
+      mode,
+      user_id: user.id,
+      entity_type,
+      entity_id,
+    });
 
     return new Response(JSON.stringify({ auth_url: authUrl.toString() }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -1721,6 +1721,7 @@ export type Database = {
         Row: {
           account_id: string
           account_number: string | null
+          bank_connection_id: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
@@ -1739,6 +1740,7 @@ export type Database = {
         Insert: {
           account_id: string
           account_number?: string | null
+          bank_connection_id?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -1757,6 +1759,7 @@ export type Database = {
         Update: {
           account_id?: string
           account_number?: string | null
+          bank_connection_id?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -2021,6 +2024,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      bank_sync_logs: {
+        Row: {
+          bank_connection_id: string
+          client_id: string | null
+          client_safe_message: string | null
+          company_id: string | null
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          id: string
+          organization_id: string
+          records_imported: number
+          records_updated: number
+          started_at: string
+          status: string
+          triggered_by: string
+          triggered_by_user_id: string | null
+        }
+        Insert: {
+          bank_connection_id: string
+          client_id?: string | null
+          client_safe_message?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          organization_id: string
+          records_imported?: number
+          records_updated?: number
+          started_at?: string
+          status?: string
+          triggered_by?: string
+          triggered_by_user_id?: string | null
+        }
+        Update: {
+          bank_connection_id?: string
+          client_id?: string | null
+          client_safe_message?: string | null
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          organization_id?: string
+          records_imported?: number
+          records_updated?: number
+          started_at?: string
+          status?: string
+          triggered_by?: string
+          triggered_by_user_id?: string | null
+        }
+        Relationships: []
       }
       bank_transactions: {
         Row: {
@@ -12817,6 +12877,7 @@ export type Database = {
       portal_visibility_settings: {
         Row: {
           allow_bank_connect: boolean
+          allow_bank_manual_sync: boolean
           allow_bill_create: boolean
           allow_client_post_to_ledger: boolean
           allow_client_reconcile: boolean
@@ -12843,6 +12904,7 @@ export type Database = {
           require_review_for_transaction_explanations: boolean
           require_vat_client_approval: boolean
           show_bank_accounts: boolean
+          show_bank_transactions: boolean
           show_bills: boolean
           show_cash: boolean
           show_ct_estimate: boolean
@@ -12861,6 +12923,7 @@ export type Database = {
         }
         Insert: {
           allow_bank_connect?: boolean
+          allow_bank_manual_sync?: boolean
           allow_bill_create?: boolean
           allow_client_post_to_ledger?: boolean
           allow_client_reconcile?: boolean
@@ -12887,6 +12950,7 @@ export type Database = {
           require_review_for_transaction_explanations?: boolean
           require_vat_client_approval?: boolean
           show_bank_accounts?: boolean
+          show_bank_transactions?: boolean
           show_bills?: boolean
           show_cash?: boolean
           show_ct_estimate?: boolean
@@ -12905,6 +12969,7 @@ export type Database = {
         }
         Update: {
           allow_bank_connect?: boolean
+          allow_bank_manual_sync?: boolean
           allow_bill_create?: boolean
           allow_client_post_to_ledger?: boolean
           allow_client_reconcile?: boolean
@@ -12931,6 +12996,7 @@ export type Database = {
           require_review_for_transaction_explanations?: boolean
           require_vat_client_approval?: boolean
           show_bank_accounts?: boolean
+          show_bank_transactions?: boolean
           show_bills?: boolean
           show_cash?: boolean
           show_ct_estimate?: boolean
@@ -15106,34 +15172,52 @@ export type Database = {
       }
       truelayer_auth_states: {
         Row: {
+          accountant_user_id: string | null
+          bank_connection_id: string | null
           client_id: string | null
           company_id: string | null
           created_at: string | null
           expires_at: string | null
           id: string
+          mode: string
           organization_id: string
+          portal_user_id: string | null
           redirect_path: string | null
+          return_url: string | null
           state: string
+          used_at: string | null
         }
         Insert: {
+          accountant_user_id?: string | null
+          bank_connection_id?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
           expires_at?: string | null
           id?: string
+          mode?: string
           organization_id: string
+          portal_user_id?: string | null
           redirect_path?: string | null
+          return_url?: string | null
           state: string
+          used_at?: string | null
         }
         Update: {
+          accountant_user_id?: string | null
+          bank_connection_id?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string | null
           expires_at?: string | null
           id?: string
+          mode?: string
           organization_id?: string
+          portal_user_id?: string | null
           redirect_path?: string | null
+          return_url?: string | null
           state?: string
+          used_at?: string | null
         }
         Relationships: []
       }
@@ -16942,6 +17026,15 @@ export type Database = {
         Args: { p_rule_id: string }
         Returns: Json
       }
+      derive_bank_connection_status: {
+        Args: {
+          _consent_expires_at: string
+          _last_error: string
+          _last_synced_at: string
+          _status: string
+        }
+        Returns: string
+      }
       disconnect_mailbox_safe: { Args: { p_mailbox_id: string }; Returns: Json }
       emit_automation_event: {
         Args: {
@@ -17065,6 +17158,37 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_bank_connection_health_for_entity: {
+        Args: { _client_id: string; _company_id: string }
+        Returns: {
+          account_count: number
+          bank_logo_url: string
+          bank_name: string
+          client_safe_message: string
+          connection_id: string
+          consent_expires_at: string
+          derived_status: string
+          last_synced_at: string
+        }[]
+      }
+      get_bank_connection_health_for_org: {
+        Args: { _org_id: string }
+        Returns: {
+          account_count: number
+          bank_logo_url: string
+          bank_name: string
+          client_id: string
+          company_id: string
+          connection_id: string
+          consent_expires_at: string
+          derived_status: string
+          last_error: string
+          last_synced_at: string
+          organization_id: string
+          provider: string
+          status: string
+        }[]
       }
       get_invoice_with_lines_safe: {
         Args: { p_invoice_id: string }
