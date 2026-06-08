@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, Link2, AlertCircle, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Check, Link2, AlertCircle, FileText, Split } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ export function MatchingSuggestionsPanel({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
     queryKey: ["matching-candidates", transactionId],
@@ -38,6 +40,7 @@ export function MatchingSuggestionsPanel({
 
   const candidates = data?.candidates || [];
   const transaction = data?.transaction;
+  const txnAbs = transaction ? Math.abs(Number(transaction.amount)) : 0;
 
   const applyMutation = useMutation({
     mutationFn: async (candidate: MatchCandidate) => {
@@ -70,6 +73,53 @@ export function MatchingSuggestionsPanel({
       toast.error("Failed to apply match", { description: error.message });
     },
   });
+
+  const splitMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const picked = candidates.filter((c) => selectedIds.has(c.id));
+      if (picked.length < 2) throw new Error("Select at least two documents to split");
+      const allocations = picked.map((c) => ({
+        documentId: c.id,
+        documentType: c.type,
+        amount: adjustments[c.id] ?? c.proposedAllocation,
+      }));
+      const total = allocations.reduce((s, a) => s + Number(a.amount || 0), 0);
+      if (Math.abs(total - txnAbs) > 0.01) {
+        throw new Error(
+          `Split total (${total.toFixed(2)}) must equal transaction amount (${txnAbs.toFixed(2)})`,
+        );
+      }
+      const result = await applyMatch(transactionId!, { allocations }, user.id);
+      if (!result.success) throw new Error(result.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["matching-candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      toast.success("Split match applied");
+      setSelectedIds(new Set());
+      onMatchApplied?.();
+    },
+    onError: (error: any) => {
+      toast.error("Failed to apply split match", { description: error.message });
+    },
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedTotal = candidates
+    .filter((c) => selectedIds.has(c.id))
+    .reduce((s, c) => s + Number(adjustments[c.id] ?? c.proposedAllocation), 0);
+  const splitRemainder = txnAbs - selectedTotal;
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence === 100) return "bg-green-500";
@@ -165,6 +215,29 @@ export function MatchingSuggestionsPanel({
           </div>
         ) : (
           <div className="space-y-3">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-2 p-3 border rounded-lg bg-muted/40">
+                <div className="text-xs">
+                  <p className="font-medium flex items-center gap-1">
+                    <Split className="h-3 w-3" /> Split match ({selectedIds.size} selected)
+                  </p>
+                  <p className="text-muted-foreground">
+                    Total {formatCurrency(selectedTotal)} ·{" "}
+                    {Math.abs(splitRemainder) < 0.01
+                      ? "Balanced"
+                      : `${splitRemainder > 0 ? "Under" : "Over"} by ${formatCurrency(Math.abs(splitRemainder))}`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => splitMutation.mutate()}
+                  disabled={splitMutation.isPending || selectedIds.size < 2 || Math.abs(splitRemainder) > 0.01}
+                >
+                  <Check className="h-4 w-4 mr-1" />
+                  Apply Split
+                </Button>
+              </div>
+            )}
             {candidates.map((candidate) => {
               const allocation = adjustments[candidate.id] ?? candidate.proposedAllocation;
               const isAdjusted = adjustments[candidate.id] !== undefined;
@@ -177,6 +250,12 @@ export function MatchingSuggestionsPanel({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
+                    <Checkbox
+                      className="mt-1"
+                      checked={selectedIds.has(candidate.id)}
+                      onCheckedChange={() => toggleSelected(candidate.id)}
+                      aria-label="Include in split"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant="outline" className="text-xs">
@@ -219,7 +298,7 @@ export function MatchingSuggestionsPanel({
                     <Button
                       size="sm"
                       onClick={() => applyMutation.mutate(candidate)}
-                      disabled={applyMutation.isPending || allocation <= 0}
+                      disabled={applyMutation.isPending || allocation <= 0 || selectedIds.size > 0}
                     >
                       <Check className="h-4 w-4 mr-1" />
                       Apply
