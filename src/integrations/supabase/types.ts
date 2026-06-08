@@ -16750,6 +16750,10 @@ export type Database = {
         Args: { p_allocations: Json; p_bank_transaction_id: string }
         Returns: Json
       }
+      apply_bank_rule: {
+        Args: { p_bank_transaction_id: string; p_rule_id: string }
+        Returns: Json
+      }
       apply_ch_diff: {
         Args: { p_decision: string; p_diff_id: string; p_notes?: string }
         Returns: undefined
