@@ -38,6 +38,8 @@ export interface PaymentInput {
   bankTransactionId?: string;
   reference?: string;
   paymentMethod?: string;
+  /** FX rate at payment date (foreign per 1 base). Defaults to invoice's rate. */
+  paymentFxRate?: number;
 }
 
 /**
@@ -249,6 +251,7 @@ export async function recordInvoicePayment(
     p_reference: payment.reference ?? null,
     p_payment_method: payment.paymentMethod ?? null,
     p_user_id: userId,
+    p_payment_fx_rate: payment.paymentFxRate ?? null,
   });
   if (error) return { success: false, error: error.message };
   const result = data as { success: boolean; payment_id?: string; error_message?: string };
