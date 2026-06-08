@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Calculator, Send, FileText } from "lucide-react";
+import { Plus, Calculator, Send, FileText, UserCheck } from "lucide-react";
 import { format, addMonths, endOfMonth, startOfMonth } from "date-fns";
 import { toast } from "sonner";
 
@@ -165,6 +165,21 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
     },
   });
 
+  const requestClientApprovalMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('vat_returns')
+        .update({ client_approval_required: true, client_approved_at: null, client_approved_by: null })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vat-returns', organizationId, entityType, entityId] });
+      toast.success('Sent to client for approval');
+    },
+    onError: (e: any) => toast.error(e.message ?? 'Failed to request approval'),
+  });
+
   const submitMutation = useMutation({
     mutationFn: async (vatReturnId: string) => {
       const { error } = await supabase
@@ -260,6 +275,17 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
                   >
                     <FileText className="h-4 w-4" />
                   </Button>
+                  {vr.status === 'draft' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title={vr.client_approval_required ? 'Awaiting client approval' : 'Request client approval'}
+                      onClick={() => requestClientApprovalMutation.mutate(vr.id)}
+                      disabled={requestClientApprovalMutation.isPending}
+                    >
+                      <UserCheck className={`h-4 w-4 ${vr.client_approval_required && !vr.client_approved_at ? 'text-amber-600' : ''}`} />
+                    </Button>
+                  )}
                   {vr.status === 'draft' && (
                     <Button 
                       variant="ghost" 
