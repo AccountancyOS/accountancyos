@@ -11530,11 +11530,15 @@ export type Database = {
       }
       org_settings: {
         Row: {
+          accounts_payable_account_id: string | null
+          accounts_receivable_account_id: string | null
+          accumulated_depreciation_account_id: string | null
           automation_max_actions_org_day: number | null
           automation_max_actions_org_hour: number | null
           automation_max_actions_per_rule_day: number | null
           automation_max_actions_per_rule_hour: number | null
           automation_rule_management_mode: string | null
+          bank_charges_account_id: string | null
           bill_number_next: number | null
           bill_number_padding: number | null
           bill_number_prefix: string | null
@@ -11545,25 +11549,35 @@ export type Database = {
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
           deadline_buffer_days_vat: number | null
+          director_loan_account_id: string | null
           email_default_mode: string | null
+          fixed_assets_account_id: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
+          opening_balance_equity_account_id: string | null
           organization_id: string
+          retained_earnings_account_id: string | null
           shared_mailbox_enabled: boolean | null
           sla_email_response_hours: number | null
           sla_internal_message_hours: number | null
           sla_portal_message_hours: number | null
           sla_task_default_hours: number | null
           sla_task_urgent_hours: number | null
+          suspense_account_id: string | null
           updated_at: string | null
+          vat_control_account_id: string | null
         }
         Insert: {
+          accounts_payable_account_id?: string | null
+          accounts_receivable_account_id?: string | null
+          accumulated_depreciation_account_id?: string | null
           automation_max_actions_org_day?: number | null
           automation_max_actions_org_hour?: number | null
           automation_max_actions_per_rule_day?: number | null
           automation_max_actions_per_rule_hour?: number | null
           automation_rule_management_mode?: string | null
+          bank_charges_account_id?: string | null
           bill_number_next?: number | null
           bill_number_padding?: number | null
           bill_number_prefix?: string | null
@@ -11574,25 +11588,35 @@ export type Database = {
           deadline_buffer_days_ct?: number | null
           deadline_buffer_days_sa?: number | null
           deadline_buffer_days_vat?: number | null
+          director_loan_account_id?: string | null
           email_default_mode?: string | null
+          fixed_assets_account_id?: string | null
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
+          opening_balance_equity_account_id?: string | null
           organization_id: string
+          retained_earnings_account_id?: string | null
           shared_mailbox_enabled?: boolean | null
           sla_email_response_hours?: number | null
           sla_internal_message_hours?: number | null
           sla_portal_message_hours?: number | null
           sla_task_default_hours?: number | null
           sla_task_urgent_hours?: number | null
+          suspense_account_id?: string | null
           updated_at?: string | null
+          vat_control_account_id?: string | null
         }
         Update: {
+          accounts_payable_account_id?: string | null
+          accounts_receivable_account_id?: string | null
+          accumulated_depreciation_account_id?: string | null
           automation_max_actions_org_day?: number | null
           automation_max_actions_org_hour?: number | null
           automation_max_actions_per_rule_day?: number | null
           automation_max_actions_per_rule_hour?: number | null
           automation_rule_management_mode?: string | null
+          bank_charges_account_id?: string | null
           bill_number_next?: number | null
           bill_number_padding?: number | null
           bill_number_prefix?: string | null
@@ -11603,18 +11627,24 @@ export type Database = {
           deadline_buffer_days_ct?: number | null
           deadline_buffer_days_sa?: number | null
           deadline_buffer_days_vat?: number | null
+          director_loan_account_id?: string | null
           email_default_mode?: string | null
+          fixed_assets_account_id?: string | null
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
+          opening_balance_equity_account_id?: string | null
           organization_id?: string
+          retained_earnings_account_id?: string | null
           shared_mailbox_enabled?: boolean | null
           sla_email_response_hours?: number | null
           sla_internal_message_hours?: number | null
           sla_portal_message_hours?: number | null
           sla_task_default_hours?: number | null
           sla_task_urgent_hours?: number | null
+          suspense_account_id?: string | null
           updated_at?: string | null
+          vat_control_account_id?: string | null
         }
         Relationships: [
           {
@@ -16739,6 +16769,17 @@ export type Database = {
         }
         Returns: string
       }
+      apply_opening_balances: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_entries: Json
+          p_lock_period?: boolean
+          p_opening_date: string
+          p_organization_id: string
+        }
+        Returns: Json
+      }
       approve_bill_safe: { Args: { p_bill_id: string }; Returns: Json }
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       automation_dry_run: {
@@ -17063,11 +17104,15 @@ export type Database = {
       ensure_org_settings: {
         Args: { _org_id: string }
         Returns: {
+          accounts_payable_account_id: string | null
+          accounts_receivable_account_id: string | null
+          accumulated_depreciation_account_id: string | null
           automation_max_actions_org_day: number | null
           automation_max_actions_org_hour: number | null
           automation_max_actions_per_rule_day: number | null
           automation_max_actions_per_rule_hour: number | null
           automation_rule_management_mode: string | null
+          bank_charges_account_id: string | null
           bill_number_next: number | null
           bill_number_padding: number | null
           bill_number_prefix: string | null
@@ -17078,18 +17123,24 @@ export type Database = {
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
           deadline_buffer_days_vat: number | null
+          director_loan_account_id: string | null
           email_default_mode: string | null
+          fixed_assets_account_id: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
+          opening_balance_equity_account_id: string | null
           organization_id: string
+          retained_earnings_account_id: string | null
           shared_mailbox_enabled: boolean | null
           sla_email_response_hours: number | null
           sla_internal_message_hours: number | null
           sla_portal_message_hours: number | null
           sla_task_default_hours: number | null
           sla_task_urgent_hours: number | null
+          suspense_account_id: string | null
           updated_at: string | null
+          vat_control_account_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -17190,6 +17241,28 @@ export type Database = {
           status: string
         }[]
       }
+      get_general_ledger_from_ledger: {
+        Args: {
+          p_account_id: string
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: {
+          credit: number
+          debit: number
+          description: string
+          journal_id: string
+          ledger_entry_id: string
+          reference: string
+          running_balance: number
+          source_id: string
+          source_type: string
+          transaction_date: string
+        }[]
+      }
       get_invoice_with_lines_safe: {
         Args: { p_invoice_id: string }
         Returns: Json
@@ -17197,11 +17270,15 @@ export type Database = {
       get_org_settings_safe: {
         Args: { p_organization_id: string }
         Returns: {
+          accounts_payable_account_id: string | null
+          accounts_receivable_account_id: string | null
+          accumulated_depreciation_account_id: string | null
           automation_max_actions_org_day: number | null
           automation_max_actions_org_hour: number | null
           automation_max_actions_per_rule_day: number | null
           automation_max_actions_per_rule_hour: number | null
           automation_rule_management_mode: string | null
+          bank_charges_account_id: string | null
           bill_number_next: number | null
           bill_number_padding: number | null
           bill_number_prefix: string | null
@@ -17212,18 +17289,24 @@ export type Database = {
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
           deadline_buffer_days_vat: number | null
+          director_loan_account_id: string | null
           email_default_mode: string | null
+          fixed_assets_account_id: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
+          opening_balance_equity_account_id: string | null
           organization_id: string
+          retained_earnings_account_id: string | null
           shared_mailbox_enabled: boolean | null
           sla_email_response_hours: number | null
           sla_internal_message_hours: number | null
           sla_portal_message_hours: number | null
           sla_task_default_hours: number | null
           sla_task_urgent_hours: number | null
+          suspense_account_id: string | null
           updated_at: string | null
+          vat_control_account_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -17308,6 +17391,25 @@ export type Database = {
       get_questionnaire_responses_by_token: {
         Args: { p_instance_id: string; p_token: string }
         Returns: Json
+      }
+      get_trial_balance_from_ledger: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: {
+          account_code: string
+          account_id: string
+          account_name: string
+          account_type: string
+          closing_balance: number
+          opening_balance: number
+          period_credit: number
+          period_debit: number
+        }[]
       }
       get_user_organization_id:
         | { Args: never; Returns: string }
@@ -17492,8 +17594,10 @@ export type Database = {
           p_description: string
           p_entries?: Json
           p_fx_rate?: number
+          p_idempotency_key?: string
           p_journal_date: string
           p_journal_type: string
+          p_lock_override_reason?: string
           p_organization_id: string
           p_reference: string
           p_source_id: string

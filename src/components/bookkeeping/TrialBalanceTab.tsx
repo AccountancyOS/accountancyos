@@ -27,6 +27,7 @@ import {
 import { ImportTrialBalanceDialog } from "./ImportTrialBalanceDialog";
 import { CreateSnapshotDialog } from "./CreateSnapshotDialog";
 import { SnapshotHistoryPanel } from "./SnapshotHistoryPanel";
+import { OpeningBalancesWizard } from "./OpeningBalancesWizard";
 import { Badge } from "@/components/ui/badge";
 
 interface TrialBalanceTabProps {
@@ -41,6 +42,7 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
   
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
+  const [openingBalancesOpen, setOpeningBalancesOpen] = useState(false);
 
   // Calculate period dates
   const getPeriodDates = () => {
@@ -250,6 +252,11 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
           <Upload className="h-4 w-4 mr-2" />
           Import TB
         </Button>
+
+        <Button variant="outline" onClick={() => setOpeningBalancesOpen(true)}>
+          <Database className="h-4 w-4 mr-2" />
+          Opening Balances
+        </Button>
         
         <Button 
           variant="outline" 
@@ -377,6 +384,12 @@ export function TrialBalanceTab({ entity }: TrialBalanceTabProps) {
         periodStart={periodDates.start}
         periodEnd={periodDates.end}
         trialBalanceData={trialBalance}
+      />
+
+      <OpeningBalancesWizard
+        open={openingBalancesOpen}
+        onOpenChange={setOpeningBalancesOpen}
+        entity={entity}
       />
     </div>
   );
