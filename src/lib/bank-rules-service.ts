@@ -279,124 +279,20 @@ export async function applyRuleToTransaction(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Fetch rule
-    const { data: rule, error: ruleError } = await supabase
-      .from("bank_rules")
-      .select("*")
-      .eq("id", ruleId)
-      .single();
-
-    if (ruleError || !rule) {
-      return { success: false, error: "Rule not found" };
+    // Route through the hardened apply_bank_rule RPC. The function posts via
+    // post_bank_transaction (single ledger path), updates rule stats, and
+    // writes a bank_rule_executions row atomically server-side.
+    const { data, error } = await supabase.rpc("apply_bank_rule", {
+      p_bank_transaction_id: transactionId,
+      p_rule_id: ruleId,
+    });
+    if (error) return { success: false, error: error.message };
+    if (data && typeof data === "object" && (data as any).success === false) {
+      return {
+        success: false,
+        error: (data as any).error_message || (data as any).error || "Rule application failed",
+      };
     }
-
-    // Fetch transaction
-    const { data: transaction, error: txError } = await supabase
-      .from("bank_transactions")
-      .select("*, bank_accounts!inner(account_id)")
-      .eq("id", transactionId)
-      .single();
-
-    if (txError || !transaction) {
-      return { success: false, error: "Transaction not found" };
-    }
-
-    // Already categorized?
-    if (transaction.status !== "UNREVIEWED") {
-      return { success: false, error: "Transaction already categorized" };
-    }
-
-    const actions = rule.actions as unknown as RuleAction[];
-    let accountId: string | null = null;
-    let vatCodeId: string | null = null;
-    let category: string | null = null;
-
-    for (const action of actions) {
-      switch (action.type) {
-        case "set_account":
-          accountId = action.value;
-          break;
-        case "set_vat_code":
-          vatCodeId = action.value;
-          break;
-        case "set_category":
-          category = action.value;
-          break;
-      }
-    }
-
-    if (!accountId) {
-      return { success: false, error: "Rule must have a set_account action" };
-    }
-
-    // Get bank account's GL account
-    const bankGLAccountId = (transaction.bank_accounts as any)?.account_id;
-    if (!bankGLAccountId) {
-      return { success: false, error: "Bank account not linked to GL account" };
-    }
-
-    // Create posting context
-    const context: PostingContext = {
-      organizationId: transaction.organization_id,
-      entityType: transaction.company_id ? "company" : "client",
-      entityId: transaction.company_id || transaction.client_id,
-      transactionDate: transaction.transaction_date,
-      sourceType: "BANK_TRANSACTION",
-      sourceId: transactionId,
-      userId,
-    };
-
-    // Determine debit/credit based on amount
-    const isMoneyIn = transaction.amount > 0;
-    const absAmount = Math.abs(transaction.amount);
-
-    const ledgerEntries = isMoneyIn
-      ? [
-          { accountId: bankGLAccountId, debit: absAmount, credit: null, description: transaction.description, vatCodeId },
-          { accountId, debit: null, credit: absAmount, description: transaction.description, vatCodeId },
-        ]
-      : [
-          { accountId, debit: absAmount, credit: null, description: transaction.description, vatCodeId },
-          { accountId: bankGLAccountId, debit: null, credit: absAmount, description: transaction.description, vatCodeId },
-        ];
-
-    // Post to ledger
-    const postResult = await postToLedger(context, ledgerEntries);
-    if (!postResult.success) {
-      return { success: false, error: postResult.error };
-    }
-
-    // Update transaction status
-    await supabase
-      .from("bank_transactions")
-      .update({
-        status: "CATEGORIZED",
-        category: category || null,
-        rule_id: ruleId,
-        matched_ledger_entry_id: postResult.journalId,
-      })
-      .eq("id", transactionId);
-
-    // Record rule execution
-    await supabase.from("bank_rule_executions").insert([{
-      organization_id: transaction.organization_id,
-      bank_rule_id: ruleId,
-      bank_transaction_id: transactionId,
-      executed_by: userId,
-      matched_conditions: rule.conditions as any,
-      applied_actions: actions as any,
-      result: "success",
-    }]);
-
-    // Update rule stats
-    await supabase
-      .from("bank_rules")
-      .update({
-        times_applied: (rule.times_applied ?? 0) + 1,
-        last_applied_at: new Date().toISOString(),
-      })
-      .eq("id", ruleId);
-
     return { success: true };
   } catch (error: any) {
     console.error("Failed to apply rule:", error);
