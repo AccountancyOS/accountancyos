@@ -177,7 +177,7 @@ export function ReviewQueueTab({ entity }: Props) {
                         {new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(r.amount ?? 0)}
                       </div>
                     )}
-                    {id !== "query" && (
+                    {id !== "query" ? (
                       <div className="flex items-center gap-1">
                         <Button size="sm" variant="ghost" onClick={() => action.mutate({ kind: id as any, id: r.id, review_status: "approved" })}>
                           <Check className="h-4 w-4" /> Accept
@@ -188,6 +188,32 @@ export function ReviewQueueTab({ entity }: Props) {
                         <Button size="sm" variant="ghost" onClick={() => action.mutate({ kind: id as any, id: r.id, review_status: "rejected" })}>
                           <X className="h-4 w-4" /> Reject
                         </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-end gap-1 w-full max-w-xs">
+                        {answerOpen === r.id ? (
+                          <div className="w-full space-y-2">
+                            <Textarea
+                              rows={2}
+                              value={answerText}
+                              onChange={(e) => setAnswerText(e.target.value)}
+                              placeholder="Type your answer for the client..."
+                            />
+                            <div className="flex justify-end gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => { setAnswerOpen(null); setAnswerText(""); }}>Cancel</Button>
+                              <Button size="sm" onClick={() => queryAction.mutate({ id: r.id, action: "answer", response: answerText })} disabled={!answerText.trim() || queryAction.isPending}>Send</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => setAnswerOpen(r.id)}>
+                              <MessageCircle className="h-4 w-4" /> Answer
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => queryAction.mutate({ id: r.id, action: "resolve" })} disabled={queryAction.isPending}>
+                              <CheckCheck className="h-4 w-4" /> Resolve
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
