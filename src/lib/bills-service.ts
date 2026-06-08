@@ -4,13 +4,8 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import {
-  postToLedger,
-  isPeriodLocked,
-  getControlAccount,
-  LedgerEntry,
-  PostingContext,
-} from "./posting-service";
+// Posting goes through atomic Phase 3 RPCs:
+// approve_bill, record_bill_payment, void_bill.
 
 export interface BillInput {
   supplierId?: string;
@@ -198,128 +193,14 @@ export async function approveBill(
   billId: string,
   userId: string
 ): Promise<{ success: boolean; journalId?: string; error?: string }> {
-  const { data: bill, error: fetchError } = await supabase
-    .from("bills")
-    .select(`
-      *,
-      bill_lines(*)
-    `)
-    .eq("id", billId)
-    .single();
-
-  if (fetchError || !bill) {
-    return { success: false, error: "Bill not found" };
-  }
-
-  if (bill.status !== "DRAFT") {
-    return { success: false, error: "Bill is not in draft status" };
-  }
-
-  if (bill.is_posted) {
-    return { success: false, error: "Bill already posted" };
-  }
-
-  const entityType = bill.client_id ? "client" : "company";
-  const entityId = bill.client_id || bill.company_id;
-
-  const lockCheck = await isPeriodLocked(
-    bill.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    bill.issue_date
-  );
-
-  if (lockCheck.locked) {
-    return { success: false, error: `Period locked until ${lockCheck.lockDate}` };
-  }
-
-  const creditorsAccountId = await getControlAccount(
-    bill.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    "TRADE_CREDITORS"
-  );
-
-  const vatAccountId = await getControlAccount(
-    bill.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    "VAT_CONTROL"
-  );
-
-  if (!creditorsAccountId) {
-    return { success: false, error: "Trade Creditors control account not found" };
-  }
-
-  // Build ledger entries per CTO spec:
-  // DR Expense/COS accounts (net per line)
-  // DR VAT Control (total VAT)
-  // CR Trade Creditors (gross)
-  const entries: LedgerEntry[] = [];
-
-  // DR Expense accounts for each line (net)
-  for (const line of bill.bill_lines || []) {
-    entries.push({
-      accountId: line.account_id,
-      debit: line.net_amount,
-      credit: null,
-      description: `Bill ${bill.bill_number || billId.substring(0, 8)}: ${line.description}`,
-      vatCodeId: line.vat_code_id,
-    });
-  }
-
-  // DR VAT Control for total VAT
-  if (bill.total_vat > 0 && vatAccountId) {
-    entries.push({
-      accountId: vatAccountId,
-      debit: bill.total_vat,
-      credit: null,
-      description: `VAT on Bill ${bill.bill_number || billId.substring(0, 8)}`,
-    });
-  }
-
-  // CR Trade Creditors for gross
-  entries.push({
-    accountId: creditorsAccountId,
-    debit: null,
-    credit: bill.total_gross,
-    description: `Bill ${bill.bill_number || billId.substring(0, 8)}`,
+  const { data, error } = await supabase.rpc("approve_bill", {
+    p_bill_id: billId,
+    p_user_id: userId,
   });
-
-  const postingContext: PostingContext = {
-    organizationId: bill.organization_id,
-    entityType: entityType as "client" | "company",
-    entityId,
-    transactionDate: bill.issue_date,
-    reference: bill.bill_number || undefined,
-    sourceType: "BILL",
-    sourceId: billId,
-    currency: bill.currency || "GBP",
-    fxRate: Number(bill.exchange_rate) || 1.0,
-    userId,
-  };
-
-  const postResult = await postToLedger(postingContext, entries);
-
-  if (!postResult.success) {
-    return { success: false, error: postResult.error };
-  }
-
-  const { error: updateError } = await supabase
-    .from("bills")
-    .update({
-      status: "AWAITING_PAYMENT",
-      is_posted: true,
-      posted_at: new Date().toISOString(),
-      posted_by: userId,
-    })
-    .eq("id", billId);
-
-  if (updateError) {
-    return { success: false, error: updateError.message };
-  }
-
-  return { success: true, journalId: postResult.journalId };
+  if (error) return { success: false, error: error.message };
+  const result = data as { success: boolean; journal_id?: string; error_message?: string };
+  if (!result?.success) return { success: false, error: result?.error_message || "Bill approval failed" };
+  return { success: true, journalId: result.journal_id };
 }
 
 /**
@@ -330,36 +211,14 @@ export async function voidBill(
   userId: string,
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: bill } = await supabase
-    .from("bills")
-    .select("*")
-    .eq("id", billId)
-    .single();
-
-  if (!bill) {
-    return { success: false, error: "Bill not found" };
-  }
-
-  if (bill.status === "VOIDED") {
-    return { success: false, error: "Bill already voided" };
-  }
-
-  if (Number(bill.amount_paid || 0) > 0) {
-    return { success: false, error: "Cannot void bill with payments. Refund first." };
-  }
-
-  const { error } = await supabase
-    .from("bills")
-    .update({
-      status: "VOIDED",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", billId);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
+  const { data, error } = await supabase.rpc("void_bill", {
+    p_bill_id: billId,
+    p_reason: reason ?? null,
+    p_user_id: userId,
+  });
+  if (error) return { success: false, error: error.message };
+  const result = data as { success: boolean; error_message?: string };
+  if (!result?.success) return { success: false, error: result?.error_message || "Void failed" };
   return { success: true };
 }
 
@@ -371,122 +230,20 @@ export async function recordBillPayment(
   payment: BillPaymentInput,
   userId: string
 ): Promise<{ success: boolean; paymentId?: string; error?: string }> {
-  const { data: bill } = await supabase
-    .from("bills")
-    .select("*")
-    .eq("id", billId)
-    .single();
-
-  if (!bill) {
-    return { success: false, error: "Bill not found" };
-  }
-
-  if (!bill.is_posted) {
-    return { success: false, error: "Bill must be posted before recording payment" };
-  }
-
-  const entityType = bill.client_id ? "client" : "company";
-  const entityId = bill.client_id || bill.company_id;
-
-  const lockCheck = await isPeriodLocked(
-    bill.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    payment.paymentDate
-  );
-
-  if (lockCheck.locked) {
-    return { success: false, error: `Period locked until ${lockCheck.lockDate}` };
-  }
-
-  const remainingBalance = Number(bill.remaining_balance || bill.total_gross) - Number(bill.amount_paid || 0);
-  const isOverpayment = payment.amount > remainingBalance;
-  const allocationAmount = Math.min(payment.amount, remainingBalance);
-  const overpaymentAmount = isOverpayment ? payment.amount - remainingBalance : 0;
-
-  const creditorsAccountId = await getControlAccount(
-    bill.organization_id,
-    entityType as "client" | "company",
-    entityId,
-    "TRADE_CREDITORS"
-  );
-
-  if (!creditorsAccountId) {
-    return { success: false, error: "Trade Creditors account not found" };
-  }
-
-  const { data: paymentRecord, error: paymentError } = await supabase
-    .from("bill_payments")
-    .insert({
-      bill_id: billId,
-      amount: payment.amount,
-      payment_date: payment.paymentDate,
-      bank_account_id: payment.bankAccountId || null,
-      bank_transaction_id: payment.bankTransactionId || null,
-      reference: payment.reference || null,
-      payment_method: payment.paymentMethod || null,
-      payment_type: isOverpayment ? "overpayment" : "normal",
-      unallocated_amount: overpaymentAmount,
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-
-  if (paymentError) {
-    return { success: false, error: paymentError.message };
-  }
-
-  // Post ledger entries: DR Trade Creditors, CR Bank
-  if (payment.bankAccountId) {
-    const entries: LedgerEntry[] = [
-      {
-        accountId: creditorsAccountId,
-        debit: isOverpayment ? payment.amount : allocationAmount,
-        credit: null,
-        description: `Payment: Bill ${bill.bill_number || billId.substring(0, 8)}`,
-      },
-      {
-        accountId: payment.bankAccountId,
-        debit: null,
-        credit: payment.amount,
-        description: `Payment: Bill ${bill.bill_number || billId.substring(0, 8)}`,
-      },
-    ];
-
-    const postResult = await postToLedger(
-      {
-        organizationId: bill.organization_id,
-        entityType: entityType as "client" | "company",
-        entityId,
-        transactionDate: payment.paymentDate,
-        reference: payment.reference,
-        sourceType: "PAYMENT",
-        sourceId: paymentRecord.id,
-        userId,
-      },
-      entries
-    );
-
-    if (!postResult.success) {
-      await supabase.from("bill_payments").delete().eq("id", paymentRecord.id);
-      return { success: false, error: postResult.error };
-    }
-  }
-
-  const newAmountPaid = Number(bill.amount_paid || 0) + allocationAmount;
-  const newRemainingBalance = Number(bill.total_gross) - newAmountPaid;
-  const newStatus = newRemainingBalance <= 0 ? "PAID" : "PART_PAID";
-
-  await supabase
-    .from("bills")
-    .update({
-      amount_paid: newAmountPaid,
-      remaining_balance: newRemainingBalance,
-      status: newStatus,
-    })
-    .eq("id", billId);
-
-  return { success: true, paymentId: paymentRecord.id };
+  const { data, error } = await supabase.rpc("record_bill_payment", {
+    p_bill_id: billId,
+    p_amount: payment.amount,
+    p_payment_date: payment.paymentDate,
+    p_bank_account_id: payment.bankAccountId ?? null,
+    p_bank_transaction_id: payment.bankTransactionId ?? null,
+    p_reference: payment.reference ?? null,
+    p_payment_method: payment.paymentMethod ?? null,
+    p_user_id: userId,
+  });
+  if (error) return { success: false, error: error.message };
+  const result = data as { success: boolean; payment_id?: string; error_message?: string };
+  if (!result?.success) return { success: false, error: result?.error_message || "Payment failed" };
+  return { success: true, paymentId: result.payment_id };
 }
 
 /**
