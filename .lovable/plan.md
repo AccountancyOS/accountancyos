@@ -1,87 +1,61 @@
-# Phase 1 — Client-Facing Bookkeeping Audit
+## Goal
 
-Per your decisions: **audit only**, then a follow-up build plan. Permissions will extend `portal_visibility_settings`; categorisation will be review-first; QA will seed new fixtures under Greenfield & Co. Those choices are locked in for the follow-up build plan but **no code changes happen in this phase**.
+Surface two highly relevant pieces of information on the client portal dashboard that are currently missing:
 
-## Deliverable
+1. **Upcoming Filing Deadlines** — e.g. Confirmation Statement, Accounts due, VAT return, Self Assessment return, P11D.
+2. **Tax Payments Due** — e.g. Corporation Tax payment, Self Assessment payment on account, VAT payment, PAYE liability.
 
-A single audit report saved to `.lovable/bookkeeping-portal-audit.md` (and surfaced in chat) with three sections, a prioritised gap list, and a recommended build sequence. No migrations, no UI changes.
+Both are drawn from the existing `deadlines` table, scoped to the currently selected portal entity (client or company).
 
-## What I will inspect
+## What the user will see
 
-### A. Accountant-side bookkeeping — feature inventory
-For each area below I will rate it **Fully built / Partial / UI only / Backend only / Missing** with evidence (file paths, table names, RPCs, edge functions):
-
-- Bank accounts, bank feed (TrueLayer), sync, reconnect
-- Transactions list, categorisation, bank rules, matching
-- Sales invoices, customers, credit notes, payments
-- Bills, suppliers, bill payments, receipts
-- Chart of accounts, manual journals, TB snapshots, period locks
-- VAT registrations, periods, returns, adjustments, MTD submission
-- Reports (P&L, BS, aged debtors/creditors, GL, VAT summary)
-- Fixed assets, capital allowances
-- Workpaper + filing linkage from bookkeeping data
-
-### B. Client-side bookkeeping — current state
-- Routes and pages under `src/portal/` touching bookkeeping
-- What `PortalBookkeeping` → `PortalBookkeepingFull` currently exposes (today: full accountant tabs including Chart of Accounts, Journals, Bank Rules — likely too much for a client)
-- Which tabs gate by service vs entity type vs hardcoded
-- Whether write actions inside reused accountant components are visually/functionally restricted
-- Entity switcher behaviour for multi-entity portal users
-- Queries / receipt-upload / accountant-review surfaces from the brief — which exist, which don't
-
-### C. Security & RLS audit
-For every bookkeeping-touching table (bank_*, bookkeeping_accounts, journals, ledger_entries, invoices/invoice_lines/invoice_payments, bills/bill_lines/bill_payments, customers, suppliers, receipts, credit_notes(+lines/allocations), vat_*, fixed_assets, capital_allowance_*, reconciliations, period_locks, tb_account_mappings, trial_balance_snapshots, categorization_rules, bank_rules, fx_rates):
-
-- RLS enabled
-- Portal SELECT policy correctly scoped via `portal_can_access_bookkeeping` (or equivalent) and entity_id match
-- Portal INSERT/UPDATE/DELETE policies match the brief's accountant-led model (read-only where they must be, write only where the brief permits)
-- No client can read/write another tenant's rows
-- No client can mutate accountant-only data (period locks, snapshots, VAT submissions, approvals, mappings)
-- GRANTs present on each public table for the roles policies allow
-- RPC surface (`portal_*`, `post_to_ledger`, etc.) — caller checks and security-definer hygiene
-
-I will run the Supabase linter and `supabase--read_query` against `pg_policies` to enumerate every policy on the tables above rather than relying on file grep.
-
-### D. Permissions model gap analysis
-Map every permission listed in the brief (Phase 13) to:
-- Existing column on `portal_visibility_settings`, OR
-- Existing service flag, OR
-- **Gap** → needs to be added in the build phase
-
-Output is the exact column-addition list for the future migration.
-
-### E. UX gap vs the brief
-For each portal surface the brief requires (Overview action cards, Transactions with explain workflow, Receipts hub, Sales Invoices with inline customer create, Bills, VAT client view + approval, Reports with permission tiers, Queries inbox), state: **Exists / Partial / Missing**, and which existing accountant component could be reused vs needs a portal-specific build.
-
-## Report structure
+Under the existing 4 KPI tiles on `/portal/dashboard`, two new cards side-by-side:
 
 ```text
-.lovable/bookkeeping-portal-audit.md
-  1. Executive summary (one page)
-  2. Accountant-side inventory table
-  3. Portal-side inventory table
-  4. RLS matrix (table × role × verb × policy name × verdict)
-  5. Permissions gap list (brief permission → current source → action)
-  6. UX gap list (brief surface → status → reuse plan)
-  7. Security risks found (ranked: critical / high / medium / low)
-  8. Architectural concerns
-  9. Recommended build sequence with effort sizing (S/M/L)
- 10. Out of scope for the build phase
+┌───────────────────────────────┐  ┌───────────────────────────────┐
+│ Upcoming Deadlines            │  │ Tax Payments Due              │
+│ ───────────────────────────── │  │ ───────────────────────────── │
+│ VAT Return     Due in 12 days │  │ Corporation Tax  £4,520  21d  │
+│ Confirmation…  Due in 28 days │  │ SA Payment On..  £1,840  64d  │
+│ Annual Accts…  Due in 84 days │  │ VAT Payment      £2,310  12d  │
+│                               │  │                               │
+│ View All Deadlines →          │  │ View All Payments →           │
+└───────────────────────────────┘  └───────────────────────────────┘
 ```
 
-## What I will NOT do in this phase
+- Each row shows the deadline name, the due date (relative + absolute on hover), and a colour pill: red if ≤ 7 days, amber if ≤ 30 days, neutral otherwise.
+- Empty states: "No upcoming deadlines in the next 90 days." / "No tax payments due in the next 90 days."
+- Up to 5 rows in each card; a "View All" link routes to `/portal/tasks` (deadlines do not yet have a dedicated portal page — see Open Questions).
 
-- No migrations, no RLS changes, no new tables, no new RPCs
-- No UI changes, no nav changes, no component refactors
-- No seeded test clients (those land with the build phase)
-- No edge function edits
+## Data sourcing
 
-## Technical notes
+Both cards query the `deadlines` table directly (it has portal-friendly RLS via the existing `portal_access` scope).
 
-- Tools used: `code--view`, `code--exec` (rg), `supabase--read_query` on `pg_policies` / `information_schema`, `supabase--linter`. All read-only.
-- Existing TrueLayer audit (saved in `.lovable/plan.md`) will be referenced but not re-executed.
-- Existing facts already known: `portal_has_bookkeeping` + `portal_can_access_bookkeeping` RPCs exist (migration `20260605122942`); `PortalBookkeepingFull` reuses accountant tabs verbatim via `PortalAppShim`; sidebar gates on `useAnyPortalBookkeepingAccess`; `DeactivateBookkeepingDialog` warns on service-off with data retention. These will be validated rather than re-discovered.
+- **Upcoming Deadlines:** `status NOT IN ('completed','filed')`, `due_date BETWEEN today AND today+90`, scoped to current `client_id` OR `company_id`. Sort by `due_date` asc. Exclude rows whose `deadline_type` is a payment (see next).
+- **Tax Payments Due:** same filter, but where `payment_date IS NOT NULL` AND `payment_date >= today` AND `payment_date <= today+90`. Show `payment_date` instead of `due_date`. Amount comes from `metadata->>'amount'` when present (CT/SA estimates are stored there today); otherwise the row shows "Amount TBC".
 
-## Next step after you approve
+## Technical Details
 
-I switch to build mode, produce `.lovable/bookkeeping-portal-audit.md`, then return with a sequenced build plan based on the findings (starting with permissions + portal nav gating + Transactions explain workflow + Receipts + Queries, as agreed).
+- Add two hooks in `src/portal/hooks/usePortalData.ts`:
+  - `usePortalUpcomingDeadlines()` — returns next 5 non-payment deadlines.
+  - `usePortalTaxPayments()` — returns next 5 rows with a `payment_date`.
+  - Both filter by `currentEntity` from `PortalEntityContext` (client_id XOR company_id, matching existing pattern).
+- New presentational components under `src/portal/components/dashboard/`:
+  - `UpcomingDeadlinesCard.tsx`
+  - `TaxPaymentsCard.tsx`
+  - Both follow the existing Card / Skeleton / empty-state pattern used in `PortalDashboard.tsx` and `PortalEmptyState.tsx`.
+- Wire both cards into `PortalDashboard.tsx` in a new `grid grid-cols-1 lg:grid-cols-2 gap-4` row beneath the KPI tiles.
+- No schema changes. No new RLS — `deadlines` is already readable by the portal user via existing tenant policies (verified: `client_id` / `company_id` scoping matches `portal_access`).
+- No backend or edge-function changes.
+
+## Out of scope
+
+- A dedicated `/portal/deadlines` page (cards link to `/portal/tasks` for now).
+- Editing / completing deadlines from the portal.
+- Tying tax payments into Stripe / Pay Now flows (display only).
+- Reusing `portal_visibility_settings` flags — these two sections are always visible. Adding `show_deadlines` / `show_tax_payments` toggles can come later if the user wants accountant-side control.
+
+## Open Questions
+
+1. Should "View All Deadlines" link to a new `/portal/deadlines` page, or is routing to `/portal/tasks` acceptable for this pass?
+2. Should both cards respect the `portal_visibility_settings` toggles (i.e. add `show_deadlines` and `show_tax_payments` flags) so accountants can hide them per client, or always show?
