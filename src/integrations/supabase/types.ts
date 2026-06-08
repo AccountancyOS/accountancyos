@@ -17585,6 +17585,24 @@ export type Database = {
         Args: { _client_id: string; _company_id: string; _user_id: string }
         Returns: boolean
       }
+      post_bank_transaction: {
+        Args: {
+          p_bank_transaction_id: string
+          p_contra_account_id: string
+          p_description?: string
+          p_vat_amount?: number
+          p_vat_code_id?: string
+        }
+        Returns: Json
+      }
+      post_bank_transfer: {
+        Args: {
+          p_description?: string
+          p_destination_bank_account_id: string
+          p_source_transaction_id: string
+        }
+        Returns: Json
+      }
       post_to_ledger: {
         Args: {
           p_client_id: string
