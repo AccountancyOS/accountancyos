@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { ChevronDown, ChevronRight, FileText, Download } from "lucide-react";
+import { downloadCsv } from "@/lib/csv-export";
 import { getAgedPayables } from "@/lib/bills-service";
 
 interface AgedPayablesReportProps {
@@ -174,9 +175,27 @@ export function AgedPayablesReport({ entity }: AgedPayablesReportProps) {
             Outstanding purchase bills by age bucket
           </p>
         </div>
-        <Button variant="outline" disabled>
+        <Button
+          variant="outline"
+          disabled={!agingData || agingData.suppliers.length === 0}
+          onClick={() => {
+            if (!agingData) return;
+            const headers = ["Supplier", "Current", "1-30 Days", "31-60 Days", "61-90 Days", "90+ Days", "Total"];
+            const rows = agingData.suppliers.map((s) => [
+              s.supplierName,
+              s.current,
+              s.days1to30,
+              s.days31to60,
+              s.days61to90,
+              s.over90,
+              s.total,
+            ]);
+            rows.push(["TOTAL", totals.current, totals.days1to30, totals.days31to60, totals.days61to90, totals.over90, totals.total]);
+            downloadCsv(`aged-payables-${entity.displayName}-${asOfDate}.csv`, headers, rows);
+          }}
+        >
           <Download className="h-4 w-4 mr-2" />
-          Export PDF
+          Export CSV
         </Button>
       </div>
 
