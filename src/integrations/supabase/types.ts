@@ -16896,6 +16896,16 @@ export type Database = {
         Args: { p_rule_id: string; p_sample_event?: Json }
         Returns: Json
       }
+      bulk_apply_active_bank_rules: {
+        Args: {
+          p_bank_account_id?: string
+          p_client_id?: string
+          p_company_id?: string
+          p_limit?: number
+          p_organization_id: string
+        }
+        Returns: Json
+      }
       calculate_cash_vat_proportion: {
         Args: {
           p_gross_amount: number
@@ -18014,6 +18024,10 @@ export type Database = {
           p_reason?: string
           p_reversal_date: string
         }
+        Returns: Json
+      }
+      revert_bank_rule_application: {
+        Args: { p_bank_transaction_id: string; p_reason: string }
         Returns: Json
       }
       revoke_approval_with_audit: {
