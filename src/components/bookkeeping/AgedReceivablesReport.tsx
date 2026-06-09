@@ -32,6 +32,7 @@ import { format } from "date-fns";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { ChevronDown, ChevronRight, FileText, Download } from "lucide-react";
 import { getAgedReceivables } from "@/lib/invoice-service";
+import { downloadCsv } from "@/lib/csv-export";
 
 interface AgedReceivablesReportProps {
   entity: BookkeepingEntity;
@@ -175,9 +176,27 @@ export function AgedReceivablesReport({ entity }: AgedReceivablesReportProps) {
             Outstanding sales invoices by age bucket
           </p>
         </div>
-        <Button variant="outline" disabled>
+        <Button
+          variant="outline"
+          disabled={!agingData || agingData.customers.length === 0}
+          onClick={() => {
+            if (!agingData) return;
+            const headers = ["Customer", "Current", "1-30 Days", "31-60 Days", "61-90 Days", "90+ Days", "Total"];
+            const rows = agingData.customers.map((c) => [
+              c.customerName,
+              c.current,
+              c.days1to30,
+              c.days31to60,
+              c.days61to90,
+              c.over90,
+              c.total,
+            ]);
+            rows.push(["TOTAL", totals.current, totals.days1to30, totals.days31to60, totals.days61to90, totals.over90, totals.total]);
+            downloadCsv(`aged-receivables-${entity.displayName}-${asOfDate}.csv`, headers, rows);
+          }}
+        >
           <Download className="h-4 w-4 mr-2" />
-          Export PDF
+          Export CSV
         </Button>
       </div>
 

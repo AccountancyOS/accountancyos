@@ -25,6 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
+import { downloadCsv } from "@/lib/csv-export";
 import { format, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear, subYears } from "date-fns";
 
 interface ProfitLossReportProps {
@@ -241,9 +242,53 @@ export function ProfitLossReport({ entity }: ProfitLossReportProps) {
             {entity.displayName} - {periodLabel}
           </p>
         </div>
-        <Button variant="outline" disabled>
+        <Button
+          variant="outline"
+          disabled={!reportData}
+          onClick={() => {
+            if (!reportData) return;
+            const headers = showComparison
+              ? ["Section", "Code", "Account", "Amount", "Prior", "Variance"]
+              : ["Section", "Code", "Account", "Amount"];
+            const rows: Array<Array<unknown>> = [];
+            for (const a of reportData.revenue.accounts) {
+              rows.push(
+                showComparison
+                  ? ["Revenue", a.code, a.name, a.amount, a.priorAmount ?? 0, a.amount - (a.priorAmount ?? 0)]
+                  : ["Revenue", a.code, a.name, a.amount],
+              );
+            }
+            rows.push(
+              showComparison
+                ? ["Revenue", "", "Total Revenue", reportData.revenue.total, reportData.revenue.priorTotal ?? 0, (reportData.revenue.total) - (reportData.revenue.priorTotal ?? 0)]
+                : ["Revenue", "", "Total Revenue", reportData.revenue.total],
+            );
+            for (const a of reportData.expenses.accounts) {
+              rows.push(
+                showComparison
+                  ? ["Expenses", a.code, a.name, a.amount, a.priorAmount ?? 0, a.amount - (a.priorAmount ?? 0)]
+                  : ["Expenses", a.code, a.name, a.amount],
+              );
+            }
+            rows.push(
+              showComparison
+                ? ["Expenses", "", "Total Expenses", reportData.expenses.total, reportData.expenses.priorTotal ?? 0, (reportData.expenses.total) - (reportData.expenses.priorTotal ?? 0)]
+                : ["Expenses", "", "Total Expenses", reportData.expenses.total],
+            );
+            rows.push(
+              showComparison
+                ? ["", "", "Net Profit", reportData.netProfit, reportData.priorNetProfit ?? 0, (reportData.netProfit) - (reportData.priorNetProfit ?? 0)]
+                : ["", "", "Net Profit", reportData.netProfit],
+            );
+            downloadCsv(
+              `profit-loss-${entity.displayName}-${startDate}-to-${endDate}.csv`,
+              headers,
+              rows,
+            );
+          }}
+        >
           <Download className="h-4 w-4 mr-2" />
-          Export PDF
+          Export CSV
         </Button>
       </div>
 

@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Download, CheckCircle, AlertCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
+import { downloadCsv } from "@/lib/csv-export";
 import { format } from "date-fns";
 
 interface BalanceSheetReportProps {
@@ -193,9 +194,30 @@ export function BalanceSheetReport({ entity }: BalanceSheetReportProps) {
             {entity.displayName} - As of {format(new Date(asOfDate), "d MMMM yyyy")}
           </p>
         </div>
-        <Button variant="outline" disabled>
+        <Button
+          variant="outline"
+          disabled={!reportData}
+          onClick={() => {
+            if (!reportData) return;
+            const headers = ["Section", "Code", "Account", "Balance"];
+            const rows: Array<Array<unknown>> = [];
+            const pushSection = (section: string, accounts: { code: string; name: string; balance: number }[], totalLabel: string, total: number) => {
+              for (const a of accounts) rows.push([section, a.code, a.name, a.balance]);
+              rows.push([section, "", totalLabel, total]);
+            };
+            pushSection("Current Assets", reportData.currentAssets.accounts, "Total Current Assets", reportData.currentAssets.total);
+            pushSection("Fixed Assets", reportData.fixedAssets.accounts, "Total Fixed Assets", reportData.fixedAssets.total);
+            rows.push(["", "", "Total Assets", reportData.totalAssets]);
+            pushSection("Current Liabilities", reportData.currentLiabilities.accounts, "Total Current Liabilities", reportData.currentLiabilities.total);
+            pushSection("Long-Term Liabilities", reportData.longTermLiabilities.accounts, "Total Long-Term Liabilities", reportData.longTermLiabilities.total);
+            rows.push(["", "", "Total Liabilities", reportData.totalLiabilities]);
+            pushSection("Equity", reportData.equity.accounts, "Total Equity", reportData.equity.total);
+            rows.push(["", "", "Total Liabilities + Equity", reportData.totalLiabilities + reportData.equity.total]);
+            downloadCsv(`balance-sheet-${entity.displayName}-${asOfDate}.csv`, headers, rows);
+          }}
+        >
           <Download className="h-4 w-4 mr-2" />
-          Export PDF
+          Export CSV
         </Button>
       </div>
 
