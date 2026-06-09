@@ -13882,8 +13882,13 @@ export type Database = {
           completed_at: string | null
           completed_by: string | null
           created_at: string | null
+          created_by: string | null
+          difference: number | null
           id: string
           organization_id: string
+          reopen_reason: string | null
+          reopened_at: string | null
+          reopened_by: string | null
           statement_closing_balance: number
           statement_end_date: string
           statement_opening_balance: number
@@ -13898,8 +13903,13 @@ export type Database = {
           completed_at?: string | null
           completed_by?: string | null
           created_at?: string | null
+          created_by?: string | null
+          difference?: number | null
           id?: string
           organization_id: string
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
           statement_closing_balance: number
           statement_end_date: string
           statement_opening_balance: number
@@ -13914,8 +13924,13 @@ export type Database = {
           completed_at?: string | null
           completed_by?: string | null
           created_at?: string | null
+          created_by?: string | null
+          difference?: number | null
           id?: string
           organization_id?: string
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
           statement_closing_balance?: number
           statement_end_date?: string
           statement_opening_balance?: number
@@ -16777,6 +16792,10 @@ export type Database = {
         }
         Returns: string
       }
+      add_reconciliation_line: {
+        Args: { p_bank_transaction_id: string; p_reconciliation_id: string }
+        Returns: string
+      }
       allocate_credit_note: {
         Args: {
           p_allocations: Json
@@ -17023,6 +17042,10 @@ export type Database = {
           check_user_id: string
         }
         Returns: boolean
+      }
+      complete_bank_reconciliation: {
+        Args: { p_force?: boolean; p_reconciliation_id: string }
+        Returns: string
       }
       consume_unsubscribe_token: {
         Args: { p_category?: string; p_token: string }
@@ -17906,6 +17929,14 @@ export type Database = {
         Returns: undefined
       }
       reissue_quote: { Args: { p_quote_id: string }; Returns: string }
+      remove_reconciliation_line: {
+        Args: { p_line_id: string }
+        Returns: undefined
+      }
+      reopen_bank_reconciliation: {
+        Args: { p_reason: string; p_reconciliation_id: string }
+        Returns: string
+      }
       resolve_company_director: {
         Args: { p_company_id: string; p_lead_id: string; p_org_id: string }
         Returns: {
@@ -18005,6 +18036,16 @@ export type Database = {
       split_bank_transaction: {
         Args: { p_bank_transaction_id: string; p_splits: Json }
         Returns: Json
+      }
+      start_bank_reconciliation: {
+        Args: {
+          p_bank_account_id: string
+          p_statement_closing_balance: number
+          p_statement_end_date: string
+          p_statement_opening_balance: number
+          p_statement_start_date: string
+        }
+        Returns: string
       }
       start_kyc_pack: {
         Args: { p_client_id: string; p_subjects?: Json }
