@@ -15533,6 +15533,7 @@ export type Database = {
           is_active: boolean | null
           is_common: boolean
           is_reclaimable: boolean | null
+          is_system: boolean
           jurisdiction: string | null
           net_included_in_boxes: number[] | null
           organization_id: string
@@ -15556,6 +15557,7 @@ export type Database = {
           is_active?: boolean | null
           is_common?: boolean
           is_reclaimable?: boolean | null
+          is_system?: boolean
           jurisdiction?: string | null
           net_included_in_boxes?: number[] | null
           organization_id: string
@@ -15579,6 +15581,7 @@ export type Database = {
           is_active?: boolean | null
           is_common?: boolean
           is_reclaimable?: boolean | null
+          is_system?: boolean
           jurisdiction?: string | null
           net_included_in_boxes?: number[] | null
           organization_id?: string
@@ -17636,6 +17639,16 @@ export type Database = {
         Args: { _org_id: string; _user_id: string }
         Returns: string
       }
+      get_vat_9box_detail: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_from: string
+          p_organization_id: string
+          p_to: string
+        }
+        Returns: Json
+      }
       has_any_role: {
         Args: { _org_id: string; _roles: string[]; _user_id: string }
         Returns: boolean
@@ -18150,6 +18163,10 @@ export type Database = {
           p_organization_id: string
         }
         Returns: Json
+      }
+      seed_system_vat_codes: {
+        Args: { p_organization_id: string }
+        Returns: number
       }
       send_onboarding_questionnaire: {
         Args: { p_onboarding_id: string; p_template_id: string }
