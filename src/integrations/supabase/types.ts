@@ -16819,6 +16819,15 @@ export type Database = {
         Args: { p_invoice_id: string; p_user_id?: string }
         Returns: Json
       }
+      assert_no_locked_period_write: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_date: string
+          p_organization_id: string
+        }
+        Returns: undefined
+      }
       automation_dry_run: {
         Args: { p_rule_id: string; p_sample_event?: Json }
         Returns: Json
@@ -17210,6 +17219,10 @@ export type Database = {
       generate_invite_token: { Args: never; Returns: string }
       generate_questionnaire_token: { Args: never; Returns: string }
       generate_quote_number: { Args: { org_id: string }; Returns: string }
+      generate_recurring_invoice: {
+        Args: { p_schedule_id: string; p_user_id?: string }
+        Returns: Json
+      }
       get_active_vat_registration: {
         Args: {
           p_as_of_date?: string
@@ -17668,6 +17681,10 @@ export type Database = {
           p_source_id: string
           p_source_type: string
         }
+        Returns: Json
+      }
+      process_due_recurring_invoices: {
+        Args: { p_limit?: number; p_organization_id?: string }
         Returns: Json
       }
       process_questionnaire_submission: {
