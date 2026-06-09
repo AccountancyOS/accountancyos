@@ -128,6 +128,8 @@ export function usePortalBookkeepingPermissions() {
           ].join(","),
         )
         .eq(col, currentEntity.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error || !data) return DEFAULTS;
