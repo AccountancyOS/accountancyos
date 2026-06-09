@@ -1952,6 +1952,8 @@ export type Database = {
       bank_rules: {
         Row: {
           actions: Json
+          auto_post: boolean
+          bank_account_id: string | null
           client_id: string | null
           company_id: string | null
           conditions: Json
@@ -1963,12 +1965,18 @@ export type Database = {
           last_applied_at: string | null
           organization_id: string
           priority: number | null
+          requires_review: boolean
           rule_name: string
+          source: string
           times_applied: number | null
           updated_at: string | null
+          updated_by: string | null
+          vat_sensitive: boolean
         }
         Insert: {
           actions?: Json
+          auto_post?: boolean
+          bank_account_id?: string | null
           client_id?: string | null
           company_id?: string | null
           conditions?: Json
@@ -1980,12 +1988,18 @@ export type Database = {
           last_applied_at?: string | null
           organization_id: string
           priority?: number | null
+          requires_review?: boolean
           rule_name: string
+          source?: string
           times_applied?: number | null
           updated_at?: string | null
+          updated_by?: string | null
+          vat_sensitive?: boolean
         }
         Update: {
           actions?: Json
+          auto_post?: boolean
+          bank_account_id?: string | null
           client_id?: string | null
           company_id?: string | null
           conditions?: Json
@@ -1997,11 +2011,22 @@ export type Database = {
           last_applied_at?: string | null
           organization_id?: string
           priority?: number | null
+          requires_review?: boolean
           rule_name?: string
+          source?: string
           times_applied?: number | null
           updated_at?: string | null
+          updated_by?: string | null
+          vat_sensitive?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "bank_rules_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bank_rules_client_id_fkey"
             columns: ["client_id"]
