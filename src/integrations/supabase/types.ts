@@ -17354,6 +17354,22 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_balance_sheet: {
+        Args: {
+          p_as_at_date: string
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+        }
+        Returns: {
+          account_code: string
+          account_id: string
+          account_name: string
+          account_subtype: string
+          account_type: string
+          balance: number
+        }[]
+      }
       get_bank_connection_health_for_entity: {
         Args: { _client_id: string; _company_id: string }
         Returns: {
@@ -17528,6 +17544,25 @@ export type Database = {
           show_transactions: boolean
           show_trial_balance: boolean
           show_vat_position: boolean
+        }[]
+      }
+      get_profit_and_loss: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_from_date: string
+          p_organization_id: string
+          p_to_date: string
+        }
+        Returns: {
+          account_code: string
+          account_id: string
+          account_name: string
+          account_subtype: string
+          account_type: string
+          credit_total: number
+          debit_total: number
+          net_amount: number
         }[]
       }
       get_questionnaire_by_token: {
