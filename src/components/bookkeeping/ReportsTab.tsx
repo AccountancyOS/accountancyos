@@ -6,6 +6,7 @@ import { TrialBalanceTab } from "./TrialBalanceTab";
 import { GeneralLedgerTab } from "./GeneralLedgerTab";
 import { AgedReceivablesReport } from "./AgedReceivablesReport";
 import { AgedPayablesReport } from "./AgedPayablesReport";
+import { VATBoxDetailReport } from "./VATBoxDetailReport";
 import type { BookkeepingEntity } from "./EntitySelector";
 import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 import { BarChart3 } from "lucide-react";
@@ -35,6 +36,7 @@ export function ReportsTab({ entity }: ReportsTabProps) {
           <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
           <TabsTrigger value="aged-debtors">Aged Debtors</TabsTrigger>
           <TabsTrigger value="aged-creditors">Aged Creditors</TabsTrigger>
+          <TabsTrigger value="vat-9box">VAT 9-Box Detail</TabsTrigger>
           <TabsTrigger value="trial-balance">Trial Balance</TabsTrigger>
           <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
         </TabsList>
@@ -53,6 +55,10 @@ export function ReportsTab({ entity }: ReportsTabProps) {
 
         <TabsContent value="aged-creditors" className="mt-4">
           <AgedPayablesReport entity={entity} />
+        </TabsContent>
+
+        <TabsContent value="vat-9box" className="mt-4">
+          <VATBoxDetailReport entity={entity} />
         </TabsContent>
 
         <TabsContent value="trial-balance" className="mt-4">
