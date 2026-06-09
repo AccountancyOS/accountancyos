@@ -16,6 +16,7 @@ import { PeriodLockTab } from "@/components/bookkeeping/PeriodLockTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
 import { COATaxMappingEditor } from "@/components/bookkeeping/COATaxMappingEditor";
 import { ReviewQueueTab } from "@/components/bookkeeping/ReviewQueueTab";
+import { FixedAssetsTab } from "@/components/bookkeeping/FixedAssetsTab";
 import { PayrollModule } from "@/components/payroll/PayrollModule";
 import { CISModule } from "@/components/cis/CISModule";
 import { PracticeBankingOverview } from "@/components/bookkeeping/PracticeBankingOverview";
@@ -111,6 +112,7 @@ export default function Bookkeeping() {
                   
                   {/* Operations Group */}
                   <TabsTrigger value="receipts" className="text-xs sm:text-sm">Receipts</TabsTrigger>
+                  <TabsTrigger value="fixed-assets" className="text-xs sm:text-sm">Fixed Assets</TabsTrigger>
                   {isVATRegistered && (
                     <TabsTrigger value="vat-returns" className="text-xs sm:text-sm">VAT Returns</TabsTrigger>
                   )}
@@ -168,6 +170,10 @@ export default function Bookkeeping() {
 
             <TabsContent value="receipts" className="space-y-4">
               <ReceiptsTab entityType={selectedEntity.type} entityId={selectedEntity.id} />
+            </TabsContent>
+
+            <TabsContent value="fixed-assets" className="space-y-4">
+              <FixedAssetsTab entity={selectedEntity} />
             </TabsContent>
 
             {isVATRegistered && (
