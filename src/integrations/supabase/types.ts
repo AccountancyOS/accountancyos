@@ -17224,6 +17224,16 @@ export type Database = {
         Args: { _client_id: string; _company_id: string }
         Returns: boolean
       }
+      explain_bank_transaction: {
+        Args: {
+          p_bank_transaction_id: string
+          p_contra_account_id: string
+          p_description?: string
+          p_vat_amount?: number
+          p_vat_code_id?: string
+        }
+        Returns: Json
+      }
       finalize_workpaper_safe: {
         Args: { p_workpaper_id: string }
         Returns: Json
@@ -18014,6 +18024,10 @@ export type Database = {
           p_organization_id: string
           p_reason: string
         }
+        Returns: Json
+      }
+      unmatch_bank_transaction: {
+        Args: { p_bank_transaction_id: string; p_reason?: string }
         Returns: Json
       }
       update_automation_rule_safe: {
