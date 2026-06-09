@@ -293,12 +293,18 @@ serve(async (req) => {
 
         console.log(`Fetched ${transactions.length} transactions for account ${ba.truelayer_account_id}`);
 
-        // Upsert transactions with category and raw_json
-        for (const txn of transactions) {
-          const transactionData: Record<string, unknown> = {
+        // Atomic upsert keyed on (bank_account_id, truelayer_transaction_id).
+        // Falls back to a deterministic import_hash when the provider does not
+        // supply a stable transaction_id. Both paths are covered by unique
+        // partial indexes so concurrent syncs cannot duplicate rows.
+        const batchId = crypto.randomUUID();
+        const withProviderId: Record<string, unknown>[] = [];
+        const withFallbackHash: Record<string, unknown>[] = [];
+
+        const buildBase = (txn: any): Record<string, unknown> => {
+          const base: Record<string, unknown> = {
             organization_id: ba.organization_id,
             bank_account_id: ba.id,
-            truelayer_transaction_id: txn.transaction_id,
             transaction_date: txn.timestamp?.split('T')[0] || new Date().toISOString().split('T')[0],
             description: txn.description || 'No description',
             amount: txn.amount,
@@ -309,41 +315,67 @@ serve(async (req) => {
             status: 'UNREVIEWED',
             provider: 'TRUELAYER',
             import_source: 'TRUELAYER',
+            import_batch_id: batchId,
           };
+          if (ba.client_id) base.client_id = ba.client_id;
+          else if (ba.company_id) base.company_id = ba.company_id;
+          return base;
+        };
 
-          if (ba.client_id) {
-            transactionData.client_id = ba.client_id;
-          } else if (ba.company_id) {
-            transactionData.company_id = ba.company_id;
-          }
+        const buildFallbackHash = (txn: any): string => {
+          const parts = [
+            ba.id,
+            txn.timestamp?.split('T')[0] || '',
+            Number(txn.amount ?? 0).toFixed(2),
+            (txn.description || '').trim().toLowerCase().replace(/\s+/g, ' '),
+            (txn.merchant_name || txn.counter_party || '').toString().trim().toLowerCase(),
+          ].join('|');
+          return `tl:${parts}`;
+        };
 
-          // Check if transaction already exists
-          const { data: existing } = await supabase
-            .from('bank_transactions')
-            .select('id')
-            .eq('truelayer_transaction_id', txn.transaction_id)
-            .maybeSingle();
-
-          if (existing) {
-            // Update existing transaction
-            await supabase
-              .from('bank_transactions')
-              .update({
-                balance: transactionData.balance,
-                currency: transactionData.currency,
-                category: transactionData.category,
-                raw_json: transactionData.raw_json,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', existing.id);
-            totalUpdatedTransactions++;
+        for (const txn of transactions) {
+          const base = buildBase(txn);
+          if (txn.transaction_id) {
+            base.truelayer_transaction_id = txn.transaction_id;
+            withProviderId.push(base);
           } else {
-            // Insert new transaction
-            await supabase
-              .from('bank_transactions')
-              .insert(transactionData);
-            totalNewTransactions++;
+            base.import_hash = buildFallbackHash(txn);
+            withFallbackHash.push(base);
           }
+        }
+
+        if (withProviderId.length > 0) {
+          const { data: upserted, error: upErr } = await supabase
+            .from('bank_transactions')
+            .upsert(withProviderId, {
+              onConflict: 'bank_account_id,truelayer_transaction_id',
+              ignoreDuplicates: false,
+            })
+            .select('id, created_at, updated_at');
+          if (upErr) {
+            throw upErr;
+          }
+          for (const row of upserted || []) {
+            // created_at == updated_at within ~1s => fresh insert
+            const created = new Date(row.created_at as string).getTime();
+            const updated = new Date((row.updated_at as string) || row.created_at as string).getTime();
+            if (Math.abs(updated - created) < 1500) totalNewTransactions++;
+            else totalUpdatedTransactions++;
+          }
+        }
+
+        if (withFallbackHash.length > 0) {
+          const { data: inserted, error: hashErr } = await supabase
+            .from('bank_transactions')
+            .upsert(withFallbackHash, {
+              onConflict: 'bank_account_id,import_hash',
+              ignoreDuplicates: true,
+            })
+            .select('id');
+          if (hashErr) {
+            throw hashErr;
+          }
+          totalNewTransactions += inserted?.length ?? 0;
         }
 
         // Update last_synced_at on the bank account
