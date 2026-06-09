@@ -75,8 +75,59 @@ export function getTrueLayerConfig(): TrueLayerConfig {
   };
 }
 
-// Resolve the front-end app base URL to redirect users back to after callback.
+// Resolve the front-end app base URL for the accountant surface.
 // APP_PUBLIC_URL is the canonical production hostname; fall back gracefully.
 export function getAppBaseUrl(): string {
   return Deno.env.get("APP_PUBLIC_URL") || "https://app.accountancyos.com";
+}
+
+// Resolve the front-end base URL for the client portal surface.
+export function getPortalBaseUrl(): string {
+  return (
+    Deno.env.get("PORTAL_PUBLIC_URL") ||
+    Deno.env.get("APP_PUBLIC_URL") ||
+    "https://app.accountancyos.com"
+  );
+}
+
+// Pick the correct surface base URL from a validated, relative return path.
+// `/portal/*` -> portal base; everything else -> accountant base.
+export function getBaseUrlForReturnPath(returnPath: string): string {
+  if (typeof returnPath === "string" && returnPath.startsWith("/portal/")) {
+    return getPortalBaseUrl();
+  }
+  return getAppBaseUrl();
+}
+
+// Validate that a stored return_url is a safe internal relative path.
+// Rejects absolute URLs, protocol-relative URLs, backslash variants and
+// any path outside the bookkeeping/portal allow-list. Falls back to a
+// safe default that surfaces a failure state in the accountant app.
+const SAFE_FALLBACK = "/bookkeeping?tab=banking&connection=failed";
+const ALLOWED_PREFIXES = ["/portal/bookkeeping", "/bookkeeping"];
+
+export function safeReturnPath(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) return SAFE_FALLBACK;
+
+  let decoded = value;
+  try {
+    // Decode once to catch encoded protocol-relative attacks like %2f%2fevil.com
+    decoded = decodeURIComponent(value);
+  } catch {
+    return SAFE_FALLBACK;
+  }
+
+  if (!decoded.startsWith("/")) return SAFE_FALLBACK;
+  if (decoded.startsWith("//")) return SAFE_FALLBACK;
+  if (decoded.includes("\\")) return SAFE_FALLBACK;
+  if (/^\/\s*\/+/.test(decoded)) return SAFE_FALLBACK;
+  // Block javascript:, data:, etc. (any scheme) — already excluded by the
+  // leading-slash check, but be explicit for defence in depth.
+  if (/^\/[a-z][a-z0-9+.-]*:/i.test(decoded)) return SAFE_FALLBACK;
+
+  if (!ALLOWED_PREFIXES.some((prefix) => decoded === prefix || decoded.startsWith(prefix + "?") || decoded.startsWith(prefix + "/") || decoded.startsWith(prefix + "#"))) {
+    return SAFE_FALLBACK;
+  }
+
+  return decoded;
 }
