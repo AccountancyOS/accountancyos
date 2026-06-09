@@ -119,6 +119,19 @@ async function doEnsure(user: User): Promise<string | null> {
     // ignore
   }
 
+  // Seed the standard UK VAT codes for the new organization. Idempotent on the
+  // database side, so a duplicate call is harmless. Never block org creation.
+  try {
+    const { error: seedError } = await supabase.rpc("seed_system_vat_codes", {
+      p_organization_id: orgId as string,
+    });
+    if (seedError) {
+      console.warn("[ensureOrg] seed_system_vat_codes failed", seedError);
+    }
+  } catch (e) {
+    console.warn("[ensureOrg] seed_system_vat_codes threw", e);
+  }
+
   return orgId as string;
 }
 
