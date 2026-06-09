@@ -18002,6 +18002,10 @@ export type Database = {
         Args: { p_onboarding_id: string; p_template_id: string }
         Returns: Json
       }
+      split_bank_transaction: {
+        Args: { p_bank_transaction_id: string; p_splits: Json }
+        Returns: Json
+      }
       start_kyc_pack: {
         Args: { p_client_id: string; p_subjects?: Json }
         Returns: string
