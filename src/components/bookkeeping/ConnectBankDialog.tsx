@@ -39,6 +39,7 @@ export function ConnectBankDialog({ open, onOpenChange, entity, redirectPath = "
           entity_id: entity.id,
           organization_id: organization.id,
           redirect_path: redirectPath,
+          surface: redirectPath.startsWith('/portal') ? 'portal' : 'accountant',
         },
       });
 
