@@ -17523,6 +17523,16 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      lock_period: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_lock_date: string
+          p_organization_id: string
+          p_reason?: string
+        }
+        Returns: Json
+      }
       log_onboarding_event: {
         Args: {
           p_actor_kind?: string
@@ -17722,6 +17732,14 @@ export type Database = {
       }
       queue_filing_for_submission: {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
+        Returns: Json
+      }
+      recompute_aged_balances: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_organization_id: string
+        }
         Returns: Json
       }
       record_automation_audit: {
@@ -17947,6 +17965,15 @@ export type Database = {
       }
       trigger_records_request: { Args: { p_job_id: string }; Returns: Json }
       try_parse_numeric: { Args: { val: string }; Returns: number }
+      unlock_period: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       update_automation_rule_safe: {
         Args: {
           p_action_config?: Json

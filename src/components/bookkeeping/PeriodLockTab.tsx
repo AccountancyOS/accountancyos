@@ -102,50 +102,16 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
 
   const lockMutation = useMutation({
     mutationFn: async () => {
-      const oldLockDate = periodLock?.lock_date;
-      
-      if (periodLock) {
-        // Update existing lock
-        const { error } = await supabase
-          .from('period_locks')
-          .update({
-            lock_date: newLockDate,
-            reason: lockReason || null,
-            locked_at: new Date().toISOString(),
-            locked_by: user?.id,
-          })
-          .eq('id', periodLock.id);
-        if (error) throw error;
-      } else {
-        // Create new lock
-        const { error } = await supabase
-          .from('period_locks')
-          .insert({
-            organization_id: organizationId,
-            client_id: entityType === 'client' ? entityId : null,
-            company_id: entityType === 'company' ? entityId : null,
-            lock_date: newLockDate,
-            reason: lockReason || null,
-            locked_by: user?.id,
-          });
-        if (error) throw error;
-      }
-
-      // Log to audit
-      await supabase.from('audit_log').insert({
-        organization_id: organizationId!,
-        entity_type: 'period_lock',
-        entity_id: periodLock?.id || 'new',
-        action: periodLock ? 'lock_updated' : 'lock_created',
-        user_id: user?.id,
-        old_value: oldLockDate || null,
-        new_value: newLockDate,
-        metadata: {
-          client_id: entityType === 'client' ? entityId : null,
-          company_id: entityType === 'company' ? entityId : null,
-          reason: lockReason || null,
-        },
+      const { data, error } = await supabase.rpc('lock_period', {
+        p_organization_id: organizationId!,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+        p_lock_date: newLockDate,
+        p_reason: lockReason || null,
       });
+      if (error) throw error;
+      const result = data as { success: boolean; error?: string };
+      if (!result?.success) throw new Error(result?.error || 'Failed to lock period');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['period-lock'] });
@@ -153,8 +119,8 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
       toast.success("Period lock updated");
       setLockReason("");
     },
-    onError: (error) => {
-      toast.error("Failed to update period lock");
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update period lock");
       console.error(error);
     },
   });
@@ -162,29 +128,15 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
   const unlockMutation = useMutation({
     mutationFn: async () => {
       if (!periodLock) return;
-      
-      // Log to audit before deletion
-      await supabase.from('audit_log').insert({
-        organization_id: organizationId!,
-        entity_type: 'period_lock',
-        entity_id: periodLock.id,
-        action: 'lock_removed',
-        user_id: user?.id,
-        old_value: periodLock.lock_date,
-        new_value: null,
-        metadata: {
-          client_id: entityType === 'client' ? entityId : null,
-          company_id: entityType === 'company' ? entityId : null,
-          reason: unlockReason || null,
-          previous_lock_date: periodLock.lock_date,
-        },
+      const { data, error } = await supabase.rpc('unlock_period', {
+        p_organization_id: organizationId!,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+        p_reason: unlockReason,
       });
-
-      const { error } = await supabase
-        .from('period_locks')
-        .delete()
-        .eq('id', periodLock.id);
       if (error) throw error;
+      const result = data as { success: boolean; error?: string };
+      if (!result?.success) throw new Error(result?.error || 'Failed to unlock period');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['period-lock'] });
@@ -192,6 +144,9 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
       toast.success("Period lock removed");
       setNewLockDate("");
       setUnlockReason("");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to unlock period");
     },
   });
 
@@ -264,10 +219,18 @@ export function PeriodLockTab({ entityType, entityId }: PeriodLockTabProps) {
               >
                 Change Lock Date
               </Button>
-              <Button 
-                variant="destructive" 
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <Label>Unlock Reason (required)</Label>
+              <Textarea
+                value={unlockReason}
+                onChange={(e) => setUnlockReason(e.target.value)}
+                placeholder="Explain why this period is being unlocked (audited)"
+              />
+              <Button
+                variant="destructive"
                 onClick={() => unlockMutation.mutate()}
-                disabled={unlockMutation.isPending}
+                disabled={unlockMutation.isPending || !unlockReason.trim()}
               >
                 <Unlock className="h-4 w-4 mr-2" />
                 Remove Lock
