@@ -8804,6 +8804,8 @@ export type Database = {
       }
       fixed_assets: {
         Row: {
+          accumulated_depreciation: number
+          accumulated_depreciation_account_id: string | null
           acquisition_date: string
           asset_category: string
           asset_name: string
@@ -8818,17 +8820,28 @@ export type Database = {
           created_at: string
           created_by: string | null
           default_pool_type: string
+          depreciation_expense_account_id: string | null
+          depreciation_method: string
+          depreciation_rate_pct: number | null
+          depreciation_start_date: string | null
           disposal_date: string | null
           disposal_proceeds: number | null
+          fixed_asset_account_id: string | null
           id: string
           invoice_reference: string | null
           is_car: boolean
+          last_depreciation_date: string | null
           notes: string | null
           organization_id: string
+          residual_value: number
+          status: string
           supplier: string | null
           updated_at: string
+          useful_life_months: number | null
         }
         Insert: {
+          accumulated_depreciation?: number
+          accumulated_depreciation_account_id?: string | null
           acquisition_date: string
           asset_category: string
           asset_name: string
@@ -8843,17 +8856,28 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           default_pool_type?: string
+          depreciation_expense_account_id?: string | null
+          depreciation_method?: string
+          depreciation_rate_pct?: number | null
+          depreciation_start_date?: string | null
           disposal_date?: string | null
           disposal_proceeds?: number | null
+          fixed_asset_account_id?: string | null
           id?: string
           invoice_reference?: string | null
           is_car?: boolean
+          last_depreciation_date?: string | null
           notes?: string | null
           organization_id: string
+          residual_value?: number
+          status?: string
           supplier?: string | null
           updated_at?: string
+          useful_life_months?: number | null
         }
         Update: {
+          accumulated_depreciation?: number
+          accumulated_depreciation_account_id?: string | null
           acquisition_date?: string
           asset_category?: string
           asset_name?: string
@@ -8868,22 +8892,52 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           default_pool_type?: string
+          depreciation_expense_account_id?: string | null
+          depreciation_method?: string
+          depreciation_rate_pct?: number | null
+          depreciation_start_date?: string | null
           disposal_date?: string | null
           disposal_proceeds?: number | null
+          fixed_asset_account_id?: string | null
           id?: string
           invoice_reference?: string | null
           is_car?: boolean
+          last_depreciation_date?: string | null
           notes?: string | null
           organization_id?: string
+          residual_value?: number
+          status?: string
           supplier?: string | null
           updated_at?: string
+          useful_life_months?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fixed_assets_accumulated_depreciation_account_id_fkey"
+            columns: ["accumulated_depreciation_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fixed_assets_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_assets_depreciation_expense_account_id_fkey"
+            columns: ["depreciation_expense_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_assets_fixed_asset_account_id_fkey"
+            columns: ["fixed_asset_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
             referencedColumns: ["id"]
           },
           {
@@ -11583,6 +11637,7 @@ export type Database = {
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
           deadline_buffer_days_vat: number | null
+          depreciation_expense_account_id: string | null
           director_loan_account_id: string | null
           email_default_mode: string | null
           fixed_assets_account_id: string | null
@@ -11624,6 +11679,7 @@ export type Database = {
           deadline_buffer_days_ct?: number | null
           deadline_buffer_days_sa?: number | null
           deadline_buffer_days_vat?: number | null
+          depreciation_expense_account_id?: string | null
           director_loan_account_id?: string | null
           email_default_mode?: string | null
           fixed_assets_account_id?: string | null
@@ -11665,6 +11721,7 @@ export type Database = {
           deadline_buffer_days_ct?: number | null
           deadline_buffer_days_sa?: number | null
           deadline_buffer_days_vat?: number | null
+          depreciation_expense_account_id?: string | null
           director_loan_account_id?: string | null
           email_default_mode?: string | null
           fixed_assets_account_id?: string | null
@@ -11687,6 +11744,13 @@ export type Database = {
           vat_control_account_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "org_settings_depreciation_expense_account_id_fkey"
+            columns: ["depreciation_expense_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "org_settings_fx_gain_account_id_fkey"
             columns: ["fx_gain_account_id"]
@@ -17208,6 +17272,16 @@ export type Database = {
         Returns: string
       }
       disconnect_mailbox_safe: { Args: { p_mailbox_id: string }; Returns: Json }
+      dispose_fixed_asset: {
+        Args: {
+          p_asset_id: string
+          p_disposal_date: string
+          p_proceeds: number
+          p_proceeds_account_id: string
+          p_reason?: string
+        }
+        Returns: Json
+      }
       emit_automation_event: {
         Args: {
           p_entity_id: string
@@ -17254,6 +17328,7 @@ export type Database = {
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
           deadline_buffer_days_vat: number | null
+          depreciation_expense_account_id: string | null
           director_loan_account_id: string | null
           email_default_mode: string | null
           fixed_assets_account_id: string | null
@@ -17488,6 +17563,7 @@ export type Database = {
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
           deadline_buffer_days_vat: number | null
+          depreciation_expense_account_id: string | null
           director_loan_account_id: string | null
           email_default_mode: string | null
           fixed_assets_account_id: string | null
@@ -17843,6 +17919,10 @@ export type Database = {
         }
         Returns: Json
       }
+      post_monthly_depreciation: {
+        Args: { p_asset_id: string; p_period_end: string }
+        Returns: Json
+      }
       post_to_ledger: {
         Args: {
           p_client_id: string
@@ -18127,6 +18207,14 @@ export type Database = {
         Returns: undefined
       }
       role_level: { Args: { r: string }; Returns: number }
+      run_monthly_depreciation: {
+        Args: {
+          p_company_id: string
+          p_organization_id: string
+          p_period_end: string
+        }
+        Returns: Json
+      }
       save_questionnaire_answer_by_token: {
         Args: {
           p_answer_array?: string[]
