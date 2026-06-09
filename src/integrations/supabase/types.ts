@@ -17354,6 +17354,42 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_aged_creditors: {
+        Args: {
+          p_as_at: string
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+        }
+        Returns: {
+          bucket_1_30: number
+          bucket_31_60: number
+          bucket_61_90: number
+          bucket_90_plus: number
+          current_amount: number
+          supplier_id: string
+          supplier_name: string
+          total_outstanding: number
+        }[]
+      }
+      get_aged_debtors: {
+        Args: {
+          p_as_at: string
+          p_client_id: string
+          p_company_id: string
+          p_organization_id: string
+        }
+        Returns: {
+          bucket_1_30: number
+          bucket_31_60: number
+          bucket_61_90: number
+          bucket_90_plus: number
+          current_amount: number
+          customer_id: string
+          customer_name: string
+          total_outstanding: number
+        }[]
+      }
       get_balance_sheet: {
         Args: {
           p_as_at_date: string
