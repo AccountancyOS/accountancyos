@@ -11586,6 +11586,8 @@ export type Database = {
           director_loan_account_id: string | null
           email_default_mode: string | null
           fixed_assets_account_id: string | null
+          fx_gain_account_id: string | null
+          fx_loss_account_id: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
@@ -11625,6 +11627,8 @@ export type Database = {
           director_loan_account_id?: string | null
           email_default_mode?: string | null
           fixed_assets_account_id?: string | null
+          fx_gain_account_id?: string | null
+          fx_loss_account_id?: string | null
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
@@ -11664,6 +11668,8 @@ export type Database = {
           director_loan_account_id?: string | null
           email_default_mode?: string | null
           fixed_assets_account_id?: string | null
+          fx_gain_account_id?: string | null
+          fx_loss_account_id?: string | null
           invoice_number_next?: number | null
           invoice_number_padding?: number | null
           invoice_number_prefix?: string | null
@@ -11681,6 +11687,20 @@ export type Database = {
           vat_control_account_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "org_settings_fx_gain_account_id_fkey"
+            columns: ["fx_gain_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_settings_fx_loss_account_id_fkey"
+            columns: ["fx_loss_account_id"]
+            isOneToOne: false
+            referencedRelation: "bookkeeping_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "org_settings_organization_id_fkey"
             columns: ["organization_id"]
@@ -17018,6 +17038,10 @@ export type Database = {
         Args: { p_organization_id: string; p_rule_id?: string }
         Returns: Json
       }
+      check_bank_balance_integrity: {
+        Args: { p_as_of_date?: string; p_bank_account_id: string }
+        Returns: Json
+      }
       check_suppression: {
         Args: { p_category: string; p_email: string; p_org_id: string }
         Returns: boolean
@@ -17220,6 +17244,8 @@ export type Database = {
           director_loan_account_id: string | null
           email_default_mode: string | null
           fixed_assets_account_id: string | null
+          fx_gain_account_id: string | null
+          fx_loss_account_id: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
@@ -17400,6 +17426,8 @@ export type Database = {
           director_loan_account_id: string | null
           email_default_mode: string | null
           fixed_assets_account_id: string | null
+          fx_gain_account_id: string | null
+          fx_loss_account_id: string | null
           invoice_number_next: number | null
           invoice_number_padding: number | null
           invoice_number_prefix: string | null
@@ -17963,6 +17991,15 @@ export type Database = {
         Returns: undefined
       }
       retry_failed_email_safe: { Args: { p_email_id: string }; Returns: Json }
+      revalue_bank_account_fx: {
+        Args: {
+          p_bank_account_id: string
+          p_fx_rate_to_base: number
+          p_reason?: string
+          p_revaluation_date: string
+        }
+        Returns: Json
+      }
       reverse_bill_payment_safe: {
         Args: { p_payment_id: string; p_reason: string }
         Returns: Json
