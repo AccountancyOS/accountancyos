@@ -1,18 +1,41 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getTrueLayerConfig, getAppBaseUrl, TrueLayerConfigError } from "../_shared/truelayer-config.ts";
+import {
+  getTrueLayerConfig,
+  getBaseUrlForReturnPath,
+  safeReturnPath,
+  TrueLayerConfigError,
+} from "../_shared/truelayer-config.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-function safeRedirect(appUrl: string, basePath: string, reason: string) {
-  // basePath is the original front-end return path (portal or accountant).
-  const sep = basePath.includes('?') ? '&' : '?';
-  return Response.redirect(`${appUrl}${basePath}${sep}connection=failed&reason=${encodeURIComponent(reason)}`, 302);
+const SAFE_REASON_RE = /^[a-z0-9_]{1,64}$/i;
+function sanitizeReason(reason: string): string {
+  return SAFE_REASON_RE.test(reason) ? reason : 'internal_error';
+}
+
+// Build a safe redirect URL using URL() — never raw concatenation. The
+// returnPath is run through safeReturnPath() before being passed in.
+function buildRedirect(returnPath: string, params: Record<string, string>) {
+  const safePath = safeReturnPath(returnPath);
+  const baseUrl = getBaseUrlForReturnPath(safePath);
+  const url = new URL(safePath, baseUrl);
+  for (const [k, v] of Object.entries(params)) {
+    url.searchParams.set(k, v);
+  }
+  return Response.redirect(url.toString(), 302);
+}
+
+function safeRedirect(_appUrl: string, basePath: string, reason: string) {
+  return buildRedirect(basePath, {
+    connection: 'failed',
+    reason: sanitizeReason(reason),
+  });
 }
 
 serve(async (req) => {
-  const APP_URL = getAppBaseUrl();
+  const APP_URL = ''; // legacy arg, ignored by safeRedirect
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
@@ -290,8 +313,10 @@ serve(async (req) => {
     const entityParam = authState.client_id
       ? `client-${authState.client_id}`
       : `company-${authState.company_id}`;
-    const sep = returnPath.includes('?') ? '&' : '?';
-    return Response.redirect(`${APP_URL}${returnPath}${sep}connection=success&entity=${entityParam}`, 302);
+    return buildRedirect(returnPath, {
+      connection: 'success',
+      entity: entityParam,
+    });
   } catch (error) {
     console.error('Error in truelayer-callback:', error);
     return safeRedirect(APP_URL, '/bookkeeping?tab=banking', 'internal_error');
