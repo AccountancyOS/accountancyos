@@ -1,0 +1,42 @@
+name: Sprint 0 Acceptance
+
+# Enforces the Filing Engine v2 Sprint 0 foundation on every push/PR.
+# The verify-sprint0 harness FAILS the build if a new edge function calls HMRC
+# directly outside the sanctioned hmrc-call-proxy / _shared/hmrc-client.ts
+# chokepoint (allowlisted legacy callers excepted), or if a duplicate approval
+# artefact is introduced.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  sprint0:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # Runtime-agnostic logic + governance invariants (no network/DB needed).
+      # Proves: fraud headers, audit redaction, approval/projection/submission
+      # gates, source-hash validation, no-bypass, no-duplicate-approval-artefact.
+      - name: Sprint 0 logic & governance invariants
+        run: bun run test:sprint0
+
+      # Deno integration tests for the HMRC client chokepoint (stubbed fetch).
+      # Proves: fraud headers attached to outbound request, audit redaction at
+      # the call site, Hello World audited, absolute-URL rejection.
+      - name: Edge function tests
+        run: deno task test
