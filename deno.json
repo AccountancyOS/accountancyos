@@ -1,0 +1,13 @@
+{
+  "//": "Deno config for Supabase edge functions and their tests. Edge functions import dependencies via full URLs (esm.sh / deno.land), so no import map is required.",
+  "tasks": {
+    "test": "deno test -A supabase/functions",
+    "verify:sprint0": "deno run -A scripts/tests/verify-sprint0.ts"
+  },
+  "fmt": {
+    "include": ["supabase/functions"]
+  },
+  "lint": {
+    "include": ["supabase/functions"]
+  }
+}

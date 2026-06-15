@@ -8,7 +8,9 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:sprint0": "bun scripts/tests/verify-sprint0.ts",
+    "test:edge": "deno test -A supabase/functions"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
