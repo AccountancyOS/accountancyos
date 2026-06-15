@@ -17,6 +17,18 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const cronSecret = Deno.env.get("CRON_SECRET");
+
+    // Verify cron secret for scheduled invocations
+    const providedSecret = req.headers.get("X-Cron-Secret");
+    if (!cronSecret || providedSecret !== cronSecret) {
+      console.error("[fx-rates] Unauthorized: invalid or missing cron secret");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { action, base_currency = 'GBP', target_currency, date } = await req.json();

@@ -30,8 +30,21 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Require authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify user
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error("[generate-filing-pdf] Auth error:", authError);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -47,7 +60,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log(`[generate-filing-pdf] Generating ${documentType} for filing ${filingId}`);
+    console.log(`[generate-filing-pdf] Generating ${documentType} for filing ${filingId} by user ${user.id}`);
 
     // Fetch filing data with extended relations for CoSec
     const { data: filing, error: filingError } = await supabase
@@ -68,6 +81,22 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("[generate-filing-pdf] Filing not found:", filingError);
       return new Response(JSON.stringify({ error: "Filing not found" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify user belongs to the filing's organization
+    const { data: orgUser, error: orgError } = await supabase
+      .from("organization_users")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .eq("organization_id", filing.organization_id)
+      .single();
+
+    if (orgError || !orgUser) {
+      console.error(`[generate-filing-pdf] User ${user.id} not authorized for org ${filing.organization_id}`);
+      return new Response(JSON.stringify({ error: "Access denied to filing" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

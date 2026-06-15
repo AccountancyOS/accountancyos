@@ -26,11 +26,50 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Require authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify user
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error('[stripe-checkout] Auth error:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { organizationId, organizationName, intent, plan } = await req.json();
 
     if (!organizationId || !organizationName) {
       throw new Error('Missing required parameters: organizationId and organizationName are required');
     }
+
+    // Verify user belongs to organization
+    const { data: orgUser, error: orgError } = await supabase
+      .from('organization_users')
+      .select('organization_id, role')
+      .eq('user_id', user.id)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (orgError || !orgUser) {
+      console.error(`[stripe-checkout] User ${user.id} not authorized for org ${organizationId}`);
+      return new Response(
+        JSON.stringify({ error: 'Access denied to organization' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    logStep('User authorized', { userId: user.id, organizationId, role: orgUser.role });
 
     // Determine which price ID to use based on plan selection
     const selectedPlan = plan || 'team'; // Default to team if not specified

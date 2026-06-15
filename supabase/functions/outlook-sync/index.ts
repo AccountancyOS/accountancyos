@@ -128,6 +128,18 @@ serve(async (req: Request) => {
   }
 
   try {
+    const cronSecret = Deno.env.get("CRON_SECRET");
+
+    // Verify cron secret for scheduled invocations
+    const providedSecret = req.headers.get("X-Cron-Secret");
+    if (!cronSecret || providedSecret !== cronSecret) {
+      console.error("[outlook-sync] Unauthorized: invalid or missing cron secret");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
     // Get mailbox_id from body if specific sync requested

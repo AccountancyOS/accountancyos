@@ -299,6 +299,18 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const cronSecret = Deno.env.get("CRON_SECRET");
+
+    // Verify cron secret for scheduled invocations
+    const providedSecret = req.headers.get("X-Cron-Secret");
+    if (!cronSecret || providedSecret !== cronSecret) {
+      console.error("[process-automation-events] Unauthorized: invalid or missing cron secret");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Parse request body for optional parameters
@@ -315,7 +327,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Processing automation events. Org: ${organizationId || "all"}, Limit: ${limit}`);
+    console.log(`[process-automation-events] Processing automation events. Org: ${organizationId || "all"}, Limit: ${limit}`);
 
     // Fetch unprocessed events
     let query = supabase

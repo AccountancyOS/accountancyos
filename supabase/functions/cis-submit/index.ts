@@ -25,18 +25,72 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Require authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Verify user
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error("[CIS Submit] Auth error:", authError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const body: CISSubmitRequest = await req.json();
     const { filingId, returnType, xmlPayload, organizationId, cisReturnId, taxYear, taxMonth } = body;
 
-    console.log(`[CIS Submit] Processing ${returnType} for filing ${filingId}`);
+    console.log(`[CIS Submit] Processing ${returnType} for filing ${filingId} by user ${user.id}`);
 
     // Validate required fields
     if (!filingId || !returnType || !xmlPayload || !organizationId) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify user belongs to organization
+    const { data: orgUser, error: orgError } = await supabase
+      .from("organization_users")
+      .select("organization_id, role")
+      .eq("user_id", user.id)
+      .eq("organization_id", organizationId)
+      .single();
+
+    if (orgError || !orgUser) {
+      console.error(`[CIS Submit] User ${user.id} not authorized for org ${organizationId}`);
+      return new Response(
+        JSON.stringify({ error: "Access denied to organization" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify filing belongs to the organization
+    const { data: filing, error: filingError } = await supabase
+      .from("filings")
+      .select("id, organization_id")
+      .eq("id", filingId)
+      .eq("organization_id", organizationId)
+      .single();
+
+    if (filingError || !filing) {
+      console.error(`[CIS Submit] Filing ${filingId} not found or not in org ${organizationId}`);
+      return new Response(
+        JSON.stringify({ error: "Filing not found or access denied" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
