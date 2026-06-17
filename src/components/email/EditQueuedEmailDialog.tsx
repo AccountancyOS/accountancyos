@@ -56,7 +56,7 @@ export function EditQueuedEmailDialog({
     subject: "",
     body_html: "",
     body_text: "",
-    status: "queued",
+    status: "pending",
   });
   const [viewMode, setViewMode] = useState<"preview" | "html">("preview");
 
@@ -73,7 +73,7 @@ export function EditQueuedEmailDialog({
         subject: email.subject || "",
         body_html: email.body_html || "",
         body_text: email.body_text || "",
-        status: email.status || "queued",
+        status: email.status || "pending",
       });
     }
   }, [email]);
@@ -223,8 +223,8 @@ export function EditQueuedEmailDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="queued">Queued (Ready to Send)</SelectItem>
-                  <SelectItem value="ignored">Ignored</SelectItem>
+                  <SelectItem value="pending">Pending (Ready to Send)</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -250,7 +250,7 @@ export function EditQueuedEmailDialog({
                 Save as Draft
               </Button>
               <Button
-                onClick={() => handleSave("queued")}
+                onClick={() => handleSave("pending")}
                 disabled={updateMutation.isPending}
               >
                 {updateMutation.isPending ? (
