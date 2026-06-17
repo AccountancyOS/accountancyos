@@ -18244,6 +18244,10 @@ export type Database = {
         Args: { p_dry_run?: boolean; p_org_id: string }
         Returns: Json
       }
+      seed_organization_defaults: {
+        Args: { p_org_id: string }
+        Returns: undefined
+      }
       seed_standard_chart_of_accounts: {
         Args: {
           p_client_id: string
