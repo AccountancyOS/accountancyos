@@ -3,7 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppProvider } from "@/lib/app-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -87,8 +89,28 @@ const queryClient = new QueryClient({
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
+  const { data: isAccountantUser, isLoading: checkingMembership } = useQuery({
+    queryKey: ["accountant-membership", user?.id],
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("organization_users")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.warn("[ProtectedRoute] membership check failed", error);
+        return true; // fail-open: don't trap accountants if the check errors
+      }
+      return !!data;
+    },
+  });
+
+  if (loading || (user && checkingMembership)) {
     return (
       <div className="h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -98,6 +120,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Portal users (no organization_users row) belong in /portal/*.
+  // Allow the accountant-only /portal/preview/* route through so staff
+  // can still preview the client view.
+  const isPortalPreview = location.pathname.startsWith("/portal/preview/");
+  if (isAccountantUser === false && !isPortalPreview) {
+    return <Navigate to="/portal" replace />;
   }
 
   return <AppProvider>{children}</AppProvider>;

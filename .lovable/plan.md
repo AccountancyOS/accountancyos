@@ -1,42 +1,33 @@
 ## Problem
 
-Sending a quote fails with:
-`null value in column "organization_id" of relation "quote_acceptance_tokens" violates not-null constraint`
+`portal-b@accountancyOS.com` is a client-portal user — they have a row in `portal_access` but no row in `organization_users` or `user_roles`. When they sign in they're dropped onto the accountant app shell (sidebar, `/settings`, `/emails`, etc.) instead of the client portal. Individual data queries 403 because RLS correctly refuses them, but the UI chrome itself renders.
 
-## Why it's back
+Root cause: `ProtectedRoute` in `src/App.tsx` only checks `user != null`. It doesn't ask "is this user a member of any organization, or are they a portal user?". Anyone authenticated gets the accountant UI.
 
-I confirmed against the live database — the current `public.lifecycle_send_quote` function body has:
-
-```sql
-INSERT INTO quote_acceptance_tokens(token, quote_id, expires_at)
-VALUES (v_token, p_quote_id, now() + interval '30 days');
-```
-
-Migration `20260604205211_…` rewrote this RPC and dropped `organization_id` from the INSERT. The column is `NOT NULL`, so every send attempt fails. No later migration has restored it, so the previous fix is no longer in effect.
+Meanwhile `PortalGuard` (under `src/portal/`) does the inverse check on `/portal/*`, but nothing pushes portal users into `/portal/*` to begin with.
 
 ## Fix
 
-One new migration that re-creates `public.lifecycle_send_quote` identical to the current definition, with a single line changed:
+One narrow change in `src/App.tsx`:
 
-```sql
-INSERT INTO quote_acceptance_tokens(token, quote_id, organization_id, expires_at)
-VALUES (v_token, p_quote_id, v_quote.organization_id, now() + interval '30 days');
-```
+1. Extend `ProtectedRoute` so that after `user` is loaded, it asynchronously checks whether the user has any `organization_users` row.
+   - If yes → render the accountant app as today.
+   - If no → `<Navigate to="/portal" replace />`.
+   - While the check is in flight → keep showing the existing centered spinner (no flash of accountant UI).
 
-`v_quote.organization_id` is already loaded at the top of the function (and used for the access check), so no extra lookup is needed.
+2. Use a single lightweight query (`select id from organization_users where user_id = :uid limit 1`) cached for the session via React Query, so the check runs once per login, not per route change.
 
-## Guardrail to prevent regression
-
-Add a small safety net in the same migration: a `BEFORE INSERT` trigger on `quote_acceptance_tokens` that backfills `organization_id` from the parent `quotes` row when the caller forgets to pass it. This way, if another future rewrite drops the column again, sending won't break.
+No other files change. `PortalGuard` already handles the reverse case (accountant user landing on `/portal/*`), so no edits there.
 
 ## Out of scope
 
-- No table/schema changes to `quote_acceptance_tokens` itself.
-- No frontend changes.
-- No changes to other lifecycle RPCs (resend, accept, reject) — they don't insert tokens.
+- No changes to RLS, RPCs, or any backend logic.
+- No changes to `/portal/*` routes or `PortalGuard`.
+- No changes to login/signup flow itself — the redirect happens on the first protected route after login.
+- The `/portal/preview/:entityType/:entityId` accountant-preview route stays unguarded by the new check (it's already inside `ProtectedRoute` — accountants previewing the portal still need it, so the new check must allow it through). Simplest: skip the portal-user redirect when the path starts with `/portal/preview/`.
 
 ## Verification
 
-After approval:
-1. Re-fetch the function definition and confirm `organization_id` is in the INSERT.
-2. Send the quote at `/quotes/f19ebf37-…` and confirm a token row is created with the correct `organization_id`.
+1. Sign in as `portal-b@accountancyos.com` → land on `/portal` (or whatever portal home resolves to), not the accountant sidebar.
+2. Sign in as a staff/owner of org `54804f3d-…` → still land on the accountant app as before. No extra spinner beyond the existing auth-loading one.
+3. Accountant clicking "Preview portal" on a quote/client still works (route `/portal/preview/...`).
