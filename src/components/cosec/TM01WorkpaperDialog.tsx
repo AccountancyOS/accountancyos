@@ -83,6 +83,7 @@ export function TM01WorkpaperDialog({
       const result = await createResolutionFiling({
         companyId,
         organizationId,
+        jobId,
         filingType: "TM01",
         relatedData: {
           officer_id: selectedOfficerId,

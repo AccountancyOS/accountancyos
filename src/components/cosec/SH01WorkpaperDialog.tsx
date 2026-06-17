@@ -175,6 +175,7 @@ export function SH01WorkpaperDialog({
       const result = await createResolutionFiling({
         companyId,
         organizationId,
+        jobId,
         filingType: "SH01",
         relatedData: {
           allotment_id: allotment.id,
