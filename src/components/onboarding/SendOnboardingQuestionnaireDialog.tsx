@@ -109,8 +109,11 @@ export function SendOnboardingQuestionnaireDialog({
       const template = templates.find(t => t.id === selectedTemplateId);
       if (!template) throw new Error("Template not found");
 
-      // Create the questionnaire instance
-      // Note: access_token is deprecated but required by schema - RPC creates secure link
+      // Create the questionnaire instance.
+      // status must satisfy questionnaire_instances_status_check (sent/in_progress/submitted/reviewed).
+      // access_token is a legacy NOT NULL UNIQUE column; the secure token lives in
+      // questionnaire_public_links and is created via the RPC below, so we just need
+      // a unique placeholder here.
       const { data: instanceData, error: instanceError } = await supabase
         .from("questionnaire_instances")
         .insert([{
@@ -119,8 +122,8 @@ export function SendOnboardingQuestionnaireDialog({
           name: template.name,
           questions: template.content,
           sent_at: new Date().toISOString(),
-          status: "draft",
-          access_token: "deprecated-use-public-links", // Deprecated: secure tokens now in questionnaire_public_links
+          status: QUESTIONNAIRE_STATUS.SENT,
+          access_token: uniqueLegacyToken("qn"),
         }])
         .select("id")
         .single();
