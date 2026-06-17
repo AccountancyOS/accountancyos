@@ -137,9 +137,30 @@ async function checkAuthHookEndToEnd(supabase: SupabaseClient) {
       record("email:send_log row reaches sent", false, qErr.message, "Check email_send_log exists and RLS allows service role");
       return;
     }
-    const sent = data?.find((r) => r.status === "sent");
+    const sent = data?.find((r: any) => r.status === "sent");
     if (sent) {
-      record("email:send_log row reaches sent", true, `template=${sent.template_name}`);
+      // Non-negotiable #2: a `sent` row is only credible if the provider
+      // acknowledged with an id / response. Without it we treat the run as
+      // a failure even though the worker marked it sent — this is the exact
+      // failure mode that hid Amy's missing recovery email.
+      const providerId =
+        (sent as any)?.metadata?.provider_message_id ??
+        (sent as any)?.metadata?.provider_response?.id ??
+        null;
+      if (!providerId) {
+        record(
+          "email:send_log row reaches sent",
+          false,
+          `template=${sent.template_name} but no provider_message_id`,
+          "process-email-queue must capture provider response into metadata",
+        );
+        return;
+      }
+      record(
+        "email:send_log row reaches sent",
+        true,
+        `template=${sent.template_name} provider_id=${providerId}`,
+      );
       return;
     }
     const failed = data?.find((r) => ["failed", "dlq"].includes(r.status));
@@ -160,6 +181,83 @@ async function checkAuthHookEndToEnd(supabase: SupabaseClient) {
     "no terminal row within 25s",
     "Queue worker may not be running — check pg_cron + process-email-queue",
   );
+}
+
+/**
+ * Non-negotiable #3: prove RLS using real user JWTs, never the service role.
+ *
+ * Requires two seeded users that own different orgs and one client id owned
+ * by Org B. If creds aren't provided the check is reported as skipped so the
+ * smoke run still flags it for the release checklist.
+ */
+async function checkCrossOrgRls() {
+  const aEmail = process.env.SMOKE_RLS_ORG_A_EMAIL;
+  const aPass = process.env.SMOKE_RLS_ORG_A_PASSWORD;
+  const bEmail = process.env.SMOKE_RLS_ORG_B_EMAIL;
+  const bPass = process.env.SMOKE_RLS_ORG_B_PASSWORD;
+  const orgBClientId = process.env.SMOKE_RLS_ORG_B_CLIENT_ID;
+
+  if (!aEmail || !aPass || !bEmail || !bPass || !orgBClientId) {
+    record(
+      "rls:cross-org isolation (user JWT)",
+      true,
+      "skipped (set SMOKE_RLS_ORG_A_* and SMOKE_RLS_ORG_B_* to enable)",
+      "Add seeded org A/B users via seed-portal-test-users to enable in CI",
+    );
+    return;
+  }
+
+  const sbA = createClient(SUPABASE_URL!, ANON_KEY!);
+  const sbB = createClient(SUPABASE_URL!, ANON_KEY!);
+
+  const { error: aErr } = await sbA.auth.signInWithPassword({ email: aEmail, password: aPass });
+  if (aErr) {
+    record("rls:cross-org isolation (user JWT)", false, `Org A sign-in failed: ${aErr.message}`);
+    return;
+  }
+  const { error: bErr } = await sbB.auth.signInWithPassword({ email: bEmail, password: bPass });
+  if (bErr) {
+    record("rls:cross-org isolation (user JWT)", false, `Org B sign-in failed: ${bErr.message}`);
+    return;
+  }
+
+  // Sanity: Org B owner CAN read its own client.
+  const ownRead = await sbB.from("clients").select("id").eq("id", orgBClientId).maybeSingle();
+  if (ownRead.error || !ownRead.data) {
+    record(
+      "rls:cross-org isolation (user JWT)",
+      false,
+      `Org B owner cannot read own client ${orgBClientId} (${ownRead.error?.message ?? "no row"})`,
+      "Re-seed fixtures or update SMOKE_RLS_ORG_B_CLIENT_ID",
+    );
+    return;
+  }
+
+  // Real test: Org A MUST NOT see Org B's client.
+  const crossRead = await sbA.from("clients").select("id").eq("id", orgBClientId);
+  const leaked = (crossRead.data ?? []).length > 0;
+  record(
+    "rls:cross-org isolation (user JWT)",
+    !leaked,
+    leaked ? `Org A leaked Org B client ${orgBClientId}` : "Org A cannot see Org B clients",
+    leaked ? "RLS policy regression — review clients table policies immediately" : undefined,
+  );
+
+  // Negative-write probe: Org A must not be able to update Org B's client.
+  const crossWrite = await sbA
+    .from("clients")
+    .update({ name: "rls-probe" })
+    .eq("id", orgBClientId)
+    .select("id");
+  const writeLeaked = (crossWrite.data ?? []).length > 0;
+  record(
+    "rls:cross-org write blocked",
+    !writeLeaked,
+    writeLeaked ? "Org A updated Org B client (CRITICAL)" : "write blocked",
+  );
+
+  await sbA.auth.signOut();
+  await sbB.auth.signOut();
 }
 
 async function checkInfraTables() {
@@ -209,6 +307,13 @@ async function main() {
   await checkAuthHookEndToEnd(supabase);
   await checkInfraTables();
   await checkRlsRequiredTables();
+  await checkCrossOrgRls();
+
+  // Manual release checks (cannot be machine-verified from outside).
+  console.log("\nManual release checks (verify before publish):");
+  for (const item of manifest.manualReleaseChecks ?? []) {
+    console.log(`  • ${item}`);
+  }
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed.`);
