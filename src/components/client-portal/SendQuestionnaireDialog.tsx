@@ -104,8 +104,8 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
           period_label: form.period_label || null,
           questions: template.content,
           sent_at: new Date().toISOString(),
-          status: "draft",
-          access_token: "deprecated-use-public-links", // Deprecated: secure tokens now in questionnaire_public_links
+          status: "sent",
+          access_token: crypto.randomUUID(), // Deprecated column; secure tokens live in questionnaire_public_links
         }])
         .select("id")
         .single();
