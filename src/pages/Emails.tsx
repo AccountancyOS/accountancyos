@@ -180,7 +180,8 @@ export default function Emails() {
     mutationFn: async (emailId: string) => {
       const { error } = await supabase
         .from("email_queue")
-        .update({ status: "queued", error_message: null })
+        // email_queue_status_check: pending/sent/failed/cancelled.
+        .update({ status: "pending", error_message: null })
         .eq("id", emailId);
       
       if (error) throw error;
@@ -199,7 +200,7 @@ export default function Emails() {
     mutationFn: async () => {
       const { error } = await supabase
         .from("email_queue")
-        .update({ status: "queued", error_message: null, retry_count: 0 })
+        .update({ status: "pending", error_message: null, retry_count: 0 })
         .eq("status", "failed")
         .eq("organization_id", organization?.id);
       
@@ -238,7 +239,8 @@ export default function Emails() {
     mutationFn: async (emailId: string) => {
       const { error } = await supabase
         .from("email_queue")
-        .update({ status: "ignored" })
+        // "ignored" is not in email_queue_status_check; mark as cancelled.
+        .update({ status: "cancelled" })
         .eq("id", emailId);
       
       if (error) throw error;
