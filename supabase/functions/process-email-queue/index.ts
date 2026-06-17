@@ -1,345 +1,363 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const MAX_RETRIES = 5
+const DEFAULT_BATCH_SIZE = 10
+const DEFAULT_SEND_DELAY_MS = 200
+const DEFAULT_AUTH_TTL_MINUTES = 15
+const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
-interface EmailQueueItem {
-  id: string;
-  organization_id: string;
-  to_email: string;
-  to_name: string | null;
-  subject: string;
-  body_html: string | null;
-  body_text: string | null;
-  template_id: string | null;
-  merge_data: Record<string, unknown>;
-  mailbox_id: string | null;
-  provider: string | null;
-  status: string;
-  scheduled_at: string | null;
-  retry_count: number;
-  error_message: string | null;
-  cc_emails: string[] | null;
-  bcc_emails: string[] | null;
-}
-
-interface ConnectedMailbox {
-  id: string;
-  user_id: string;
-  provider: string;
-  email_address: string;
-  access_token: string;
-  refresh_token: string;
-  token_expires_at: string;
-  display_name: string | null;
-}
-
-/**
- * Process merge fields in a template string
- */
-function processMergeFields(template: string, mergeData: Record<string, unknown>): string {
-  if (!template) return template;
-  let result = template;
-  for (const [key, value] of Object.entries(mergeData)) {
-    const regex = new RegExp(`{{${key}}}`, "g");
-    result = result.replace(regex, String(value ?? ""));
+// Check if an error is a rate-limit (429) response.
+// Uses EmailAPIError.status when available (email-js >=0.x with structured errors),
+// falls back to parsing the error message for older versions.
+function isRateLimited(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'status' in error) {
+    return (error as { status: number }).status === 429
   }
-  return result;
+  return error instanceof Error && error.message.includes('429')
 }
 
-/**
- * Send email via connected Gmail mailbox
- */
-async function sendViaGmail(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  mailbox: ConnectedMailbox,
-  email: EmailQueueItem,
-  subject: string,
-  body: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+// Check if an error is a forbidden (403) response. Retrying won't help.
+// Move straight to DLQ.
+function isForbidden(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'status' in error) {
+    return (error as { status: number }).status === 403
+  }
+  return error instanceof Error && error.message.includes('403')
+}
+
+// Extract Retry-After seconds from a structured EmailAPIError, or default to 60s.
+function getRetryAfterSeconds(error: unknown): number {
+  if (error && typeof error === 'object' && 'retryAfterSeconds' in error) {
+    return (error as { retryAfterSeconds: number | null }).retryAfterSeconds ?? 60
+  }
+  return 60
+}
+
+function parseJwtClaims(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length < 2) {
+    return null
+  }
 
   try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-      },
-      body: JSON.stringify({
-        mailbox_id: mailbox.id,
-        to: email.to_email,
-        to_name: email.to_name,
-        subject: subject,
-        body_html: body,
-        cc: email.cc_emails,
-        bcc: email.bcc_emails,
-      }),
-    });
+    const payload = parts[1]
+      .replaceAll('-', '+')
+      .replaceAll('_', '/')
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { success: false, error: errorData.error || `Gmail send failed: ${response.status}` };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Gmail send error" };
+    return JSON.parse(atob(payload)) as Record<string, unknown>
+  } catch {
+    return null
   }
 }
 
-/**
- * Send email via connected Outlook mailbox
- */
-async function sendViaOutlook(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  mailbox: ConnectedMailbox,
-  email: EmailQueueItem,
-  subject: string,
-  body: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-
-  try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/outlook-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-      },
-      body: JSON.stringify({
-        mailbox_id: mailbox.id,
-        to: email.to_email,
-        to_name: email.to_name,
-        subject: subject,
-        body_html: body,
-        cc: email.cc_emails,
-        bcc: email.bcc_emails,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { success: false, error: errorData.error || `Outlook send failed: ${response.status}` };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Outlook send error" };
-  }
-}
-
-/**
- * Log email queue action
- */
-async function logQueueAction(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  queueId: string,
-  action: string,
-  status: string | null,
-  provider: string | null,
-  errorMessage: string | null
+// Move a message to the dead letter queue and log the reason.
+async function moveToDlq(
+  supabase: ReturnType<typeof createClient>,
+  queue: string,
+  msg: { msg_id: number; message: Record<string, unknown> },
+  reason: string
 ): Promise<void> {
-  try {
-    await supabase.from("email_queue_log").insert({
-      queue_id: queueId,
-      action,
-      status,
-      provider,
-      error_message: errorMessage,
-    });
-  } catch (error) {
-    console.error("Failed to log queue action:", error);
+  const payload = msg.message
+  await supabase.from('email_send_log').insert({
+    message_id: payload.message_id,
+    template_name: (payload.label || queue) as string,
+    recipient_email: payload.to,
+    status: 'dlq',
+    error_message: reason,
+  })
+  const { error } = await supabase.rpc('move_to_dlq', {
+    source_queue: queue,
+    dlq_name: `${queue}_dlq`,
+    message_id: msg.msg_id,
+    payload,
+  })
+  if (error) {
+    console.error('Failed to move message to DLQ', { queue, msg_id: msg.msg_id, reason, error })
   }
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+  const apiKey = Deno.env.get('LOVABLE_API_KEY')
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
+    console.error('Missing required environment variables')
+    return new Response(
+      JSON.stringify({ error: 'Server configuration error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
 
-    // Parse request body for optional parameters
-    let limit = 20;
-    try {
-      const body = await req.json();
-      limit = body.limit || 20;
-    } catch {
-      // No body or invalid JSON - use defaults
+  // Defense in depth: verify_jwt=true already requires a valid JWT at the
+  // gateway layer. This adds an explicit role check so only service-role
+  // callers can trigger queue processing.
+  const token = authHeader.slice('Bearer '.length).trim()
+  const claims = parseJwtClaims(token)
+  if (claims?.role !== 'service_role') {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+  // 1. Check rate-limit cooldown and read queue config
+  const { data: state } = await supabase
+    .from('email_send_state')
+    .select('retry_after_until, batch_size, send_delay_ms, auth_email_ttl_minutes, transactional_email_ttl_minutes')
+    .single()
+
+  if (state?.retry_after_until && new Date(state.retry_after_until) > new Date()) {
+    return new Response(
+      JSON.stringify({ skipped: true, reason: 'rate_limited' }),
+      { headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const batchSize = state?.batch_size ?? DEFAULT_BATCH_SIZE
+  const sendDelayMs = state?.send_delay_ms ?? DEFAULT_SEND_DELAY_MS
+  const ttlMinutes: Record<string, number> = {
+    auth_emails: state?.auth_email_ttl_minutes ?? DEFAULT_AUTH_TTL_MINUTES,
+    transactional_emails: state?.transactional_email_ttl_minutes ?? DEFAULT_TRANSACTIONAL_TTL_MINUTES,
+  }
+
+  let totalProcessed = 0
+
+  // 2. Process auth_emails first (priority), then transactional_emails
+  for (const queue of ['auth_emails', 'transactional_emails']) {
+    const { data: messages, error: readError } = await supabase.rpc('read_email_batch', {
+      queue_name: queue,
+      batch_size: batchSize,
+      vt: 30,
+    })
+
+    if (readError) {
+      console.error('Failed to read email batch', { queue, error: readError })
+      continue
     }
 
-    console.log(`Processing email queue. Limit: ${limit}`);
+    if (!messages?.length) continue
 
-    // Fetch pending/queued emails that are ready to send
-    const { data: emails, error: fetchError } = await supabase
-      .from("email_queue")
-      .select("*")
-      .in("status", ["pending"])
-      .or("scheduled_at.is.null,scheduled_at.lte.now()")
-      .lt("retry_count", 3)
-      .order("created_at", { ascending: true })
-      .limit(limit);
+    // Retry budget is based on real send failures, not pgmq read_ct.
+    // read_ct increments for every message in a claimed batch, including
+    // messages not attempted when a 429 stops processing early.
+    const messageIds = Array.from(
+      new Set(
+        messages
+          .map((msg) =>
+            msg?.message?.message_id && typeof msg.message.message_id === 'string'
+              ? msg.message.message_id
+              : null
+          )
+          .filter((id): id is string => Boolean(id))
+      )
+    )
+    const failedAttemptsByMessageId = new Map<string, number>()
+    if (messageIds.length > 0) {
+      const { data: failedRows, error: failedRowsError } = await supabase
+        .from('email_send_log')
+        .select('message_id')
+        .in('message_id', messageIds)
+        .eq('status', 'failed')
 
-    if (fetchError) {
-      console.error("Failed to fetch queue:", fetchError);
-      return new Response(JSON.stringify({ error: fetchError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (failedRowsError) {
+        console.error('Failed to load failed-attempt counters', {
+          queue,
+          error: failedRowsError,
+        })
+      } else {
+        for (const row of failedRows ?? []) {
+          const messageId = row?.message_id
+          if (typeof messageId !== 'string' || !messageId) continue
+          failedAttemptsByMessageId.set(
+            messageId,
+            (failedAttemptsByMessageId.get(messageId) ?? 0) + 1
+          )
+        }
+      }
     }
 
-    if (!emails || emails.length === 0) {
-      console.log("No emails to process");
-      return new Response(JSON.stringify({ processed: 0, sent: 0, failed: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]
+      const payload = msg.message
+      const failedAttempts =
+        payload?.message_id && typeof payload.message_id === 'string'
+          ? (failedAttemptsByMessageId.get(payload.message_id) ?? 0)
+          : msg.read_ct ?? 0
 
-    console.log(`Found ${emails.length} emails to process`);
-
-    let sent = 0;
-    let failed = 0;
-
-    for (const email of emails as EmailQueueItem[]) {
-      // Mark as pending
-      await supabase
-        .from("email_queue")
-        // email_queue has no last_attempt_at column; the queue worker logs
-        // attempts via logQueueAction below.
-        .update({ status: "pending" })
-        .eq("id", email.id);
-
-      await logQueueAction(supabase, email.id, "send_attempt", "pending", null, null);
-
-      let subject = email.subject;
-      let body = email.body_html || "";
-
-      // If template_id is set, load and merge template
-      if (email.template_id) {
-        const { data: template } = await supabase
-          .from("templates")
-          .select("content")
-          .eq("id", email.template_id)
-          .single();
-
-        if (template?.content) {
-          const content = template.content as { subject?: string; body?: string; htmlBody?: string };
-          subject = content.subject || subject;
-          body = content.htmlBody || content.body || body;
+      // Drop expired messages (TTL exceeded).
+      // Prefer payload.queued_at when present; fall back to PGMQ's enqueued_at
+      // which is always set by the queue.
+      const queuedAt = payload.queued_at ?? msg.enqueued_at
+      if (queuedAt) {
+        const ageMs = Date.now() - new Date(queuedAt).getTime()
+        const maxAgeMs = ttlMinutes[queue] * 60 * 1000
+        if (ageMs > maxAgeMs) {
+          console.warn('Email expired (TTL exceeded)', {
+            queue,
+            msg_id: msg.msg_id,
+            queued_at: queuedAt,
+            ttl_minutes: ttlMinutes[queue],
+          })
+          await moveToDlq(supabase, queue, msg, `TTL exceeded (${ttlMinutes[queue]} minutes)`)
+          continue
         }
       }
 
-      // Process merge fields
-      const mergeData = (email.merge_data || {}) as Record<string, unknown>;
-      subject = processMergeFields(subject, mergeData);
-      body = processMergeFields(body, mergeData);
-
-      let result: { success: boolean; error?: string; messageId?: string };
-      let provider = "none";
-
-      // Resolve the mailbox to send from: explicit on the queue row, or the
-      // org's most recently connected active mailbox as a fallback.
-      let mailbox: ConnectedMailbox | null = null;
-      if (email.mailbox_id) {
-        const { data } = await supabase
-          .from("connected_mailboxes")
-          .select("*")
-          .eq("id", email.mailbox_id)
-          .maybeSingle();
-        mailbox = data as ConnectedMailbox | null;
+      // Move to DLQ if max failed send attempts reached.
+      if (failedAttempts >= MAX_RETRIES) {
+        await moveToDlq(supabase, queue, msg, `Max retries (${MAX_RETRIES}) exceeded (attempted ${failedAttempts} times)`)
+        continue
       }
-      if (!mailbox || mailbox.status !== "active") {
-        const { data } = await supabase
-          .from("connected_mailboxes")
-          .select("*")
-          .eq("organization_id", email.organization_id)
-          .eq("status", "active")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        mailbox = (data as ConnectedMailbox | null) ?? null;
-        if (mailbox && !email.mailbox_id) {
+
+      // Guard: skip if another worker already sent this message (VT expired race)
+      if (payload.message_id) {
+        const { data: alreadySent } = await supabase
+          .from('email_send_log')
+          .select('id')
+          .eq('message_id', payload.message_id)
+          .eq('status', 'sent')
+          .maybeSingle()
+
+        if (alreadySent) {
+          console.warn('Skipping duplicate send (already sent)', {
+            queue,
+            msg_id: msg.msg_id,
+            message_id: payload.message_id,
+          })
+          const { error: dupDelError } = await supabase.rpc('delete_email', {
+            queue_name: queue,
+            message_id: msg.msg_id,
+          })
+          if (dupDelError) {
+            console.error('Failed to delete duplicate message from queue', { queue, msg_id: msg.msg_id, error: dupDelError })
+          }
+          continue
+        }
+      }
+
+      try {
+        await sendLovableEmail(
+          {
+            run_id: payload.run_id,
+            to: payload.to,
+            from: payload.from,
+            sender_domain: payload.sender_domain,
+            subject: payload.subject,
+            html: payload.html,
+            text: payload.text,
+            purpose: payload.purpose,
+            label: payload.label,
+            idempotency_key: payload.idempotency_key,
+            unsubscribe_token: payload.unsubscribe_token,
+            message_id: payload.message_id,
+          },
+          // sendUrl is optional — when LOVABLE_SEND_URL is not set, the library
+          // falls back to the default Lovable API endpoint (https://api.lovable.dev).
+          // Set LOVABLE_SEND_URL as a Supabase secret to override (e.g. for local dev).
+          { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
+        )
+
+        // Log success
+        await supabase.from('email_send_log').insert({
+          message_id: payload.message_id,
+          template_name: payload.label || queue,
+          recipient_email: payload.to,
+          status: 'sent',
+        })
+
+        // Delete from queue
+        const { error: delError } = await supabase.rpc('delete_email', {
+          queue_name: queue,
+          message_id: msg.msg_id,
+        })
+        if (delError) {
+          console.error('Failed to delete sent message from queue', { queue, msg_id: msg.msg_id, error: delError })
+        }
+        totalProcessed++
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.error('Email send failed', {
+          queue,
+          msg_id: msg.msg_id,
+          read_ct: msg.read_ct,
+          failed_attempts: failedAttempts,
+          error: errorMsg,
+        })
+
+        if (isRateLimited(error)) {
+          await supabase.from('email_send_log').insert({
+            message_id: payload.message_id,
+            template_name: payload.label || queue,
+            recipient_email: payload.to,
+            status: 'rate_limited',
+            error_message: errorMsg.slice(0, 1000),
+          })
+
+          const retryAfterSecs = getRetryAfterSeconds(error)
           await supabase
-            .from("email_queue")
-            .update({ mailbox_id: mailbox.id })
-            .eq("id", email.id);
+            .from('email_send_state')
+            .update({
+              retry_after_until: new Date(
+                Date.now() + retryAfterSecs * 1000
+              ).toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', 1)
+
+          // Stop processing — remaining messages stay in queue (VT expires, retried next cycle)
+          return new Response(
+            JSON.stringify({ processed: totalProcessed, stopped: 'rate_limited' }),
+            { headers: { 'Content-Type': 'application/json' } }
+          )
         }
-      }
 
-      if (!mailbox || mailbox.status !== "active") {
-        result = {
-          success: false,
-          error:
-            "No connected mailbox. Connect Gmail or Outlook in Settings → Email Provider before sending.",
-        };
-      } else {
-        provider = mailbox.provider;
-        if (mailbox.provider === "gmail") {
-          result = await sendViaGmail(supabase, mailbox, email, subject, body);
-        } else if (mailbox.provider === "outlook") {
-          result = await sendViaOutlook(supabase, mailbox, email, subject, body);
-        } else {
-          result = { success: false, error: `Unsupported provider: ${mailbox.provider}` };
+        // 403s are permanent configuration or authorization failures for this
+        // message, so move straight to DLQ and stop processing the rest of the batch.
+        if (isForbidden(error)) {
+          await moveToDlq(supabase, queue, msg, errorMsg.slice(0, 1000))
+          return new Response(
+            JSON.stringify({ processed: totalProcessed, stopped: 'forbidden' }),
+            { headers: { 'Content-Type': 'application/json' } }
+          )
         }
+
+        // Log non-429 failures to track real retry attempts.
+        await supabase.from('email_send_log').insert({
+          message_id: payload.message_id,
+          template_name: payload.label || queue,
+          recipient_email: payload.to,
+          status: 'failed',
+          error_message: errorMsg.slice(0, 1000),
+        })
+        if (payload?.message_id && typeof payload.message_id === 'string') {
+          failedAttemptsByMessageId.set(payload.message_id, failedAttempts + 1)
+        }
+
+        // Non-429 errors: message stays invisible until VT expires, then retried
       }
 
-      if (result.success) {
-        await supabase
-          .from("email_queue")
-          .update({
-            status: "sent",
-            sent_at: new Date().toISOString(),
-            provider,
-            error_message: null,
-          })
-          .eq("id", email.id);
-
-        await logQueueAction(supabase, email.id, "sent", "sent", provider, null);
-        sent++;
-        console.log(`Email ${email.id} sent successfully via ${provider}`);
-      } else {
-        const newRetryCount = email.retry_count + 1;
-        const newStatus = newRetryCount >= 3 ? "failed" : "pending";
-
-        await supabase
-          .from("email_queue")
-          .update({
-            status: newStatus,
-            retry_count: newRetryCount,
-            error_message: result.error,
-            provider,
-          })
-          .eq("id", email.id);
-
-        await logQueueAction(supabase, email.id, "failed", newStatus, provider, result.error || null);
-        failed++;
-        console.error(`Email ${email.id} failed: ${result.error}`);
+      // Small delay between sends to smooth bursts
+      if (i < messages.length - 1) {
+        await new Promise((r) => setTimeout(r, sendDelayMs))
       }
-
-      // Small delay between emails to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-
-    console.log(`Processing complete: ${sent} sent, ${failed} failed`);
-
-    return new Response(
-      JSON.stringify({ processed: emails.length, sent, failed }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    console.error("Edge function error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
-});
+
+  return new Response(
+    JSON.stringify({ processed: totalProcessed }),
+    { headers: { 'Content-Type': 'application/json' } }
+  )
+})
