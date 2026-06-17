@@ -625,7 +625,7 @@ const OnboardingDetail = () => {
                         if (application.client_id) {
                           navigate(`/clients/${application.client_id}`);
                         } else if (application.company_id) {
-                          navigate(`/clients/company/${application.company_id}`);
+                          navigate(`/companies/${application.company_id}`);
                         }
                       }}
                     >
