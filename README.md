@@ -1,5 +1,23 @@
 # Welcome to your Lovable project
 
+## Regression Prevention (read first)
+
+AccountancyOS uses a layered safety net to catch drift in critical workflows:
+
+- [`docs/critical-workflows.md`](./docs/critical-workflows.md) — end-to-end definition of every business-critical flow (auth, portal, email queue, questionnaires, filings, RLS, etc.).
+- [`docs/supabase-infrastructure.md`](./docs/supabase-infrastructure.md) + [`infra/supabase-manifest.json`](./infra/supabase-manifest.json) — expected backend infrastructure (edge functions, cron, secrets, RLS tables, email config).
+- [`docs/change-checklist.md`](./docs/change-checklist.md) — required checklist for every change. Mirrored in `.github/PULL_REQUEST_TEMPLATE.md`.
+- [`docs/test-fixtures.md`](./docs/test-fixtures.md) — deterministic seeded users. Real users (e.g. live clients) are never used as regression subjects.
+
+### Commands
+
+```bash
+bun test         # Vitest regression suite (frontend + manifest contracts)
+bun smoke        # Post-deploy smoke test against the live backend
+```
+
+Both must pass before shipping. The smoke script fails loudly when any edge function, cron job, table, or auth wiring is missing.
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/484d38ef-d5f4-4a95-9b44-cfbcba7d7c13
