@@ -116,6 +116,8 @@ coverage is not enough — see the coverage matrix at the bottom of this file.
 - **RLS**: org-scoped
 - **State transitions**: deadline created → job auto-spawned at threshold → tasks instantiated from template
 - **Failure modes**: missing service mapping (skip), partnership without both contacts (block), deadline overlap with manual override
+- **Status vocabulary (SSOT)**: `JOB_STATUSES` in `src/lib/workflow-constants.ts` MUST equal the values allowed by the `chk_jobs_status` constraint on `public.jobs`. Manual job creation (`src/components/jobs/CreateJobDialog.tsx`) and `jobSchema` in `src/lib/validation-schemas.ts` MUST source statuses from this constant — no inline string literals.
+- **Regression coverage**: `src/test/regression/job-status-vocabulary.test.ts` (SSOT + schema), smoke check `db:jobs.chk_jobs_status matches JOB_STATUSES` in `scripts/smoke-test.ts`.
 
 ## 11. TrueLayer Connect / Sync
 - **Frontend entry**: `src/components/bookkeeping/BankConnectDialog.tsx`
@@ -175,7 +177,7 @@ Per non-negotiable #6, every critical workflow has at least one of: integration 
 | 7 | Questionnaire Send | `src/lib/questionnaire-workpaper-service.ts` | _todo: service test_ | n/a (covered by table RLS check) | DB state transition (planned) |
 | 8 | Questionnaire Completion | `src/pages/QuestionnaireResponse.tsx`, `submit_questionnaire_response` RPC | _todo: RPC test_ | n/a | DB state transition (planned) |
 | 9 | Email Queue Processing | `supabase/functions/process-email-queue` | `src/test/regression/process-email-queue-contract.test.ts` | `email:send_log row reaches sent` (asserts `metadata.provider_message_id`) | Edge contract + live smoke |
-| 10 | Deadline / Job Generation | `src/lib/auto-rollover-service.ts`, `src/lib/job-template-engine.ts` | _todo: engine test_ | n/a | DB state transition (planned) |
+| 10 | Deadline / Job Generation | `src/lib/auto-rollover-service.ts`, `src/lib/job-template-engine.ts`, `src/components/jobs/CreateJobDialog.tsx` | `src/test/regression/job-status-vocabulary.test.ts` (+ engine test _todo_) | `db:jobs.chk_jobs_status matches JOB_STATUSES` | DB constraint drift + SSOT unit (engine test planned) |
 | 11 | TrueLayer Connect / Sync | `supabase/functions/truelayer-*` | _todo: contract test_ | `edge:truelayer-sync-scheduled` | Edge contract (planned) |
 | 12 | Bookkeeping Posting | `post_to_ledger` RPC | _todo: RPC test_ | n/a | DB state transition (planned) |
 | 13 | Workpaper Approval / Locking | `src/lib/filing-lock-service.ts` | _todo: service test_ | n/a | DB state transition (planned) |

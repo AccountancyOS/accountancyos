@@ -86,7 +86,20 @@ export const jobSchema = z.object({
   service_type: z
     .string()
     .min(1, { message: "Service type is required" }),
-  status: z.enum(["not_started", "in_progress", "waiting_on_client", "with_reviewer", "complete", "blocked"]),
+  // Must match the `chk_jobs_status` DB constraint and `JOB_STATUSES` in
+  // workflow-constants.ts. Do not duplicate the list of literals — see
+  // src/test/regression/job-status-vocabulary.test.ts for drift coverage.
+  status: z.enum([
+    "blank",
+    "records_requested",
+    "records_received",
+    "accountant_queries",
+    "client_queries",
+    "accountant_review",
+    "client_review",
+    "ready_to_file",
+    "completed",
+  ]),
   priority: z.enum(["low", "normal", "high", "critical"]),
   filing_deadline: z
     .string()

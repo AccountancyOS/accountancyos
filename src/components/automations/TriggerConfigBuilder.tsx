@@ -7,6 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { JOB_STATUSES as CANONICAL_JOB_STATUSES } from "@/lib/workflow-constants";
+import { formatStatus } from "@/lib/format-utils";
 
 interface TriggerConfigBuilderProps {
   triggerType: string;
@@ -14,14 +16,11 @@ interface TriggerConfigBuilderProps {
   onChange: (config: Record<string, unknown>) => void;
 }
 
-const JOB_STATUSES = [
-  { value: "not_started", label: "Not Started" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "waiting_on_client", label: "Waiting on Client" },
-  { value: "ready_for_review", label: "Ready for Review" },
-  { value: "in_review", label: "In Review" },
-  { value: "completed", label: "Completed" },
-];
+// Sourced from chk_jobs_status / workflow-constants.ts.
+const JOB_STATUSES = CANONICAL_JOB_STATUSES.map((value) => ({
+  value,
+  label: formatStatus(value),
+}));
 
 const FILING_STATUSES = [
   { value: "draft", label: "Draft" },
