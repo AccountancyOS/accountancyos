@@ -515,8 +515,10 @@ async function closeJobWithReason(
   await supabase
     .from("jobs")
     .update({ 
-      status: "cancelled",
-      notes: reason,
+      // chk_jobs_status: no "cancelled" in workflow; use blank as the safe
+      // terminal-by-cancellation state. The reason is captured in the audit
+      // log below (jobs has no notes/internal_notes column).
+      status: "blank",
     })
     .eq("id", jobId);
 
