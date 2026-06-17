@@ -12,7 +12,7 @@ AccountancyOS uses a layered safety net to catch drift in critical workflows:
 ### Commands
 
 ```bash
-bun test         # Vitest regression suite (frontend + manifest contracts)
+bun run test     # Vitest regression suite (frontend + manifest + edge contracts)
 bun smoke        # Post-deploy smoke test against the live backend
 ```
 
