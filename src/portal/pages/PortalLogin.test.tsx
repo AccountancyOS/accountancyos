@@ -12,8 +12,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: (...a: unknown[]) => toastError(...a) } }));
 
-vi.mock("react-router-dom", async (orig) => {
-  const actual = await (orig as () => Promise<typeof import("react-router-dom")>)();
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
   return { ...actual, useNavigate: () => navigate };
 });
 
