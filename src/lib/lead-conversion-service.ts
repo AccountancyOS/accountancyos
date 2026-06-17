@@ -59,15 +59,17 @@ async function hasSignedEngagementLetter(leadId: string, organizationId: string)
 
 /**
  * Convert a lead to a client or company record.
- * 
- * Guards:
+ *
+ * Guards (both mandatory — there is no bypass):
  * - Idempotency: prevents duplicate conversion
- * - EL gate: requires signed engagement letter (can be bypassed with force flag)
+ * - EL gate: requires a signed engagement letter
+ *
+ * The former `force` option was removed in Sprint 1: a signed engagement
+ * letter is now an unconditional precondition for activating a relationship.
  */
 export async function convertLeadToClient(
   lead: Lead,
-  organizationId: string,
-  options: { force?: boolean } = {}
+  organizationId: string
 ): Promise<ConversionResult> {
   try {
     // 1. Idempotency check — prevent duplicate conversions
@@ -80,15 +82,13 @@ export async function convertLeadToClient(
       };
     }
 
-    // 2. Engagement letter gate — unless force-bypassed
-    if (!options.force) {
-      const elSigned = await hasSignedEngagementLetter(lead.id, organizationId);
-      if (!elSigned) {
-        return {
-          success: false,
-          error: "Engagement letter must be signed before converting a lead to a client. Send and sign the engagement letter first.",
-        };
-      }
+    // 2. Engagement letter gate — always enforced
+    const elSigned = await hasSignedEngagementLetter(lead.id, organizationId);
+    if (!elSigned) {
+      return {
+        success: false,
+        error: "Engagement letter must be signed before converting a lead to a client. Send and sign the engagement letter first.",
+      };
     }
 
     const isCompanyType = isCompanyBasedType(lead.lead_type);
