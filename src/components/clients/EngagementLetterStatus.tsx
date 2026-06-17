@@ -13,13 +13,23 @@ export function EngagementLetterStatus({ clientId, companyId }: EngagementLetter
   const { data: lastSignedDate } = useQuery({
     queryKey: ["el-last-signed", clientId, companyId],
     queryFn: async (): Promise<string | null> => {
-      // Use a raw filter approach to avoid deep type recursion
-      const { data, error } = await supabase
+      // Scope to THIS client/company. engagement_letters links to the entity only
+      // via onboarding_applications, so filter through that relationship with an
+      // inner join. `as any` keeps the embedded-select off the deep type recursion.
+      let query = supabase
         .from("engagement_letters")
-        .select("signed_at")
+        .select("signed_at, onboarding_applications!inner(client_id, company_id)")
         .not("signed_at", "is", null)
         .order("signed_at", { ascending: false })
-        .limit(1) as any;
+        .limit(1);
+
+      if (clientId) {
+        query = query.eq("onboarding_applications.client_id", clientId);
+      } else if (companyId) {
+        query = query.eq("onboarding_applications.company_id", companyId);
+      }
+
+      const { data, error } = await query as any;
 
       if (error) throw error;
       return data?.[0]?.signed_at || null;
