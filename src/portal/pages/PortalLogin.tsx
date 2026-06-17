@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,9 +59,12 @@ export default function PortalLogin() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing In..." : "Sign In"}
             </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Trouble signing in? Contact your accountant.
-            </p>
+            <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
+              <Link to="/portal/forgot-password" className="underline hover:text-foreground">
+                Forgot Password?
+              </Link>
+              <span>Trouble signing in? Contact your accountant.</span>
+            </div>
           </form>
         </CardContent>
       </Card>
