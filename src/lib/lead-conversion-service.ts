@@ -128,8 +128,11 @@ export async function convertLeadToClient(
         .from("leads")
         .update({
           converted_at: new Date().toISOString(),
-          converted_to_company_id: company.id,
-          status: "won",
+          // leads has no converted_to_* or status column; pipeline_stage stores
+          // the funnel state (CHECK allows new/qualified/proposal_sent/chasing/
+          // won/lost). The reverse link lives on companies/clients via lead_id
+          // when present in newer schemas.
+          pipeline_stage: "won",
         })
         .eq("id", lead.id);
 
@@ -180,8 +183,7 @@ export async function convertLeadToClient(
         .from("leads")
         .update({
           converted_at: new Date().toISOString(),
-          converted_to_client_id: client.id,
-          status: "won",
+          pipeline_stage: "won",
         })
         .eq("id", lead.id);
 
