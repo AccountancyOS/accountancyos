@@ -439,8 +439,9 @@ async function createNextYearCS01Job(params: {
         company_id: params.companyId,
         job_name: nextJobName,
         service_type: "CS01",
-        status: "not_started",
-        priority: originalJob?.priority || "medium",
+        // chk_jobs_status / jobs_priority_check.
+        status: "blank",
+        priority: originalJob?.priority || "normal",
         period_end: nextMadeUpTo.toISOString().split("T")[0],
         assigned_to: params.assignedTo || originalJob?.assigned_to,
         is_auto_generated: true,
