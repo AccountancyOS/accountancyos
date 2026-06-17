@@ -156,7 +156,8 @@ async function executeStep(supabase: any, step: StepRow, overrides: { timingOver
       const config = step.config as { job_name_template?: string; service_type?: string; job_template_id?: string };
       if (!config.service_type) return { success: false, shouldWait: false, error: "CREATE_JOB requires service_type" };
       const jobName = resolvePlaceholders(config.job_name_template || "Auto-generated Job", ctx);
-      const { data, error } = await supabase.from("jobs").insert({ organization_id: ctx.orgId, job_name: jobName, service_type: config.service_type, status: "not_started", client_id: ctx.clientId || null, company_id: ctx.companyId || null, template_id: config.job_template_id || null, assigned_to: overrides.assigneeUserId || null, is_auto_generated: true, auto_generated_at: new Date().toISOString(), automation_source: "template" }).select("id").single();
+      // chk_jobs_status: blank is the canonical "new job" state.
+      const { data, error } = await supabase.from("jobs").insert({ organization_id: ctx.orgId, job_name: jobName, service_type: config.service_type, status: "blank", client_id: ctx.clientId || null, company_id: ctx.companyId || null, template_id: config.job_template_id || null, assigned_to: overrides.assigneeUserId || null, is_auto_generated: true, auto_generated_at: new Date().toISOString(), automation_source: "template" }).select("id").single();
       if (error) return { success: false, shouldWait: false, error: error.message };
       return { success: true, shouldWait: false, data: { jobId: data.id } };
     }

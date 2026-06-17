@@ -185,7 +185,9 @@ const OnboardingDetail = () => {
         .from("onboarding_applications")
         .update({ 
           status: "rejected",
-          notes: rejectionReason ? `Rejection reason: ${rejectionReason}` : null
+          // onboarding_applications has no general notes column; clearance_notes
+          // is the rejection-reason field.
+          clearance_notes: rejectionReason ? `Rejection reason: ${rejectionReason}` : null
         })
         .eq("id", id);
 

@@ -105,8 +105,9 @@ export function EmailJobTagger({
           company_id: companyId || undefined,
           job_name: newJobName,
           service_type: "General",
-          status: "not_started",
-          priority: "medium",
+          // chk_jobs_status / jobs_priority_check.
+          status: "blank",
+          priority: "normal",
         }])
         .select("id")
         .single();

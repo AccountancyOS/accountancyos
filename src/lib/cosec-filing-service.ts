@@ -107,7 +107,6 @@ export async function createCS01Filing(data: CS01FilingData): Promise<CreateFili
         period_end: data.madeUpToDate,
         filing_data: filingPayload,
         status: "draft",
-        filing_deadline: filingDeadline.toISOString().split("T")[0],
       })
       .select("id")
       .single();
@@ -147,6 +146,7 @@ export async function createResolutionFiling(params: {
   filingType: ResolutionFilingType;
   relatedData: any;
   discrepancyMessage: string;
+  jobId?: string;
 }): Promise<CreateFilingResult> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -159,6 +159,26 @@ export async function createResolutionFiling(params: {
       prepared_at: new Date().toISOString(),
     };
 
+    // filings.job_id is NOT NULL. If the caller did not pass one, bind to the
+    // most recent open CS01 job for the company so resolution filings always
+    // have a parent job.
+    let jobId = params.jobId;
+    if (!jobId) {
+      const { data: openJob } = await supabase
+        .from("jobs")
+        .select("id")
+        .eq("company_id", params.companyId)
+        .eq("organization_id", params.organizationId)
+        .neq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      jobId = openJob?.id;
+    }
+    if (!jobId) {
+      return { success: false, error: "No open job found to attach resolution filing to." };
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const client = supabase as any;
     const { data: filing, error } = await client
@@ -166,6 +186,7 @@ export async function createResolutionFiling(params: {
       .insert({
         organization_id: params.organizationId,
         company_id: params.companyId,
+        job_id: jobId,
         filing_type: params.filingType,
         filing_body: "COMPANIES_HOUSE",
         filing_data: filingPayload,
@@ -418,8 +439,9 @@ async function createNextYearCS01Job(params: {
         company_id: params.companyId,
         job_name: nextJobName,
         service_type: "CS01",
-        status: "not_started",
-        priority: originalJob?.priority || "medium",
+        // chk_jobs_status / jobs_priority_check.
+        status: "blank",
+        priority: originalJob?.priority || "normal",
         period_end: nextMadeUpTo.toISOString().split("T")[0],
         assigned_to: params.assignedTo || originalJob?.assigned_to,
         is_auto_generated: true,

@@ -118,8 +118,9 @@ export async function executeAutoRollover(config: RolloverConfig): Promise<Rollo
         company_id: config.companyId,
         job_name: nextJobName,
         service_type: config.serviceType,
-        status: "not_started",
-        priority: originalJob.priority || "medium",
+        // chk_jobs_status / jobs_priority_check.
+        status: "blank",
+        priority: originalJob.priority || "normal",
         period_start: nextPeriodStart.toISOString().split("T")[0],
         period_end: nextPeriodEnd.toISOString().split("T")[0],
         assigned_to: config.assignedTo || originalJob.assigned_to,

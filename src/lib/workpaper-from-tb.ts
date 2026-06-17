@@ -470,7 +470,8 @@ export async function createWorkpaperFromSnapshot(
     // Update snapshot to link to workpaper
     await supabase
       .from("trial_balance_snapshots")
-      .update({ status: "used_in_workpaper" })
+      // trial_balance_snapshots_status_check: draft/finalised/superseded.
+      .update({ status: "finalised" })
       .eq("id", snapshotId);
 
     return { success: true, workpaperId: workpaper.id };

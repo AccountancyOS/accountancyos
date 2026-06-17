@@ -175,6 +175,7 @@ export function SH01WorkpaperDialog({
       const result = await createResolutionFiling({
         companyId,
         organizationId,
+        jobId,
         filingType: "SH01",
         relatedData: {
           allotment_id: allotment.id,
@@ -202,7 +203,10 @@ export function SH01WorkpaperDialog({
       if (jobId) {
         await supabase
           .from("jobs")
-          .update({ status: "in_progress" })
+          // chk_jobs_status allows blank/records_requested/records_received/
+          // accountant_queries/client_queries/accountant_review/client_review/
+          // ready_to_file/completed. "in_progress" is not valid.
+          .update({ status: "records_received" })
           .eq("id", jobId);
       }
 

@@ -346,7 +346,8 @@ export async function sendFilingForApproval(
           `,
           entity_type: "filing",
           entity_id: filingId,
-          status: "queued",
+          // email_queue_status_check: pending/sent/failed/cancelled.
+          status: "pending",
         });
     }
 

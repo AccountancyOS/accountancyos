@@ -149,7 +149,8 @@ async function executeAction(
             organization_id: context.organizationId,
             job_name: finalJobName,
             service_type: serviceType,
-            status: "not_started",
+            // chk_jobs_status: blank is the canonical "new job" state.
+            status: "blank",
             client_id: clientId ?? null,
             company_id: companyId ?? null,
             filing_deadline: dueDate ?? null,

@@ -311,7 +311,8 @@ async function executeCreateJob(
       organization_id: ctx.orgId,
       job_name: jobName,
       service_type: serviceType,
-      status: "not_started",
+      // chk_jobs_status default.
+      status: "blank",
       client_id: ctx.clientId || null,
       company_id: ctx.companyId || null,
       template_id: config.job_template_id || null,
