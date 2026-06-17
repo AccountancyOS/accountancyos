@@ -235,7 +235,9 @@ export async function sendFilingToClient(
   const { error } = await supabase
     .from("filings")
     .update({
-      status: "sent_to_client",
+      // filings valid_status: draft/awaiting_approval/approved/ready_to_file/
+      // filed/rejected. "sent_to_client" is rejected by the strict check.
+      status: "awaiting_approval",
       approval_requested_at: new Date().toISOString(),
     })
     .eq("id", filingId);
