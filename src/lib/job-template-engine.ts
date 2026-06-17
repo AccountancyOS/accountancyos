@@ -769,7 +769,8 @@ async function createTasksFromTemplate(
       organization_id: organizationId,
       title: taskTemplate.name,
       description: taskTemplate.description || null,
-      status: "not_started",
+      // job_tasks_status_check: {todo, doing, done, blocked}
+      status: "todo",
       task_order: index,
       due_date: dueDate.toISOString().split("T")[0],
       is_client_visible: taskTemplate.isClientFacing,
@@ -795,8 +796,10 @@ async function createRecordsRequestsFromTemplate(
     organization_id: organizationId,
     title: request.name,
     description: request.description || `Please upload: ${request.name}`,
-    status: "pending",
-    visibility: "client" as const,
+    // client_tasks_status_check: {not_started, in_progress, complete}
+    status: "not_started",
+    // client_tasks_visibility_check: {client_visible, internal_only}
+    visibility: "client_visible" as const,
     task_order: index,
     template_id: jobId, // Link to job for reference
     ...(entity.type === "company" ? { company_id: entity.id } : { client_id: entity.id }),
