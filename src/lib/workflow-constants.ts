@@ -8,6 +8,29 @@
 import type { JobStatus } from "./job-status-service";
 
 /**
+ * Canonical ordered list of job statuses permitted by the
+ * `chk_jobs_status` CHECK constraint on `public.jobs`.
+ *
+ * Single source of truth for any UI, validator, or service that writes
+ * to `jobs.status`. Do NOT inline string literals elsewhere — import this.
+ *
+ * Drift between this array and the DB constraint is asserted in:
+ *   - src/test/regression/job-status-vocabulary.test.ts (unit)
+ *   - scripts/smoke-test.ts                              (live DB)
+ */
+export const JOB_STATUSES = [
+  "blank",
+  "records_requested",
+  "records_received",
+  "accountant_queries",
+  "client_queries",
+  "accountant_review",
+  "client_review",
+  "ready_to_file",
+  "completed",
+] as const satisfies readonly JobStatus[];
+
+/**
  * Job statuses that indicate records have been received or work has progressed
  * beyond the chasing stage. CONDITION gates use this to stop sending chase emails.
  */

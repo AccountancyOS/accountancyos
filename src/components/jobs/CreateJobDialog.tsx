@@ -23,6 +23,8 @@ import {
 import { toast } from "sonner";
 import { FormFieldError } from "@/components/ui/form-field-error";
 import { jobSchema, validateForm } from "@/lib/validation-schemas";
+import { JOB_STATUSES } from "@/lib/workflow-constants";
+import { formatStatus } from "@/lib/format-utils";
 
 interface CreateJobDialogProps {
   open: boolean;
@@ -35,7 +37,7 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
   const [jobName, setJobName] = useState("");
   const [clientId, setClientId] = useState("");
   const [serviceType, setServiceType] = useState("");
-  const [status, setStatus] = useState("not_started");
+  const [status, setStatus] = useState<(typeof JOB_STATUSES)[number]>("blank");
   const [priority, setPriority] = useState("normal");
   const [filingDeadline, setFilingDeadline] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -145,7 +147,7 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
     setJobName("");
     setClientId("");
     setServiceType("");
-    setStatus("not_started");
+    setStatus("blank");
     setPriority("normal");
     setFilingDeadline("");
     setErrors({});
@@ -265,15 +267,19 @@ export default function CreateJobDialog({ open, onOpenChange }: CreateJobDialogP
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
-              <Select value={status} onValueChange={setStatus}>
+              <Select
+                value={status}
+                onValueChange={(v) => setStatus(v as (typeof JOB_STATUSES)[number])}
+              >
                 <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="not_started">Not Started</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="waiting_on_client">Waiting on Client</SelectItem>
-                  <SelectItem value="with_reviewer">With Reviewer</SelectItem>
+                  {JOB_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {formatStatus(s)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

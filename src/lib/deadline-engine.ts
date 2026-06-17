@@ -185,7 +185,8 @@ export async function updateDeadlineRiskScore(deadlineId: string): Promise<void>
     // Job status factor
     if (deadline.jobs) {
       const jobStatus = (deadline.jobs as any).status;
-      if (jobStatus === "not_started" && daysRemaining < 30) {
+      // `blank` is the canonical "not started" job status (chk_jobs_status).
+      if (jobStatus === "blank" && daysRemaining < 30) {
         riskScore = Math.min(100, riskScore + 20);
       }
     } else if (daysRemaining < 30) {

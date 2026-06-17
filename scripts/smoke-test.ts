@@ -19,6 +19,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { JOB_STATUSES } from "../src/lib/workflow-constants";
 
 type Manifest = typeof import("../infra/supabase-manifest.json");
 
@@ -298,6 +299,49 @@ async function checkRlsRequiredTables() {
   );
 }
 
+/**
+ * Asserts the DB-side allowed values for `chk_jobs_status` match the frontend
+ * SSOT (`JOB_STATUSES`). Catches the exact "manual job creation rejected by
+ * check constraint" regression that the original create-job failure caused.
+ */
+async function checkJobStatusVocabulary(supabase: SupabaseClient) {
+  const { data, error } = await supabase.rpc("get_check_constraint_values", {
+    constraint_name: "chk_jobs_status",
+  });
+  if (error) {
+    record(
+      "db:jobs.chk_jobs_status matches JOB_STATUSES",
+      false,
+      error.message,
+      "Apply the migration that adds public.get_check_constraint_values()",
+    );
+    return;
+  }
+  const dbValues: string[] = Array.isArray(data) ? [...data] : [];
+  if (dbValues.length === 0) {
+    record(
+      "db:jobs.chk_jobs_status matches JOB_STATUSES",
+      false,
+      "constraint not found or empty",
+      "Check chk_jobs_status still exists on public.jobs",
+    );
+    return;
+  }
+  const expected = new Set<string>(JOB_STATUSES);
+  const actual = new Set<string>(dbValues);
+  const missingInDb = [...expected].filter((v) => !actual.has(v));
+  const extraInDb = [...actual].filter((v) => !expected.has(v));
+  const ok = missingInDb.length === 0 && extraInDb.length === 0;
+  record(
+    "db:jobs.chk_jobs_status matches JOB_STATUSES",
+    ok,
+    ok
+      ? `${dbValues.length} values aligned`
+      : `missingInDb=[${missingInDb.join(",")}] extraInDb=[${extraInDb.join(",")}]`,
+    ok ? undefined : "Update JOB_STATUSES in src/lib/workflow-constants.ts or migrate chk_jobs_status",
+  );
+}
+
 async function main() {
   console.log(`Smoke test against ${SUPABASE_URL}`);
   const supabase = createClient(SUPABASE_URL!, ANON_KEY!);
@@ -308,6 +352,7 @@ async function main() {
   await checkInfraTables();
   await checkRlsRequiredTables();
   await checkCrossOrgRls();
+  await checkJobStatusVocabulary(supabase);
 
   // Manual release checks (cannot be machine-verified from outside).
   console.log("\nManual release checks (verify before publish):");

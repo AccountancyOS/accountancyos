@@ -37,7 +37,17 @@ export const DashboardKPICards = () => {
             .from("jobs")
             .select("id", { count: "exact", head: true })
             .eq("organization_id", organization.id)
-            .in("status", ["in_progress", "waiting_on_client", "ready_for_review"]);
+            // Canonical "in-flight" job statuses (chk_jobs_status). Excludes
+            // `blank` (not started) and `completed`.
+            .in("status", [
+              "records_requested",
+              "records_received",
+              "accountant_queries",
+              "client_queries",
+              "accountant_review",
+              "client_review",
+              "ready_to_file",
+            ]);
           if (assignedFilter) q = q.eq("assigned_to", user!.id);
           return q;
         })(),
