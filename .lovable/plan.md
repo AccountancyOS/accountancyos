@@ -1,30 +1,38 @@
-## Add Forgot Password to the Client Portal
+# Schema-Compatibility Fix Rollout — Batches 1-5 Complete
 
-### New pages (public, under `/portal/*`)
-1. `src/portal/pages/PortalForgotPassword.tsx`
-   - Email input + submit → `supabase.auth.resetPasswordForEmail(email, { redirectTo: ${window.location.origin}/portal/reset-password })`
-   - Always shows a generic success toast ("If an account exists, a reset link has been sent") to avoid email enumeration
-   - "Back to sign in" link to `/portal/login`
-2. `src/portal/pages/PortalResetPassword.tsx`
-   - Listens for `PASSWORD_RECOVERY` auth event and parses `type=recovery` from `window.location.hash`
-   - New password + confirm fields → `supabase.auth.updateUser({ password })`
-   - On success: toast and redirect to `/portal/dashboard` (user is now signed in via the recovery session)
-   - If no recovery session present, show "Reset link expired" with a link back to `/portal/forgot-password`
+All five batches of the schema-compatibility audit have been applied.
 
-### Wiring
-- `src/portal/pages/PortalLogin.tsx`: add a "Forgot password?" link directly under the password field linking to `/portal/forgot-password`. Replace the existing "Trouble signing in? Contact your accountant." footnote with the link + sign-in helper.
-- `src/portal/routes/PortalRoutes.tsx`: register two new public routes alongside `login` and `invite`:
-  - `<Route path="forgot-password" element={<PortalForgotPassword />} />`
-  - `<Route path="reset-password" element={<PortalResetPassword />} />`
-- `src/App.tsx` already routes `/portal/*` to `PortalRoutes`, so no change there. The portal `ProtectedRoute` redirect that sends non-portal accountant pages to `/portal` does not affect these routes (they live under `/portal/*`).
+## Summary of changes
 
-### Styling
-Match the existing `PortalLogin` Card layout (same `Card`, `CardHeader`, `Input`, `Button`, `bg-background` shell) so the three pages feel consistent.
+### Guardrails (new)
+- `src/lib/db-constants/index.ts` — TS const-enums (`JOB_STATUS`, `FILING_STATUS`, `EMAIL_QUEUE_STATUS`, `QUESTIONNAIRE_STATUS`, `ENGAGEMENT_STATUS`, `CLIENT_STATUS`, `COMPANY_STATUS`, `PORTAL_ACCESS_STATUS`, `TB_SNAPSHOT_STATUS`, `LEAD_PIPELINE_STAGE`) and `uniqueLegacyToken()` helper.
 
-### Verification
-1. From `/portal/login`, click "Forgot password?" → land on `/portal/forgot-password`, enter the portal-b email, submit, see success toast.
-2. Receive the email, click the recovery link → land on `/portal/reset-password` with the new-password form (not redirected to accountant app).
-3. Set a new password → land on `/portal/dashboard` signed in.
-4. Sign out and sign back in with the new password.
+### Migration
+- `email_queue.status` DEFAULT was `'queued'` (rejected by CHECK). Now `'pending'`. Existing rows backfilled (`queued` -> `pending`, `ignored` -> `cancelled`).
+- BEFORE INSERT trigger `backfill_quote_token_org_id` on `quote_acceptance_tokens` populates `organization_id` from the parent quote when missing.
 
-No database, RLS, or edge-function changes are needed — Supabase Auth handles the recovery email via its existing template, and Lovable Cloud already ships a default recovery email.
+### Status-literal fixes (Batches 1-4)
+- `engagements`: `cancelled` -> `terminated` (DeactivateBookkeepingDialog).
+- `jobs`: `not_started`/`in_progress`/`cancelled`/`pending` -> valid CHECK values (`blank`, `records_received`) across SH01/TM01 dialogs, EmailJobTagger, auto-rollover-service, cosec-filing-service, workflow-step-executor, workflow-tick, process-automation-events, job-exception-handler.
+- `jobs.priority`: `medium` -> `normal`.
+- `filings`: `sent_to_client` -> `awaiting_approval` (filing-lock-service); removed nonexistent `filing_deadline` from cosec CS01 insert.
+- `email_queue`: `queued`/`ignored` -> `pending`/`cancelled` (Emails page, filing-service, EditQueuedEmailDialog UI).
+- `questionnaire_instances`: `draft` -> `sent` and hardcoded `access_token` replaced with `uniqueLegacyToken()` (SendOnboardingQuestionnaireDialog).
+- `trial_balance_snapshots`: `used_in_workpaper` -> `finalised` (workpaper-from-tb).
+
+### Column-rename / missing-column fixes
+- `lead-conversion-service`: removed nonexistent `leads.status` / `converted_to_*_id`; now updates `pipeline_stage='won'` and `converted_at` only.
+- `onboarding_applications.notes` -> `clearance_notes` (OnboardingDetail rejection flow).
+- `jobs.notes` removed from job-exception-handler cancel path (column doesn't exist; reason persists in audit log).
+- `email_queue.last_attempt_at` removed from process-email-queue update (column doesn't exist).
+
+### Required-column fix
+- `filings.job_id` is NOT NULL — `createResolutionFiling` now accepts `jobId` and the SH01/TM01/AP01 dialogs pass theirs through. When omitted, it auto-binds to the most recent open job for the company.
+
+## Items reviewed and intentionally left as-is
+- Audit B1 (`client_messages.content`): already populated.
+- Audit B4 (`deadlines.name`): already populated.
+- Audit B7 (`email_queue.subject` in workflow-step-executor): already populated.
+- Audit A21 (`portal_access.status` in seed-portal-test-users): the seed types this as `"active"|"revoked"`; flagged values target `client_tasks` (no CHECK).
+- Audit C1 (CompanyTextFieldEditor): uses a dynamic field name; the apparent `null` literal in the audit was a parser artefact.
+- `WorkpaperStatusActions`, `AddTaskDialog`, `CreateOnboardingDialog`, `job-template-engine`, `seed-portal-test-users` use `in_progress`/`not_started` against tables (`workpaper_instances`, `client_tasks`, `job_tasks`, `onboarding_applications`) whose CHECK constraints allow those values, so no fix needed.
