@@ -622,10 +622,12 @@ const OnboardingDetail = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        if (application.client_id) {
+                        if (application.application_type === "individual" && application.client_id) {
                           navigate(`/clients/${application.client_id}`);
                         } else if (application.company_id) {
                           navigate(`/companies/${application.company_id}`);
+                        } else if (application.client_id) {
+                          navigate(`/clients/${application.client_id}`);
                         }
                       }}
                     >

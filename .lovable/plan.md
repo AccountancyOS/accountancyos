@@ -1,25 +1,25 @@
 ## Issue
 
-After an engagement letter is signed and AML is approved, the onboarding screen shows a "View Company" button. Clicking it navigates to `/clients/company/{company_id}`, which is not a registered route — so React Router falls through to the 404 page.
-
-The correct company route in `src/App.tsx` is `/companies/:companyId`.
+For a company onboarding (Bassage Eyes Ltd), the application row has both `client_id` (the primary contact, Amy-Lee Stevens) and `company_id` (Bassage Eyes Ltd). The "View" button currently checks `client_id` first, so it navigates to the contact instead of the company.
 
 ## Fix
 
-In `src/pages/OnboardingDetail.tsx` (around line 628), change the company branch of the button's `onClick` from:
+In `src/pages/OnboardingDetail.tsx` (lines 624-630), branch on `application_type` instead of field presence:
 
 ```ts
-navigate(`/clients/company/${application.company_id}`);
+onClick={() => {
+  if (application.application_type === "individual" && application.client_id) {
+    navigate(`/clients/${application.client_id}`);
+  } else if (application.company_id) {
+    navigate(`/companies/${application.company_id}`);
+  } else if (application.client_id) {
+    navigate(`/clients/${application.client_id}`);
+  }
+}}
 ```
 
-to:
-
-```ts
-navigate(`/companies/${application.company_id}`);
-```
-
-The individual branch (`/clients/:clientId`) stays unchanged — that route exists and works.
+This guarantees company applications open the company workspace, individual applications open the client record, and the fallback still works if only one id is present.
 
 ## Verification
 
-Re-open the approved onboarding application, click "View Company", and confirm it lands on the company workspace instead of the 404 page.
+Open the approved Bassage Eyes Ltd onboarding application and click "View Company" — it should now land on the Bassage Eyes Ltd company page, not Amy-Lee Stevens.
