@@ -54,7 +54,8 @@ export function DeactivateBookkeepingDialog({
     try {
       const { error } = await supabase
         .from("engagements")
-        .update({ status: "cancelled", end_date: new Date().toISOString() })
+        // engagements_status_check allows draft/active/suspended/terminated.
+        .update({ status: "terminated", end_date: new Date().toISOString() })
         .eq("id", engagementId);
       if (error) throw error;
 
