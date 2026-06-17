@@ -35,7 +35,7 @@ describe("Critical workflows documentation", () => {
   });
 
   it("documents every relevant failure mode for the forgotten password flow", () => {
-    expect(DOC).toMatch(/email_send_log empty/);
+    expect(DOC).toMatch(/email_send_log[`\s]+empty/);
     expect(DOC).toMatch(/redirectTo/);
     expect(DOC).toMatch(/Rate-limit/);
     expect(DOC).toMatch(/suppressed_emails/);
