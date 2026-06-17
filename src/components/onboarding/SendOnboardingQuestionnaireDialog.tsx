@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { QUESTIONNAIRE_STATUS, uniqueLegacyToken } from "@/lib/db-constants";
 import type { Json } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { Send, Loader2, Copy, Check } from "lucide-react";
