@@ -213,7 +213,9 @@ Deno.serve(async (req) => {
       // Mark as pending
       await supabase
         .from("email_queue")
-        .update({ status: "pending", last_attempt_at: new Date().toISOString() })
+        // email_queue has no last_attempt_at column; the queue worker logs
+        // attempts via logQueueAction below.
+        .update({ status: "pending" })
         .eq("id", email.id);
 
       await logQueueAction(supabase, email.id, "send_attempt", "pending", null, null);
