@@ -127,5 +127,13 @@
     "employees", "payslips", "pay_runs",
     "email_messages", "email_queue", "email_send_log", "suppressed_emails",
     "connected_mailboxes", "templates", "message_templates"
+  ],
+  "manualReleaseChecks": [
+    "Supabase Auth → URL Config: every entry in redirectAllowList is present.",
+    "Supabase Auth → Hooks: 'Send Email' hook is enabled and points to auth-email-hook.",
+    "Cloud → Emails: sender domain is verified (DKIM/SPF green).",
+    "Stripe → Webhooks: stripe-webhook endpoint is registered with the secret in STRIPE_WEBHOOK_SECRET.",
+    "HMRC + Companies House: sandbox vs production toggle matches the intended environment.",
+    "pg_cron: every job in cronJobs is present and last_run within expected window."
   ]
 }
