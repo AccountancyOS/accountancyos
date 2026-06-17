@@ -17610,6 +17610,10 @@ export type Database = {
           status: string
         }[]
       }
+      get_check_constraint_values: {
+        Args: { constraint_name: string }
+        Returns: string[]
+      }
       get_general_ledger_from_ledger: {
         Args: {
           p_account_id: string
