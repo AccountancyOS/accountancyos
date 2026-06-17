@@ -10,6 +10,12 @@ Conventions for each workflow:
 - **External** — third-party providers
 - **State transitions** — observable lifecycle / logs
 - **Failure modes** — known ways it breaks
+- **Regression test** — Vitest / edge-function contract test that guards it
+- **Smoke check** — named check in `scripts/smoke-test.ts` (if applicable)
+
+Every workflow MUST have at least one of: a regression test, an edge-function
+contract test, a live smoke check, or a DB-state transition test. Mock-only
+coverage is not enough — see the coverage matrix at the bottom of this file.
 
 ---
 
