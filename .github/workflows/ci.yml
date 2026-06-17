@@ -21,7 +21,7 @@ jobs:
       - name: Typecheck
         run: bunx tsc -p tsconfig.app.json --noEmit
       - name: Vitest regression suite
-        run: bun test
+        run: bun run test
 
   smoke:
     name: Post-Deploy Smoke (manual / deployment-gated)
