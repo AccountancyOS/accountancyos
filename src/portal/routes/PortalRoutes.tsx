@@ -3,6 +3,8 @@ import { PortalGuard } from "../guards/PortalGuard";
 import { PortalLayout } from "../layouts/PortalLayout";
 import PortalLogin from "../pages/PortalLogin";
 import PortalInvite from "../pages/PortalInvite";
+import PortalForgotPassword from "../pages/PortalForgotPassword";
+import PortalResetPassword from "../pages/PortalResetPassword";
 import PortalDashboard from "../pages/PortalDashboard";
 import PortalTasks from "../pages/PortalTasks";
 import PortalDocuments from "../pages/PortalDocuments";
@@ -31,6 +33,8 @@ export default function PortalRoutes() {
     <Routes>
       <Route path="login" element={<PortalLogin />} />
       <Route path="invite" element={<PortalInvite />} />
+      <Route path="forgot-password" element={<PortalForgotPassword />} />
+      <Route path="reset-password" element={<PortalResetPassword />} />
 
       <Route element={<PortalGuard />}>
         <Route element={<PortalLayout />}>
