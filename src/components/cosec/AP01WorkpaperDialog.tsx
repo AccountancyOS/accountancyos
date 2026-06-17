@@ -110,6 +110,7 @@ export function AP01WorkpaperDialog({
       const result = await createResolutionFiling({
         companyId,
         organizationId,
+        jobId,
         filingType: "AP01",
         relatedData: {
           person_id: person.id,
