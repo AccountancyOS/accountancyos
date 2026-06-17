@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
       }
 
       try {
-        await sendLovableEmail(
+        const providerResponse = await sendLovableEmail(
           {
             run_id: payload.run_id,
             to: payload.to,
@@ -270,12 +270,39 @@ Deno.serve(async (req) => {
           { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
         )
 
-        // Log success
+        // Non-negotiable: do not record `sent` unless the provider returned
+        // an acknowledgement (id / response body). A silent resolve from the
+        // SDK without a provider id means we have no proof of acceptance and
+        // must keep the message in-flight so it retries.
+        const providerId =
+          (providerResponse && typeof providerResponse === 'object'
+            ? ((providerResponse as Record<string, unknown>).id ??
+              (providerResponse as Record<string, unknown>).message_id ??
+              (providerResponse as Record<string, unknown>).messageId)
+            : null) ?? null
+
+        if (!providerId) {
+          // Treat as a soft failure so pgmq visibility timeout retries it.
+          await supabase.from('email_send_log').insert({
+            message_id: payload.message_id,
+            template_name: payload.label || queue,
+            recipient_email: payload.to,
+            status: 'failed',
+            error_message: 'provider_no_ack: SDK resolved without provider message id',
+            metadata: { provider_response: providerResponse ?? null },
+          })
+          continue
+        }
+
         await supabase.from('email_send_log').insert({
           message_id: payload.message_id,
           template_name: payload.label || queue,
           recipient_email: payload.to,
           status: 'sent',
+          metadata: {
+            provider_message_id: String(providerId),
+            provider_response: providerResponse,
+          },
         })
 
         // Delete from queue
