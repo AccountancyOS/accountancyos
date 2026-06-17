@@ -1,122 +1,67 @@
-## Regression Prevention System
+## Why job creation failed
 
-A permanent safety net to catch drift in auth emails, portal access, queues, RLS, onboarding, questionnaires, jobs, and filings before users hit them. Layered: docs → manifest → smoke probe → automated tests → checklist.
+`public.jobs.chk_jobs_status` only permits 9 canonical statuses:
 
-The project today has zero `*.test.*` files, no Vitest config, and no CI workflows. There are already two relevant edge functions (`portal-qa-probe`, `seed-portal-test-users`) we can extend rather than rebuild.
+`blank, records_requested, records_received, accountant_queries, client_queries, accountant_review, client_review, ready_to_file, completed`
 
----
+`src/components/jobs/CreateJobDialog.tsx` still uses an old vocabulary (`not_started`, `in_progress`, `waiting_on_client`, `with_reviewer`) and defaults to `not_started`, so every manual job-create insert is rejected by the check constraint. That matches the toast in the session replay.
 
-### 1. Critical Workflows Documentation
+The DB is correct. The UI is wrong, and the regression net has no test asserting UI status options match the DB constraint.
 
-Create `docs/critical-workflows.md` with one section per workflow, each covering: frontend entry point, backend RPCs/edge functions, tables touched, RLS assumptions, external providers, expected state transitions and logs, and known failure modes.
+## Fix
 
-Workflows covered:
+### 1. Single source of truth in `src/lib/workflow-constants.ts`
+- Inspect the file. If an ordered canonical list already exists, reuse it.
+- Otherwise add:
+  ```ts
+  export const JOB_STATUSES = [
+    "blank","records_requested","records_received",
+    "accountant_queries","client_queries",
+    "accountant_review","client_review",
+    "ready_to_file","completed",
+  ] as const;
+  export type JobStatus = typeof JOB_STATUSES[number];
+  ```
+- Do not duplicate the list elsewhere.
 
-```text
-- Accountant login                          - Email queue processing
-- Client portal login                       - Deadline / job generation
-- Client forgotten password                 - TrueLayer connect + sync
-- Client invitation (portal_access)         - Bookkeeping transaction posting
-- Quote accepted -> client -> onboarding    - Workpaper approval / locking
-- Engagement letter send + sign             - Filing submission state machine
-- Questionnaire send                        - RLS cross-organization isolation
-- Questionnaire completion -> job update
-```
+### 2. Fix `src/components/jobs/CreateJobDialog.tsx`
+- Default `status` state → `"blank"`.
+- Replace hardcoded `<SelectItem>` list with a map over `JOB_STATUSES`, labelled via existing `formatStatus()` from `@/lib/format-utils`.
+- Render all 9 statuses in workflow order.
+- No other behavior changes (priority, auto-gen paths, semantics untouched).
 
-### 2. Supabase Infrastructure Manifest
+### 3. Repo-wide sweep for old vocabulary
+Search the entire repo for `not_started`, `in_progress`, `waiting_on_client`, `with_reviewer` in any job creation/update/filter logic (components, services, hooks, edge functions, SQL). For each hit:
+- If it writes to `jobs.status` or maps user-visible job status, replace with a canonical value from `JOB_STATUSES`.
+- If it is unrelated (e.g. invoice status, payroll, automation execution state), leave it alone and note it.
+Produce a short list of touched vs deliberately-skipped occurrences in the final message.
 
-Create `infra/supabase-manifest.json` as the source of truth for expected backend infrastructure, plus a human-readable `docs/supabase-infrastructure.md`. Manifest declares:
+### 4. Regression test
+New: `src/test/regression/job-status-vocabulary.test.ts`
+- Assert `JOB_STATUSES` deep-equals the 9 canonical values in exact order.
+- Assert it contains none of the old values (`not_started`, `in_progress`, `waiting_on_client`, `with_reviewer`).
+- Follow the existing `src/test/regression/*` style (Vitest, no service-role usage).
 
-- Required edge functions (full list, with `verify_jwt` expectation)
-- Required cron jobs (`process-email-queue`, `chaser-tick`, `sla-check`, `session-cleanup`, `workflow-tick`, `dormant-lead-scan`, `invoice-overdue-scan`, `truelayer-sync-scheduled`)
-- Required runtime secrets (Stripe, HMRC, Companies House, TrueLayer, Gmail/Outlook OAuth, `LOVABLE_API_KEY`)
-- Required public-schema tables that must have RLS enabled
-- Required email infrastructure (`email_send_log`, `email_send_state`, `suppressed_emails`, `enqueue_email` RPC, pgmq queues `auth_emails` + `transactional_emails`)
-- Required storage buckets
-- Required auth config: Site URL, allow-listed redirects (including `https://app.accountancyos.com/portal/reset-password`), auth-email hook wiring
+### 5. Smoke-test drift check in `scripts/smoke-test.ts`
+Add a check that compares the live DB constraint against `JOB_STATUSES`:
+- Try a read-only SQL via the existing smoke pattern: `select pg_get_constraintdef(oid) from pg_constraint where conname='chk_jobs_status'`.
+- If the smoke runner cannot execute raw SQL, add a tiny read-only SECURITY DEFINER helper `public.get_check_constraint_values(text)` returning `text[]`, granted to `authenticated`, used only for metadata introspection. No destructive SQL, no schema changes to `jobs`. Migration only added if strictly required for this helper.
+- Parse the allowed values, compare as a set to `JOB_STATUSES`, fail loudly with a clear diff on mismatch.
 
-### 3. Post-Deploy Smoke Test Script
+### 6. Documentation
+Update `docs/critical-workflows.md` under the Jobs / Deadline-job generation row:
+- Add coverage links to `src/test/regression/job-status-vocabulary.test.ts` and the new smoke check.
+- Note that manual job creation MUST source statuses from `JOB_STATUSES` in `workflow-constants.ts`.
 
-Create `scripts/smoke-test.ts` (runnable with `bun scripts/smoke-test.ts`) that reads the manifest and verifies against the live backend:
+## Out of scope
+- No change to `chk_jobs_status` itself.
+- No change to priority values, automation, onboarding, or unrelated job fields.
+- No migration unless the read-only metadata helper is required.
 
-- Every manifest edge function is deployed and reachable (HEAD/OPTIONS)
-- Every manifest cron job exists in `cron.job`
-- Every manifest table exists and has RLS enabled
-- Email queue: enqueues a synthetic test email and confirms `email_send_log` reaches `sent` within 30s
-- Auth hook: triggers a recovery for a dedicated test user and asserts `auth-email-hook` ran and `email_send_log` recorded a `recovery` send
-- Reset URL: confirms `/portal/reset-password` resolves on the deployed portal
-- Required secrets present (`fetch_secrets` comparison)
-- RLS probe: runs the existing `portal-qa-probe` and a new cross-org probe
-
-Exits non-zero with a clear report when any check fails. Designed to be CI-runnable and locally runnable.
-
-### 4. Automated Regression Tests
-
-Install Vitest + Testing Library (the project has none today). Configure `vitest.config.ts`, `src/test/setup.ts`, add `"test"` script to `package.json`.
-
-First-wave tests (covering the highest-risk paths):
-
-- `PortalForgotPassword.test.tsx` - asserts the component calls `resetPasswordForEmail` with the correct `redirectTo` and shows enumeration-safe success
-- `PortalLogin.test.tsx` - happy path + error path
-- Email queue contract test - validates the auth-email-hook payload shape and `enqueue_email` arguments via a mocked Supabase client
-- Questionnaire send + completion - service layer test that completion writes job update
-- Quote acceptance lifecycle - service layer test for `acceptQuote -> create client -> start onboarding`
-- RLS cross-org isolation - integration test using the `seed-portal-test-users` fixture (Org A and Org B) verifying users in one org cannot read the other's clients/jobs
-
-### 5. Test Fixtures and Seed Data
-
-Extend `seed-portal-test-users` to provision a deterministic fixture set used by tests and smoke checks:
-
-```text
-- regression+accountant@accountancyos.test
-- regression+client.active@accountancyos.test       (portal access active)
-- regression+client.noportal@accountancyos.test     (no portal access)
-- regression+client.revoked@accountancyos.test      (portal access revoked)
-- regression+client.company@accountancyos.test      (limited company)
-- regression+client.sole@accountancyos.test         (sole trader)
-- regression+orgA.owner@accountancyos.test + regression+orgB.owner@accountancyos.test  (RLS isolation)
-```
-
-Document them in `docs/test-fixtures.md`. Real users (e.g. Amy) are explicitly excluded from automated tests.
-
-### 6. Development Guardrails
-
-Add `docs/change-checklist.md` plus a `## Change Checklist` block prepended to `README.md`. Every future change must record:
-
-- Impact analysis (which workflows from `critical-workflows.md` are affected)
-- Tests added / run
-- Migration safety check (idempotent? backfill? RLS still enforced?)
-- RLS / security check
-- Edge function deploy check
-- Smoke test pass (or why skipped)
-
-Add `.github/PULL_REQUEST_TEMPLATE.md` mirroring the checklist so it appears on every PR.
-
-### 7. Implementation Order
-
-```text
-1. critical-workflows.md + supabase-infrastructure.md + manifest JSON
-2. Vitest setup + first-wave tests
-3. Extend seed-portal-test-users for full fixture set + test-fixtures.md
-4. scripts/smoke-test.ts wired to manifest + extended portal-qa-probe
-5. change-checklist.md + README block + PR template
-6. Run smoke script + tests; record results in the new docs as the baseline
-```
-
-### Technical Details
-
-- Test runner: Vitest 3.x with jsdom + Testing Library, mirroring the prompt-provided frontend testing setup. No Playwright (out of scope for first wave; can be layered later).
-- Smoke script auth: uses anon key for public probes; uses a dedicated `REGRESSION_SERVICE_KEY` runtime secret for RLS checks. We will request that secret via `add_secret` only if the user approves the plan.
-- Cron + table introspection in smoke script uses `supabase.rpc` against existing read-only helper functions; no destructive SQL.
-- Manifest format kept as JSON so it is machine-checkable and easy to diff in PRs.
-- RLS test strategy: two seeded org owners + signed-in PostgREST calls; assert cross-org `select` returns zero rows and cross-org `update/insert` returns 401/403.
-- No changes to existing business logic or live data in this work - this is purely additive infrastructure.
-
-### Acceptance
-
-- `docs/critical-workflows.md`, `docs/supabase-infrastructure.md`, `docs/test-fixtures.md`, `docs/change-checklist.md` exist and are complete
-- `infra/supabase-manifest.json` exists and matches live infra
-- `scripts/smoke-test.ts` runs green against current deployment and fails loud when a required piece is missing (proven by toggling a check)
-- Vitest installed; first-wave tests pass; `bun test` runs them
-- Forgotten-password path is covered by both a Vitest test (frontend wiring) and the smoke script (end-to-end)
-- PR template + README checklist in place
+## Acceptance
+- Manual job creation succeeds; row lands with chosen canonical status, default `blank`.
+- Status dropdown shows the 9 canonical statuses in workflow order, with no old values.
+- `bun run test` passes including the new regression test.
+- `bun smoke` passes including the new constraint-vs-`JOB_STATUSES` check.
+- Future drift between DB constraint and `JOB_STATUSES` fails CI before reaching users.
+- Repo sweep leaves no legacy status writes in job code paths.
