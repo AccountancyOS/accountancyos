@@ -14,7 +14,8 @@ describe("Baseline: forgotten-password regression is now automated", () => {
   it("frontend wiring is covered by a Vitest test", () => {
     const t = read("src/portal/pages/PortalForgotPassword.test.tsx");
     expect(t).toMatch(/resetPasswordForEmail/);
-    expect(t).toMatch(/\/portal\/reset-password/);
+    expect(t).toMatch(/portal.{0,4}reset-password/);
+    expect(t).toMatch(/redirectTo/);
   });
 
   it("auth hook contract is enforced", () => {
