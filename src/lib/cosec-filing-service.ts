@@ -107,7 +107,6 @@ export async function createCS01Filing(data: CS01FilingData): Promise<CreateFili
         period_end: data.madeUpToDate,
         filing_data: filingPayload,
         status: "draft",
-        filing_deadline: filingDeadline.toISOString().split("T")[0],
       })
       .select("id")
       .single();
