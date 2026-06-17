@@ -104,7 +104,8 @@ async function executeCreateTask(
         organization_id: context.organizationId,
         title: title || 'Auto-generated Task',
         status: 'not_started',
-        visibility: visibility || 'internal',
+        // client_tasks_visibility_check: {client_visible, internal_only}
+        visibility: visibility || 'internal_only',
         job_id: jobId || null,
         client_id: clientId || null,
         company_id: companyId || null,
