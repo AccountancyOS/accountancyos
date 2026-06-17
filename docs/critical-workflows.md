@@ -158,3 +158,30 @@ coverage is not enough — see the coverage matrix at the bottom of this file.
 - **RLS**: tables with cross-org links (e.g. `accountant_client_links`, `portal_access`) must still scope by the originating org
 - **State transitions**: n/a
 - **Failure modes**: a policy using `USING (true)`, anon role granted to a tenant table, a new table created without RLS enabled, a SECURITY DEFINER function that leaks across orgs
+---
+
+## Coverage Matrix
+
+Per non-negotiable #6, every critical workflow has at least one of: integration test, live smoke check, edge-function contract test, or DB/RLS state-transition test. Mocked-only coverage is not accepted.
+
+| # | Workflow | Owner module / files | Regression test | Smoke check | Coverage kind |
+|---|---|---|---|---|---|
+| 1 | Accountant Login | `src/lib/auth-context.tsx`, `src/pages/Index.tsx` | _todo: `Login.test.tsx`_ | `portal:reset-password reachable` (proxy for site routing) | Integration (planned) |
+| 2 | Client Portal Login | `src/portal/pages/PortalLogin.tsx`, `src/portal/guards/PortalGuard.tsx` | `src/portal/pages/PortalLogin.test.tsx` | `rls:cross-org isolation (user JWT)` | Integration + live smoke |
+| 3 | Client Forgotten Password | `src/portal/pages/PortalForgotPassword.tsx`, `supabase/functions/auth-email-hook`, `supabase/functions/process-email-queue` | `src/portal/pages/PortalForgotPassword.test.tsx`, `src/test/regression/auth-email-hook-contract.test.ts`, `src/test/regression/process-email-queue-contract.test.ts`, `src/test/regression/forgotten-password-baseline.test.ts` | `auth:recovery accepted`, `email:send_log row reaches sent` | Integration + edge contract + live smoke (provider ack required) |
+| 4 | Client Invitation | `src/components/clients/InviteClientDialog.tsx`, `supabase/functions/accept-portal-invite-signup` | _todo: `accept-portal-invite-signup-contract.test.ts`_ | `edge:accept-portal-invite-signup` | Edge contract (planned) |
+| 5 | Quote → Client → Onboarding | `src/lib/quote-port-service.ts`, `accept_quote_and_create_client` RPC | _todo: `quote-acceptance.test.ts`_ | `edge:onboarding-stripe-checkout`, `edge:onboarding-stripe-verify` | DB state transition (planned) |
+| 6 | Engagement Letter Send / Sign | `src/lib/engagement-change-service.ts`, `supabase/functions/send-engagement-letter` | _todo: contract test_ | `edge:send-engagement-letter` | Edge contract (planned) |
+| 7 | Questionnaire Send | `src/lib/questionnaire-workpaper-service.ts` | _todo: service test_ | n/a (covered by table RLS check) | DB state transition (planned) |
+| 8 | Questionnaire Completion | `src/pages/QuestionnaireResponse.tsx`, `submit_questionnaire_response` RPC | _todo: RPC test_ | n/a | DB state transition (planned) |
+| 9 | Email Queue Processing | `supabase/functions/process-email-queue` | `src/test/regression/process-email-queue-contract.test.ts` | `email:send_log row reaches sent` (asserts `metadata.provider_message_id`) | Edge contract + live smoke |
+| 10 | Deadline / Job Generation | `src/lib/auto-rollover-service.ts`, `src/lib/job-template-engine.ts` | _todo: engine test_ | n/a | DB state transition (planned) |
+| 11 | TrueLayer Connect / Sync | `supabase/functions/truelayer-*` | _todo: contract test_ | `edge:truelayer-sync-scheduled` | Edge contract (planned) |
+| 12 | Bookkeeping Posting | `post_to_ledger` RPC | _todo: RPC test_ | n/a | DB state transition (planned) |
+| 13 | Workpaper Approval / Locking | `src/lib/filing-lock-service.ts` | _todo: service test_ | n/a | DB state transition (planned) |
+| 14 | Filing Submission | `supabase/functions/{ch-submit,hmrc-ct-submit,hmrc-vat-submit,cis-submit,rti-submit}` | _todo: contract tests_ | `edge:*-submit` reachability | Edge contract (planned) |
+| 15 | RLS Cross-Org Isolation | every table in `infra/supabase-manifest.json#rlsRequiredTables` | `src/test/regression/rls-cross-org.test.ts` | `rls:cross-org isolation (user JWT)`, `rls:cross-org write blocked` | Live smoke with **user JWT** (no service role) |
+
+### Planned (`_todo_`) entries
+
+Each `_todo_` slot is tracked in `infra/supabase-manifest.json#manualReleaseChecks` until its automated coverage lands. The change checklist requires a release manager to manually verify any `_todo_` workflow they touched until a real test is added.
