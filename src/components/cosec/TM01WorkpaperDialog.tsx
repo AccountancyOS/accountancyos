@@ -101,7 +101,8 @@ export function TM01WorkpaperDialog({
       if (jobId) {
         await supabase
           .from("jobs")
-          .update({ status: "in_progress" })
+          // chk_jobs_status: see SH01WorkpaperDialog.
+          .update({ status: "records_received" })
           .eq("id", jobId);
       }
 
