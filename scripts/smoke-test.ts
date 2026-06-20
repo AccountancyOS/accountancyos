@@ -19,7 +19,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { JOB_STATUSES } from "../src/lib/workflow-constants";
+import { CHECK_CONSTRAINT_REGISTRY } from "../src/lib/db-constants/check-constraints";
 
 type Manifest = typeof import("../infra/supabase-manifest.json");
 
@@ -300,46 +300,39 @@ async function checkRlsRequiredTables() {
 }
 
 /**
- * Asserts the DB-side allowed values for `chk_jobs_status` match the frontend
- * SSOT (`JOB_STATUSES`). Catches the exact "manual job creation rejected by
- * check constraint" regression that the original create-job failure caused.
+ * Asserts the live DB-side allowed values for EVERY registered CHECK constraint
+ * match the frontend SSOT (`CHECK_CONSTRAINT_REGISTRY`). Catches the class of
+ * "write rejected by check constraint" regressions — the original manual
+ * job-creation failure, the filings double-constraint, etc. — across all
+ * constrained vocabularies, not just jobs.
  */
-async function checkJobStatusVocabulary(supabase: SupabaseClient) {
-  const { data, error } = await supabase.rpc("get_check_constraint_values", {
-    constraint_name: "chk_jobs_status",
-  });
-  if (error) {
+async function checkConstraintVocabularies(supabase: SupabaseClient) {
+  for (const entry of CHECK_CONSTRAINT_REGISTRY) {
+    const label = `db:${entry.table}.${entry.column} (${entry.constraint}) matches SSOT`;
+    const { data, error } = await supabase.rpc("get_check_constraint_values", {
+      constraint_name: entry.constraint,
+    });
+    if (error) {
+      record(label, false, error.message, "Apply the migration that adds public.get_check_constraint_values()");
+      continue;
+    }
+    const dbValues: string[] = Array.isArray(data) ? [...data] : [];
+    if (dbValues.length === 0) {
+      record(label, false, "constraint not found or empty", `Check ${entry.constraint} still exists on public.${entry.table}`);
+      continue;
+    }
+    const expected = new Set<string>(entry.values);
+    const actual = new Set<string>(dbValues);
+    const missingInDb = [...expected].filter((v) => !actual.has(v));
+    const extraInDb = [...actual].filter((v) => !expected.has(v));
+    const ok = missingInDb.length === 0 && extraInDb.length === 0;
     record(
-      "db:jobs.chk_jobs_status matches JOB_STATUSES",
-      false,
-      error.message,
-      "Apply the migration that adds public.get_check_constraint_values()",
+      label,
+      ok,
+      ok ? `${dbValues.length} values aligned` : `missingInDb=[${missingInDb.join(",")}] extraInDb=[${extraInDb.join(",")}]`,
+      ok ? undefined : `Reconcile src/lib/db-constants/check-constraints.ts with ${entry.constraint}`,
     );
-    return;
   }
-  const dbValues: string[] = Array.isArray(data) ? [...data] : [];
-  if (dbValues.length === 0) {
-    record(
-      "db:jobs.chk_jobs_status matches JOB_STATUSES",
-      false,
-      "constraint not found or empty",
-      "Check chk_jobs_status still exists on public.jobs",
-    );
-    return;
-  }
-  const expected = new Set<string>(JOB_STATUSES);
-  const actual = new Set<string>(dbValues);
-  const missingInDb = [...expected].filter((v) => !actual.has(v));
-  const extraInDb = [...actual].filter((v) => !expected.has(v));
-  const ok = missingInDb.length === 0 && extraInDb.length === 0;
-  record(
-    "db:jobs.chk_jobs_status matches JOB_STATUSES",
-    ok,
-    ok
-      ? `${dbValues.length} values aligned`
-      : `missingInDb=[${missingInDb.join(",")}] extraInDb=[${extraInDb.join(",")}]`,
-    ok ? undefined : "Update JOB_STATUSES in src/lib/workflow-constants.ts or migrate chk_jobs_status",
-  );
 }
 
 async function main() {
@@ -352,7 +345,7 @@ async function main() {
   await checkInfraTables();
   await checkRlsRequiredTables();
   await checkCrossOrgRls();
-  await checkJobStatusVocabulary(supabase);
+  await checkConstraintVocabularies(supabase);
 
   // Manual release checks (cannot be machine-verified from outside).
   console.log("\nManual release checks (verify before publish):");

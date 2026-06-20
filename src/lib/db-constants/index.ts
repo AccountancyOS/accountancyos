@@ -19,13 +19,23 @@ export const JOB_STATUS = {
 } as const;
 export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS];
 
+// Canonical filings.status vocabulary = chk_filing_status (13 values). The
+// ordered array `FILING_STATUSES` in ./check-constraints is the SSOT; this
+// object is the keyed-accessor form. Both must match the DB constraint.
 export const FILING_STATUS = {
+  NOT_STARTED: "not_started",
   DRAFT: "draft",
+  IN_PROGRESS: "in_progress",
+  READY_FOR_REVIEW: "ready_for_review",
+  SENT_TO_CLIENT: "sent_to_client",
+  CLIENT_CHANGES_REQUESTED: "client_changes_requested",
   AWAITING_APPROVAL: "awaiting_approval",
   APPROVED: "approved",
   READY_TO_FILE: "ready_to_file",
-  FILED: "filed",
+  SUBMITTED: "submitted",
+  ACCEPTED: "accepted",
   REJECTED: "rejected",
+  FILED: "filed",
 } as const;
 export type FilingStatus = (typeof FILING_STATUS)[keyof typeof FILING_STATUS];
 
