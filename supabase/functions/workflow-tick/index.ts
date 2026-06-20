@@ -167,7 +167,8 @@ async function executeStep(supabase: any, step: StepRow, overrides: { timingOver
       const title = resolvePlaceholders(config.title || "Auto Task", ctx);
       let dueDate: string | null = null;
       if (config.due_offset_days) { const d = new Date(); d.setDate(d.getDate() + config.due_offset_days); dueDate = d.toISOString().split("T")[0]; }
-      const { data, error } = await supabase.from("client_tasks").insert({ organization_id: ctx.orgId, title, description: config.description || null, client_id: ctx.clientId || null, company_id: ctx.companyId || null, visibility: config.visibility || "internal", status: "pending", due_date: dueDate }).select("id").single();
+      // client_tasks CHECKs: status {not_started,in_progress,complete}; visibility {client_visible,internal_only}
+      const { data, error } = await supabase.from("client_tasks").insert({ organization_id: ctx.orgId, title, description: config.description || null, client_id: ctx.clientId || null, company_id: ctx.companyId || null, visibility: config.visibility || "internal_only", status: "not_started", due_date: dueDate }).select("id").single();
       if (error) return { success: false, shouldWait: false, error: error.message };
       return { success: true, shouldWait: false, data: { taskId: data.id } };
     }
