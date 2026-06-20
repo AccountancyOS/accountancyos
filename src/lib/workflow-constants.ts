@@ -45,6 +45,15 @@ export const CHASER_STOP_STATUSES: readonly JobStatus[] = [
 ] as const;
 
 /**
+ * Job statuses representing open/active work — every canonical status except
+ * the terminal `completed`. Use for "active jobs" lists/KPIs/pickers so they
+ * never filter on retired status strings (which silently return zero rows).
+ */
+export const OPEN_JOB_STATUSES: readonly JobStatus[] = JOB_STATUSES.filter(
+  (s) => s !== "completed",
+);
+
+/**
  * Map of values_ref identifiers to their resolved constant arrays.
  * The CONDITION step executor resolves values_ref at runtime using this map.
  * Unknown refs fail loudly — never silently.

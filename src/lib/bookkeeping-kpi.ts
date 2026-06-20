@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { OPEN_JOB_STATUSES } from "@/lib/workflow-constants";
 
 export interface KPIResult {
   value: number | null;
@@ -509,7 +510,7 @@ export async function getEntityDeadlinesAndJobs(
     .from('jobs')
     .select('id, job_name, status, service_type')
     .eq(entityType === 'client' ? 'client_id' : 'company_id', entityId)
-    .in('status', ['not_started', 'in_progress', 'review'])
+    .in('status', [...OPEN_JOB_STATUSES])
     .order('created_at', { ascending: false })
     .limit(5);
 

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { createWorkpaperFromSnapshot, UK_WORKPAPER_CATEGORIES } from "@/lib/workpaper-from-tb";
 import { formatServiceType } from "@/lib/format-utils";
+import { OPEN_JOB_STATUSES } from "@/lib/workflow-constants";
 import {
   Dialog,
   DialogContent,
@@ -68,7 +69,7 @@ export function CreateWorkpaperFromSnapshotDialog({
       let query = supabase
         .from("jobs")
         .select("id, job_name, service_type, period_label, status")
-        .in("status", ["not_started", "in_progress", "review"]);
+        .in("status", [...OPEN_JOB_STATUSES]);
 
       if (snapshot.company_id) {
         query = query.eq("company_id", snapshot.company_id);

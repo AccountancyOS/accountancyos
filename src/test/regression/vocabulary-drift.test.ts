@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { CHECK_CONSTRAINT_REGISTRY } from "@/lib/db-constants/check-constraints";
+import { JOB_STATUSES, OPEN_JOB_STATUSES } from "@/lib/workflow-constants";
 
 /**
  * Frozen expected values, keyed by exact constraint name, transcribed from the
@@ -61,6 +62,26 @@ describe("vocabulary drift registry (SSOT)", () => {
     const registered = CHECK_CONSTRAINT_REGISTRY.map((e) => e.constraint).sort();
     const expected = Object.keys(EXPECTED_CONSTRAINT_VALUES).sort();
     expect(registered).toEqual(expected);
+  });
+
+  describe("OPEN_JOB_STATUSES (derived 'active jobs' set)", () => {
+    it("is exactly the canonical job statuses minus the terminal 'completed'", () => {
+      expect([...OPEN_JOB_STATUSES].sort()).toEqual(
+        JOB_STATUSES.filter((s) => s !== "completed").sort(),
+      );
+    });
+
+    it("excludes 'completed' and every retired legacy status", () => {
+      for (const bad of ["completed", "not_started", "in_progress", "review", "with_reviewer", "waiting_on_client"]) {
+        expect(OPEN_JOB_STATUSES as readonly string[]).not.toContain(bad);
+      }
+    });
+
+    it("contains only canonical job statuses", () => {
+      for (const s of OPEN_JOB_STATUSES) {
+        expect(JOB_STATUSES as readonly string[]).toContain(s);
+      }
+    });
   });
 
   for (const entry of CHECK_CONSTRAINT_REGISTRY) {
