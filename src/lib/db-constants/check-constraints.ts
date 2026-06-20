@@ -116,7 +116,7 @@ export const CHECK_CONSTRAINT_REGISTRY: readonly CheckConstraintVocab[] = [
   { table: "filings", column: "status", constraint: "chk_filing_status", values: FILING_STATUSES },
   { table: "onboarding_applications", column: "status", constraint: "onboarding_applications_status_check", values: ONBOARDING_STATUSES },
   { table: "onboarding_applications", column: "aml_status", constraint: "onboarding_applications_aml_status_check", values: ONBOARDING_AML_STATUSES },
-  { table: "onboarding_applications", column: "billing_status", constraint: "billing_status_check", values: ONBOARDING_BILLING_STATUSES },
+  { table: "onboarding_applications", column: "billing_status", constraint: "onboarding_applications_billing_status_check", values: ONBOARDING_BILLING_STATUSES },
   { table: "quotes", column: "status", constraint: "quotes_status_check", values: QUOTE_STATUSES },
   { table: "deadlines", column: "status", constraint: "deadlines_status_check", values: DEADLINE_STATUSES },
   { table: "leads", column: "pipeline_stage", constraint: "leads_pipeline_stage_check", values: LEAD_PIPELINE_STAGES },

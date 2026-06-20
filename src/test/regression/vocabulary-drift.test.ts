@@ -41,7 +41,7 @@ const EXPECTED_CONSTRAINT_VALUES: Record<string, string[]> = {
     "portal_pending", "for_review", "needs_client_action", "approved", "rejected", "cancelled",
   ],
   onboarding_applications_aml_status_check: ["pending", "verified", "failed", "manual_review"],
-  billing_status_check: ["pending", "skipped", "completed", "not_required"],
+  onboarding_applications_billing_status_check: ["pending", "skipped", "completed", "not_required"],
   quotes_status_check: ["draft", "sent", "accepted", "rejected", "expired", "superseded"],
   deadlines_status_check: ["pending", "in_progress", "completed", "filed", "overdue", "cancelled"],
   leads_pipeline_stage_check: ["new", "qualified", "proposal_sent", "chasing", "won", "lost"],

@@ -87,52 +87,38 @@ Risk legend:
 
 ---
 
-## 3. `filings.status`
+## 3. `filings.status` — ✅ RESOLVED (migration `20260620150856`)
+
+**Correction to an earlier draft of this audit:** `public.filings` has **TWO**
+constraints on `status`, not three. There is **no `valid_status` constraint on
+filings** — `valid_status` is a *different* constraint that lives on
+`workpaper_instances` (§4); they were conflated. Verified via
+`pg_constraint` / the migration history.
 
 | Field | Value |
 |---|---|
 | Table / column | `public.filings.status` |
-| DB constraints | **THREE overlapping CHECK constraints — all enforced AND-wise:** |
-| `valid_status` | `{draft, awaiting_approval, approved, ready_to_file, filed, rejected}` |
-| `chk_filing_status` | `{not_started, draft, in_progress, ready_for_review, sent_to_client, client_changes_requested, awaiting_approval, approved, ready_to_file, submitted, accepted, rejected, filed}` |
-| `chk_filings_status` (NOT VALID) | `{draft, ready_for_approval, awaiting_client_approval, approved_by_client, approved, queued, submitting, submitted, pending, accepted, filed, rejected, error, submission_failed, cancelled}` |
-| **Effective intersection (writeable)** | **`{draft, approved, rejected, filed}`** |
-| TS type `FilingStatus` (`src/lib/filing-service.ts:8`) | 13-value union matching `chk_filing_status` only |
-| App default insert | `'draft'` (OK) |
-| Risk | **P0 — latent. Currently 0 filings in DB.** |
+| `chk_filing_status` (20260217133510, **canonical**) | `{not_started, draft, in_progress, ready_for_review, sent_to_client, client_changes_requested, awaiting_approval, approved, ready_to_file, submitted, accepted, rejected, filed}` (13) |
+| `chk_filings_status` (20251218231226, **stale, NOT VALID**) | `{draft, ready_for_approval, awaiting_client_approval, approved_by_client, approved, queued, submitting, submitted, pending, accepted, filed, rejected, error, submission_failed, cancelled}` (15) |
+| TS type `FilingStatus` (`src/lib/filing-service.ts:8`) | 13-value union matching `chk_filing_status` exactly |
+| Risk (before fix) | **P0 — latent.** A `NOT VALID` CHECK is still enforced on writes, so both applied; the writeable **intersection** was only `{draft, approved, submitted, accepted, filed, rejected}`. The first "Send for Approval" / "Mark Ready" / "Reopen" would hit a CHECK violation. |
 
-### App values found vs effective intersection
+### Fix applied
+Migration `20260620150856_…` runs `ALTER TABLE public.filings DROP CONSTRAINT
+IF EXISTS chk_filings_status;` (and idempotently re-asserts `chk_filing_status`).
+Safe: dropping a CHECK cannot invalidate existing rows; it only widens the
+accepted set back to the canonical vocabulary the app already writes. The earlier
+draft's proposed `DROP CONSTRAINT valid_status` was dropped from the migration —
+that constraint does not exist on filings.
 
-| Location | Value written | Passes all three? |
-|---|---|---|
-| `filing-service.ts:91` createFilingFromWorkpaper | `'draft'` | YES |
-| `filing-service.ts:258` sendForApproval | `'awaiting_approval'` | **NO** (fails `valid_status`) |
-| `filing-service.ts:307` updateFilingStatus → `'not_started'` | `'not_started'` | **NO** |
-| `filing-service.ts:450` markReady | `'ready_to_file'` | **NO** |
-| `filing-service.ts:494` reject | `'rejected'` | YES |
-| `filing-service.ts:557` markFiled | `'filed'` | YES |
-| `FilingDetail.tsx:168` reopen | `'in_progress'` | **NO** |
-| `FilingDetail.tsx` markReady | `'ready_for_review'` | **NO** |
+`FILING_STATUSES` (the 13 canonical values) is now in
+`src/lib/db-constants/check-constraints.ts`, registered for the live smoke check
+on `chk_filing_status`, and the unused 6-value `FILING_STATUS` object in
+`db-constants/index.ts` was corrected to the full 13.
 
-The first user that clicks "Send for Approval", "Mark Ready", or "Reopen" on
-any filing will hit a `valid_status` CHECK violation. The Phase-1 smoke test
-pattern would catch this; today it does not because no filing exists.
-
-### Fix — **DO NOT change runtime now**
-The correct canonical set is **not unambiguous**: the three constraints encode
-three different generations of the filing workflow, and `chk_filing_status`
-(13 values) is the one the TS union and UI agree with. The 6-value
-`valid_status` constraint is almost certainly the **stale** one (matches the
-old `workpaper_instances`-style vocabulary), but dropping a constraint is a
-schema change that needs explicit approval and a migration.
-
-Recommended (deferred, owner decision required):
-1. Confirm `chk_filing_status` is canonical (matches `FilingStatus` TS union).
-2. Migration: `ALTER TABLE filings DROP CONSTRAINT valid_status, DROP CONSTRAINT chk_filings_status;`
-3. Add `FILING_STATUSES` constant in `workflow-constants.ts` derived from
-   `FilingStatus`, regression test, smoke drift check on `chk_filing_status`.
-
-Until then this is **the single highest-risk drift in the codebase**.
+> Apply note for the live DB: if any existing `filings.status` value falls
+> outside the 13 canonical values, it remains stored (drop can't reject it) but
+> a future update will be constrained — none are expected given the app's TS union.
 
 ---
 
@@ -243,7 +229,7 @@ consume its SSOT. No action required.
 |---|---|---|---|---|
 | 1 | `client_tasks.status` / `.visibility` | No | P0 + P1 | **Yes** — 2 broken inserts fixed |
 | 2 | `job_tasks.status` | No | P0 | **Yes** — 1 broken insert fixed |
-| 3 | `filings.status` (3 constraints) | TS type only | **P0 latent — highest risk** | No — needs schema decision |
+| 3 | `filings.status` (2 constraints; not 3) | **Yes — FILING_STATUSES** | **P0 latent → RESOLVED** | **Yes** — migration drops stale `chk_filings_status` |
 | 4 | `workpaper_instances.status` | No | P1 | No |
 | 4b | jobs filter in bookkeeping | N/A | P1 (silent zero-results) | No — needs product decision |
 | 5a | `onboarding_applications.status` | No | P0 latent (bad default) | No — needs schema migration |
@@ -253,10 +239,11 @@ consume its SSOT. No action required.
 
 ## Recommended next steps (in order)
 
-1. **Filing constraints reconciliation** (P0 latent, highest risk). Owner: Filings module.
-2. **Onboarding status default migration** (P0 latent). Owner: Onboarding module.
-3. **Bookkeeping active-jobs filter** product decision (P1, silent UX bug). Owner: Bookkeeping module.
-4. Introduce `CLIENT_TASK_STATUSES`, `CLIENT_TASK_VISIBILITIES`, `JOB_TASK_STATUSES`, `FILING_STATUSES`, `WORKPAPER_STATUSES`, `ONBOARDING_STATUSES`, `ONBOARDING_BILLING_STATUSES`, `ONBOARDING_AML_STATUSES` constants and matching regression + smoke checks, modeled on Phase 1.
+1. ~~Filing constraints reconciliation~~ — **DONE** (migration `20260620150856`; registry + smoke check).
+2. ~~Introduce per-domain status constants + regression + smoke checks~~ — **DONE.** A single registry `src/lib/db-constants/check-constraints.ts` now holds `CLIENT_TASK_STATUSES`, `CLIENT_TASK_VISIBILITIES`, `JOB_TASK_STATUSES`, `FILING_STATUSES`, `ONBOARDING_STATUSES`, `ONBOARDING_BILLING_STATUSES`, `ONBOARDING_AML_STATUSES`, `ENGAGEMENT_STATUSES`, `ENTITY_LIFECYCLE_STATUSES`, `PORTAL_ACCESS_STATUSES`, `ENGAGEMENT_LETTER_STATUSES`, `QUOTE_STATUSES`, `DEADLINE_STATUSES`, `LEAD_PIPELINE_STAGES` (+ `JOB_STATUSES`). Covered by `src/test/regression/vocabulary-drift.test.ts` (unit) and the `checkConstraintVocabularies` loop in `scripts/smoke-test.ts` (live, all 16 constraints).
+3. **Onboarding `status` default migration** (P0 latent — bad column default). Still open; needs an onboarding-flow decision. Owner: Onboarding module.
+4. **Bookkeeping active-jobs filter** product decision (P1, silent zero-results). Still open. Owner: Bookkeeping module.
+5. **Refactor remaining hardcoded literals** at write sites to import from the registry (mechanical; the guard already catches drift regardless).
 
 ## Changes applied by this audit
 
