@@ -335,6 +335,64 @@ async function checkConstraintVocabularies(supabase: SupabaseClient) {
   }
 }
 
+/**
+ * Detects infrastructure drift that the end-to-end checks can miss: a critical
+ * pg_cron job being unscheduled/inactive (e.g. the email worker that, when it
+ * silently stopped, broke password-reset delivery). Non-critical jobs are
+ * reported but do not fail the run.
+ */
+async function checkCronJobs() {
+  if (!SERVICE_KEY) {
+    record("db:cron jobs scheduled", true, "skipped (no service-role key)");
+    return;
+  }
+  const admin = createClient(SUPABASE_URL!, SERVICE_KEY);
+  for (const job of manifest.cronJobs) {
+    const { data, error } = await admin.rpc("get_cron_job_status", { p_jobname: job.name });
+    const critical = job.critical === true;
+    if (error) {
+      record(`cron:${job.name}`, !critical, error.message, "Apply the migration adding public.get_cron_job_status()");
+      continue;
+    }
+    const exists = (data as { exists?: boolean })?.exists === true;
+    const active = (data as { active?: boolean })?.active === true;
+    const scheduled = exists && active;
+    record(
+      `cron:${job.name}${critical ? " (critical)" : ""}`,
+      scheduled || !critical,
+      scheduled ? `active, schedule=${(data as { schedule?: string })?.schedule}` : exists ? "exists but INACTIVE" : "NOT scheduled",
+      scheduled ? undefined : "Cron drift — (re)schedule the job (see its migration)",
+    );
+  }
+}
+
+/**
+ * Verifies required Vault secrets exist (presence only — never the value). The
+ * email worker cron reads `email_queue_service_role_key` from Vault at run time;
+ * if it is missing, branded auth emails enqueue but never send.
+ */
+async function checkVaultSecrets() {
+  if (!SERVICE_KEY) {
+    record("db:vault secrets present", true, "skipped (no service-role key)");
+    return;
+  }
+  const admin = createClient(SUPABASE_URL!, SERVICE_KEY);
+  for (const name of manifest.requiredVaultSecrets ?? []) {
+    const { data, error } = await admin.rpc("vault_secret_exists", { p_name: name });
+    if (error) {
+      record(`vault:${name}`, false, error.message, "Apply the migration adding public.vault_secret_exists()");
+      continue;
+    }
+    const present = data === true;
+    record(
+      `vault:${name}`,
+      present,
+      present ? "present" : "MISSING",
+      present ? undefined : "Set the Vault secret (run setup_email_infra, or Dashboard > Project Settings > Vault)",
+    );
+  }
+}
+
 async function main() {
   console.log(`Smoke test against ${SUPABASE_URL}`);
   const supabase = createClient(SUPABASE_URL!, ANON_KEY!);
@@ -346,6 +404,8 @@ async function main() {
   await checkRlsRequiredTables();
   await checkCrossOrgRls();
   await checkConstraintVocabularies(supabase);
+  await checkCronJobs();
+  await checkVaultSecrets();
 
   // Manual release checks (cannot be machine-verified from outside).
   console.log("\nManual release checks (verify before publish):");

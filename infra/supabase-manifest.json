@@ -70,14 +70,17 @@
     { "name": "gdpr-data-deletion", "verifyJwt": true, "critical": false }
   ],
   "cronJobs": [
-    { "name": "process-email-queue", "expectedSchedule": "*/5 seconds OR every 5s" },
-    { "name": "chaser-tick", "expectedSchedule": "*/15 minutes" },
-    { "name": "sla-check", "expectedSchedule": "hourly" },
-    { "name": "workflow-tick", "expectedSchedule": "*/5 minutes" },
-    { "name": "session-cleanup", "expectedSchedule": "hourly" },
-    { "name": "dormant-lead-scan", "expectedSchedule": "daily" },
-    { "name": "invoice-overdue-scan", "expectedSchedule": "daily" },
-    { "name": "truelayer-sync-scheduled", "expectedSchedule": "*/6 hours" }
+    { "name": "process-email-queue", "expectedSchedule": "*/5 seconds OR every 5s", "critical": true },
+    { "name": "chaser-tick", "expectedSchedule": "*/15 minutes", "critical": false },
+    { "name": "sla-check", "expectedSchedule": "hourly", "critical": false },
+    { "name": "workflow-tick", "expectedSchedule": "*/5 minutes", "critical": false },
+    { "name": "session-cleanup", "expectedSchedule": "hourly", "critical": false },
+    { "name": "dormant-lead-scan", "expectedSchedule": "daily", "critical": false },
+    { "name": "invoice-overdue-scan", "expectedSchedule": "daily", "critical": false },
+    { "name": "truelayer-sync-scheduled", "expectedSchedule": "*/6 hours", "critical": false }
+  ],
+  "requiredVaultSecrets": [
+    "email_queue_service_role_key"
   ],
   "requiredSecrets": [
     "LOVABLE_API_KEY",
