@@ -2837,6 +2837,209 @@ export type Database = {
         }
         Relationships: []
       }
+      canonical_deadline_rules: {
+        Row: {
+          active: boolean
+          calculation_method: Json
+          canonical_service_code: string
+          created_at: string
+          deadline_code: string
+          deadline_name: string
+          deadline_type: string
+          default_chaser_policy: string | null
+          default_triggers_chasers: boolean
+          default_visible_to_client: boolean
+          effective_from: string
+          effective_to: string | null
+          job_template_code: string | null
+          notes: string | null
+          required_facts: string[]
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          calculation_method?: Json
+          canonical_service_code: string
+          created_at?: string
+          deadline_code: string
+          deadline_name: string
+          deadline_type: string
+          default_chaser_policy?: string | null
+          default_triggers_chasers?: boolean
+          default_visible_to_client?: boolean
+          effective_from?: string
+          effective_to?: string | null
+          job_template_code?: string | null
+          notes?: string | null
+          required_facts?: string[]
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          calculation_method?: Json
+          canonical_service_code?: string
+          created_at?: string
+          deadline_code?: string
+          deadline_name?: string
+          deadline_type?: string
+          default_chaser_policy?: string | null
+          default_triggers_chasers?: boolean
+          default_visible_to_client?: boolean
+          effective_from?: string
+          effective_to?: string | null
+          job_template_code?: string | null
+          notes?: string | null
+          required_facts?: string[]
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canonical_deadline_rules_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "canonical_deadline_rules_job_template_code_fkey"
+            columns: ["job_template_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_job_templates"
+            referencedColumns: ["job_template_code"]
+          },
+        ]
+      }
+      canonical_job_templates: {
+        Row: {
+          active: boolean
+          canonical_service_code: string
+          created_at: string
+          default_status: string
+          display_name: string
+          job_template_code: string
+          period_type: string
+          requires_client_approval: boolean
+          requires_client_records: boolean
+          requires_filing: boolean
+          requires_questionnaire: boolean
+          requires_workpaper: boolean
+          rollover_rule: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          canonical_service_code: string
+          created_at?: string
+          default_status?: string
+          display_name: string
+          job_template_code: string
+          period_type: string
+          requires_client_approval?: boolean
+          requires_client_records?: boolean
+          requires_filing?: boolean
+          requires_questionnaire?: boolean
+          requires_workpaper?: boolean
+          rollover_rule?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          canonical_service_code?: string
+          created_at?: string
+          default_status?: string
+          display_name?: string
+          job_template_code?: string
+          period_type?: string
+          requires_client_approval?: boolean
+          requires_client_records?: boolean
+          requires_filing?: boolean
+          requires_questionnaire?: boolean
+          requires_workpaper?: boolean
+          rollover_rule?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canonical_job_templates_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      canonical_services: {
+        Row: {
+          active: boolean
+          allowed_client_types: string[]
+          category: string
+          code: string
+          created_at: string
+          creates_deadlines: boolean
+          creates_jobs: boolean
+          default_billing_frequency: string | null
+          filing_regime: string | null
+          is_recurring: boolean
+          name: string
+          notes: string | null
+          requires_companies_house_data: boolean
+          requires_completion_date: boolean
+          requires_hmrc_authorisation: boolean
+          requires_payroll_settings: boolean
+          requires_period: boolean
+          requires_property_details: boolean
+          requires_vat_settings: boolean
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          allowed_client_types?: string[]
+          category: string
+          code: string
+          created_at?: string
+          creates_deadlines?: boolean
+          creates_jobs?: boolean
+          default_billing_frequency?: string | null
+          filing_regime?: string | null
+          is_recurring?: boolean
+          name: string
+          notes?: string | null
+          requires_companies_house_data?: boolean
+          requires_completion_date?: boolean
+          requires_hmrc_authorisation?: boolean
+          requires_payroll_settings?: boolean
+          requires_period?: boolean
+          requires_property_details?: boolean
+          requires_vat_settings?: boolean
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          allowed_client_types?: string[]
+          category?: string
+          code?: string
+          created_at?: string
+          creates_deadlines?: boolean
+          creates_jobs?: boolean
+          default_billing_frequency?: string | null
+          filing_regime?: string | null
+          is_recurring?: boolean
+          name?: string
+          notes?: string | null
+          requires_companies_house_data?: boolean
+          requires_completion_date?: boolean
+          requires_hmrc_authorisation?: boolean
+          requires_payroll_settings?: boolean
+          requires_period?: boolean
+          requires_property_details?: boolean
+          requires_vat_settings?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       capital_allowance_claims: {
         Row: {
           amount: number
@@ -6267,10 +6470,12 @@ export type Database = {
       deadlines: {
         Row: {
           active_window_start: string | null
+          canonical_service_code: string | null
           client_id: string | null
           company_id: string | null
           completed_at: string | null
           created_at: string | null
+          deadline_code: string | null
           deadline_type: string
           description: string | null
           due_date: string
@@ -6299,10 +6504,12 @@ export type Database = {
         }
         Insert: {
           active_window_start?: string | null
+          canonical_service_code?: string | null
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
           created_at?: string | null
+          deadline_code?: string | null
           deadline_type: string
           description?: string | null
           due_date: string
@@ -6331,10 +6538,12 @@ export type Database = {
         }
         Update: {
           active_window_start?: string | null
+          canonical_service_code?: string | null
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
           created_at?: string | null
+          deadline_code?: string | null
           deadline_type?: string
           description?: string | null
           due_date?: string
@@ -6363,6 +6572,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "deadlines_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
+          {
             foreignKeyName: "deadlines_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
@@ -6375,6 +6591,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_deadline_code_fkey"
+            columns: ["deadline_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_deadline_rules"
+            referencedColumns: ["deadline_code"]
           },
           {
             foreignKeyName: "deadlines_engagement_id_fkey"
@@ -7684,6 +7907,7 @@ export type Database = {
           activated_at: string | null
           active: boolean | null
           billing_notes: string | null
+          canonical_service_code: string | null
           client_id: string | null
           company_id: string | null
           created_at: string
@@ -7706,6 +7930,7 @@ export type Database = {
           activated_at?: string | null
           active?: boolean | null
           billing_notes?: string | null
+          canonical_service_code?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string
@@ -7728,6 +7953,7 @@ export type Database = {
           activated_at?: string | null
           active?: boolean | null
           billing_notes?: string | null
+          canonical_service_code?: string | null
           client_id?: string | null
           company_id?: string | null
           created_at?: string
@@ -7747,6 +7973,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "engagements_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "engagements_client_id_fkey"
             columns: ["client_id"]
@@ -10256,6 +10489,7 @@ export type Database = {
           auto_generated_at: string | null
           automation_source: string | null
           can_undo_until: string | null
+          canonical_service_code: string | null
           client_id: string | null
           company_id: string | null
           completed_at: string | null
@@ -10269,6 +10503,7 @@ export type Database = {
           is_auto_generated: boolean | null
           is_recurring: boolean | null
           job_name: string
+          job_template_code: string | null
           last_activity_at: string | null
           name: string | null
           organization_id: string
@@ -10293,6 +10528,7 @@ export type Database = {
           auto_generated_at?: string | null
           automation_source?: string | null
           can_undo_until?: string | null
+          canonical_service_code?: string | null
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
@@ -10306,6 +10542,7 @@ export type Database = {
           is_auto_generated?: boolean | null
           is_recurring?: boolean | null
           job_name: string
+          job_template_code?: string | null
           last_activity_at?: string | null
           name?: string | null
           organization_id: string
@@ -10330,6 +10567,7 @@ export type Database = {
           auto_generated_at?: string | null
           automation_source?: string | null
           can_undo_until?: string | null
+          canonical_service_code?: string | null
           client_id?: string | null
           company_id?: string | null
           completed_at?: string | null
@@ -10343,6 +10581,7 @@ export type Database = {
           is_auto_generated?: boolean | null
           is_recurring?: boolean | null
           job_name?: string
+          job_template_code?: string | null
           last_activity_at?: string | null
           name?: string | null
           organization_id?: string
@@ -10378,6 +10617,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "jobs_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
+          {
             foreignKeyName: "jobs_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
@@ -10390,6 +10636,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_job_template_code_fkey"
+            columns: ["job_template_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_job_templates"
+            referencedColumns: ["job_template_code"]
           },
           {
             foreignKeyName: "jobs_organization_id_fkey"
@@ -11696,6 +11949,7 @@ export type Database = {
           business_days: string[] | null
           business_hours_end: string | null
           business_hours_start: string | null
+          canonical_spine_v1: boolean
           created_at: string | null
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
@@ -11738,6 +11992,7 @@ export type Database = {
           business_days?: string[] | null
           business_hours_end?: string | null
           business_hours_start?: string | null
+          canonical_spine_v1?: boolean
           created_at?: string | null
           deadline_buffer_days_ct?: number | null
           deadline_buffer_days_sa?: number | null
@@ -11780,6 +12035,7 @@ export type Database = {
           business_days?: string[] | null
           business_hours_end?: string | null
           business_hours_start?: string | null
+          canonical_spine_v1?: boolean
           created_at?: string | null
           deadline_buffer_days_ct?: number | null
           deadline_buffer_days_sa?: number | null
@@ -13636,6 +13892,7 @@ export type Database = {
       quote_lines: {
         Row: {
           billing_frequency: string
+          canonical_service_code: string | null
           created_at: string
           description_override: string | null
           id: string
@@ -13649,6 +13906,7 @@ export type Database = {
         }
         Insert: {
           billing_frequency?: string
+          canonical_service_code?: string | null
           created_at?: string
           description_override?: string | null
           id?: string
@@ -13662,6 +13920,7 @@ export type Database = {
         }
         Update: {
           billing_frequency?: string
+          canonical_service_code?: string | null
           created_at?: string
           description_override?: string | null
           id?: string
@@ -13674,6 +13933,13 @@ export type Database = {
           unit_price?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "quote_lines_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "quote_lines_organization_id_fkey"
             columns: ["organization_id"]
@@ -14609,6 +14875,7 @@ export type Database = {
         Row: {
           active: boolean | null
           billing_model: string
+          canonical_service_code: string | null
           code: string
           created_at: string
           default_job_template_id: string | null
@@ -14630,6 +14897,7 @@ export type Database = {
         Insert: {
           active?: boolean | null
           billing_model: string
+          canonical_service_code?: string | null
           code: string
           created_at?: string
           default_job_template_id?: string | null
@@ -14651,6 +14919,7 @@ export type Database = {
         Update: {
           active?: boolean | null
           billing_model?: string
+          canonical_service_code?: string | null
           code?: string
           created_at?: string
           default_job_template_id?: string | null
@@ -14670,6 +14939,13 @@ export type Database = {
           workpaper_template_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "services_catalog_canonical_service_code_fkey"
+            columns: ["canonical_service_code"]
+            isOneToOne: false
+            referencedRelation: "canonical_services"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "services_catalog_default_job_template_id_fkey"
             columns: ["default_job_template_id"]
@@ -17419,6 +17695,7 @@ export type Database = {
           business_days: string[] | null
           business_hours_end: string | null
           business_hours_start: string | null
+          canonical_spine_v1: boolean
           created_at: string | null
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
@@ -17658,6 +17935,7 @@ export type Database = {
           business_days: string[] | null
           business_hours_end: string | null
           business_hours_start: string | null
+          canonical_spine_v1: boolean
           created_at: string | null
           deadline_buffer_days_ct: number | null
           deadline_buffer_days_sa: number | null
