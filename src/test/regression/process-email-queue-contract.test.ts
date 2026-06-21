@@ -37,14 +37,18 @@ describe("process-email-queue contract", () => {
   });
 
   it("includes CORS headers on every response", () => {
-    // Catch the regression where new branches return bare Content-Type only.
-    const responses = SRC.match(/new Response\([\s\S]*?\}\s*\)/g) ?? [];
-    expect(responses.length).toBeGreaterThan(0);
-    for (const r of responses) {
-      // OK to skip the bare OPTIONS 'ok' response which already spreads corsHeaders directly.
-      if (/headers:\s*corsHeaders/.test(r)) continue;
-      expect(r).toMatch(/\.\.\.corsHeaders/);
-    }
+    // Every response must carry CORS headers, or the browser preflight/actual
+    // request fails ("Failed to send a request to the Edge Function"). The
+    // regression to catch is a new branch that returns a bare Content-Type
+    // header object WITHOUT corsHeaders. (A previous version of this test tried
+    // to slice each `new Response(...)` with a regex, but the lazy match
+    // truncated at the inner JSON.stringify brace and never reached the headers
+    // argument — a false red against correct code. Assert the intent directly.)
+    const bareContentType =
+      SRC.match(/headers:\s*\{(?![^}]*corsHeaders)[^}]*[Cc]ontent-[Tt]ype[^}]*\}/g) ?? [];
+    expect(bareContentType).toEqual([]);
+    // And the OPTIONS preflight returns corsHeaders directly.
+    expect(SRC).toMatch(/OPTIONS[\s\S]*?headers:\s*corsHeaders/);
   });
 
   it("also drains public.email_queue rows that the Emails UI shows", () => {
