@@ -117,16 +117,20 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
       if (quoteError) throw quoteError;
 
       // Create quote lines
-      const quoteLines = lines.map((line, index) => ({
-        organization_id: organization.id,
-        quote_id: quote.id,
-        service_id: line.service_id,
-        quantity: line.quantity,
-        unit_price: line.unit_price,
-        subtotal: line.quantity * line.unit_price,
-        billing_frequency: line.billing_frequency,
-        line_order: index,
-      }));
+      const quoteLines = lines.map((line, index) => {
+        const svc = services?.find((s) => s.id === line.service_id);
+        return {
+          organization_id: organization.id,
+          quote_id: quote.id,
+          service_id: line.service_id,
+          canonical_service_code: svc?.canonical_service_code ?? null,
+          quantity: line.quantity,
+          unit_price: line.unit_price,
+          subtotal: line.quantity * line.unit_price,
+          billing_frequency: line.billing_frequency,
+          line_order: index,
+        };
+      });
 
       const { error: linesError } = await supabase
         .from("quote_lines")
