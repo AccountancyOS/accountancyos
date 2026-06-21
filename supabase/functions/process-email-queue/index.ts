@@ -16,6 +16,27 @@ const DEFAULT_SEND_DELAY_MS = 200
 const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
+// Derive a plain-text fallback from HTML so the Lovable Email API always
+// receives a `text` parameter (it's required and 400s with missing_parameter
+// otherwise). Best-effort: strip tags, decode common entities, collapse space.
+function htmlToText(html: string): string {
+  if (!html) return ''
+  const stripped = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/(p|div|h[1-6]|li|tr|br)>/gi, '\n')
+    .replace(/<br\s*\/?>(?!\n)/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+  const decoded = stripped
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+  return decoded.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 // Check if an error is a rate-limit (429) response.
 // Uses EmailAPIError.status when available (email-js >=0.x with structured errors),
 // falls back to parsing the error message for older versions.
