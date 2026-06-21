@@ -315,7 +315,9 @@ Deno.serve(async (req) => {
           (providerResponse && typeof providerResponse === 'object'
             ? ((providerResponse as Record<string, unknown>).id ??
               (providerResponse as Record<string, unknown>).message_id ??
-              (providerResponse as Record<string, unknown>).messageId)
+                 (providerResponse as Record<string, unknown>).messageId ??
+                 (providerResponse as Record<string, unknown>).workflow_id ??
+                 (providerResponse as Record<string, unknown>).workflowId)
             : null) ?? null
 
         if (!providerId) {
@@ -498,7 +500,9 @@ Deno.serve(async (req) => {
             (providerResponse && typeof providerResponse === 'object'
               ? ((providerResponse as Record<string, unknown>).id ??
                 (providerResponse as Record<string, unknown>).message_id ??
-                (providerResponse as Record<string, unknown>).messageId)
+                (providerResponse as Record<string, unknown>).messageId ??
+                (providerResponse as Record<string, unknown>).workflow_id ??
+                (providerResponse as Record<string, unknown>).workflowId)
               : null) ?? null
 
           if (!providerId) {
