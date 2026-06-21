@@ -1,6 +1,15 @@
 import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+const FROM_ADDRESS = 'AccountancyOS <noreply@accountancyos.com>'
+const SENDER_DOMAIN = 'notify.accountancyos.com'
+
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
 const DEFAULT_SEND_DELAY_MS = 200
@@ -79,6 +88,10 @@ async function moveToDlq(
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   const apiKey = Deno.env.get('LOVABLE_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -87,7 +100,7 @@ Deno.serve(async (req) => {
     console.error('Missing required environment variables')
     return new Response(
       JSON.stringify({ error: 'Server configuration error' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -95,7 +108,7 @@ Deno.serve(async (req) => {
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -110,7 +123,7 @@ Deno.serve(async (req) => {
   if (callerRole !== 'service_role' && callerRole !== 'authenticated') {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -125,7 +138,7 @@ Deno.serve(async (req) => {
   if (state?.retry_after_until && new Date(state.retry_after_until) > new Date()) {
     return new Response(
       JSON.stringify({ skipped: true, reason: 'rate_limited' }),
-      { headers: { 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -350,7 +363,7 @@ Deno.serve(async (req) => {
           // Stop processing — remaining messages stay in queue (VT expires, retried next cycle)
           return new Response(
             JSON.stringify({ processed: totalProcessed, stopped: 'rate_limited' }),
-            { headers: { 'Content-Type': 'application/json' } }
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
 
@@ -360,7 +373,7 @@ Deno.serve(async (req) => {
           await moveToDlq(supabase, queue, msg, errorMsg.slice(0, 1000))
           return new Response(
             JSON.stringify({ processed: totalProcessed, stopped: 'forbidden' }),
-            { headers: { 'Content-Type': 'application/json' } }
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
 
@@ -386,8 +399,169 @@ Deno.serve(async (req) => {
     }
   }
 
+  // 3. Drain public.email_queue rows (UI-visible app emails — quotes, ad-hoc, etc.)
+  //    Non-negotiable: only flip to `sent` when the provider returned a message id.
+  let emailQueueProcessed = 0
+  let emailQueueFailed = 0
+  try {
+    const { data: rows, error: rowsError } = await supabase
+      .from('email_queue')
+      .select('id, organization_id, to_email, to_name, subject, body_html, body_text')
+      .eq('status', 'pending')
+      .lte('scheduled_at', new Date().toISOString())
+      .order('created_at', { ascending: true })
+      .limit(batchSize)
+
+    if (rowsError) {
+      console.error('Failed to read email_queue', { error: rowsError })
+    } else {
+      for (const row of rows ?? []) {
+        if (!row.to_email || !row.subject || !row.body_html) {
+          await supabase
+            .from('email_queue')
+            .update({
+              status: 'failed',
+              error_message: 'Missing to_email, subject, or body_html',
+              last_error_code: 'invalid_payload',
+              last_error_message: 'Missing to_email, subject, or body_html',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', row.id)
+          emailQueueFailed++
+          continue
+        }
+
+        const messageId = crypto.randomUUID()
+
+        await supabase.from('email_send_log').insert({
+          message_id: messageId,
+          template_name: 'email_queue',
+          recipient_email: row.to_email,
+          status: 'pending',
+        })
+
+        try {
+          const providerResponse = await sendLovableEmail(
+            {
+              to: row.to_email,
+              from: FROM_ADDRESS,
+              sender_domain: SENDER_DOMAIN,
+              subject: row.subject,
+              html: row.body_html,
+              text: row.body_text ?? undefined,
+              purpose: 'transactional',
+              label: 'email_queue',
+              idempotency_key: row.id,
+              message_id: messageId,
+            },
+            { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
+          )
+
+          const providerId =
+            (providerResponse && typeof providerResponse === 'object'
+              ? ((providerResponse as Record<string, unknown>).id ??
+                (providerResponse as Record<string, unknown>).message_id ??
+                (providerResponse as Record<string, unknown>).messageId)
+              : null) ?? null
+
+          if (!providerId) {
+            await supabase.from('email_send_log').insert({
+              message_id: messageId,
+              template_name: 'email_queue',
+              recipient_email: row.to_email,
+              status: 'failed',
+              error_message: 'provider_no_ack: SDK resolved without provider message id',
+              metadata: { provider_response: providerResponse ?? null, email_queue_id: row.id },
+            })
+            await supabase
+              .from('email_queue')
+              .update({
+                status: 'failed',
+                error_message: 'Provider did not acknowledge send (no message id)',
+                last_error_code: 'provider_no_ack',
+                last_error_message: 'Provider did not acknowledge send (no message id)',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', row.id)
+            emailQueueFailed++
+            continue
+          }
+
+          await supabase.from('email_send_log').insert({
+            message_id: messageId,
+            template_name: 'email_queue',
+            recipient_email: row.to_email,
+            status: 'sent',
+            metadata: {
+              provider_message_id: String(providerId),
+              provider_response: providerResponse,
+              email_queue_id: row.id,
+            },
+          })
+
+          await supabase
+            .from('email_queue')
+            .update({
+              status: 'sent',
+              sent_at: new Date().toISOString(),
+              error_message: null,
+              last_error_code: null,
+              last_error_message: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', row.id)
+
+          emailQueueProcessed++
+          await new Promise((r) => setTimeout(r, sendDelayMs))
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          console.error('email_queue send failed', { id: row.id, error: errorMsg })
+          await supabase.from('email_send_log').insert({
+            message_id: messageId,
+            template_name: 'email_queue',
+            recipient_email: row.to_email,
+            status: 'failed',
+            error_message: errorMsg.slice(0, 1000),
+            metadata: { email_queue_id: row.id },
+          })
+          await supabase
+            .from('email_queue')
+            .update({
+              status: 'failed',
+              error_message: errorMsg.slice(0, 1000),
+              last_error_code: isRateLimited(error) ? 'rate_limited' : 'send_failed',
+              last_error_message: errorMsg.slice(0, 1000),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', row.id)
+          emailQueueFailed++
+
+          if (isRateLimited(error)) {
+            const retryAfterSecs = getRetryAfterSeconds(error)
+            await supabase
+              .from('email_send_state')
+              .update({
+                retry_after_until: new Date(Date.now() + retryAfterSecs * 1000).toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', 1)
+            break
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('email_queue drain crashed', { error: e instanceof Error ? e.message : String(e) })
+  }
+
   return new Response(
-    JSON.stringify({ processed: totalProcessed }),
-    { headers: { 'Content-Type': 'application/json' } }
+    JSON.stringify({
+      processed: totalProcessed + emailQueueProcessed,
+      failed: emailQueueFailed,
+      pgmq_processed: totalProcessed,
+      email_queue_processed: emailQueueProcessed,
+      email_queue_failed: emailQueueFailed,
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 })
