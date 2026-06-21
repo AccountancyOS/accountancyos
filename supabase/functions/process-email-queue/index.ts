@@ -454,6 +454,21 @@ Deno.serve(async (req) => {
 
         const messageId = crypto.randomUUID()
 
+        // Mint a one-click unsubscribe token. The Lovable Email API rejects
+        // transactional sends without one (`missing_unsubscribe`).
+        let unsubscribeToken: string | null = null
+        if (row.organization_id) {
+          const { data: tokenData, error: tokenErr } = await supabase.rpc(
+            'enqueue_unsubscribe_token',
+            { p_org_id: row.organization_id, p_email: row.to_email, p_category: 'transactional' }
+          )
+          if (tokenErr) {
+            console.error('Failed to mint unsubscribe token', { id: row.id, error: tokenErr.message })
+          } else if (typeof tokenData === 'string') {
+            unsubscribeToken = tokenData
+          }
+        }
+
         await supabase.from('email_send_log').insert({
           message_id: messageId,
           template_name: 'email_queue',
@@ -474,6 +489,7 @@ Deno.serve(async (req) => {
               label: 'email_queue',
               idempotency_key: row.id,
               message_id: messageId,
+              unsubscribe_token: unsubscribeToken ?? undefined,
             },
             { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
           )
