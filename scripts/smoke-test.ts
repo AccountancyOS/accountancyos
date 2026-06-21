@@ -437,6 +437,7 @@ async function main() {
   const supabase = createClient(SUPABASE_URL!, ANON_KEY!);
 
   await checkEdgeFunctions();
+  await checkProcessEmailQueueCors();
   await checkPortalRoute();
   await checkAuthHookEndToEnd(supabase);
   await checkInfraTables();
