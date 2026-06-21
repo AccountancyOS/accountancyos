@@ -87,6 +87,45 @@ async function checkEdgeFunctions() {
   await Promise.all(critical.map((f) => checkEdgeFunctionReachable(f.name)));
 }
 
+async function checkProcessEmailQueueCors() {
+  // Browsers cannot invoke the function from the Emails page unless the OPTIONS
+  // preflight returns a permissive Access-Control-Allow-Origin AND allows the
+  // `authorization`/`apikey` request headers. This is the exact regression that
+  // surfaced as "Failed to send a request to the Edge Function" in the UI.
+  const url = `${SUPABASE_URL}/functions/v1/process-email-queue`;
+  try {
+    const res = await withTimeout(
+      fetch(url, {
+        method: "OPTIONS",
+        headers: {
+          apikey: ANON_KEY!,
+          origin: "https://app.accountancyos.com",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization, content-type",
+        },
+      }),
+      10_000,
+      "edge process-email-queue preflight",
+    );
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    const allowHeaders = (res.headers.get("access-control-allow-headers") ?? "").toLowerCase();
+    const ok =
+      res.status >= 200 &&
+      res.status < 300 &&
+      !!allowOrigin &&
+      allowHeaders.includes("authorization");
+    record(
+      "edge:process-email-queue CORS preflight",
+      ok,
+      `HTTP ${res.status} allow-origin=${allowOrigin ?? "(missing)"} allow-headers=${allowHeaders || "(missing)"}`,
+      ok ? undefined : "Add corsHeaders + OPTIONS handler to process-email-queue",
+    );
+    await res.text().catch(() => undefined);
+  } catch (err) {
+    record("edge:process-email-queue CORS preflight", false, (err as Error).message);
+  }
+}
+
 async function checkPortalRoute() {
   const url = `${PORTAL_BASE.replace(/\/$/, "")}/portal/reset-password`;
   try {
