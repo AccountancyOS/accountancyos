@@ -99,12 +99,15 @@ Deno.serve(async (req) => {
     )
   }
 
-  // Defense in depth: verify_jwt=true already requires a valid JWT at the
-  // gateway layer. This adds an explicit role check so only service-role
-  // callers can trigger queue processing.
+  // Auth: verify_jwt=true at the gateway (see config.toml) guarantees the bearer
+  // is a signature-verified JWT, so the role claim can be trusted. We allow two
+  // callers: the service-role cron (automated draining) AND an authenticated app
+  // user (the manual "Process Queue" admin action in the UI). Anon is rejected —
+  // queue processing is not a public operation.
   const token = authHeader.slice('Bearer '.length).trim()
   const claims = parseJwtClaims(token)
-  if (claims?.role !== 'service_role') {
+  const callerRole = claims?.role
+  if (callerRole !== 'service_role' && callerRole !== 'authenticated') {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
       { status: 403, headers: { 'Content-Type': 'application/json' } }

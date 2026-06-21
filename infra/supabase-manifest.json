@@ -16,7 +16,7 @@
   },
   "edgeFunctions": [
     { "name": "auth-email-hook", "verifyJwt": false, "critical": true },
-    { "name": "process-email-queue", "verifyJwt": false, "critical": true },
+    { "name": "process-email-queue", "verifyJwt": true, "critical": true },
     { "name": "handle-email-unsubscribe", "verifyJwt": false, "critical": false },
     { "name": "accept-portal-invite-signup", "verifyJwt": false, "critical": true },
     { "name": "seed-portal-test-users", "verifyJwt": false, "critical": false },
