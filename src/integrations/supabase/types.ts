@@ -17200,6 +17200,8 @@ export type Database = {
       }
     }
     Functions: {
+      _canonical_caller_in_org: { Args: { p_org: string }; Returns: boolean }
+      _canonical_spine_enabled: { Args: { p_org: string }; Returns: boolean }
       _check_questionnaire_token_rate_limit: {
         Args: { p_token_hash: string }
         Returns: undefined
@@ -18151,8 +18153,24 @@ export type Database = {
         Returns: Json
       }
       lifecycle_accept_quote: { Args: { p_quote_id: string }; Returns: Json }
+      lifecycle_activate_client_services: {
+        Args: { p_quote_id: string }
+        Returns: Json
+      }
       lifecycle_approve_onboarding: {
         Args: { p_onboarding_id: string }
+        Returns: Json
+      }
+      lifecycle_generate_deadlines_for_job: {
+        Args: { p_facts?: Json; p_job_id: string }
+        Returns: Json
+      }
+      lifecycle_generate_jobs_for_service: {
+        Args: {
+          p_engagement_id: string
+          p_period_end?: string
+          p_period_start?: string
+        }
         Returns: Json
       }
       lifecycle_grant_portal_access: {
