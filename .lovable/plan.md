@@ -1,67 +1,40 @@
-## Why job creation failed
+## Why the error appears
 
-`public.jobs.chk_jobs_status` only permits 9 canonical statuses:
+Two distinct bugs, one visible, one hidden:
 
-`blank, records_requested, records_received, accountant_queries, client_queries, accountant_review, client_review, ready_to_file, completed`
+### Bug 1 (causes the toast you see)
+`supabase/functions/process-email-queue/index.ts` has **no CORS headers and no `OPTIONS` preflight handler**. When the Emails page calls `supabase.functions.invoke("process-email-queue")` from the browser, the CORS preflight fails before the function ever runs — supabase-js surfaces that as "Failed to send a request to the Edge Function". The function logs only show `Boot`/`Shutdown`, never an invocation, which matches.
 
-`src/components/jobs/CreateJobDialog.tsx` still uses an old vocabulary (`not_started`, `in_progress`, `waiting_on_client`, `with_reviewer`) and defaults to `not_started`, so every manual job-create insert is rejected by the check constraint. That matches the toast in the session replay.
+### Bug 2 (revealed once Bug 1 is fixed)
+The Emails page lists rows from the `public.email_queue` table (one pending quote email is sitting there right now). But `process-email-queue` only drains the pgmq queues `auth_emails` and `transactional_emails`. It never reads `email_queue`. So even after CORS is fixed, clicking "Process Queue" returns `processed: 0` and the visible pending email stays stuck forever. The UI is wired to a worker that doesn't process its own queue.
 
-The DB is correct. The UI is wrong, and the regression net has no test asserting UI status options match the DB constraint.
+## Plan
 
-## Fix
+### Step 1 — Fix CORS on `process-email-queue` (unblocks the toast)
+- Add the standard `corsHeaders` import and an `OPTIONS` preflight handler at the top of `Deno.serve`.
+- Include `...corsHeaders` in every `Response` (success, 401, 403, 500, rate-limited, forbidden, final).
+- No behavior change beyond CORS.
 
-### 1. Single source of truth in `src/lib/workflow-constants.ts`
-- Inspect the file. If an ordered canonical list already exists, reuse it.
-- Otherwise add:
-  ```ts
-  export const JOB_STATUSES = [
-    "blank","records_requested","records_received",
-    "accountant_queries","client_queries",
-    "accountant_review","client_review",
-    "ready_to_file","completed",
-  ] as const;
-  export type JobStatus = typeof JOB_STATUSES[number];
-  ```
-- Do not duplicate the list elsewhere.
+### Step 2 — Confirm scope of "Process Queue" button before changing worker semantics
+Bug 2 is bigger than a UI tweak — it changes what the worker does. I want your call before touching it. Options:
 
-### 2. Fix `src/components/jobs/CreateJobDialog.tsx`
-- Default `status` state → `"blank"`.
-- Replace hardcoded `<SelectItem>` list with a map over `JOB_STATUSES`, labelled via existing `formatStatus()` from `@/lib/format-utils`.
-- Render all 9 statuses in workflow order.
-- No other behavior changes (priority, auto-gen paths, semantics untouched).
+- **(A) Make `process-email-queue` also drain `public.email_queue`** (preferred): after the pgmq loop, select `email_queue` rows where `status='pending'` and `scheduled_at <= now()` for the caller's org, render placeholders, send via the existing provider path, and on provider ack flip the row to `sent` with `provider_message_id`; on failure set `status='failed'` with `error_message`. Honours the non-negotiable: never mark `sent` without a provider id.
+- **(B) Leave the worker alone, change the button**: have the Emails page invoke a different function (or new RPC) that processes `email_queue` rows, and keep `process-email-queue` for pgmq/auth only.
+- **(C) Status quo + label change**: rename the button to "Process Auth/Transactional Queue" and add separate handling for `email_queue` later.
 
-### 3. Repo-wide sweep for old vocabulary
-Search the entire repo for `not_started`, `in_progress`, `waiting_on_client`, `with_reviewer` in any job creation/update/filter logic (components, services, hooks, edge functions, SQL). For each hit:
-- If it writes to `jobs.status` or maps user-visible job status, replace with a canonical value from `JOB_STATUSES`.
-- If it is unrelated (e.g. invoice status, payroll, automation execution state), leave it alone and note it.
-Produce a short list of touched vs deliberately-skipped occurrences in the final message.
+### Step 3 — Regression coverage
+- Extend `src/test/regression/process-email-queue-contract.test.ts` (or add a new test) to assert the function source contains an `OPTIONS` handler and `Access-Control-Allow-Origin` — so this CORS gap can't silently regress.
+- Add a smoke check in `scripts/smoke-test.ts` that does a real `OPTIONS` preflight against the deployed `process-email-queue` endpoint and asserts a 2xx with the CORS header present. This matches your non-negotiable that infra/deploy drift must be caught by the live smoke test, not just unit tests.
+- If you pick option (A) in Step 2, add a regression test asserting that an `email_queue` row only flips to `sent` when a `provider_message_id` is recorded (mirrors the auth-email non-negotiable).
 
-### 4. Regression test
-New: `src/test/regression/job-status-vocabulary.test.ts`
-- Assert `JOB_STATUSES` deep-equals the 9 canonical values in exact order.
-- Assert it contains none of the old values (`not_started`, `in_progress`, `waiting_on_client`, `with_reviewer`).
-- Follow the existing `src/test/regression/*` style (Vitest, no service-role usage).
-
-### 5. Smoke-test drift check in `scripts/smoke-test.ts`
-Add a check that compares the live DB constraint against `JOB_STATUSES`:
-- Try a read-only SQL via the existing smoke pattern: `select pg_get_constraintdef(oid) from pg_constraint where conname='chk_jobs_status'`.
-- If the smoke runner cannot execute raw SQL, add a tiny read-only SECURITY DEFINER helper `public.get_check_constraint_values(text)` returning `text[]`, granted to `authenticated`, used only for metadata introspection. No destructive SQL, no schema changes to `jobs`. Migration only added if strictly required for this helper.
-- Parse the allowed values, compare as a set to `JOB_STATUSES`, fail loudly with a clear diff on mismatch.
-
-### 6. Documentation
-Update `docs/critical-workflows.md` under the Jobs / Deadline-job generation row:
-- Add coverage links to `src/test/regression/job-status-vocabulary.test.ts` and the new smoke check.
-- Note that manual job creation MUST source statuses from `JOB_STATUSES` in `workflow-constants.ts`.
+### Step 4 — Deploy and verify
+- Deploy `process-email-queue`.
+- From the Emails page, click "Process Queue" → expect a real JSON response (no toast error) and, if Step 2A is chosen, the visible pending quote email transitions to `sent` with a provider id stored.
 
 ## Out of scope
-- No change to `chk_jobs_status` itself.
-- No change to priority values, automation, onboarding, or unrelated job fields.
-- No migration unless the read-only metadata helper is required.
+- No DB migrations.
+- No changes to `auth-email-hook`, `email_queue` schema, or the Emails page UI beyond what Step 2 decides.
+- No retry-policy or TTL changes.
 
-## Acceptance
-- Manual job creation succeeds; row lands with chosen canonical status, default `blank`.
-- Status dropdown shows the 9 canonical statuses in workflow order, with no old values.
-- `bun run test` passes including the new regression test.
-- `bun smoke` passes including the new constraint-vs-`JOB_STATUSES` check.
-- Future drift between DB constraint and `JOB_STATUSES` fails CI before reaching users.
-- Repo sweep leaves no legacy status writes in job code paths.
+## Decision I need from you
+Which option for Step 2 — **A**, **B**, or **C**? Default is **A** unless you say otherwise.
