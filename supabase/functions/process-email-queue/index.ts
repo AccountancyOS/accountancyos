@@ -448,7 +448,7 @@ Deno.serve(async (req) => {
               sender_domain: SENDER_DOMAIN,
               subject: row.subject,
               html: row.body_html,
-              text: row.body_text ?? undefined,
+              text: row.body_text ?? htmlToText(row.body_html),
               purpose: 'transactional',
               label: 'email_queue',
               idempotency_key: row.id,
