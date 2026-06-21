@@ -6,7 +6,9 @@
 
 ## Background
 
-Today `public_accept_quote_by_token` eagerly creates active `accountant_client_links`, active `engagements`, `blank` jobs and `pending` deadlines at **quote acceptance** — before any engagement letter is signed. Sprint 1 makes activation conditional on completing onboarding (incl. EL signing) via a gate evaluator, and reduces acceptance to a pending funnel. Because this changes a live activation path that cannot be tested against the production DB from this environment, rollout is gated by a **per-org feature flag** and delivered in 5 increments.
+Today `public_accept_quote_by_token` eagerly creates active `accountant_client_links`, active `engagements`, `blank` jobs and `pending` deadlines at **quote acceptance** — before any engagement letter is signed. Sprint 1 makes activation conditional on completing onboarding (incl. EL signing) via a gate evaluator, and reduces acceptance to a pending funnel.
+
+**Evaluator output scope (confirmed):** the activation body creates **links / engagements / jobs / client_tasks / info-requests / portal; deadlines are delegated to the deadline engine** (`src/lib/deadline-engine.ts` + detail-table triggers), NOT emitted by the evaluator. Rationale: `accountant_client_links` is owned only by the accept-RPC today (no trigger, no approve, no frontend), so it must move into the evaluator before accept becomes a pending funnel in Inc 2; deadlines stay engine-owned, generated from active services/jobs/client facts (target architecture: active service → job → deadline engine, not activation → deadlines). This means the evaluator's body = the proven `lifecycle_approve_onboarding` activation intent **plus** active-link creation, **minus** deadlines. Because this changes a live activation path that cannot be tested against the production DB from this environment, rollout is gated by a **per-org feature flag** and delivered in 5 increments.
 
 ### The 5-increment decomposition
 
