@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,21 +31,68 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import DashboardLayout from "@/components/DashboardLayout";
+
+type BillingModel = "fixed" | "monthly" | "hourly";
 
 interface Service {
   id: string;
   code: string;
   name: string;
   description: string | null;
-  billing_model: "fixed" | "monthly" | "hourly";
+  billing_model: BillingModel;
   default_price: number;
   is_bookkeeping_related: boolean;
   active: boolean;
+  canonical_service_code: string | null;
 }
+
+interface CanonicalService {
+  code: string;
+  name: string;
+  category: string;
+  is_recurring: boolean;
+  default_billing_frequency: string | null;
+  notes: string | null;
+  active: boolean;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  accounts: "Accounts Production",
+  tax: "Corporation Tax",
+  personal_tax: "Personal Tax",
+  personal_tax_mtd: "Personal Tax (MTD ITSA)",
+  partnership_tax: "Partnership Tax",
+  capital_gains_tax: "Capital Gains Tax",
+  payroll: "Payroll",
+  payroll_pension: "Pensions",
+  payroll_tax: "Benefits & Expenses",
+  bookkeeping: "Bookkeeping",
+  vat: "VAT",
+  cis: "CIS",
+  company_secretarial: "Company Secretarial",
+  management_reporting: "Management Reporting",
+  advisory: "Advisory",
+  charity: "Charity",
+  charity_tax: "Charity Tax",
+  trust_compliance: "Trusts",
+  property_tax: "Property",
+  software: "Software",
+  custom: "Custom",
+};
+
+const billingModelLabels: Record<BillingModel, string> = {
+  fixed: "Fixed Price",
+  monthly: "Monthly Recurring",
+  hourly: "Hourly Rate",
+};
+
+const defaultBillingModelFor = (frequency: string | null | undefined): BillingModel =>
+  frequency === "monthly" ? "monthly" : "fixed";
 
 const Services = () => {
   const { organization } = useOrganization();
@@ -58,7 +105,7 @@ const Services = () => {
     code: "",
     name: "",
     description: "",
-    billing_model: "fixed" as "fixed" | "monthly" | "hourly",
+    billing_model: "fixed" as BillingModel,
     default_price: "",
     is_bookkeeping_related: false,
     active: true,
@@ -77,6 +124,91 @@ const Services = () => {
       return data as Service[];
     },
     enabled: !!organization?.id,
+  });
+
+  const { data: canonicalServices, isLoading: isLoadingCanonical } = useQuery({
+    queryKey: ["canonical-services"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("canonical_services")
+        .select("code,name,category,is_recurring,default_billing_frequency,notes,active")
+        .eq("active", true)
+        .order("category")
+        .order("name");
+      if (error) throw error;
+      return data as CanonicalService[];
+    },
+  });
+
+  // Index practice rows by canonical code for fast overlay lookup
+  const overlayByCode = useMemo(() => {
+    const m = new Map<string, Service>();
+    (services ?? []).forEach((s) => {
+      if (s.canonical_service_code) m.set(s.canonical_service_code, s);
+    });
+    return m;
+  }, [services]);
+
+  const customServices = useMemo(
+    () => (services ?? []).filter((s) => !s.canonical_service_code),
+    [services]
+  );
+
+  const canonicalByCategory = useMemo(() => {
+    const groups = new Map<string, CanonicalService[]>();
+    (canonicalServices ?? []).forEach((cs) => {
+      if (cs.code === "custom_advisory") return; // handled by custom section
+      const arr = groups.get(cs.category) ?? [];
+      arr.push(cs);
+      groups.set(cs.category, arr);
+    });
+    return Array.from(groups.entries()).sort(([a], [b]) =>
+      (CATEGORY_LABELS[a] ?? a).localeCompare(CATEGORY_LABELS[b] ?? b)
+    );
+  }, [canonicalServices]);
+
+  // Upsert practice configuration for a canonical service
+  const configureCanonicalMutation = useMutation({
+    mutationFn: async (input: {
+      canonical: CanonicalService;
+      patch: Partial<Pick<Service, "active" | "default_price" | "billing_model">>;
+    }) => {
+      const existing = overlayByCode.get(input.canonical.code);
+      if (existing) {
+        const { error } = await supabase
+          .from("services_catalog")
+          .update(input.patch)
+          .eq("id", existing.id);
+        if (error) throw error;
+        return;
+      }
+      const billingModel = input.patch.billing_model
+        ?? defaultBillingModelFor(input.canonical.default_billing_frequency);
+      const { error } = await supabase.from("services_catalog").insert({
+        organization_id: organization!.id,
+        code: input.canonical.code,
+        name: input.canonical.name,
+        description: input.canonical.notes,
+        billing_model: billingModel,
+        default_price: input.patch.default_price ?? 0,
+        is_recurring: input.canonical.is_recurring,
+        is_bookkeeping_related: input.canonical.category === "bookkeeping",
+        entity_scope: "company",
+        active: input.patch.active ?? true,
+        canonical_service_code: input.canonical.code,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services", organization?.id] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Could not update service",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const generateCodeFromName = async (name: string): Promise<string> => {
@@ -108,7 +240,7 @@ const Services = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: ["services", organization?.id] });
       toast({ title: "Service created successfully" });
       resetForm();
       setIsDialogOpen(false);
@@ -134,7 +266,7 @@ const Services = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: ["services", organization?.id] });
       toast({ title: "Service updated successfully" });
       resetForm();
       setIsDialogOpen(false);
@@ -157,7 +289,7 @@ const Services = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: ["services", organization?.id] });
       toast({ title: "Service deleted successfully" });
     },
     onError: (error: any) => {
@@ -205,12 +337,6 @@ const Services = () => {
     setIsDialogOpen(true);
   };
 
-  const billingModelLabels = {
-    fixed: "Fixed Price",
-    monthly: "Monthly Recurring",
-    hourly: "Hourly Rate",
-  };
-
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
@@ -218,7 +344,7 @@ const Services = () => {
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Services Catalogue</h1>
           <p className="text-muted-foreground mt-1">
-            Manage your service offerings and pricing
+            Configure the AccountancyOS canonical service catalogue for your practice, or add your own custom services
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -228,16 +354,16 @@ const Services = () => {
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Add Service
+              Add Custom Service
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
-                {editingService ? "Edit Service" : "Add New Service"}
+                {editingService ? "Edit Custom Service" : "Add Custom Service"}
               </DialogTitle>
               <DialogDescription>
-                Configure a service offering for your practice
+                Use this for bespoke offerings outside the AccountancyOS canonical catalogue. Jobs and deadlines for custom services are not auto-generated.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -343,84 +469,195 @@ const Services = () => {
         </Dialog>
       </div>
 
-      {isLoading ? (
-        <TableSkeleton columns={5} rows={6} />
-      ) : !services?.length ? (
-        <div className="text-center py-12 border border-dashed rounded-lg">
-          <p className="text-muted-foreground mb-4">No services yet</p>
-          <Button onClick={() => setIsDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Your First Service
-          </Button>
-        </div>
-      ) : (
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Billing Model</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {services.map((service) => (
-                <TableRow key={service.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{service.name}</div>
-                      {service.description && (
-                        <div className="text-sm text-muted-foreground line-clamp-1">
-                          {service.description}
+      <Tabs defaultValue="canonical" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="canonical">Canonical Catalogue</TabsTrigger>
+          <TabsTrigger value="custom">
+            Custom Services{customServices.length ? ` (${customServices.length})` : ""}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="canonical" className="space-y-6">
+          {isLoadingCanonical || isLoading ? (
+            <TableSkeleton columns={5} rows={8} />
+          ) : (
+            canonicalByCategory.map(([category, items]) => (
+              <div key={category} className="border rounded-lg">
+                <div className="px-4 py-3 border-b bg-muted/30">
+                  <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+                    {CATEGORY_LABELS[category] ?? category}
+                  </h2>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[40%]">Service</TableHead>
+                      <TableHead>Billing Model</TableHead>
+                      <TableHead className="text-right">Price (£)</TableHead>
+                      <TableHead className="text-right">Enabled</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((cs) => {
+                      const row = overlayByCode.get(cs.code);
+                      const enabled = !!row?.active;
+                      const billingModel: BillingModel =
+                        row?.billing_model ?? defaultBillingModelFor(cs.default_billing_frequency);
+                      const price = row?.default_price ?? 0;
+                      return (
+                        <TableRow key={cs.code}>
+                          <TableCell>
+                            <div className="font-medium">{cs.name}</div>
+                            <div className="flex gap-1 mt-1">
+                              {cs.is_recurring && (
+                                <Badge variant="outline" className="text-xs">Recurring</Badge>
+                              )}
+                              {cs.default_billing_frequency && (
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {cs.default_billing_frequency.replace("_", " ")}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={billingModel}
+                              onValueChange={(value: BillingModel) =>
+                                configureCanonicalMutation.mutate({
+                                  canonical: cs,
+                                  patch: { billing_model: value, active: row?.active ?? true },
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-[180px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="fixed">Fixed Price</SelectItem>
+                                <SelectItem value="monthly">Monthly Recurring</SelectItem>
+                                <SelectItem value="hourly">Hourly Rate</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              defaultValue={price}
+                              key={`${cs.code}-${price}`}
+                              className="h-8 w-32 ml-auto text-right"
+                              onBlur={(e) => {
+                                const next = parseFloat(e.target.value);
+                                if (Number.isNaN(next) || next === price) return;
+                                configureCanonicalMutation.mutate({
+                                  canonical: cs,
+                                  patch: { default_price: next, active: row?.active ?? true },
+                                });
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Switch
+                              checked={enabled}
+                              onCheckedChange={(checked) =>
+                                configureCanonicalMutation.mutate({
+                                  canonical: cs,
+                                  patch: { active: checked },
+                                })
+                              }
+                              aria-label={`Enable ${cs.name}`}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="custom">
+          {isLoading ? (
+            <TableSkeleton columns={5} rows={4} />
+          ) : !customServices.length ? (
+            <div className="text-center py-12 border border-dashed rounded-lg">
+              <p className="text-muted-foreground mb-4">No custom services yet</p>
+              <Button onClick={() => setIsDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Custom Service
+              </Button>
+            </div>
+          ) : (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Billing Model</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {customServices.map((service) => (
+                    <TableRow key={service.id}>
+                      <TableCell>
+                        <div className="font-medium">{service.name}</div>
+                        {service.description && (
+                          <div className="text-sm text-muted-foreground line-clamp-1">
+                            {service.description}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {billingModelLabels[service.billing_model]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        £{Number(service.default_price).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={service.active ? "default" : "secondary"}>
+                          {service.active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(service)}
+                            aria-label={`Edit service ${service.name}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm("Delete this custom service?")) {
+                                deleteMutation.mutate(service.id);
+                              }
+                            }}
+                            aria-label={`Delete service ${service.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {billingModelLabels[service.billing_model]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    £{service.default_price.toFixed(2)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={service.active ? "default" : "secondary"}>
-                      {service.active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(service)}
-                        aria-label={`Edit service ${service.name}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm("Delete this service?")) {
-                            deleteMutation.mutate(service.id);
-                          }
-                        }}
-                        aria-label={`Delete service ${service.name}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
       </div>
     </DashboardLayout>
   );
