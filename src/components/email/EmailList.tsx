@@ -30,6 +30,8 @@ const CONTEXT_LABELS: Record<string, string> = {
   "ad-hoc": "Ad-hoc",
   portal: "Portal",
   system: "System",
+  quote: "Quote",
+  engagement: "Engagement Letter",
 };
 
 const QUEUE_STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
