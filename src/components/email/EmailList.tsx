@@ -9,23 +9,51 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmailSearch } from "./EmailSearch";
 import { EmailViewer } from "./EmailViewer";
 import { format } from "date-fns";
-import { Mail, ArrowLeft, ArrowRight, Briefcase } from "lucide-react";
+import { Mail, ArrowLeft, ArrowRight, Briefcase, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EmailListProps {
   clientId?: string;
   companyId?: string;
   jobId?: string;
+  leadId?: string;
+  recipientEmail?: string;
+  showQueue?: boolean;
   title?: string;
 }
 
-export function EmailList({ clientId, companyId, jobId, title = "Emails" }: EmailListProps) {
+const CONTEXT_LABELS: Record<string, string> = {
+  invoice: "Invoice",
+  chase: "Reminder",
+  onboarding: "Onboarding",
+  filing: "Filing",
+  "ad-hoc": "Ad-hoc",
+  portal: "Portal",
+  system: "System",
+};
+
+const QUEUE_STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  pending: { label: "Pending", variant: "secondary" },
+  sent: { label: "Sent", variant: "default" },
+  failed: { label: "Failed", variant: "destructive" },
+  cancelled: { label: "Cancelled", variant: "outline" },
+};
+
+export function EmailList({
+  clientId,
+  companyId,
+  jobId,
+  leadId,
+  recipientEmail,
+  showQueue = false,
+  title = "Emails",
+}: EmailListProps) {
   const { organization } = useOrganization();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 
   const { data: emails, isLoading, refetch } = useQuery({
-    queryKey: ["email-messages", organization?.id, clientId, companyId, jobId, searchQuery],
+    queryKey: ["email-messages", organization?.id, clientId, companyId, jobId, leadId, recipientEmail, searchQuery],
     queryFn: async () => {
       if (!organization?.id) return [];
 
@@ -40,15 +68,25 @@ export function EmailList({ clientId, companyId, jobId, title = "Emails" }: Emai
         .eq("organization_id", organization.id)
         .order("sent_at", { ascending: false, nullsFirst: false });
 
-      if (clientId) {
-        query = query.eq("client_id", clientId);
+      // Build inclusive OR filter across relational ids and optional address fallback.
+      const orParts: string[] = [];
+      if (clientId) orParts.push(`client_id.eq.${clientId}`);
+      if (companyId) orParts.push(`company_id.eq.${companyId}`);
+      if (jobId) orParts.push(`job_id.eq.${jobId}`);
+      if (recipientEmail) {
+        const safe = recipientEmail.replace(/"/g, "");
+        orParts.push(`to_emails.cs.{"${safe}"}`);
+        orParts.push(`from_email.eq.${safe}`);
       }
-      if (companyId) {
-        query = query.eq("company_id", companyId);
+      if (leadId) {
+        // matched_entities is a jsonb array; contains operator
+        orParts.push(`matched_entities.cs.[{"type":"lead","id":"${leadId}"}]`);
       }
-      if (jobId) {
-        query = query.eq("job_id", jobId);
+      if (orParts.length === 0) {
+        // No filter provided — return nothing to avoid showing org-wide emails accidentally.
+        return [];
       }
+      query = query.or(orParts.join(","));
 
       // Full-text search using the search_vector column
       if (searchQuery.trim()) {
@@ -68,9 +106,93 @@ export function EmailList({ clientId, companyId, jobId, title = "Emails" }: Emai
     enabled: !!organization?.id,
   });
 
+  const { data: queueItems, isLoading: queueLoading } = useQuery({
+    queryKey: ["email-queue-for-entity", organization?.id, clientId, companyId, jobId, leadId, recipientEmail],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      let q = supabase
+        .from("email_queue")
+        .select("id, subject, to_email, to_name, status, scheduled_at, sent_at, last_error_message, error_message, mailbox_id, created_by, context, retry_count")
+        .eq("organization_id", organization.id)
+        .order("scheduled_at", { ascending: false, nullsFirst: false })
+        .limit(25);
+
+      const orParts: string[] = [];
+      if (clientId) orParts.push(`client_id.eq.${clientId}`);
+      if (companyId) orParts.push(`company_id.eq.${companyId}`);
+      if (jobId) orParts.push(`job_id.eq.${jobId}`);
+      if (leadId) orParts.push(`and(entity_type.eq.lead,entity_id.eq.${leadId})`);
+      if (recipientEmail) orParts.push(`to_email.eq.${recipientEmail}`);
+      if (orParts.length === 0) return [];
+      q = q.or(orParts.join(","));
+
+      const { data, error } = await q;
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!organization?.id && showQueue,
+  });
+
+  // Show only outstanding items in the queue panel (pending/scheduled/failed); successful sends live in history.
+  const outstandingQueue = (queueItems || []).filter(
+    (q) => q.status === "pending" || q.status === "failed",
+  );
+
   const selectedEmail = emails?.find((e) => e.id === selectedEmailId);
 
   return (
+    <div className="space-y-4">
+      {showQueue && outstandingQueue.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4" />
+              Outgoing — Pending or Failed
+              <Badge variant="secondary" className="ml-1">{outstandingQueue.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {outstandingQueue.map((item) => {
+              const status = QUEUE_STATUS_LABELS[item.status] ?? { label: item.status, variant: "outline" as const };
+              const contextLabel = item.context ? CONTEXT_LABELS[item.context] : null;
+              const when = item.scheduled_at || item.sent_at;
+              const isFailed = item.status === "failed";
+              return (
+                <div key={item.id} className="border rounded-md p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{item.subject || "(No subject)"}</p>
+                      <p className="text-muted-foreground text-xs truncate">
+                        To {item.to_name ? `${item.to_name} <${item.to_email}>` : item.to_email}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <Badge variant={status.variant} className="text-xs">
+                          {isFailed ? <AlertCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                          {status.label}
+                        </Badge>
+                        {contextLabel && (
+                          <Badge variant="outline" className="text-xs">{contextLabel}</Badge>
+                        )}
+                        {when && (
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(when), "dd MMM yyyy HH:mm")}
+                          </span>
+                        )}
+                      </div>
+                      {isFailed && (
+                        <p className="text-xs text-destructive mt-1">
+                          Failed to send — check email settings or retry from the Emails page.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
       {/* Email List */}
       <Card className="flex flex-col">
@@ -97,7 +219,13 @@ export function EmailList({ clientId, companyId, jobId, title = "Emails" }: Emai
             ) : !emails?.length ? (
               <div className="p-8 text-center text-muted-foreground">
                 <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No emails found</p>
+                <p>
+                  {leadId
+                    ? "No AccountancyOS emails recorded for this lead yet."
+                    : clientId || companyId
+                    ? "No AccountancyOS emails recorded for this client yet."
+                    : "No emails found"}
+                </p>
                 {searchQuery && (
                   <p className="text-sm mt-1">Try adjusting your search</p>
                 )}
@@ -180,6 +308,9 @@ export function EmailList({ clientId, companyId, jobId, title = "Emails" }: Emai
                                 {email.jobs.job_name}
                               </Badge>
                             )}
+                            {!email.client_id && !email.company_id && recipientEmail && (
+                              <Badge variant="outline" className="text-xs">Address match</Badge>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -214,6 +345,7 @@ export function EmailList({ clientId, companyId, jobId, title = "Emails" }: Emai
           </Card>
         )}
       </div>
+    </div>
     </div>
   );
 }
