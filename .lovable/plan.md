@@ -1,50 +1,85 @@
-## Root cause
+## Current behaviour
 
-The June 17 rewrite of `lifecycle_send_quote` (migration `20260617111847…`) renamed the merge-data keys it builds:
+`lifecycle_send_quote` writes the rendered email into `email_queue`, and `process-email-queue` always sends it through the Lovable Emails API with a fixed `FROM_ADDRESS = "AccountancyOS <noreply@accountancyos.com>"`. The accountant's identity is never carried through, even though we already have:
 
-| Old key (still used by templates & editor) | New key produced by RPC |
-|---|---|
-| `accept_link` | `accept_url` |
-| `quote_lines_table` | `lines_html` |
-| `quote_total_now` | `total_now` |
-| `quote_total_monthly` | `total_monthly` |
-| `quote_total` | `total_amount` |
-
-The Quote Proposal template body (and the merge-field picker in `EmailTemplateEditor.tsx`) still emit the old `{{quote_lines_table}}`, `{{accept_link}}`, `{{quote_total_now}}`, `{{quote_total_monthly}}` tags. The RPC's `replace()` loop finds no matching keys, so the tags are sent verbatim — exactly what you see in the received email.
+- `connected_mailboxes` (Gmail/Outlook OAuth per user) with `gmail-send` and `outlook-send` Edge Functions that accept `mailbox_id` and can be called with the service-role key.
+- `email_queue` columns ready for this: `mailbox_id`, `provider`, `created_by`, `queued_by`.
+- `quotes` table does **not** yet record which staff user created the quote.
 
 ## Fix
 
-Add a new migration that re-creates `lifecycle_send_quote` with both the new keys **and** legacy aliases in the merge object, so both old and new templates resolve cleanly:
+Route quote emails through the creator's connected mailbox when one exists; fall back to the current noreply path (with a clear flag) when it doesn't. No UI changes required for sending — the existing Send Quote button keeps working.
+
+### 1. Capture quote creator
+
+Migration adds `quotes.created_by uuid references auth.users(id)` and a BEFORE INSERT trigger that defaults it to `auth.uid()` when omitted. Backfill is not required (only future sends are affected).
+
+### 2. Resolve mailbox in `lifecycle_send_quote`
+
+Re-create `lifecycle_send_quote` (same body as the just-fixed version) and add, before the `INSERT INTO email_queue`:
 
 ```
-accept_url        + accept_link           (= same URL)
-lines_html        + quote_lines_table     (= same HTML table)
-total_now         + quote_total_now       (formatted with thousands sep, 2dp)
-total_monthly     + quote_total_monthly   (formatted)
-total_amount      + quote_total           (formatted)
+SELECT id, provider, email_address
+  INTO v_mailbox_id, v_mailbox_provider, v_mailbox_from
+FROM connected_mailboxes
+WHERE organization_id = v_quote.organization_id
+  AND status = 'active'
+  AND sync_enabled IS NOT FALSE
+  AND user_id = COALESCE(v_quote.created_by, auth.uid())
+ORDER BY updated_at DESC
+LIMIT 1;
+
+-- Fallback to any active org mailbox if the creator hasn't connected one
+IF v_mailbox_id IS NULL THEN
+  SELECT id, provider, email_address
+    INTO v_mailbox_id, v_mailbox_provider, v_mailbox_from
+  FROM connected_mailboxes
+  WHERE organization_id = v_quote.organization_id
+    AND status = 'active'
+    AND sync_enabled IS NOT FALSE
+  ORDER BY updated_at DESC LIMIT 1;
+END IF;
 ```
 
-Also format the numeric values with `to_char(..., 'FM999,999,990.00')` so the email shows `1,250.00` instead of `1250.00`, matching the earlier behaviour from `20260603105258`.
+Persist on insert: `mailbox_id`, `provider`, `created_by = COALESCE(v_quote.created_by, auth.uid())`, `queued_by = auth.uid()`. Also set `context = 'quote_send'` (already done).
 
-No template content changes, no UI changes — the EmailTemplateEditor merge-field chips already reference the legacy names so they keep working.
+### 3. Dispatcher routes via the user's mailbox
 
-## Technical details
+In `supabase/functions/process-email-queue/index.ts`, extend the `email_queue` select to include `mailbox_id, provider, created_by`. For each pending row:
 
-1. **New migration** `supabase/migrations/<ts>_quote_send_merge_keys_compat.sql`
-   - `CREATE OR REPLACE FUNCTION public.lifecycle_send_quote(p_quote_id uuid) …`
-   - Body identical to the current `20260617111847` version except:
-     - Build `v_merge` with both new + legacy keys listed above.
-     - Format `total_now`, `total_monthly`, `total_amount` (and their legacy aliases) via `to_char(..., 'FM999,999,990.00')`.
-     - Inline `to_char` for `v_unit_display` / `v_subtotal_display` in the line-item HTML, so the table shows `GBP 1,250.00` not `GBP 1250.00`.
-   - No schema changes, no grant changes, no template-row updates.
+```
+if (row.mailbox_id && row.provider) {
+  const fnName = row.provider === 'outlook' ? 'outlook-send' : 'gmail-send';
+  providerResponse = await supabase.functions.invoke(fnName, {
+    body: {
+      mailbox_id: row.mailbox_id,
+      to: row.to_email,
+      subject: row.subject,
+      body_html: row.body_html,
+      body_text: row.body_text ?? htmlToText(row.body_html),
+    },
+  });
+  // treat invoke error / missing id as send failure (same retry/DLQ semantics as today)
+} else {
+  // existing sendLovableEmail(...) noreply path, unchanged
+}
+```
 
-2. **No changes** to:
-   - `EmailTemplateEditor.tsx` (already uses the legacy names).
-   - The Quote Proposal template row in `public.templates`.
-   - `QuoteDetail.tsx` send flow.
+Service-role auth is already accepted by both functions (`isInternalCall = bearer === SUPABASE_SERVICE_ROLE_KEY`). Success logging and `email_queue` status updates stay identical; `email_send_log.metadata` records `provider: 'gmail' | 'outlook' | 'lovable'` for visibility.
+
+### 4. CreateQuoteDialog
+
+No change required — DB trigger fills `created_by`. (Optional small follow-up: also set it explicitly in the insert payload so types stay strict; out of scope for this plan unless you want it.)
+
+## Out of scope
+
+- Per-user "Send as" picker in the Send Quote dialog (we always use the creator's mailbox). Add later if needed.
+- Threading replies back into `email_messages` for the sent quote (gmail-send/outlook-send already persist to their own tables; wiring quote-thread linkage is a separate task).
+- Backfilling `created_by` on existing draft quotes.
 
 ## Verification
 
-After the migration:
-- Re-send the Q-26-0009 quote from Blue Tick.
-- Confirm the queued `email_queue` row's `body_html` contains the rendered services table, the `GBP` amounts, and a real `/q/<token>` accept URL (no `{{…}}` left).
+1. As `leon@bluetickaccountants.com` (who has a Gmail/Outlook mailbox connected — to be confirmed), create and send a new quote.
+2. Confirm the recipient sees the email from `leon@bluetickaccountants.com`, not `noreply@accountancyos.com`.
+3. Confirm `email_queue.mailbox_id`, `provider`, `created_by` are populated and `email_send_log.metadata.provider` is `gmail` or `outlook`.
+4. Delete/disable the mailbox and re-send a different draft quote → it falls back to the noreply path and still delivers.

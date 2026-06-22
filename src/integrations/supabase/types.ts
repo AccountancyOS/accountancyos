@@ -13972,6 +13972,7 @@ export type Database = {
           client_id: string | null
           company_id: string | null
           created_at: string
+          created_by: string | null
           currency: string
           id: string
           lead_id: string | null
@@ -13999,6 +14000,7 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          created_by?: string | null
           currency?: string
           id?: string
           lead_id?: string | null
@@ -14026,6 +14028,7 @@ export type Database = {
           client_id?: string | null
           company_id?: string | null
           created_at?: string
+          created_by?: string | null
           currency?: string
           id?: string
           lead_id?: string | null
