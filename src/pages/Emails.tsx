@@ -90,6 +90,8 @@ const contextLabels: Record<string, string> = {
   "ad-hoc": "Ad-hoc",
   portal: "Portal",
   system: "System",
+  quote: "Quote",
+  engagement: "Engagement Letter",
 };
 
 export default function Emails() {
@@ -410,6 +412,8 @@ export default function Emails() {
                     <SelectItem value="ad-hoc">Ad-hoc</SelectItem>
                     <SelectItem value="portal">Portal</SelectItem>
                     <SelectItem value="system">System</SelectItem>
+                    <SelectItem value="quote">Quote</SelectItem>
+                    <SelectItem value="engagement">Engagement Letter</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
