@@ -429,7 +429,7 @@ Deno.serve(async (req) => {
   try {
     const { data: rows, error: rowsError } = await supabase
       .from('email_queue')
-      .select('id, organization_id, to_email, to_name, subject, body_html, body_text')
+      .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by')
       .eq('status', 'pending')
       .lte('scheduled_at', new Date().toISOString())
       .order('created_at', { ascending: true })
@@ -479,22 +479,42 @@ Deno.serve(async (req) => {
         })
 
         try {
-          const providerResponse = await sendLovableEmail(
-            {
-              to: row.to_email,
-              from: FROM_ADDRESS,
-              sender_domain: SENDER_DOMAIN,
-              subject: row.subject,
-              html: row.body_html,
-              text: row.body_text ?? htmlToText(row.body_html),
-              purpose: 'transactional',
-              label: 'email_queue',
-              idempotency_key: row.id,
-              message_id: messageId,
-              unsubscribe_token: unsubscribeToken ?? undefined,
-            },
-            { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
-          )
+          let providerResponse: unknown
+          let providerLabel: 'gmail' | 'outlook' | 'lovable' = 'lovable'
+
+          if (row.mailbox_id && row.provider) {
+            // Send from the accountant's connected mailbox
+            const fnName = row.provider === 'outlook' ? 'outlook-send' : 'gmail-send'
+            providerLabel = row.provider === 'outlook' ? 'outlook' : 'gmail'
+            const { data: fnData, error: fnErr } = await supabase.functions.invoke(fnName, {
+              body: {
+                mailbox_id: row.mailbox_id,
+                to: row.to_email,
+                subject: row.subject,
+                body_html: row.body_html,
+                body_text: row.body_text ?? htmlToText(row.body_html),
+              },
+            })
+            if (fnErr) throw new Error(`${fnName} invoke failed: ${fnErr.message ?? String(fnErr)}`)
+            providerResponse = fnData
+          } else {
+            providerResponse = await sendLovableEmail(
+              {
+                to: row.to_email,
+                from: FROM_ADDRESS,
+                sender_domain: SENDER_DOMAIN,
+                subject: row.subject,
+                html: row.body_html,
+                text: row.body_text ?? htmlToText(row.body_html),
+                purpose: 'transactional',
+                label: 'email_queue',
+                idempotency_key: row.id,
+                message_id: messageId,
+                unsubscribe_token: unsubscribeToken ?? undefined,
+              },
+              { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
+            )
+          }
 
           const providerId =
             (providerResponse && typeof providerResponse === 'object'
@@ -502,7 +522,8 @@ Deno.serve(async (req) => {
                 (providerResponse as Record<string, unknown>).message_id ??
                 (providerResponse as Record<string, unknown>).messageId ??
                 (providerResponse as Record<string, unknown>).workflow_id ??
-                (providerResponse as Record<string, unknown>).workflowId)
+                (providerResponse as Record<string, unknown>).workflowId ??
+                (providerResponse as Record<string, unknown>).provider_message_id)
               : null) ?? null
 
           if (!providerId) {
@@ -537,6 +558,7 @@ Deno.serve(async (req) => {
               provider_message_id: String(providerId),
               provider_response: providerResponse,
               email_queue_id: row.id,
+              provider: providerLabel,
             },
           })
 
