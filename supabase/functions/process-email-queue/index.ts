@@ -496,7 +496,14 @@ Deno.serve(async (req) => {
               },
             })
             if (fnErr) throw new Error(`${fnName} invoke failed: ${fnErr.message ?? String(fnErr)}`)
-            providerResponse = fnData
+            // gmail-send/outlook-send may not return a provider message id;
+            // a non-error invoke means accepted -> synthesize one for ack.
+            const data = (fnData ?? {}) as Record<string, unknown>
+            if (data.error) throw new Error(String(data.error))
+            if (!data.message_id && !data.id) {
+              data.message_id = `${providerLabel}-${messageId}`
+            }
+            providerResponse = data
           } else {
             providerResponse = await sendLovableEmail(
               {
