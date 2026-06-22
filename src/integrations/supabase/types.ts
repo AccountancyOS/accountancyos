@@ -18186,7 +18186,7 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_back_onboarding: {
-        Args: { p_application_id: string; p_reason: string; p_step: string }
+        Args: { p_application_id: string; p_reason?: string; p_step: string }
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
@@ -18706,7 +18706,12 @@ export type Database = {
         Args: { p_is_active: boolean; p_rule_id: string }
         Returns: Json
       }
-      trigger_records_request: { Args: { p_job_id: string }; Returns: Json }
+      trigger_records_request:
+        | { Args: { p_job_id: string }; Returns: Json }
+        | {
+            Args: { p_job_id: string; p_questionnaire_template_id: string }
+            Returns: Json
+          }
       try_parse_numeric: { Args: { val: string }; Returns: number }
       unlock_period: {
         Args: {

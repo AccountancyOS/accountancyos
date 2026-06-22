@@ -23,15 +23,13 @@ interface EmailListProps {
 }
 
 const CONTEXT_LABELS: Record<string, string> = {
-  invoice: "Invoice",
-  chase: "Reminder",
-  onboarding: "Onboarding",
-  filing: "Filing",
-  "ad-hoc": "Ad-hoc",
-  portal: "Portal",
-  system: "System",
   quote: "Quote",
+  onboarding: "Onboarding",
   engagement: "Engagement Letter",
+  job: "Job",
+  invoice: "Invoice",
+  system: "System",
+  general: "General",
 };
 
 const QUEUE_STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {

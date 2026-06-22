@@ -1,47 +1,50 @@
-# Add `quote` and `engagement` to email context categories
-
 ## Goal
 
-Extend the `email_queue.context` CHECK constraint to include two new categories — `quote` and `engagement` — and tag the relevant outbound emails with them so staff can filter the Emails work queue by these categories.
+Replace the email `context` taxonomy with the simplified list: **Quote, Onboarding, Engagement Letter, Job, Invoice, System, General** (plus "All" as the filter default).
 
 ## Changes
 
-### 1. Migration — widen the CHECK constraint
+### 1. Database migration
+- Backfill existing rows in `email_queue` and `email_messages`:
+  - `chase` → `job`
+  - `filing` → `job`
+  - `ad-hoc` → `general`
+  - `portal` → `general`
+  - `engagement` stays `engagement`
+  - `quote`, `onboarding`, `invoice`, `system` stay as-is
+- Drop and recreate `email_queue_context_check` constraint with new allowed values: `quote, onboarding, engagement, job, invoice, system, general`.
+- If `email_messages` has a matching check constraint, update it the same way.
 
-Drop and recreate `email_queue_context_check` to allow:
+### 2. Backend RPCs / senders
+Update outbound email producers to emit the new contexts:
+- `lifecycle_send_quote` → already `quote` ✅
+- Engagement letter RPC → `engagement` ✅ (verify)
+- Onboarding senders → `onboarding` (verify; no change expected)
+- Invoice senders → `invoice` (no change expected)
+- **Automation chaser runs** (`automation_chaser_runs` → email_queue) → `job`
+- **Record request** emails → `job`
+- **Filing notifications** (filing submitted/accepted/rejected) → `job`
+- Anything currently writing `ad-hoc` or `portal` → `general`
 
-`invoice`, `chase`, `onboarding`, `filing`, `ad-hoc`, `portal`, `system`, `quote`, `engagement`
+I'll grep the codebase for `context:` and `'ad-hoc'|'chase'|'filing'|'portal'` literals and update each call site.
 
-No data backfill (existing rows are unaffected; old `ad-hoc` quote emails stay as `ad-hoc`).
+### 3. Frontend
+- `src/lib/db-constants/check-constraints.ts` — update the context enum/array.
+- `src/pages/Emails.tsx` — replace `contextLabels` and the filter dropdown options with: All, Quote, Onboarding, Engagement Letter, Job, Invoice, System, General.
+- `src/components/email/EmailList.tsx` — update `CONTEXT_LABELS` badge mapping to the same 7 values.
 
-### 2. Tag outbound emails at source
-
-- `lifecycle_send_quote` RPC — change inserted `context` from `ad-hoc` to `quote`.
-- Engagement letter send paths — locate the RPC / edge function that enqueues engagement letter emails (likely `lifecycle_send_engagement_letter` or similar) and set `context = 'engagement'`. Cover both initial send and re-sign triggers.
-
-### 3. Frontend — surface the new categories
-
-- `src/lib/db-constants/check-constraints.ts` (or wherever the context enum lives) — add `quote` and `engagement`.
-- `src/pages/Emails.tsx` — add the two options to the context filter dropdown and the badge label map (friendly labels: "Quote", "Engagement Letter").
-- `src/components/email/EmailList.tsx` — extend the `CONTEXT_LABELS` map added in the previous increment.
+### Display labels
+| Value | Label |
+|---|---|
+| quote | Quote |
+| onboarding | Onboarding |
+| engagement | Engagement Letter |
+| job | Job |
+| invoice | Invoice |
+| system | System |
+| general | General |
 
 ## Out of scope
-
-- No changes to sender/mailbox routing, template engine, or queue processor.
-- No backfill of historical `ad-hoc` rows.
-- No new UI surfaces beyond the existing context filter + badges.
-
-## Files touched
-
-- New migration under `supabase/migrations/`
-- `src/lib/db-constants/check-constraints.ts`
-- `src/pages/Emails.tsx`
-- `src/components/email/EmailList.tsx`
-- Whichever lifecycle RPC sends engagement-letter emails (to be identified during implementation; will report it back if it differs from expectation)
-
-## Verification
-
-- Sending a quote enqueues a row with `context='quote'`.
-- Sending an engagement letter enqueues a row with `context='engagement'`.
-- Both categories appear in the `/emails` filter and as badges on rows.
-- Existing emails with other contexts continue to work unchanged.
+- No new email sending flows.
+- No changes to queue processing, RLS, or scheduling.
+- No new tables.

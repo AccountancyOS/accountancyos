@@ -83,15 +83,13 @@ const statusConfig: Record<EmailStatus, { label: string; variant: "default" | "s
 };
 
 const contextLabels: Record<string, string> = {
-  invoice: "Invoice",
-  chase: "Chase",
-  onboarding: "Onboarding",
-  filing: "Filing",
-  "ad-hoc": "Ad-hoc",
-  portal: "Portal",
-  system: "System",
   quote: "Quote",
+  onboarding: "Onboarding",
   engagement: "Engagement Letter",
+  job: "Job",
+  invoice: "Invoice",
+  system: "System",
+  general: "General",
 };
 
 export default function Emails() {
@@ -405,15 +403,13 @@ export default function Emails() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Contexts</SelectItem>
-                    <SelectItem value="invoice">Invoice</SelectItem>
-                    <SelectItem value="chase">Chase</SelectItem>
-                    <SelectItem value="onboarding">Onboarding</SelectItem>
-                    <SelectItem value="filing">Filing</SelectItem>
-                    <SelectItem value="ad-hoc">Ad-hoc</SelectItem>
-                    <SelectItem value="portal">Portal</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
                     <SelectItem value="quote">Quote</SelectItem>
+                    <SelectItem value="onboarding">Onboarding</SelectItem>
                     <SelectItem value="engagement">Engagement Letter</SelectItem>
+                    <SelectItem value="job">Job</SelectItem>
+                    <SelectItem value="invoice">Invoice</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
+                    <SelectItem value="general">General</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
