@@ -47,6 +47,7 @@ import {
   Activity,
 } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
+import { EmailList } from "@/components/email/EmailList";
 import {
   CLIENT_TYPES,
   CLIENT_TYPE_LABELS,
@@ -383,7 +384,7 @@ export const LeadDetailPanel = ({
         </SheetHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden mt-4">
-          <TabsList className="flex-shrink-0 grid w-full grid-cols-5">
+          <TabsList className="flex-shrink-0 grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="quotes">
@@ -395,6 +396,7 @@ export const LeadDetailPanel = ({
               )}
             </TabsTrigger>
             <TabsTrigger value="conversations">Messages</TabsTrigger>
+            <TabsTrigger value="emails">Emails</TabsTrigger>
             <TabsTrigger value="documents">Docs</TabsTrigger>
           </TabsList>
 
@@ -674,6 +676,16 @@ export const LeadDetailPanel = ({
                   Email history with this lead will appear here
                 </p>
               </div>
+            </TabsContent>
+
+            {/* Emails Tab */}
+            <TabsContent value="emails" className="m-0 space-y-4">
+              <EmailList
+                leadId={lead.id}
+                recipientEmail={lead.email || undefined}
+                showQueue
+                title="Emails"
+              />
             </TabsContent>
 
             {/* Documents Tab */}

@@ -23,6 +23,7 @@ import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPa
 import { EngagementLetterStatus } from "@/components/clients/EngagementLetterStatus";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
+import { EmailList } from "@/components/email/EmailList";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
@@ -118,6 +119,7 @@ export default function ClientPortal() {
             <TabsList className="flex-wrap">
               <TabsTrigger value="portal">Portal</TabsTrigger>
               <TabsTrigger value="conversations">Conversations</TabsTrigger>
+              <TabsTrigger value="emails">Emails</TabsTrigger>
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="contacts">Contacts</TabsTrigger>
@@ -138,6 +140,15 @@ export default function ClientPortal() {
 
             <TabsContent value="conversations">
               <ConversationsTab clientId={client.id} />
+            </TabsContent>
+
+            <TabsContent value="emails">
+              <EmailList
+                clientId={client.id}
+                recipientEmail={client.email ?? undefined}
+                showQueue
+                title="Emails"
+              />
             </TabsContent>
 
             <TabsContent value="jobs">
