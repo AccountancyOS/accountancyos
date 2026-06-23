@@ -423,7 +423,7 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
   const payWithStripe = async () => {
     setSubmitting(true);
     const { data, error } = await supabase.functions.invoke("onboarding-stripe-checkout", {
-      body: { application_id: bundle.application.id },
+      body: { application_id: bundle.application.id, access_token: getAccessToken() },
     });
     if (error || !data?.url) {
       setSubmitting(false);
