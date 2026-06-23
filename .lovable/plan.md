@@ -1,50 +1,37 @@
 ## Goal
 
-Replace the email `context` taxonomy with the simplified list: **Quote, Onboarding, Engagement Letter, Job, Invoice, System, General** (plus "All" as the filter default).
+Create `docs/email-system.md` as a permanent reference so developers don't accidentally break either email pipeline.
 
 ## Changes
 
-### 1. Database migration
-- Backfill existing rows in `email_queue` and `email_messages`:
-  - `chase` → `job`
-  - `filing` → `job`
-  - `ad-hoc` → `general`
-  - `portal` → `general`
-  - `engagement` stays `engagement`
-  - `quote`, `onboarding`, `invoice`, `system` stay as-is
-- Drop and recreate `email_queue_context_check` constraint with new allowed values: `quote, onboarding, engagement, job, invoice, system, general`.
-- If `email_messages` has a matching check constraint, update it the same way.
+### 1. Create `docs/email-system.md`
 
-### 2. Backend RPCs / senders
-Update outbound email producers to emit the new contexts:
-- `lifecycle_send_quote` → already `quote` ✅
-- Engagement letter RPC → `engagement` ✅ (verify)
-- Onboarding senders → `onboarding` (verify; no change expected)
-- Invoice senders → `invoice` (no change expected)
-- **Automation chaser runs** (`automation_chaser_runs` → email_queue) → `job`
-- **Record request** emails → `job`
-- **Filing notifications** (filing submitted/accepted/rejected) → `job`
-- Anything currently writing `ad-hoc` or `portal` → `general`
+Sections:
+- **Overview** — two independent pipelines (Lovable Managed Auth Email vs App-Owned Outbound Queue)
+- **Pipeline A: Auth Email** — ASCII flow diagram + inventory:
+  - Edge functions: `auth-email-hook`, `process-email-queue`, `handle-email-unsubscribe`, `handle-email-suppression`
+  - Tables: `email_send_log`, `email_send_state`, `suppressed_emails`, `email_unsubscribe_tokens`
+  - pgmq queues: `auth_emails`, `transactional_emails` (+ DLQ)
+  - RPCs: `enqueue_email`, `read_email_batch`, `delete_email`, `move_to_dlq`
+  - Cron: `process-email-queue` every 5s
+  - Templates: `supabase/functions/_shared/email-templates/*.tsx`
+  - Domain: `notify.accountancyos.com`, site URL `https://app.accountancyos.com`
+- **Pipeline B: App Outbound Queue** — ASCII flow diagram + inventory:
+  - Tables: `email_queue`, `email_messages`, `email_threads`, `email_attachments`, `message_entity_links`, `connected_mailboxes`, `email_preferences`, `email_suppressions`, `email_push_subscriptions`
+  - Service layer: `src/lib/email-service.ts`, `src/lib/email-safe-service.ts` (and the RPC wrappers it calls)
+  - UI: `src/pages/Emails.tsx`, `src/components/email/EmailList.tsx`
+  - Context taxonomy table (the 7 allowed values: quote, onboarding, engagement, job, invoice, system, general) with the human label for each
+- **Silent-Breakage Table** — what edits silently break sends (auth-hook contract, SENDER_DOMAIN, context check constraint, cron job, service-role rotation, auto-generated Supabase files, redirect allow-list, post-publish prod cron, RLS, mailbox OAuth tokens)
+- **Drift Detection** — `bun smoke` (`scripts/smoke-test.ts`), regression tests under `src/test/regression/` (auth-email-hook-contract, process-email-queue-contract, supabase-manifest, vocabulary-drift), CI gate
+- **Safe / Care / Never cheat sheet**
+- **PR Checklist** — ticks required before merging any change that touches `email_*` tables, `auth-email-hook`, `process-email-queue`, `send-transactional-email`, or `infra/supabase-manifest.json`
 
-I'll grep the codebase for `context:` and `'ad-hoc'|'chase'|'filing'|'portal'` literals and update each call site.
+### 2. Link from `README.md`
 
-### 3. Frontend
-- `src/lib/db-constants/check-constraints.ts` — update the context enum/array.
-- `src/pages/Emails.tsx` — replace `contextLabels` and the filter dropdown options with: All, Quote, Onboarding, Engagement Letter, Job, Invoice, System, General.
-- `src/components/email/EmailList.tsx` — update `CONTEXT_LABELS` badge mapping to the same 7 values.
-
-### Display labels
-| Value | Label |
-|---|---|
-| quote | Quote |
-| onboarding | Onboarding |
-| engagement | Engagement Letter |
-| job | Job |
-| invoice | Invoice |
-| system | System |
-| general | General |
+Add a one-line entry under the existing docs section pointing to `docs/email-system.md`.
 
 ## Out of scope
-- No new email sending flows.
-- No changes to queue processing, RLS, or scheduling.
-- No new tables.
+
+- No code, schema, RLS, edge-function, or template changes.
+- No new tests.
+- No behavioral change to either email pipeline.
