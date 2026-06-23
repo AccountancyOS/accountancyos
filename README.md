@@ -8,6 +8,7 @@ AccountancyOS uses a layered safety net to catch drift in critical workflows:
 - [`docs/supabase-infrastructure.md`](./docs/supabase-infrastructure.md) + [`infra/supabase-manifest.json`](./infra/supabase-manifest.json) — expected backend infrastructure (edge functions, cron, secrets, RLS tables, email config).
 - [`docs/change-checklist.md`](./docs/change-checklist.md) — required checklist for every change. Mirrored in `.github/PULL_REQUEST_TEMPLATE.md`.
 - [`docs/test-fixtures.md`](./docs/test-fixtures.md) — deterministic seeded users. Real users (e.g. live clients) are never used as regression subjects.
+- [`docs/email-system.md`](./docs/email-system.md) — both email pipelines (auth + app outbound queue), what silently breaks them, and the PR checklist.
 
 ### Commands
 
