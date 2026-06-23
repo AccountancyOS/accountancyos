@@ -88,6 +88,20 @@ export const LEAD_PIPELINE_STAGES = ["new", "qualified", "proposal_sent", "chasi
 
 // --- Registry --------------------------------------------------------------
 
+/** email_queue.context — email_queue_context_check (latest set after the 2026-06-22 remap). */
+export const EMAIL_QUEUE_CONTEXTS = [
+  "quote",
+  "onboarding",
+  "engagement",
+  "job",
+  "invoice",
+  "system",
+  "general",
+] as const;
+
+/** email_queue.status — email_queue_status_check. */
+export const EMAIL_QUEUE_STATUSES = ["pending", "sent", "failed", "cancelled"] as const;
+
 export interface CheckConstraintVocab {
   /** Table the constraint lives on. */
   table: string;
@@ -120,4 +134,6 @@ export const CHECK_CONSTRAINT_REGISTRY: readonly CheckConstraintVocab[] = [
   { table: "quotes", column: "status", constraint: "quotes_status_check", values: QUOTE_STATUSES },
   { table: "deadlines", column: "status", constraint: "deadlines_status_check", values: DEADLINE_STATUSES },
   { table: "leads", column: "pipeline_stage", constraint: "leads_pipeline_stage_check", values: LEAD_PIPELINE_STAGES },
+  { table: "email_queue", column: "context", constraint: "email_queue_context_check", values: EMAIL_QUEUE_CONTEXTS },
+  { table: "email_queue", column: "status", constraint: "email_queue_status_check", values: EMAIL_QUEUE_STATUSES },
 ] as const;

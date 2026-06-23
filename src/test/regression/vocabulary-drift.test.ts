@@ -46,6 +46,8 @@ const EXPECTED_CONSTRAINT_VALUES: Record<string, string[]> = {
   quotes_status_check: ["draft", "sent", "accepted", "rejected", "expired", "superseded"],
   deadlines_status_check: ["pending", "in_progress", "completed", "filed", "overdue", "cancelled"],
   leads_pipeline_stage_check: ["new", "qualified", "proposal_sent", "chasing", "won", "lost"],
+  email_queue_context_check: ["quote", "onboarding", "engagement", "job", "invoice", "system", "general"],
+  email_queue_status_check: ["pending", "sent", "failed", "cancelled"],
 };
 
 /** Legacy/retired values that must never reappear in a canonical set. */
@@ -55,6 +57,8 @@ const FORBIDDEN: Record<string, string[]> = {
   client_tasks_status_check: ["pending"],
   client_tasks_visibility_check: ["internal", "client"],
   chk_filing_status: ["ready_for_approval", "queued", "submitting", "submission_failed"],
+  email_queue_context_check: ["chase", "filing", "ad-hoc", "portal"],
+  email_queue_status_check: ["queued", "draft"],
 };
 
 describe("vocabulary drift registry (SSOT)", () => {

@@ -1,11 +1,13 @@
 # Email System Reference
 
-AccountancyOS runs **two independent email pipelines**. They share no code paths. Confusing them is the #1 way email silently breaks.
+AccountancyOS has **two email entry points** (auth vs. app), but they are **not** fully independent: both ultimately drain through the **same worker, `process-email-queue`**. Confusing where an email is *composed* vs. where it is *sent* is the #1 way email silently breaks.
 
-| Pipeline | Purpose | Owned by |
-|---|---|---|
-| **A. Lovable Managed Auth Email** | Password reset, magic link, signup confirmation, invites, email change, reauthentication | Lovable platform (do not hand-edit the contract) |
-| **B. App Outbound Queue** | Every business email the practice sends to clients/leads (quotes, engagement letters, chasers, job notifications, invoices, system notices) | This codebase |
+| Entry point | Purpose | Composed by | Sent by |
+|---|---|---|---|
+| **A. Lovable Managed Auth Email** | Password reset, magic link, signup confirmation, invites, email change, reauthentication | `auth-email-hook` → `enqueue_email` → pgmq `auth_emails` | `process-email-queue` |
+| **B. App Outbound Queue** | Every business email the practice sends to clients/leads (quotes, engagement letters, chasers, job notifications, invoices, system notices) | sender RPCs (e.g. `lifecycle_send_quote`) INSERT into `email_queue` | `process-email-queue` |
+
+> **`process-email-queue` is shared.** It drains the pgmq `auth_emails`/`transactional_emails` queues **and** the `public.email_queue` table, and for each message picks a provider: **Lovable's email API by default**, or a **connected Gmail/Outlook mailbox** when the queue row carries a `mailbox_id`.
 
 ---
 
@@ -17,13 +19,13 @@ Supabase Auth event
   -> renders React Email template
   -> enqueue_email RPC ----> pgmq queue: auth_emails
   -> pg_cron (every 5s) -> process-email-queue (edge function)
-  -> Lovable email API -> Mailgun -> recipient
+  -> Lovable email API (provider) -> recipient
   -> email_send_log row updated (pending | sent | failed | dlq | suppressed)
 ```
 
 ### Inventory
 
-- **Edge functions**: `auth-email-hook`, `process-email-queue`, `handle-email-unsubscribe`, `handle-email-suppression`
+- **Edge functions**: `auth-email-hook`, `process-email-queue`, `handle-email-unsubscribe` (note: there is no `handle-email-suppression` or `send-transactional-email` function — suppression is handled in `process-email-queue` + the `suppressed_emails` table)
 - **Tables**: `email_send_log`, `email_send_state`, `suppressed_emails`, `email_unsubscribe_tokens`
 - **pgmq queues**: `auth_emails`, `transactional_emails` (+ DLQ counterparts)
 - **RPCs**: `enqueue_email`, `read_email_batch`, `delete_email`, `move_to_dlq`
@@ -45,15 +47,17 @@ RPC or service (lifecycle_send_quote, trigger_records_request,
    |
    v
 INSERT email_queue (status='pending', context in 7 allowed values)
+   |   ^ placeholders are substituted HERE, by the sender RPC, before the row is queued.
+   |     process-email-queue does NOT apply merge_data — it sends body_html as-is.
+   v
+process-email-queue (shared worker; pg_cron every 5s or manual "Process Queue")
+   |
+   +-- row has mailbox_id? --> gmail-send / outlook-send (accountant's connected mailbox)
+   |
+   +-- otherwise            --> Lovable email API (default provider)
    |
    v
-connected_mailboxes dispatcher (Gmail / Outlook OAuth)
-   |
-   v
-provider send
-   |
-   v
-email_messages (sent record) + message_entity_links (joins message to entity)
+email_send_log (send record) + email_messages / message_entity_links (joins message to entity)
 ```
 
 ### Inventory
@@ -74,7 +78,7 @@ email_messages (sent record) + message_entity_links (joins message to entity)
 - **UI**
   - `src/pages/Emails.tsx` — global queue / work list with `context` filter
   - `src/components/email/EmailList.tsx` — row rendering + `CONTEXT_LABELS` badge map
-- **Queue statuses**: `draft`, `queued`, `pending`, `sent`, `failed`
+- **Queue statuses** (`email_queue_status_check`): `pending`, `sent`, `failed`, `cancelled` — note `queued` and `draft` are **not** valid `email_queue` statuses (the 7-value `pending/sent/suppressed/failed/bounced/complained/dlq` set is `email_send_log`, a different table)
 
 ### `email_queue.context` taxonomy (enforced by `email_queue_context_check`)
 
@@ -98,7 +102,10 @@ Any insert with a value outside this list is rejected by the DB. Update the chec
 |---|---|
 | Removing `enqueue_email` from `supabase/functions/auth-email-hook/index.ts`, or reverting to the legacy `@lovable.dev/email-js` `callback_url` direct send | All auth emails (no queue retries, no logs) |
 | Changing `SENDER_DOMAIN` away from `notify.accountancyos.com` in any edge function | Provider lookup fails; sends 5xx |
-| Inserting `email_queue.context` value outside the 7 allowed | INSERT rejected, sender RPC errors |
+| Inserting `email_queue.context` value outside the 7 allowed | INSERT rejected, sender RPC errors (now guarded by the drift registry/test) |
+| A sender RPC builds a template `{{placeholder}}` it doesn't fill in (name mismatch, or storing `merge_data` expecting the worker to apply it) | Email goes out with literal `{{...}}` / missing links. **Substitution must happen in the sender before queuing — `process-email-queue` never applies `merge_data`.** |
+| A sender RPC queries a column that doesn't exist on its table (e.g. `templates.category`/`is_active`) | Sender errors, email never queued ("column … does not exist") |
+| Removing the CORS `OPTIONS` handler / `corsHeaders` from `process-email-queue` | Browser preflight fails → the manual "Process Queue" button errors with "Failed to send a request to the Edge Function" |
 | Dropping / renaming `email_send_log`, `email_send_state`, `suppressed_emails`, `email_unsubscribe_tokens`, or any pgmq queue | Worker crashes; emails enqueue and never send |
 | Removing the `process-email-queue` pg_cron job | Silent halt. Re-provision via `setup_email_infra`, never recreate manually |
 | Supabase service-role key rotation without refreshing Vault secret | Worker returns 401/403; fix with `setup_email_infra` (idempotent) |
@@ -117,7 +124,7 @@ Any insert with a value outside this list is rejected by the DB. Update the chec
 - `src/test/regression/auth-email-hook-contract.test.ts` — locks the auth hook contract
 - `src/test/regression/process-email-queue-contract.test.ts` — locks the worker contract
 - `src/test/regression/supabase-manifest.test.ts` — locks the manifest
-- `src/test/regression/vocabulary-drift.test.ts` — catches stale enum / context values
+- `src/test/regression/vocabulary-drift.test.ts` — catches stale enum / context values; **`email_queue.context` and `email_queue.status` are now registered** in `src/lib/db-constants/check-constraints.ts`, so a value drifting out of the allowed set fails this test (and the live `bun smoke` check) before it reaches a client
 - CI (`.github/workflows/ci.yml`) runs these on every PR
 
 Run both before shipping anything that touches email:
@@ -139,7 +146,7 @@ bun smoke
 
 ### Care (run `bun run test` + `bun smoke`)
 - Any migration touching `email_*` tables, RLS, or RPCs
-- Editing `auth-email-hook`, `process-email-queue`, `send-transactional-email`
+- Editing `auth-email-hook`, `process-email-queue`, or a sender RPC like `lifecycle_send_quote`
 - Changing the `email_queue_context_check` constraint or the matching frontend constants
 - Editing `infra/supabase-manifest.json`
 
