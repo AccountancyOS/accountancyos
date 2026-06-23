@@ -34,11 +34,17 @@ interface QuotePayload {
   lines: QuoteLine[];
   used: boolean;
   onboarding_application_id?: string | null;
+  onboarding_access_token?: string | null;
   error?: string;
 }
 
 const fmt = (currency: string, n: number) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(Number(n || 0));
+
+// Build the onboarding URL, carrying the secret access token when we have it
+// (Sprint 1 token enforcement). Falls back to the bare path for legacy links.
+const onboardPath = (id: string, tok?: string | null) =>
+  tok ? `/onboard/${id}?token=${encodeURIComponent(tok)}` : `/onboard/${id}`;
 
 export default function PublicQuoteView() {
   const { token } = useParams<{ token: string }>();
@@ -49,6 +55,7 @@ export default function PublicQuoteView() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<"accepted" | "rejected" | null>(null);
   const [onboardingId, setOnboardingId] = useState<string | null>(null);
+  const [onboardingToken, setOnboardingToken] = useState<string | null>(null);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -66,6 +73,9 @@ export default function PublicQuoteView() {
           if (payload?.onboarding_application_id) {
             setOnboardingId(payload.onboarding_application_id);
           }
+          if (payload?.onboarding_access_token) {
+            setOnboardingToken(payload.onboarding_access_token);
+          }
         }
       }
       setLoading(false);
@@ -76,31 +86,33 @@ export default function PublicQuoteView() {
   useEffect(() => {
     if (!quote) return;
     if (quote.status === "accepted" && onboardingId) {
-      const t = setTimeout(() => navigate(`/onboard/${onboardingId}`), 1200);
+      const t = setTimeout(() => navigate(onboardPath(onboardingId, onboardingToken)), 1200);
       return () => clearTimeout(t);
     }
-  }, [quote, onboardingId, navigate]);
+  }, [quote, onboardingId, onboardingToken, navigate]);
 
   const accept = async () => {
     if (!token) return;
     setSubmitting("accept");
     const { data, error } = await supabase.rpc("public_accept_quote_by_token", { p_token: token });
     setSubmitting(null);
-    const payload = data as unknown as { success?: boolean; error?: string; onboarding_application_id?: string };
+    const payload = data as unknown as { success?: boolean; error?: string; onboarding_application_id?: string; onboarding_access_token?: string };
     if (error || payload?.error) {
       toast({ title: "Could not accept quote", description: error?.message || payload?.error, variant: "destructive" });
       return;
     }
     setDone("accepted");
     let appId = payload?.onboarding_application_id ?? null;
+    let appToken = payload?.onboarding_access_token ?? null;
     // The accept RPC does not always include the onboarding id; re-query the
-    // public quote endpoint, which self-heals and returns it.
+    // public quote endpoint, which self-heals and returns it (and the token).
     if (!appId) {
       for (let i = 0; i < 3 && !appId; i++) {
         const { data: qd } = await supabase.rpc("public_get_quote_by_token", { p_token: token });
         const qp = qd as unknown as QuotePayload | null;
         if (qp?.onboarding_application_id) {
           appId = qp.onboarding_application_id;
+          appToken = qp.onboarding_access_token ?? appToken;
           break;
         }
         await new Promise((r) => setTimeout(r, 600));
@@ -108,7 +120,8 @@ export default function PublicQuoteView() {
     }
     if (appId) {
       setOnboardingId(appId);
-      setTimeout(() => navigate(`/onboard/${appId}`), 1000);
+      if (appToken) setOnboardingToken(appToken);
+      setTimeout(() => navigate(onboardPath(appId, appToken)), 1000);
     }
   };
 
@@ -240,7 +253,7 @@ export default function PublicQuoteView() {
                     <p>Proposal accepted. Continuing to your onboarding…</p>
                   </div>
                   {onboardingId && (
-                    <Button onClick={() => navigate(`/onboard/${onboardingId}`)}>
+                    <Button onClick={() => navigate(onboardPath(onboardingId, onboardingToken))}>
                       Continue Onboarding
                     </Button>
                   )}

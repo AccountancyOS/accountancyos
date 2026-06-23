@@ -32,6 +32,13 @@ function deriveStep(app: any): Step {
   return "engagement";
 }
 
+// Sprint 1 token enforcement: the onboarding access token arrives in the URL
+// (/onboard/:id?token=...). Read it from the current location so every public
+// onboarding RPC can pass it. Returns undefined for legacy links with no token
+// (the RPCs accept a NULL token and behave as before).
+const getAccessToken = (): string | undefined =>
+  new URLSearchParams(window.location.search).get("token") ?? undefined;
+
 export default function PublicOnboarding() {
   const { applicationId } = useParams<{ applicationId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,7 +48,7 @@ export default function PublicOnboarding() {
 
   const load = useCallback(async () => {
     if (!applicationId) return;
-    const { data, error } = await supabase.rpc("public_get_onboarding", { p_application_id: applicationId });
+    const { data, error } = await supabase.rpc("public_get_onboarding", { p_application_id: applicationId, p_access_token: getAccessToken() });
     if (error) {
       toast.error(error.message);
       setLoading(false);
@@ -187,6 +194,7 @@ function EngagementStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => v
     (async () => {
       const { data, error } = await supabase.rpc("public_preview_engagement_letter", {
         p_application_id: bundle.application.id,
+        p_access_token: getAccessToken(),
       });
       if (cancelled) return;
       if (error) {
@@ -207,6 +215,7 @@ function EngagementStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => v
     setSubmitting(true);
     const { error } = await supabase.rpc("public_sign_engagement_letter", {
       p_application_id: bundle.application.id,
+      p_access_token: getAccessToken(),
       p_signature_data: {
         signed_name: signature,
         signed_at: new Date().toISOString(),
@@ -353,6 +362,7 @@ function UploadRow({
     }
     const { error: rpcErr } = await supabase.rpc("public_record_aml_upload", {
       p_application_id: bundle.application.id,
+      p_access_token: getAccessToken(),
       p_document_type: docType,
       p_file_name: file.name,
       p_file_path: path,
@@ -427,6 +437,7 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
     setSubmitting(true);
     const { error } = await supabase.rpc("public_skip_billing", {
       p_application_id: bundle.application.id,
+      p_access_token: getAccessToken(),
     });
     setSubmitting(false);
     if (error) { toast.error(error.message); return; }
@@ -485,6 +496,7 @@ function PortalStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void 
     setSubmitting(true);
     const { error } = await supabase.rpc("public_submit_onboarding_for_review", {
       p_application_id: bundle.application.id,
+      p_access_token: getAccessToken(),
       p_portal_email: email.trim(),
     });
     setSubmitting(false);
