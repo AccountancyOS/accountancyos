@@ -36,8 +36,21 @@ function deriveStep(app: any): Step {
 // (/onboard/:id?token=...). Read it from the current location so every public
 // onboarding RPC can pass it. Returns undefined for legacy links with no token
 // (the RPCs accept a NULL token and behave as before).
-const getAccessToken = (): string | undefined =>
-  new URLSearchParams(window.location.search).get("token") ?? undefined;
+//
+// The token is persisted to sessionStorage (keyed per application) so it
+// survives a redirect that strips the query string — notably the Stripe
+// billing round-trip, where the token MUST NOT be sent to the third party.
+// It is read back from sessionStorage when the URL has no token.
+const getAccessToken = (): string | undefined => {
+  const id = window.location.pathname.split("/onboard/")[1]?.split(/[/?#]/)[0];
+  const key = id ? `onboarding_token_${id}` : "onboarding_token";
+  const urlToken = new URLSearchParams(window.location.search).get("token");
+  if (urlToken) {
+    try { sessionStorage.setItem(key, urlToken); } catch { /* storage unavailable */ }
+    return urlToken;
+  }
+  try { return sessionStorage.getItem(key) ?? undefined; } catch { return undefined; }
+};
 
 export default function PublicOnboarding() {
   const { applicationId } = useParams<{ applicationId: string }>();
@@ -423,7 +436,7 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
   const payWithStripe = async () => {
     setSubmitting(true);
     const { data, error } = await supabase.functions.invoke("onboarding-stripe-checkout", {
-      body: { application_id: bundle.application.id, access_token: getAccessToken() },
+      body: { application_id: bundle.application.id },
     });
     if (error || !data?.url) {
       setSubmitting(false);

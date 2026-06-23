@@ -33,7 +33,7 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { application_id, access_token } = await req.json();
+    const { application_id } = await req.json();
     if (!application_id) {
       return new Response(JSON.stringify({ error: "application_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -126,11 +126,12 @@ serve(async (req: Request) => {
       : Number(snapshot.total_now ?? 0);
 
     const appBase = resolveAppBaseUrl(req);
-    // Preserve the onboarding access token across the Stripe round-trip so the
-    // client returns to /onboard with the token still in the URL (Sprint 1).
-    const tokenQ = access_token ? `&token=${encodeURIComponent(access_token)}` : "";
-    const successUrl = `${appBase}/onboard/${application_id}?billing=success&session_id={CHECKOUT_SESSION_ID}${tokenQ}`;
-    const cancelUrl = `${appBase}/onboard/${application_id}?billing=cancelled${tokenQ}`;
+    // NOTE: the onboarding access token is intentionally NOT included in these
+    // Stripe redirect URLs — a third party (Stripe) must never see the secret.
+    // The client persists it in sessionStorage before redirecting and restores
+    // it on return (see getAccessToken in PublicOnboarding).
+    const successUrl = `${appBase}/onboard/${application_id}?billing=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appBase}/onboard/${application_id}?billing=cancelled`;
 
     const sessionParams: any = {
       mode: isSubscription ? "subscription" : "payment",
