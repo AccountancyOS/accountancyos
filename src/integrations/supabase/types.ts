@@ -7775,6 +7775,7 @@ export type Database = {
           is_active: boolean
           is_default: boolean
           legal_entity: string | null
+          letter_body: string | null
           merge_fields: string[] | null
           organization_id: string
           service_code: string | null
@@ -7793,6 +7794,7 @@ export type Database = {
           is_active?: boolean
           is_default?: boolean
           legal_entity?: string | null
+          letter_body?: string | null
           merge_fields?: string[] | null
           organization_id: string
           service_code?: string | null
@@ -7811,6 +7813,7 @@ export type Database = {
           is_active?: boolean
           is_default?: boolean
           legal_entity?: string | null
+          letter_body?: string | null
           merge_fields?: string[] | null
           organization_id?: string
           service_code?: string | null
@@ -18628,6 +18631,19 @@ export type Database = {
       remove_reconciliation_line: {
         Args: { p_line_id: string }
         Returns: undefined
+      }
+      render_engagement_letter_body: {
+        Args: {
+          p_accepted_at: string
+          p_client_name: string
+          p_currency: string
+          p_firm_name: string
+          p_services_list_html: string
+          p_template: string
+          p_total_monthly: number
+          p_total_one_off: number
+        }
+        Returns: string
       }
       reopen_bank_reconciliation: {
         Args: { p_reason: string; p_reconciliation_id: string }
