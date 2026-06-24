@@ -25,6 +25,7 @@ import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
 import { CLIENT_TYPES as CLIENT_TYPE_VALUES, CLIENT_TYPE_LABELS, getClientTypeLabel } from "@/lib/client-types";
 import { formatServiceType } from "@/lib/format-utils";
 import { LetterEditor } from "@/components/engagement-letter/LetterEditor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Variant {
   id: string;
@@ -38,6 +39,7 @@ interface Variant {
   is_active: boolean;
   subject: string;
   body: string;
+  letter_body: string | null;
   merge_fields: string[] | null;
 }
 
@@ -88,6 +90,49 @@ const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "fee.amount", label: "Fee Amount" },
 ];
 
+// Merge fields supported server-side when rendering the engagement letter document
+// (see public.render_engagement_letter_body).
+const LETTER_PLACEHOLDERS: { key: string; label: string }[] = [
+  { key: "firm_name", label: "Firm Name (Auto)" },
+  { key: "client_name", label: "Client Name" },
+  { key: "services_list", label: "Services List (Auto)" },
+  { key: "currency", label: "Currency" },
+  { key: "total_one_off", label: "Total One-Off Fees" },
+  { key: "total_monthly", label: "Total Monthly Fees" },
+  { key: "accepted_date", label: "Proposal Accepted Date" },
+  { key: "today", label: "Today's Date" },
+];
+
+const LETTER_SAMPLE: Record<string, string> = {
+  client_name: "Jane Smith",
+  services_list:
+    "<ul><li>Annual Accounts — GBP 1,200.00 (annual)</li><li>Confirmation Statement — GBP 60.00 (annual)</li></ul>",
+  currency: "GBP",
+  total_one_off: "1,260.00",
+  total_monthly: "0.00",
+  accepted_date: "12 Jun 2026",
+  today: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+};
+
+const renderLetterPlaceholders = (text: string, firmName: string): string => {
+  const ctx = { ...LETTER_SAMPLE, firm_name: firmName, "firm.name": firmName };
+  return Object.entries(ctx).reduce(
+    (acc, [k, v]) => acc.split(`{{${k}}}`).join(v),
+    text,
+  );
+};
+
+const DEFAULT_LETTER_BODY = `<h1>Engagement Letter</h1>
+<p>Between <strong>{{firm_name}}</strong> ("the Firm") and <strong>{{client_name}}</strong> ("the Client").</p>
+<h2>Scope of Services</h2>
+{{services_list}}
+<h2>Fees</h2>
+<p>One-off fees due now total {{currency}} {{total_one_off}}. Ongoing monthly fees total {{currency}} {{total_monthly}} per month.</p>
+<h2>Confidentiality</h2>
+<p>The Firm will treat all information received in the course of this engagement as confidential, except where disclosure is required by law or regulatory authority.</p>
+<h2>Acceptance</h2>
+<p>By signing below the Client confirms acceptance of the terms above, in respect of the proposal accepted on {{accepted_date}}.</p>`;
+
 const renderPlaceholders = (text: string, firmName: string): string => {
   const ctx = { ...SAMPLE_CONTEXT, firm_name: firmName, "firm.name": firmName };
   return Object.entries(ctx).reduce(
@@ -106,6 +151,7 @@ const EMPTY: Omit<Variant, "id" | "organization_id"> = {
   is_active: true,
   subject: "",
   body: "",
+  letter_body: null,
   merge_fields: [],
 };
 
@@ -191,6 +237,7 @@ export default function EngagementLetterVariants() {
       is_active: v.is_active,
       subject: v.subject,
       body: v.body,
+      letter_body: v.letter_body ?? null,
       merge_fields: v.merge_fields ?? [],
     });
     setEditing(v);
@@ -215,6 +262,9 @@ export default function EngagementLetterVariants() {
   const firmName = organization?.name || "Your Firm";
   const previewSubject = renderPlaceholders(form.subject || "(No Subject)", firmName);
   const previewBody = renderPlaceholders(form.body || "(No Body)", firmName);
+  const previewLetter = form.letter_body && form.letter_body.trim().length > 0
+    ? renderLetterPlaceholders(form.letter_body, firmName)
+    : renderLetterPlaceholders(DEFAULT_LETTER_BODY, firmName);
 
   return (
     <DashboardLayout>
