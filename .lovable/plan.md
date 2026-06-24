@@ -1,47 +1,66 @@
-## Goal
-Give every queued email a 15-minute "cooling off" window before it sends, surface that scheduled time in the Emails page, and add two manual overrides: a global "Process Queue" that fires the whole queue now, and a per-row "Send now" that fires a single email immediately while leaving the rest scheduled.
+## What's happening
 
-## Behaviour
+The Q-26-0010 quote email to Testing Ltd is still sitting in `public.email_queue` as `pending` (created 08:33, now 10:12 — 1h 39min unsent). The quote itself was marked "sent" by `lifecycle_send_quote` the moment it was enqueued, which is why the UI says sent, but the email itself was never delivered.
 
-**Default schedule (15 min delay)**
-- Whenever any code path enqueues an email (RPCs like `lifecycle_send_quote`, `queue_email_safe`, the `email-service.ts` insert, automations, chasers, etc.), if no explicit `scheduled_at` is supplied, default it to `now() + interval '15 minutes'`.
-- The worker (`process-email-queue`) already respects `scheduled_at <= now()` when draining `public.email_queue` — no edge function change needed beyond what's already there.
-- The cron gate (from the previous fix) already wakes when a `pending` row's `scheduled_at <= now()` — so the queue continues to self-drain on time.
+## Root cause
 
-**Process Queue button (global override)**
-- Currently it just invokes the worker, which skips rows whose `scheduled_at` is in the future.
-- Change behaviour so clicking it first promotes every pending row in this org whose `scheduled_at > now()` to `scheduled_at = now()`, then invokes the worker. Net effect: the entire queue sends immediately.
+This is the exact cron-gate bug we diagnosed earlier but never actually applied a fix for. The `process-email-queue` pg_cron job runs every 5 seconds but only wakes the worker when **pgmq** queues have messages:
 
-**Send now (per-row override)**
-- Add a "Send now" item to the row action menu (and/or a small button) on each pending/queued row.
-- It sets that single row's `scheduled_at = now()` and invokes the worker once. Other rows keep their original schedule.
+```sql
+WHEN EXISTS (SELECT 1 FROM pgmq.q_auth_emails LIMIT 1)
+  OR EXISTS (SELECT 1 FROM pgmq.q_transactional_emails LIMIT 1)
+  THEN net.http_post(...)
+```
 
-**UI changes on `/emails`**
-- Add a "Scheduled for" column to the queue tables showing `scheduled_at` formatted (e.g. `24 Jun 2026 09:42`) with a relative hint ("in 12 min" / "ready"). Fallback to `created_at` only when `scheduled_at` is null.
-- Update the per-row dropdown to include **Send now** for `pending`/`queued` rows.
-- Same column added to `EmailList.tsx`'s outstanding-queue card so client/job pages also show when each queued email will go.
+Quote / engagement / chaser emails live in `public.email_queue`, not pgmq, so the gate is permanently false for them. The worker drains `email_queue` correctly when invoked (that's why "Process Queue" works instantly), but cron never invokes it.
 
-## Technical details
+The 15-minute scheduling change shipped last turn is unrelated and didn't cause this — that row was created before the migration, with `scheduled_at = created_at`. Even brand-new rows with the 15-min delay would have the same problem after their delay elapsed.
 
-1. **Migration** — three small changes in one migration:
-   - `ALTER TABLE public.email_queue ALTER COLUMN scheduled_at SET DEFAULT (now() + interval '15 minutes');` so direct inserts inherit the delay.
-   - Update `public.queue_email_safe(...)` so when `p_scheduled_at` is null it stores `now() + interval '15 minutes'`.
-   - Update `public.lifecycle_send_quote(...)` (and any other lifecycle RPCs that insert into `email_queue` without `scheduled_at`) to do the same.
-   - Add a `public.send_queued_email_now(p_email_id uuid)` SECURITY DEFINER RPC that verifies the caller's org owns the row and sets `scheduled_at = now()`, `status = 'pending'`. Grant `EXECUTE` to `authenticated`.
-   - Add a `public.flush_email_queue_now(p_organization_id uuid)` SECURITY DEFINER RPC that promotes all this org's pending rows with `scheduled_at > now()` to `now()`. Grant `EXECUTE` to `authenticated`.
+## Fix
 
-2. **Frontend**
-   - `src/pages/Emails.tsx`:
-     - `processQueueMutation`: call `flush_email_queue_now` first, then `supabase.functions.invoke("process-email-queue")`.
-     - Add `sendNowMutation` that calls `send_queued_email_now` then invokes the worker; wire to a new "Send now" dropdown item.
-     - Add a "Scheduled for" column to the table.
-   - `src/components/email/EmailList.tsx`:
-     - Render `scheduled_at` (with relative hint) on each outstanding-queue card.
-   - `src/lib/email-service.ts` and any other client-side enqueue helpers: stop passing `scheduled_at: null` so the new DB default applies; allow callers to override when they need to.
+One migration: re-create the `process-email-queue` cron job with the gate extended to also wake the worker when `public.email_queue` has a row that's due.
 
-3. **No edge function code changes.** The worker already filters by `scheduled_at <= now()` and the cron gate already accounts for it.
+```sql
+SELECT cron.unschedule('process-email-queue');
+
+SELECT cron.schedule(
+  'process-email-queue',
+  '5 seconds',
+  $$
+  SELECT CASE
+    WHEN (SELECT retry_after_until FROM public.email_send_state WHERE id = 1) > now()
+      THEN NULL
+    WHEN EXISTS (SELECT 1 FROM pgmq.q_auth_emails LIMIT 1)
+      OR EXISTS (SELECT 1 FROM pgmq.q_transactional_emails LIMIT 1)
+      OR EXISTS (
+        SELECT 1 FROM public.email_queue
+        WHERE status IN ('pending','queued')
+          AND scheduled_at <= now()
+        LIMIT 1
+      )
+      THEN net.http_post(
+        url := 'https://moxpdejnucjjcplleefn.supabase.co/functions/v1/process-email-queue',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Lovable-Context', 'cron',
+          'Authorization', 'Bearer ' || (
+            SELECT decrypted_secret FROM vault.decrypted_secrets
+            WHERE name = 'email_queue_service_role_key'
+          )
+        ),
+        body := '{}'::jsonb
+      )
+    ELSE NULL
+  END;
+  $$
+);
+```
+
+Effect after deploy: the stuck Testing Ltd email drains on the next 5-second tick, and all future app emails (quotes, engagement letters, chasers) send on time without needing the "Process Queue" button. The new 15-minute default delay continues to work — once `scheduled_at <= now()` the gate fires.
+
+No edge function, frontend, or app code changes. The `email_send_state.retry_after_until` short-circuit is preserved so 429 back-off still works.
 
 ## Out of scope
-- Changing the 5-second cron tick.
-- Changing how auth emails (pgmq) are scheduled — this is only about `public.email_queue`.
-- Making the 15-minute delay user-configurable (can be added later as an org setting if you want).
+
+- Changing UI quote status semantics (the quote is correctly "sent" — what's broken is delivery, not status).
+- Cron tick interval, auth-email path, or per-org throttling.
