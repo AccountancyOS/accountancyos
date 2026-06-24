@@ -198,20 +198,24 @@ export default function PublicQuoteView() {
   const isFinal = done || quote.status === "accepted" || quote.status === "rejected" || quote.used;
   // Guard against a missing/null `lines` in the RPC payload (would crash .map to a blank screen).
   const lines = Array.isArray(quote.lines) ? quote.lines : [];
+  const practiceName = quote.practice_name || "Your Accountant";
+  const recipientName = quote.recipient_name || "Client";
+  const quoteNumber = quote.quote_number || "";
+  const currency = quote.currency || "GBP";
 
   return (
     <div className="min-h-screen bg-muted/30 py-10 px-4">
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="text-center">
           <p className="text-sm text-muted-foreground">Proposal from</p>
-          <h1 className="text-3xl font-semibold">{quote.practice_name}</h1>
+          <h1 className="text-3xl font-semibold">{practiceName}</h1>
         </div>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Proposal {quote.quote_number}</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">Prepared for {quote.recipient_name}</p>
+              <CardTitle>Proposal {quoteNumber}</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Prepared for {recipientName}</p>
             </div>
             {quote.valid_until && (
               <p className="text-sm text-muted-foreground">
@@ -236,9 +240,9 @@ export default function PublicQuoteView() {
                     <tr key={i} className="border-b last:border-0">
                       <td className="py-3 pr-2">{l.service_name}</td>
                       <td className="py-3 px-2 text-right">{Number(l.quantity)}</td>
-                      <td className="py-3 px-2 text-right">{fmt(quote.currency, l.unit_price)}</td>
+                      <td className="py-3 px-2 text-right">{fmt(currency, l.unit_price)}</td>
                       <td className="py-3 px-2 text-right capitalize">{l.billing_frequency === "monthly" ? "Monthly" : "One-off"}</td>
-                      <td className="py-3 pl-2 text-right">{fmt(quote.currency, l.subtotal)}</td>
+                      <td className="py-3 pl-2 text-right">{fmt(currency, l.subtotal)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -255,14 +259,14 @@ export default function PublicQuoteView() {
                         {oneOff > 0 && (
                           <tr>
                             <td colSpan={4} className="pt-4 text-right font-semibold">Due Now</td>
-                            <td className="pt-4 pl-2 text-right font-semibold">{fmt(quote.currency, oneOff)}</td>
+                            <td className="pt-4 pl-2 text-right font-semibold">{fmt(currency, oneOff)}</td>
                           </tr>
                         )}
                         {monthly > 0 && (
                           <tr>
                             <td colSpan={4} className="pt-2 text-right font-semibold">Monthly Recurring</td>
                             <td className="pt-2 pl-2 text-right font-semibold">
-                              {fmt(quote.currency, monthly)}<span className="text-muted-foreground font-normal">/month</span>
+                              {fmt(currency, monthly)}<span className="text-muted-foreground font-normal">/month</span>
                             </td>
                           </tr>
                         )}
@@ -316,7 +320,7 @@ export default function PublicQuoteView() {
             <DialogHeader>
               <DialogTitle>Decline Proposal</DialogTitle>
               <DialogDescription>
-                Let {quote.practice_name} know why you're declining (optional).
+                Let {practiceName} know why you're declining (optional).
               </DialogDescription>
             </DialogHeader>
             <Textarea
