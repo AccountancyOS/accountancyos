@@ -433,10 +433,13 @@ const OnboardingDetail = () => {
                       const name = line.description || svcName || line.service_name || "Service";
                       const qty = Number(line.quantity ?? 1);
                       const unit = Number(line.unit_price ?? line.unit_amount ?? line.amount ?? 0);
-                      const amount = Number(
+                      const rawSubtotal = Number(
                         line.subtotal != null ? line.subtotal : unit * qty
                       );
-                      const freq = String(line.billing_frequency || "one_off")
+                      const rawFreq = String(line.billing_frequency || "one_off");
+                      const isMonthly = rawFreq === "monthly";
+                      const displayAmount = isMonthly ? rawSubtotal / 12 : rawSubtotal;
+                      const freq = rawFreq
                         .replace(/_/g, " ")
                         .replace(/\b\w/g, (c) => c.toUpperCase());
                       return (
@@ -448,19 +451,64 @@ const OnboardingDetail = () => {
                               {qty > 1 ? ` · × ${qty}` : ""}
                             </div>
                           </div>
-                          <div className="font-mono">£{amount.toFixed(2)}</div>
+                          <div className="font-mono">
+                            £{displayAmount.toFixed(2)}
+                            {isMonthly && (
+                              <span className="text-muted-foreground"> /month</span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                  <div className="flex items-center justify-between text-sm pt-2 border-t">
-                    <span className="text-muted-foreground">Total</span>
-                    <span className="font-semibold">
-                      £{Number(
-                        snapshot?.totals?.subtotal ?? snapshot?.total ?? application.quote?.total_amount ?? 0
-                      ).toFixed(2)}
-                    </span>
-                  </div>
+                  {(() => {
+                    const lines = (snapshot.lines || []) as any[];
+                    const monthlyTotal = lines
+                      .filter((l) => String(l.billing_frequency) === "monthly")
+                      .reduce(
+                        (s, l) =>
+                          s +
+                          Number(
+                            l.subtotal != null
+                              ? l.subtotal
+                              : Number(l.unit_price ?? l.unit_amount ?? l.amount ?? 0) *
+                                Number(l.quantity ?? 1)
+                          ) / 12,
+                        0
+                      );
+                    const oneOffTotal = lines
+                      .filter((l) => String(l.billing_frequency || "one_off") !== "monthly")
+                      .reduce(
+                        (s, l) =>
+                          s +
+                          Number(
+                            l.subtotal != null
+                              ? l.subtotal
+                              : Number(l.unit_price ?? l.unit_amount ?? l.amount ?? 0) *
+                                Number(l.quantity ?? 1)
+                          ),
+                        0
+                      );
+                    return (
+                      <div className="space-y-1 pt-2 border-t">
+                        {monthlyTotal > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Monthly total</span>
+                            <span className="font-semibold">
+                              £{monthlyTotal.toFixed(2)}
+                              <span className="text-muted-foreground font-normal"> /month</span>
+                            </span>
+                          </div>
+                        )}
+                        {oneOffTotal > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">One-off total</span>
+                            <span className="font-semibold">£{oneOffTotal.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}
