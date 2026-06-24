@@ -1,26 +1,22 @@
-No — based on your refresh still showing a blank page, I would treat the public quote blank-screen issue as not resolved yet. The existing `PublicQuoteView` has two defensive guards, but the public quote route still needs a stronger fail-safe around route loading, auth bootstrapping, and the quote RPC response.
+## Problem
 
-Plan:
+On the public proposal page (`/q/:token`), monthly line items display the stored **annual** unit price and subtotal instead of the monthly amount. The internal accountant view (`QuoteDetail.tsx`) already divides monthly figures by 12 for display — the public view does not, so a £600/year line shows as £600/month.
 
-1. Reproduce The Public Quote Route
-   - Load `/q/:token` directly in the preview with Playwright.
-   - Capture console errors, network failures, and final DOM state.
-   - Confirm whether the blank screen is caused by the quote page itself, auth startup, or the backend quote RPC.
+The RPC `public_get_quote_by_token` returns `unit_price` and `subtotal` exactly as stored in `quote_lines` (annualised when `billing_frequency = 'monthly'`). The conversion is a presentation concern on the client.
 
-2. Harden `PublicQuoteView`
-   - Wrap the quote fetch in `try/catch/finally` so any thrown RPC/client error always clears loading.
-   - Add a timeout fallback so the page cannot stay blank/spinning indefinitely.
-   - Validate the RPC payload before rendering: default missing `practice_name`, `recipient_name`, `currency`, `total_amount`, and `lines` safely.
-   - Show a visible “Proposal Unavailable” state for invalid/error responses instead of leaving the page blank.
+## Fix
 
-3. Protect Public Routes From Auth Bootstrapping
-   - Review `App.tsx` routing so `/q/:token` and `/onboard/:applicationId` are not dependent on accountant auth/session startup where possible.
-   - If the auth wrapper is contributing to the blank screen, move public routes outside the authenticated app wrapper while preserving existing protected routes.
+Update `src/pages/PublicQuoteView.tsx` only. No RPC, schema, or business logic changes.
 
-4. Add Regression Coverage
-   - Add or update a regression test proving `PublicQuoteView` does not crash when the RPC returns `null`, malformed data, invalid currency, missing lines, or an RPC error.
+1. When rendering each line row, if `billing_frequency === "monthly"`:
+   - Show `unit_price / 12` and append `/month` to both the unit price and line total cells.
+   - Show line total as `subtotal / 12` per month.
+2. Update the **Monthly Recurring** tfoot total to sum `subtotal / 12` across monthly lines (currently it sums the raw annual subtotals).
+3. **Due Now** total stays unchanged (it already only sums non-monthly lines).
+4. Keep all existing guards (`Number(... || 0)`, `fmt` fallback, `Array.isArray(lines)`).
 
-5. Verify The Fix
-   - Re-open the quote URL directly and after refresh.
-   - Confirm the page renders either the proposal or a clear unavailable state.
-   - Check console/runtime errors are gone.
+## Technical notes
+
+- Mirrors the divide-by-12 pattern already used in `src/pages/QuoteDetail.tsx` (lines ~283–325) so the lead sees the same monthly figures the accountant sees internally.
+- Frequency label logic unchanged; only the numeric formatting changes.
+- No memory updates required — this is a presentation bug fix, not a new rule.

@@ -240,9 +240,21 @@ export default function PublicQuoteView() {
                     <tr key={i} className="border-b last:border-0">
                       <td className="py-3 pr-2">{l.service_name}</td>
                       <td className="py-3 px-2 text-right">{Number(l.quantity)}</td>
-                      <td className="py-3 px-2 text-right">{fmt(currency, l.unit_price)}</td>
+                      <td className="py-3 px-2 text-right">
+                        {l.billing_frequency === "monthly" ? (
+                          <>{fmt(currency, Number(l.unit_price || 0) / 12)}<span className="text-muted-foreground">/month</span></>
+                        ) : (
+                          fmt(currency, l.unit_price)
+                        )}
+                      </td>
                       <td className="py-3 px-2 text-right capitalize">{l.billing_frequency === "monthly" ? "Monthly" : "One-off"}</td>
-                      <td className="py-3 pl-2 text-right">{fmt(currency, l.subtotal)}</td>
+                      <td className="py-3 pl-2 text-right">
+                        {l.billing_frequency === "monthly" ? (
+                          <>{fmt(currency, Number(l.subtotal || 0) / 12)}<span className="text-muted-foreground">/month</span></>
+                        ) : (
+                          fmt(currency, l.subtotal)
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -250,7 +262,7 @@ export default function PublicQuoteView() {
                   {(() => {
                     const monthly = lines
                       .filter((l) => l.billing_frequency === "monthly")
-                      .reduce((s, l) => s + Number(l.subtotal || 0), 0);
+                      .reduce((s, l) => s + Number(l.subtotal || 0) / 12, 0);
                     const oneOff = lines
                       .filter((l) => l.billing_frequency !== "monthly")
                       .reduce((s, l) => s + Number(l.subtotal || 0), 0);
