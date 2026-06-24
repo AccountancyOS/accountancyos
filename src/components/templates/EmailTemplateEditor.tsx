@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { Plus, Link as LinkIcon } from "lucide-react";
+import LetterEditor from "@/components/engagement-letter/LetterEditor";
 import {
   Dialog,
   DialogContent,
@@ -101,6 +102,16 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
     return acc;
   }, {} as Record<string, typeof mergeFields>);
 
+  const placeholderOpts = (mergeFields ?? [])
+    .filter((field) => {
+      const types: string[] = (field as any).template_types ?? ["all"];
+      const isQuoteTemplate =
+        (templateName ?? "").toLowerCase().includes("quote proposal") ||
+        (content?.category ?? "").toLowerCase() === "quotes";
+      return types.includes("all") || (isQuoteTemplate && types.includes("quote_proposal"));
+    })
+    .map((f) => ({ key: f.field_key, label: f.field_label }));
+
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-6">
@@ -134,13 +145,10 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
               </TabsList>
               <TabsContent value="rich" className="space-y-2">
                 <Label htmlFor="body">Email Body</Label>
-                <Textarea
-                  id="body"
+                <LetterEditor
                   value={body}
-                  onChange={(e) => handleChange("body", e.target.value)}
-                  placeholder="Email content..."
-                  rows={15}
-                  className="font-mono"
+                  onChange={(html) => handleChange("body", html)}
+                  placeholders={placeholderOpts}
                 />
               </TabsContent>
               <TabsContent value="html" className="space-y-2">
@@ -251,8 +259,11 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
             </div>
             <div className="text-sm">
               <div className="font-semibold">Body Preview:</div>
-              <div className="text-muted-foreground whitespace-pre-wrap max-h-64 overflow-y-auto">
-                {body || "(No body content)"}
+              <div className="mt-2 max-h-64 overflow-y-auto rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
+                <div
+                  className="letter-editor-prose px-6 py-6"
+                  dangerouslySetInnerHTML={{ __html: body || "<p class='text-muted-foreground'>(No body content)</p>" }}
+                />
               </div>
             </div>
           </CardContent>
