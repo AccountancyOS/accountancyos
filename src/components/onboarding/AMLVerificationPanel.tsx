@@ -56,6 +56,11 @@ export function AMLVerificationPanel({
   const isVerified = amlStatus === "verified";
   const canVerify = nameMatches && addressMatches && documentsGenuine && idDocumentUploaded && proofOfAddressUploaded;
 
+  const docByType: Record<string, { id: string; name: string; type: string; storagePath: string } | undefined> = {
+    id: documents.find((d) => d.type === "id"),
+    proof_of_address: documents.find((d) => d.type === "proof_of_address"),
+  };
+
   const handleVerify = async () => {
     if (!canVerify) return;
 
@@ -195,45 +200,57 @@ export function AMLVerificationPanel({
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">ID Document</span>
                   </div>
-                  {idDocumentUploaded ? (
-                    <Badge variant="default" className="bg-green-600">Uploaded</Badge>
-                  ) : (
-                    <Badge variant="outline">Not Uploaded</Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {idDocumentUploaded ? (
+                      <Badge variant="default" className="bg-green-600">Uploaded</Badge>
+                    ) : (
+                      <Badge variant="outline">Not Uploaded</Badge>
+                    )}
+                    {docByType.id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title={docByType.id.name}
+                        aria-label={`Download ${docByType.id.name}`}
+                        onClick={() => downloadDocument(docByType.id!.storagePath, docByType.id!.name)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">Proof of Address</span>
                   </div>
-                  {proofOfAddressUploaded ? (
-                    <Badge variant="default" className="bg-green-600">Uploaded</Badge>
-                  ) : (
-                    <Badge variant="outline">Not Uploaded</Badge>
-                  )}
-                </div>
-              </div>
-
-              {documents.length > 0 && (
-                <div className="space-y-2 mt-3">
-                  <p className="text-xs text-muted-foreground">Available documents:</p>
-                  {documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between p-2 bg-muted/50 rounded"
-                    >
-                      <span className="text-sm truncate">{doc.name}</span>
+                  <div className="flex items-center gap-2">
+                    {proofOfAddressUploaded ? (
+                      <Badge variant="default" className="bg-green-600">Uploaded</Badge>
+                    ) : (
+                      <Badge variant="outline">Not Uploaded</Badge>
+                    )}
+                    {docByType.proof_of_address && (
                       <Button
                         variant="ghost"
-                        size="sm"
-                        onClick={() => downloadDocument(doc.storagePath, doc.name)}
+                        size="icon"
+                        className="h-8 w-8"
+                        title={docByType.proof_of_address.name}
+                        aria-label={`Download ${docByType.proof_of_address.name}`}
+                        onClick={() =>
+                          downloadDocument(
+                            docByType.proof_of_address!.storagePath,
+                            docByType.proof_of_address!.name
+                          )
+                        }
                       >
                         <Download className="h-4 w-4" />
                       </Button>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
 
             <Separator />
