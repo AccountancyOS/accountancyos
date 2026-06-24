@@ -12431,6 +12431,7 @@ export type Database = {
           address_line_2: string | null
           automations_enabled: boolean
           billing_status: Database["public"]["Enums"]["billing_status_enum"]
+          canonical_lifecycle_enabled: boolean
           city: string | null
           country: string | null
           created_at: string
@@ -12458,6 +12459,7 @@ export type Database = {
           address_line_2?: string | null
           automations_enabled?: boolean
           billing_status?: Database["public"]["Enums"]["billing_status_enum"]
+          canonical_lifecycle_enabled?: boolean
           city?: string | null
           country?: string | null
           created_at?: string
@@ -12485,6 +12487,7 @@ export type Database = {
           address_line_2?: string | null
           automations_enabled?: boolean
           billing_status?: Database["public"]["Enums"]["billing_status_enum"]
+          canonical_lifecycle_enabled?: boolean
           city?: string | null
           country?: string | null
           created_at?: string
@@ -18140,6 +18143,10 @@ export type Database = {
         Returns: undefined
       }
       is_active_onboarding_path: { Args: { p_name: string }; Returns: boolean }
+      is_canonical_lifecycle_enabled: {
+        Args: { p_org_id: string }
+        Returns: boolean
+      }
       is_period_locked: {
         Args: {
           p_client_id: string
