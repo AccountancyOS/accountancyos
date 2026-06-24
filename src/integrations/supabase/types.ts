@@ -11590,6 +11590,8 @@ export type Database = {
       }
       onboarding_applications: {
         Row: {
+          access_token: string | null
+          access_token_expires_at: string | null
           additional_documents_uploaded: boolean | null
           address_line_1: string | null
           address_line_2: string | null
@@ -11649,6 +11651,8 @@ export type Database = {
           vat_number: string | null
         }
         Insert: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
           additional_documents_uploaded?: boolean | null
           address_line_1?: string | null
           address_line_2?: string | null
@@ -11708,6 +11712,8 @@ export type Database = {
           vat_number?: string | null
         }
         Update: {
+          access_token?: string | null
+          access_token_expires_at?: string | null
           additional_documents_uploaded?: boolean | null
           address_line_1?: string | null
           address_line_2?: string | null
@@ -18900,6 +18906,10 @@ export type Database = {
       validate_filing_submission: {
         Args: { p_filing_id: string; p_filing_type: string; p_user_id: string }
         Returns: Json
+      }
+      validate_onboarding_access_token: {
+        Args: { p_application_id: string; p_token: string }
+        Returns: boolean
       }
       validate_submission_integrity: {
         Args: { p_filing_id: string; p_filing_type: string }
