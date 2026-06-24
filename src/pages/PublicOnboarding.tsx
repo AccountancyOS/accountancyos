@@ -34,14 +34,21 @@ function deriveStep(app: any): Step {
 
 // Sprint 1 token enforcement: the onboarding access token arrives in the URL
 // (/onboard/:id?token=...). Read it from the current location so every public
-// onboarding RPC can pass it. Returns undefined for legacy links with no token
-// (the RPCs accept a NULL token and behave as before).
+// onboarding RPC can pass it.
+//
+// Returns null (NOT undefined) for legacy links with no token. This matters:
+// supabase-js drops `undefined` args from the request body, and the live DB
+// currently has BOTH overloads of these RPCs — e.g. public_get_onboarding(uuid)
+// AND public_get_onboarding(uuid, text) — so a call with only p_application_id is
+// ambiguous ("could not choose the best candidate function"). Sending
+// p_access_token: null keeps the arg present, so only the (uuid, text) overload
+// matches. The RPCs treat a NULL token as "no token" (legacy behaviour).
 //
 // The token is persisted to sessionStorage (keyed per application) so it
 // survives a redirect that strips the query string — notably the Stripe
 // billing round-trip, where the token MUST NOT be sent to the third party.
 // It is read back from sessionStorage when the URL has no token.
-const getAccessToken = (): string | undefined => {
+const getAccessToken = (): string | null => {
   const id = window.location.pathname.split("/onboard/")[1]?.split(/[/?#]/)[0];
   const key = id ? `onboarding_token_${id}` : "onboarding_token";
   const urlToken = new URLSearchParams(window.location.search).get("token");
@@ -49,7 +56,7 @@ const getAccessToken = (): string | undefined => {
     try { sessionStorage.setItem(key, urlToken); } catch { /* storage unavailable */ }
     return urlToken;
   }
-  try { return sessionStorage.getItem(key) ?? undefined; } catch { return undefined; }
+  try { return sessionStorage.getItem(key); } catch { return null; }
 };
 
 export default function PublicOnboarding() {
