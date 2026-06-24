@@ -18192,6 +18192,10 @@ export type Database = {
         }
         Returns: Json
       }
+      lifecycle_onboarding_gates: {
+        Args: { p_application_id: string }
+        Returns: Json
+      }
       lifecycle_send_back_onboarding: {
         Args: { p_application_id: string; p_reason?: string; p_step: string }
         Returns: Json
