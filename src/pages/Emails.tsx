@@ -136,7 +136,9 @@ export default function Emails() {
         .neq("status", "sent")
         .order("created_at", { ascending: false });
 
-      if (statusFilter !== "all") {
+      if (statusFilter === "queued") {
+        query = query.in("status", ["queued", "pending"]);
+      } else if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
       }
       
