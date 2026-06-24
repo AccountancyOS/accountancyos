@@ -38,8 +38,15 @@ interface QuotePayload {
   error?: string;
 }
 
-const fmt = (currency: string, n: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(Number(n || 0));
+const fmt = (currency: string, n: number) => {
+  // Intl.NumberFormat THROWS on a null/empty/invalid currency code, which would
+  // crash the whole page to a blank screen. Default to GBP and never throw.
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency || "GBP" }).format(Number(n || 0));
+  } catch {
+    return `${currency || "GBP"} ${Number(n || 0).toFixed(2)}`;
+  }
+};
 
 // Build the onboarding URL, carrying the secret access token when we have it
 // (Sprint 1 token enforcement). Falls back to the bare path for legacy links.
@@ -170,6 +177,8 @@ export default function PublicQuoteView() {
   }
 
   const isFinal = done || quote.status === "accepted" || quote.status === "rejected" || quote.used;
+  // Guard against a missing/null `lines` in the RPC payload (would crash .map to a blank screen).
+  const lines = Array.isArray(quote.lines) ? quote.lines : [];
 
   return (
     <div className="min-h-screen bg-muted/30 py-10 px-4">
@@ -204,7 +213,7 @@ export default function PublicQuoteView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {quote.lines.map((l, i) => (
+                  {lines.map((l, i) => (
                     <tr key={i} className="border-b last:border-0">
                       <td className="py-3 pr-2">{l.service_name}</td>
                       <td className="py-3 px-2 text-right">{Number(l.quantity)}</td>
@@ -216,10 +225,10 @@ export default function PublicQuoteView() {
                 </tbody>
                 <tfoot>
                   {(() => {
-                    const monthly = quote.lines
+                    const monthly = lines
                       .filter((l) => l.billing_frequency === "monthly")
                       .reduce((s, l) => s + Number(l.subtotal || 0), 0);
-                    const oneOff = quote.lines
+                    const oneOff = lines
                       .filter((l) => l.billing_frequency !== "monthly")
                       .reduce((s, l) => s + Number(l.subtotal || 0), 0);
                     return (
