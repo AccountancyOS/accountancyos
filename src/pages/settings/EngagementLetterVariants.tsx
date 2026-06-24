@@ -271,9 +271,9 @@ export default function EngagementLetterVariants() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-semibold">Engagement Letter Variants</h1>
+            <h1 className="text-3xl font-semibold">Engagement Letter & Email Templates</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Manage per-service and per-entity engagement letter wording. The most specific active variant is selected at send-time.
+              Each variant defines the cover email a client receives and the engagement letter document they sign. The most specific active variant is selected at send-time.
             </p>
           </div>
           <Button onClick={openCreate}>
@@ -420,7 +420,7 @@ export default function EngagementLetterVariants() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Subject</Label>
+              <Label>Cover Email Subject</Label>
               <Input
                 value={form.subject}
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
@@ -429,7 +429,7 @@ export default function EngagementLetterVariants() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Letter Body</Label>
+                <Label>Cover Email Body</Label>
                 <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setPreviewOpen(true)}>
                   <Eye className="h-3.5 w-3.5" />
                   Preview With Sample Data
@@ -441,7 +441,30 @@ export default function EngagementLetterVariants() {
                 placeholders={PLACEHOLDERS}
               />
               <p className="text-xs text-muted-foreground">
-                Write the letter as you would in Word. Use Insert Field to drop in merge variables like the firm name or signing link.
+                The email a client receives in their inbox, with the link to view and sign their engagement letter.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Engagement Letter Document</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => setForm((f) => ({ ...f, letter_body: DEFAULT_LETTER_BODY }))}
+                >
+                  Insert Default Wording
+                </Button>
+              </div>
+              <LetterEditor
+                value={form.letter_body ?? ""}
+                onChange={(html) => setForm((f) => ({ ...f, letter_body: html }))}
+                placeholders={LETTER_PLACEHOLDERS}
+              />
+              <p className="text-xs text-muted-foreground">
+                The actual letter document the client sees and signs. Leave blank to use the built-in default wording. Use Insert Field for merge variables like scope of services, totals, and the accepted date.
               </p>
             </div>
             <div className="flex items-center gap-6">
@@ -478,21 +501,42 @@ export default function EngagementLetterVariants() {
           <DialogHeader>
             <DialogTitle>Preview With Sample Data</DialogTitle>
             <DialogDescription>
-              Merge fields are replaced with sample values so you can see how the letter will appear to a recipient.
+              Merge fields are replaced with sample values so you can see how the cover email and signed letter will appear to a recipient.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto bg-muted/30 p-6 rounded-md">
-            <div className="mx-auto max-w-[720px] rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
-              <div className="px-12 py-14 md:px-16 md:py-16">
-                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Subject</div>
-                <div className="font-medium text-zinc-900 mb-6">{previewSubject}</div>
-                <div
-                  className="letter-editor-prose"
-                  dangerouslySetInnerHTML={{ __html: previewBody }}
-                />
+          <Tabs defaultValue="email" className="flex-1 overflow-hidden flex flex-col">
+            <TabsList className="self-start">
+              <TabsTrigger value="email">Cover Email</TabsTrigger>
+              <TabsTrigger value="letter">Letter Document</TabsTrigger>
+            </TabsList>
+            <TabsContent value="email" className="flex-1 overflow-y-auto bg-muted/30 p-6 rounded-md mt-2">
+              <div className="mx-auto max-w-[720px] rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
+                <div className="px-12 py-14 md:px-16 md:py-16">
+                  <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Subject</div>
+                  <div className="font-medium text-zinc-900 mb-6">{previewSubject}</div>
+                  <div
+                    className="letter-editor-prose"
+                    dangerouslySetInnerHTML={{ __html: previewBody }}
+                  />
+                </div>
               </div>
-            </div>
-          </div>
+            </TabsContent>
+            <TabsContent value="letter" className="flex-1 overflow-y-auto bg-muted/30 p-6 rounded-md mt-2">
+              <div className="mx-auto max-w-[720px] rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
+                <div className="px-12 py-14 md:px-16 md:py-16">
+                  {(!form.letter_body || form.letter_body.trim().length === 0) && (
+                    <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      No custom letter wording — showing the built-in default. Click "Insert Default Wording" to start editing from it.
+                    </div>
+                  )}
+                  <div
+                    className="letter-editor-prose"
+                    dangerouslySetInnerHTML={{ __html: previewLetter }}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close</Button>
           </DialogFooter>
