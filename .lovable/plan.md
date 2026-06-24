@@ -1,18 +1,31 @@
-## Problem
+## Diagnosis
 
-The AML panel renders two separate sections:
+The 15‑minute delay is enforced only by the default on insert:
 
-1. **Uploaded Documents** — two status rows ("ID Document" / "Proof of Address") with a green "Uploaded" badge but no download affordance.
-2. **Available documents** — a duplicate flat list of the same files with download icons, using raw file names ("IMG_2570.png", "Self Assessment Checklist…pdf") that hide which slot they belong to.
+```
+ALTER TABLE email_queue ALTER COLUMN scheduled_at SET DEFAULT now() + interval '15 minutes';
+```
 
-The `onboarding_documents.document_type` field is exactly `id` or `proof_of_address`, so each file maps cleanly to one of the two status rows.
+The worker `process-email-queue` drains rows with `status='pending' AND scheduled_at <= now()`. Both override paths already exist:
 
-## Fix
+| Trigger | RPC called by UI | Effect |
+|---|---|---|
+| **Process Queue** button (`src/pages/Emails.tsx`) | `flush_email_queue_now(p_organization_id)` → then `supabase.functions.invoke('process-email-queue')` | Sets `scheduled_at = now()` for every `pending`/`queued` row in the org with a future `scheduled_at`, then runs the worker. |
+| **Send now** per-row (`src/pages/Emails.tsx`) | `send_queued_email_now(p_email_id)` → then `process-email-queue` | Sets `scheduled_at = now()`, resets `status='pending'`, clears `error_message`, then runs the worker. |
 
-In `src/components/onboarding/AMLVerificationPanel.tsx`:
+So the feature you asked for is in place. The reason the two welcome emails for `leon.lim.stevens@gmail.com` still show `scheduled_at = 20:54:56` and `updated_at = 20:39:56` (creation time) is that `flush_email_queue_now` was never executed against them — the only "Process Queue" click that hit the DB was the earlier one (before the 20:39:56 approval enqueued them).
 
-1. Build a lookup at the top of the render: `byType = { id: doc?, proof_of_address: doc? }` from the `documents` prop.
-2. In each status row (ID Document, Proof of Address), when the slot is uploaded and a matching doc exists, render an icon-only download button to the right of the "Uploaded" badge, wired to `downloadDocument(doc.storagePath, doc.name)`. Use the file name as `title`/`aria-label` so it's still discoverable on hover.
-3. Delete the entire "Available documents:" block (lines ~217–236), including its `{documents.length > 0 && …}` guard.
+## Actions
 
-No backend changes, no prop changes. Only `AMLVerificationPanel.tsx` is touched.
+1. **Unstick the two pending welcome emails right now.**
+   Insert-tool UPDATE on `email_queue` to set `scheduled_at = now()` for the 2 rows (IDs `26a5e982-…` and `11b5aec3-…`), then call `process-email-queue` to drain.
+
+2. **Verify by reading back** the rows (`status='sent'`, `sent_at` populated) and confirm `email_send_log` shows a `sent` entry per `message_id`.
+
+3. **No code changes required.** Future clicks of Process Queue or Send Now will already short‑circuit the 15‑minute wait.
+
+## Out of scope (ask if wanted)
+
+- Remove the 15‑minute default entirely so all emails send on the next cron tick.
+- Re‑label the Process Queue button (e.g. "Send all now") to make the immediate‑send behaviour obvious.
+- Auto‑run flush after `lifecycle_approve_onboarding` so welcome emails always go out instantly on approval.
