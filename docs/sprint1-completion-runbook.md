@@ -1,7 +1,7 @@
 # Sprint 1 — Completion Runbook (canonical engagement-letter lifecycle)
 
 **For:** the owner (non-technical) + Lovable, to finish Sprint 1 with verification.
-**Status as of 2026-06-23:** Increments 1, 2, and 3a are **done and on `main`** — all **dormant behind the per-org flag `organizations.canonical_lifecycle_enabled` (default FALSE)**, so they change nothing for any live client until a flag is switched on. The remaining steps (3b, enablement, auto-activation) need someone watching the live app, so they are intentionally NOT done yet.
+**Status as of 2026-06-24:** Increments 1, 2, 3a, **and 3b** are **done and on `main`** — all **dormant behind the per-org flag `organizations.canonical_lifecycle_enabled` (default FALSE)**, so they change nothing for any live client until a flag is switched on. The code for the canonical lifecycle is complete; what remains is (a) the human verification — enable ONE test org and walk the 5 scenarios, and (b) auto-activation, which is intentionally left because it needs a security-design decision (below), not because it's unfinished plumbing.
 
 ---
 
@@ -40,26 +40,26 @@ Do this on a **test/sandbox practice**, not a real client account.
 
 ## STEP 2 — Token enforcement (Increment 3b) — only after Step 1 passes
 
-Right now the onboarding RPCs *accept* a token but don't *require* one (so old links still work). 3b makes the token **required** — closing the bare-UUID IDOR — but **only for orgs with the flag ON**, so it rolls out with the same test org.
+**3b is now IMPLEMENTED** (commit `21264a4`) — flag-gated, so dormant until you enable a test org. It adds `lifecycle_require_onboarding_token()` (flag ON → token required + valid; flag OFF → validate-if-present) and routes all 7 public onboarding RPCs through it. Bodies were reproduced byte-for-byte by a build script that asserted only the guard block changed.
 
-**Implementation (a developer/Lovable does this; it's small and mechanical):**
-1. Add a guard function `lifecycle_require_onboarding_token(p_application_id, p_access_token)` that: reads the application's org flag; if the flag is ON → reject when the token is missing **or** invalid; if OFF → keep today's "validate-if-present" behaviour.
-2. In each of the 7 public onboarding RPCs (`public_get_onboarding`, `public_preview_engagement_letter`, `public_sign_engagement_letter`, `public_record_aml_upload`, `public_skip_billing`, `public_complete_billing`, `public_submit_onboarding_for_review`), replace the existing 4-line `IF p_access_token IS NOT NULL AND NOT validate… THEN RAISE` block with one line: `PERFORM public.lifecycle_require_onboarding_token(p_application_id, p_access_token);`. Reproduce each body verbatim and change only that block (diff-verify).
-
-**Verify (test org, flag ON):**
-- A fresh quote-accept → onboarding works end-to-end (token flows from the URL).
-- Opening `/onboard/<id>` **without** `?token=…` → blocked ("token required").
-- A non-flagged org → unaffected (still validate-if-present).
-
-**Why it wasn't done autonomously:** it edits 7 live client-facing RPCs, and a reproduction slip would break onboarding for *everyone* (the legacy path too). It must be diff-verified and watched on a test org — exactly the human-in-the-loop step. It provides zero benefit until a flag is flipped, so there's no cost to doing it carefully with you present.
+**Verify on the test org (flag ON), after Step 1:**
+- A fresh quote-accept → onboarding works end-to-end (token flows from the URL, then sessionStorage across Stripe).
+- Opening `/onboard/<id>` **without** `?token=…` (and with no sessionStorage token) → blocked with "Onboarding access token required or invalid".
+- A non-flagged org → unaffected (validate-if-present, old links still work).
 
 ---
 
 ## STEP 3 — Auto-activation (deferred increment) — optional, later
 
-Today, a flag-ON client is activated when the **accountant clicks Approve** (the gated path). The fuller vision is **auto-activation**: when a client finishes onboarding and all gates pass, `lifecycle_evaluate_onboarding_activation()` (already built, currently dormant) fires automatically — no accountant click — and only routes to the accountant for review when a gate fails.
+Today, a flag-ON client is activated when the **accountant clicks Approve** (the gated path — fully working and secure). The fuller vision is **auto-activation**: when a client finishes onboarding and all gates pass, `lifecycle_evaluate_onboarding_activation()` (already built, currently dormant) fires automatically — no accountant click — routing to the accountant only when a gate fails.
 
-To enable: call the evaluator at the end of the onboarding-completion RPC (billing-complete / submit) for flag-ON orgs. This is its own increment with its own test pass, because it changes *when* activation happens. Leave it until Steps 1–2 are solid.
+**This was deliberately NOT wired up, because it has a real design decision — not a quick wire-up:**
+- `lifecycle_approve_onboarding` enforces `user_has_organization_access(org)` (it must — it's the accountant's privileged action).
+- Auto-activation would fire from the **client's** onboarding-submit, which has **no org membership** → approve would reject it.
+- The naive fix (a "skip access check" flag on approve) would be a **security hole**: approve is callable by authenticated users, so a bypass parameter would let anyone activate any application (privilege escalation / IDOR).
+- The correct design is a **separate, non-exposed system-activation path** (a SECURITY DEFINER function NOT granted to anon/authenticated, callable only by the evaluator, that performs the activation without the per-user membership check because the *gates* are the authorization). That reuses the gate evaluation but needs the activation body factored out of approve — its own increment with its own review.
+
+**Until then, the manual Approve path is complete, secure, and the recommended flow.** Auto-activation is a convenience, not a requirement.
 
 ---
 
