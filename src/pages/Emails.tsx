@@ -49,8 +49,9 @@ import {
   Plus,
   Play,
   Loader2,
+  Send,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
 
 type EmailStatus = "draft" | "queued" | "pending" | "failed" | "ignored";
@@ -159,6 +160,9 @@ export default function Emails() {
   const processQueueMutation = useMutation({
     mutationFn: async () => {
       setIsProcessing(true);
+      if (organization?.id) {
+        await supabase.rpc("flush_email_queue_now", { p_organization_id: organization.id });
+      }
       const { data, error } = await supabase.functions.invoke("process-email-queue");
       if (error) throw error;
       return data;
@@ -172,6 +176,23 @@ export default function Emails() {
     },
     onSettled: () => {
       setIsProcessing(false);
+    },
+  });
+
+  // Send a single queued email immediately (overrides its scheduled_at).
+  const sendNowMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      const { error: rpcError } = await supabase.rpc("send_queued_email_now", { p_email_id: emailId });
+      if (rpcError) throw rpcError;
+      const { error: fnError } = await supabase.functions.invoke("process-email-queue");
+      if (fnError) throw fnError;
+    },
+    onSuccess: () => {
+      toast.success("Email sent");
+      queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to send email: ${error.message}`);
     },
   });
 
@@ -459,6 +480,7 @@ export default function Emails() {
                         <TableHead>Context</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
+                        <TableHead>Scheduled For</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -511,6 +533,20 @@ export default function Emails() {
                               </p>
                             </TableCell>
                             <TableCell>
+                              {email.scheduled_at ? (
+                                <div className="text-sm">
+                                  <p>{format(new Date(email.scheduled_at), "dd MMM yyyy HH:mm")}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(email.scheduled_at).getTime() <= Date.now()
+                                      ? "Ready"
+                                      : `In ${formatDistanceToNowStrict(new Date(email.scheduled_at))}`}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -518,6 +554,15 @@ export default function Emails() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  {(status === "draft" || status === "queued" || status === "pending" || status === "failed") && (
+                                    <DropdownMenuItem
+                                      onClick={() => sendNowMutation.mutate(email.id)}
+                                      disabled={sendNowMutation.isPending}
+                                    >
+                                      <Send className="h-4 w-4 mr-2" />
+                                      Send Now
+                                    </DropdownMenuItem>
+                                  )}
                                   {(status === "draft" || status === "queued") && (
                                     <DropdownMenuItem onClick={() => handleEditEmail(email)}>
                                       <Pencil className="h-4 w-4 mr-2" />
