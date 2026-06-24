@@ -1,66 +1,26 @@
-## What's happening
+No — based on your refresh still showing a blank page, I would treat the public quote blank-screen issue as not resolved yet. The existing `PublicQuoteView` has two defensive guards, but the public quote route still needs a stronger fail-safe around route loading, auth bootstrapping, and the quote RPC response.
 
-The Q-26-0010 quote email to Testing Ltd is still sitting in `public.email_queue` as `pending` (created 08:33, now 10:12 — 1h 39min unsent). The quote itself was marked "sent" by `lifecycle_send_quote` the moment it was enqueued, which is why the UI says sent, but the email itself was never delivered.
+Plan:
 
-## Root cause
+1. Reproduce The Public Quote Route
+   - Load `/q/:token` directly in the preview with Playwright.
+   - Capture console errors, network failures, and final DOM state.
+   - Confirm whether the blank screen is caused by the quote page itself, auth startup, or the backend quote RPC.
 
-This is the exact cron-gate bug we diagnosed earlier but never actually applied a fix for. The `process-email-queue` pg_cron job runs every 5 seconds but only wakes the worker when **pgmq** queues have messages:
+2. Harden `PublicQuoteView`
+   - Wrap the quote fetch in `try/catch/finally` so any thrown RPC/client error always clears loading.
+   - Add a timeout fallback so the page cannot stay blank/spinning indefinitely.
+   - Validate the RPC payload before rendering: default missing `practice_name`, `recipient_name`, `currency`, `total_amount`, and `lines` safely.
+   - Show a visible “Proposal Unavailable” state for invalid/error responses instead of leaving the page blank.
 
-```sql
-WHEN EXISTS (SELECT 1 FROM pgmq.q_auth_emails LIMIT 1)
-  OR EXISTS (SELECT 1 FROM pgmq.q_transactional_emails LIMIT 1)
-  THEN net.http_post(...)
-```
+3. Protect Public Routes From Auth Bootstrapping
+   - Review `App.tsx` routing so `/q/:token` and `/onboard/:applicationId` are not dependent on accountant auth/session startup where possible.
+   - If the auth wrapper is contributing to the blank screen, move public routes outside the authenticated app wrapper while preserving existing protected routes.
 
-Quote / engagement / chaser emails live in `public.email_queue`, not pgmq, so the gate is permanently false for them. The worker drains `email_queue` correctly when invoked (that's why "Process Queue" works instantly), but cron never invokes it.
+4. Add Regression Coverage
+   - Add or update a regression test proving `PublicQuoteView` does not crash when the RPC returns `null`, malformed data, invalid currency, missing lines, or an RPC error.
 
-The 15-minute scheduling change shipped last turn is unrelated and didn't cause this — that row was created before the migration, with `scheduled_at = created_at`. Even brand-new rows with the 15-min delay would have the same problem after their delay elapsed.
-
-## Fix
-
-One migration: re-create the `process-email-queue` cron job with the gate extended to also wake the worker when `public.email_queue` has a row that's due.
-
-```sql
-SELECT cron.unschedule('process-email-queue');
-
-SELECT cron.schedule(
-  'process-email-queue',
-  '5 seconds',
-  $$
-  SELECT CASE
-    WHEN (SELECT retry_after_until FROM public.email_send_state WHERE id = 1) > now()
-      THEN NULL
-    WHEN EXISTS (SELECT 1 FROM pgmq.q_auth_emails LIMIT 1)
-      OR EXISTS (SELECT 1 FROM pgmq.q_transactional_emails LIMIT 1)
-      OR EXISTS (
-        SELECT 1 FROM public.email_queue
-        WHERE status IN ('pending','queued')
-          AND scheduled_at <= now()
-        LIMIT 1
-      )
-      THEN net.http_post(
-        url := 'https://moxpdejnucjjcplleefn.supabase.co/functions/v1/process-email-queue',
-        headers := jsonb_build_object(
-          'Content-Type', 'application/json',
-          'Lovable-Context', 'cron',
-          'Authorization', 'Bearer ' || (
-            SELECT decrypted_secret FROM vault.decrypted_secrets
-            WHERE name = 'email_queue_service_role_key'
-          )
-        ),
-        body := '{}'::jsonb
-      )
-    ELSE NULL
-  END;
-  $$
-);
-```
-
-Effect after deploy: the stuck Testing Ltd email drains on the next 5-second tick, and all future app emails (quotes, engagement letters, chasers) send on time without needing the "Process Queue" button. The new 15-minute default delay continues to work — once `scheduled_at <= now()` the gate fires.
-
-No edge function, frontend, or app code changes. The `email_send_state.retry_after_until` short-circuit is preserved so 429 back-off still works.
-
-## Out of scope
-
-- Changing UI quote status semantics (the quote is correctly "sent" — what's broken is delivery, not status).
-- Cron tick interval, auth-email path, or per-org throttling.
+5. Verify The Fix
+   - Re-open the quote URL directly and after refresh.
+   - Confirm the page renders either the proposal or a clear unavailable state.
+   - Check console/runtime errors are gone.

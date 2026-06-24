@@ -68,25 +68,44 @@ export default function PublicQuoteView() {
 
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
+    // Safety net: never let this page stay blank on a stuck network/RPC.
+    const safety = setTimeout(() => {
+      if (cancelled) return;
+      setLoading((prev) => {
+        if (prev) setError((e) => e ?? "We could not load this proposal.");
+        return false;
+      });
+    }, 15000);
     (async () => {
-      const { data, error } = await supabase.rpc("public_get_quote_by_token", { p_token: token });
-      if (error) {
-        setError(error.message);
-      } else {
-        const payload = data as unknown as QuotePayload;
-        if (payload?.error) setError(payload.error);
-        else {
-          setQuote(payload);
-          if (payload?.onboarding_application_id) {
-            setOnboardingId(payload.onboarding_application_id);
-          }
-          if (payload?.onboarding_access_token) {
-            setOnboardingToken(payload.onboarding_access_token);
+      try {
+        const { data, error } = await supabase.rpc("public_get_quote_by_token", { p_token: token });
+        if (cancelled) return;
+        if (error) {
+          setError(error.message || "We could not load this proposal.");
+        } else {
+          const payload = (data ?? null) as unknown as QuotePayload | null;
+          if (!payload || typeof payload !== "object") {
+            setError("invalid");
+          } else if (payload.error) {
+            setError(payload.error);
+          } else {
+            setQuote(payload);
+            if (payload.onboarding_application_id) setOnboardingId(payload.onboarding_application_id);
+            if (payload.onboarding_access_token) setOnboardingToken(payload.onboarding_access_token);
           }
         }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "We could not load this proposal.");
+      } finally {
+        if (!cancelled) setLoading(false);
+        clearTimeout(safety);
       }
-      setLoading(false);
     })();
+    return () => {
+      cancelled = true;
+      clearTimeout(safety);
+    };
   }, [token]);
 
   // If the quote is already accepted and we know the onboarding app, resume automatically.
