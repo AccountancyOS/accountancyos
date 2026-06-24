@@ -12431,6 +12431,7 @@ export type Database = {
           address_line_2: string | null
           automations_enabled: boolean
           billing_status: Database["public"]["Enums"]["billing_status_enum"]
+          canonical_lifecycle_enabled: boolean
           city: string | null
           country: string | null
           created_at: string
@@ -12458,6 +12459,7 @@ export type Database = {
           address_line_2?: string | null
           automations_enabled?: boolean
           billing_status?: Database["public"]["Enums"]["billing_status_enum"]
+          canonical_lifecycle_enabled?: boolean
           city?: string | null
           country?: string | null
           created_at?: string
@@ -12485,6 +12487,7 @@ export type Database = {
           address_line_2?: string | null
           automations_enabled?: boolean
           billing_status?: Database["public"]["Enums"]["billing_status_enum"]
+          canonical_lifecycle_enabled?: boolean
           city?: string | null
           country?: string | null
           created_at?: string
@@ -18140,6 +18143,10 @@ export type Database = {
         Returns: undefined
       }
       is_active_onboarding_path: { Args: { p_name: string }; Returns: boolean }
+      is_canonical_lifecycle_enabled: {
+        Args: { p_org_id: string }
+        Returns: boolean
+      }
       is_period_locked: {
         Args: {
           p_client_id: string
@@ -18164,6 +18171,10 @@ export type Database = {
         Args: { p_onboarding_id: string }
         Returns: Json
       }
+      lifecycle_evaluate_onboarding_activation: {
+        Args: { p_application_id: string }
+        Returns: Json
+      }
       lifecycle_generate_deadlines_for_job: {
         Args: { p_facts?: Json; p_job_id: string }
         Returns: Json
@@ -18184,6 +18195,14 @@ export type Database = {
           p_role?: string
         }
         Returns: Json
+      }
+      lifecycle_onboarding_gates: {
+        Args: { p_application_id: string }
+        Returns: Json
+      }
+      lifecycle_require_onboarding_token: {
+        Args: { p_access_token: string; p_application_id: string }
+        Returns: undefined
       }
       lifecycle_send_back_onboarding: {
         Args: { p_application_id: string; p_reason?: string; p_step: string }
@@ -18359,46 +18378,96 @@ export type Database = {
         Returns: Json
       }
       public_accept_quote_by_token: { Args: { p_token: string }; Returns: Json }
-      public_complete_billing: {
-        Args: {
-          p_amount: number
-          p_application_id: string
-          p_stripe_session_id: string
-        }
-        Returns: Json
-      }
-      public_get_onboarding: {
-        Args: { p_application_id: string }
-        Returns: Json
-      }
+      public_complete_billing:
+        | {
+            Args: {
+              p_amount: number
+              p_application_id: string
+              p_stripe_session_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_access_token?: string
+              p_amount: number
+              p_application_id: string
+              p_stripe_session_id: string
+            }
+            Returns: Json
+          }
+      public_get_onboarding:
+        | { Args: { p_application_id: string }; Returns: Json }
+        | {
+            Args: { p_access_token?: string; p_application_id: string }
+            Returns: Json
+          }
       public_get_quote_by_token: { Args: { p_token: string }; Returns: Json }
-      public_preview_engagement_letter: {
-        Args: { p_application_id: string }
-        Returns: string
-      }
-      public_record_aml_upload: {
-        Args: {
-          p_application_id: string
-          p_document_type: string
-          p_file_name: string
-          p_file_path: string
-          p_file_size: number
-          p_mime_type: string
-        }
-        Returns: Json
-      }
+      public_preview_engagement_letter:
+        | { Args: { p_application_id: string }; Returns: string }
+        | {
+            Args: { p_access_token?: string; p_application_id: string }
+            Returns: string
+          }
+      public_record_aml_upload:
+        | {
+            Args: {
+              p_application_id: string
+              p_document_type: string
+              p_file_name: string
+              p_file_path: string
+              p_file_size: number
+              p_mime_type: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_access_token?: string
+              p_application_id: string
+              p_document_type: string
+              p_file_name: string
+              p_file_path: string
+              p_file_size: number
+              p_mime_type: string
+            }
+            Returns: Json
+          }
       public_reject_quote_by_token:
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
-      public_sign_engagement_letter: {
-        Args: { p_application_id: string; p_signature_data: Json }
-        Returns: Json
-      }
-      public_skip_billing: { Args: { p_application_id: string }; Returns: Json }
-      public_submit_onboarding_for_review: {
-        Args: { p_application_id: string; p_portal_email: string }
-        Returns: Json
-      }
+      public_sign_engagement_letter:
+        | {
+            Args: { p_application_id: string; p_signature_data: Json }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_access_token?: string
+              p_application_id: string
+              p_signature_data: Json
+            }
+            Returns: Json
+          }
+      public_skip_billing:
+        | { Args: { p_application_id: string }; Returns: Json }
+        | {
+            Args: { p_access_token?: string; p_application_id: string }
+            Returns: Json
+          }
+      public_submit_onboarding_for_review:
+        | {
+            Args: { p_application_id: string; p_portal_email: string }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_access_token?: string
+              p_application_id: string
+              p_portal_email: string
+            }
+            Returns: Json
+          }
       queue_email_safe: {
         Args: {
           p_body_html?: string
