@@ -247,27 +247,6 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
             </Dialog>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Preview</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="text-sm">
-              <div className="font-semibold">Subject:</div>
-              <div className="text-muted-foreground">{subject || "(No subject)"}</div>
-            </div>
-            <div className="text-sm">
-              <div className="font-semibold">Body Preview:</div>
-              <div className="mt-2 max-h-64 overflow-y-auto rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
-                <div
-                  className="letter-editor-prose px-6 py-6"
-                  dangerouslySetInnerHTML={{ __html: body || "<p class='text-muted-foreground'>(No body content)</p>" }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
