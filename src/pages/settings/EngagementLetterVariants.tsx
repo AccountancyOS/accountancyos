@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -22,12 +21,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, Eye, Bold, Italic, List, Heading2, Variable } from "lucide-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Loader2, Plus, Pencil, Trash2, Eye } from "lucide-react";
 import { CLIENT_TYPES as CLIENT_TYPE_VALUES, CLIENT_TYPE_LABELS, getClientTypeLabel } from "@/lib/client-types";
 import { formatServiceType } from "@/lib/format-utils";
+import { LetterEditor } from "@/components/engagement-letter/LetterEditor";
 
 interface Variant {
   id: string;
@@ -119,7 +116,7 @@ export default function EngagementLetterVariants() {
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY>(EMPTY);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: variants, isLoading } = useQuery({
     queryKey: ["engagement-letter-variants", organization?.id],
@@ -218,37 +215,6 @@ export default function EngagementLetterVariants() {
   const firmName = organization?.name || "Your Firm";
   const previewSubject = renderPlaceholders(form.subject || "(No Subject)", firmName);
   const previewBody = renderPlaceholders(form.body || "(No Body)", firmName);
-
-  const insertAtCursor = (text: string) => {
-    const ta = bodyRef.current;
-    if (!ta) {
-      setForm((f) => ({ ...f, body: f.body + text }));
-      return;
-    }
-    const start = ta.selectionStart ?? ta.value.length;
-    const end = ta.selectionEnd ?? ta.value.length;
-    const next = ta.value.slice(0, start) + text + ta.value.slice(end);
-    setForm((f) => ({ ...f, body: next }));
-    requestAnimationFrame(() => {
-      ta.focus();
-      const pos = start + text.length;
-      ta.setSelectionRange(pos, pos);
-    });
-  };
-
-  const wrapSelection = (before: string, after: string = before) => {
-    const ta = bodyRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart ?? 0;
-    const end = ta.selectionEnd ?? 0;
-    const selected = ta.value.slice(start, end) || "text";
-    const next = ta.value.slice(0, start) + before + selected + after + ta.value.slice(end);
-    setForm((f) => ({ ...f, body: next }));
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + before.length, start + before.length + selected.length);
-    });
-  };
 
   return (
     <DashboardLayout>
@@ -411,64 +377,22 @@ export default function EngagementLetterVariants() {
                 placeholder="Engagement Letter For {{client.name}}"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Body</Label>
-                  <div className="flex items-center gap-1">
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Bold" onClick={() => wrapSelection("<strong>", "</strong>")}>
-                      <Bold className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Italic" onClick={() => wrapSelection("<em>", "</em>")}>
-                      <Italic className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Heading" onClick={() => wrapSelection("<h2>", "</h2>")}>
-                      <Heading2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" title="Bullet List" onClick={() => insertAtCursor("\n<ul>\n  <li>Item</li>\n</ul>\n")}>
-                      <List className="h-3.5 w-3.5" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
-                          <Variable className="h-3.5 w-3.5" /> Insert Field
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {PLACEHOLDERS.map((p) => (
-                          <DropdownMenuItem key={p.key} onClick={() => insertAtCursor(`{{${p.key}}}`)}>
-                            {p.label}
-                            <span className="ml-auto text-xs text-muted-foreground">{`{{${p.key}}}`}</span>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-                <Textarea
-                  ref={bodyRef}
-                  value={form.body}
-                  onChange={(e) => setForm({ ...form, body: e.target.value })}
-                  rows={20}
-                  className="font-mono text-sm leading-relaxed min-h-[420px]"
-                  placeholder="Write the engagement letter body. Use the toolbar to insert formatting or merge fields."
-                />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Letter Body</Label>
+                <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setPreviewOpen(true)}>
+                  <Eye className="h-3.5 w-3.5" />
+                  Preview With Sample Data
+                </Button>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Eye className="h-4 w-4" />
-                  Live Preview
-                </div>
-                <div className="rounded-md border bg-background p-4 min-h-[420px] max-h-[480px] overflow-y-auto">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Subject</div>
-                  <div className="font-medium mb-4">{previewSubject}</div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Body</div>
-                  <div
-                    className="prose prose-sm max-w-none text-foreground"
-                    dangerouslySetInnerHTML={{ __html: previewBody }}
-                  />
-                </div>
-              </div>
+              <LetterEditor
+                value={form.body}
+                onChange={(html) => setForm((f) => ({ ...f, body: html }))}
+                placeholders={PLACEHOLDERS}
+              />
+              <p className="text-xs text-muted-foreground">
+                Write the letter as you would in Word. Use Insert Field to drop in merge variables like the firm name or signing link.
+              </p>
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
@@ -495,6 +419,32 @@ export default function EngagementLetterVariants() {
               {upsertMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Save
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Preview With Sample Data</DialogTitle>
+            <DialogDescription>
+              Merge fields are replaced with sample values so you can see how the letter will appear to a recipient.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto bg-muted/30 p-6 rounded-md">
+            <div className="mx-auto max-w-[720px] rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
+              <div className="px-12 py-14 md:px-16 md:py-16">
+                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Subject</div>
+                <div className="font-medium text-zinc-900 mb-6">{previewSubject}</div>
+                <div
+                  className="letter-editor-prose"
+                  dangerouslySetInnerHTML={{ __html: previewBody }}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

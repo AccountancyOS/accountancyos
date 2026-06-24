@@ -1,43 +1,39 @@
-## Reality check on "never expires"
+## What's wrong today
 
-Our OAuth flow already requests the longest-lived token Google offers — `supabase/functions/gmail-auth/index.ts` sets `access_type=offline` and `prompt=consent`, so we always receive a refresh token. With the consent screen in **Production**, that refresh token does not age out. Google still revokes it in three cases we cannot prevent from code:
+`src/pages/settings/EngagementLetterVariants.tsx` shows the letter body in a plain `<Textarea>` so the user types and edits **raw HTML markup** — `<div style="...">`, `<p>`, `<a href="...">` etc. — with a tiny toolbar that just wraps the selection in tags. The right side renders a live HTML preview, which is the only place it looks like a letter. That's the screen in your screenshot.
 
-1. The user revokes the app at https://myaccount.google.com/permissions.
-2. The Google account password is changed (Google invalidates outstanding refresh tokens).
-3. The refresh token is unused for 6 months.
+## Fix
 
-So "literally never expires" is not something code can guarantee — it is a Google policy. What we *can* guarantee is: (a) we always request offline + consent, (b) when Google does revoke, the UI surfaces a one-click Reconnect, and (c) the row shows the real reason instead of a generic string.
+Replace the raw-HTML textarea with a **WYSIWYG editor that looks like a Word page**. The user just writes, formats, and drops in merge fields — they never see a tag. The stored value stays HTML in `engagement_letter_template_variants.body`, so every downstream consumer (signing page, emails, the existing variants you've already created) keeps working unchanged.
 
-## Changes
+### Editor choice
+**TipTap** (built on ProseMirror) — the standard React WYSIWYG, used in Notion-style editors, ships clean HTML. Install:
 
-### 1. Reconnect button on every disconnected mailbox row
-`src/pages/Settings.tsx` (mailbox row, lines ~538-548):
-- Render a primary **Reconnect** button whenever `mailbox.status !== 'active'` OR `mailbox.error_message` is set.
-- The button calls the existing `connectGmailMutation` / `connectOutlookMutation` (Outlook mirror); both mutations already kick off the OAuth flow, and the existing `gmail-auth` / `outlook-auth` edge functions upsert on `(organization_id, email_address)` so the same row is refreshed in place — no DB changes.
-- Hide the Sync button while in this state (it's already disabled when `status !== 'active'`, so just swap the visible action).
+- `@tiptap/react`
+- `@tiptap/starter-kit` (paragraph, bold, italic, headings, lists, blockquote, code, history, etc.)
+- `@tiptap/extension-link`
+- `@tiptap/extension-placeholder`
 
-No new edge function, no new RPC, no schema change.
+### UI changes inside the variant dialog
+- Remove the split "Body | Live Preview" two-column layout.
+- Drop in a full-width Word-style "page": white background, generous padding (~64px), max-width ~720px, centered, subtle shadow, serif/system body font, line-height ~1.7 — mirrors a printed letter. Dark mode keeps the page surface light so the letter always looks like paper.
+- Sticky toolbar at the top of the page with: **Bold, Italic, Underline, H1, H2, Bullet list, Numbered list, Link, Insert Field ▾, Undo, Redo**. Active state highlights when caret is inside that mark.
+- "Insert Field" dropdown reuses the existing `PLACEHOLDERS` array; inserting a field drops a styled inline chip (e.g. a subtle pill rendered from `{{firm.name}}`) so users see what's a variable vs prose, but the saved HTML is still plain `{{firm.name}}` text — no schema change.
+- Replace the live preview pane with a **"Preview with sample data"** button that opens a read-only modal showing the rendered letter with placeholders substituted (reuses today's `renderPlaceholders` helper).
 
-### 2. Persist Google's real error (covers the diagnostics half of the previous "all 3" plan)
-Patch four edge functions so `connected_mailboxes.error_message` carries Google's actual response (e.g. `invalid_grant: Token has been expired or revoked.`) instead of the generic `Token refresh failed`:
+### Migration of existing variants
+- TipTap accepts HTML directly via `editor.commands.setContent(body)`, so the engagement letter already in the screenshot loads into the new editor as a formatted letter on first open. No data migration, no edge-function changes.
+- The existing `<style="…">` inline CSS from older bodies is preserved on load and round-trips through TipTap; we don't strip it.
 
-- `supabase/functions/gmail-sync/index.ts`
-- `supabase/functions/gmail-send/index.ts`
-- `supabase/functions/outlook-sync/index.ts`
-- `supabase/functions/outlook-send/index.ts`
+### Files touched
+- `src/pages/settings/EngagementLetterVariants.tsx` — swap textarea + toolbar + preview pane for the new editor component.
+- `src/components/engagement-letter/LetterEditor.tsx` *(new)* — the TipTap editor + Word-style page + toolbar + Insert Field dropdown.
+- `package.json` — add the four TipTap packages above (via `bun add`).
 
-In each:
-- Change `refreshAccessToken` to return `{ ok: true, ... } | { ok: false, error }` where `error` is built from `response.status` plus the parsed `error` / `error_description` (or raw body fallback), truncated to 500 chars.
-- Update every call site to write `refreshResult.error` into `connected_mailboxes.error_message` when `ok === false`, and return the same string in the response payload.
+No DB migration. No edge-function changes. No changes to `engagement-change-service`, signing pages, or onboarding flow.
 
-After the edit I'll deploy the four functions.
-
-### 3. Action required from you (one-off, outside code)
-- Open Google Cloud Console → APIs & Services → OAuth consent screen for the project tied to our `GOOGLE_CLIENT_ID`. Confirm Publishing status is **In production**, not Testing. If it's Testing, click **Publish app**. That single setting is the difference between refresh tokens that survive indefinitely and ones that die every 7 days.
-
-I'll surface a chat reminder when the code is shipped.
-
-## Out of scope
-- Auto-reconnect (would require silent OAuth, which Google doesn't allow for refresh tokens — the user always has to consent).
-- Background "keep-alive" pings (don't extend refresh-token lifetime; only Production mode does).
-- Touching the transactional Lovable Emails queue (unrelated to Gmail).
+### Out of scope
+- Tables, images, font pickers, page breaks, multi-page rendering — these don't fit the "simple Word-like letter" the user asked for and would expand scope.
+- A from-scratch letter builder UI (sectioned drag-and-drop, clause library, etc.).
+- Touching the variant-selection logic (engagement_kind / client_type / service_code / legal_entity filters stay exactly as they are).
+- The Email template editor elsewhere in the app — only the engagement letter variants screen is in scope here.

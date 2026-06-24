@@ -236,3 +236,32 @@ All colors MUST be HSL.
     background: var(--gradient-glow);
   }
 }
+
+/* TipTap engagement letter editor */
+.letter-editor-prose {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1a1a1a;
+  min-height: 360px;
+}
+.letter-editor-prose .ProseMirror { outline: none; min-height: 360px; }
+.letter-editor-prose h1 { font-size: 1.75rem; font-weight: 600; margin: 1.4em 0 0.6em; line-height: 1.25; }
+.letter-editor-prose h2 { font-size: 1.35rem; font-weight: 600; margin: 1.3em 0 0.5em; line-height: 1.3; }
+.letter-editor-prose h3 { font-size: 1.1rem;  font-weight: 600; margin: 1.2em 0 0.4em; }
+.letter-editor-prose p { margin: 0 0 1em; }
+.letter-editor-prose ul, .letter-editor-prose ol { margin: 0 0 1em; padding-left: 1.5em; }
+.letter-editor-prose ul { list-style: disc; }
+.letter-editor-prose ol { list-style: decimal; }
+.letter-editor-prose li { margin: 0.25em 0; }
+.letter-editor-prose a { color: #2563eb; text-decoration: underline; }
+.letter-editor-prose strong { font-weight: 600; }
+.letter-editor-prose blockquote { border-left: 3px solid #e5e7eb; padding-left: 1em; color: #4b5563; margin: 0 0 1em; }
+.letter-editor-prose hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.5em 0; }
+.letter-editor-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
