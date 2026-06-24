@@ -259,8 +259,11 @@ export default function EmailTemplateEditor({ content, onChange, templateName }:
             </div>
             <div className="text-sm">
               <div className="font-semibold">Body Preview:</div>
-              <div className="text-muted-foreground whitespace-pre-wrap max-h-64 overflow-y-auto">
-                {body || "(No body content)"}
+              <div className="mt-2 max-h-64 overflow-y-auto rounded-sm bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200">
+                <div
+                  className="letter-editor-prose px-6 py-6"
+                  dangerouslySetInnerHTML={{ __html: body || "<p class='text-muted-foreground'>(No body content)</p>" }}
+                />
               </div>
             </div>
           </CardContent>
