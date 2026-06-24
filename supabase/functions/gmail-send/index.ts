@@ -25,8 +25,16 @@ interface SendEmailRequest {
   company_id?: string;
 }
 
-// Refresh access token if expired
-async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {
+// Refresh access token if expired. Returns Google's actual error on failure.
+type RefreshResult =
+  | { ok: true; access_token: string; expires_in: number; refresh_token?: string }
+  | { ok: false; error: string };
+
+function truncateError(s: string): string {
+  return s.length > 500 ? s.slice(0, 500) : s;
+}
+
+async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> {
   try {
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -38,16 +46,24 @@ async function refreshAccessToken(refreshToken: string): Promise<{ access_token:
         grant_type: 'refresh_token',
       }),
     });
-
+    const raw = await response.text();
     if (!response.ok) {
-      console.error('Token refresh failed:', await response.text());
-      return null;
+      let detail = raw;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.error || parsed?.error_description) {
+          detail = [parsed.error, parsed.error_description].filter(Boolean).join(': ');
+        }
+      } catch { /* keep raw */ }
+      const error = truncateError(`Google token refresh failed (${response.status}): ${detail}`);
+      console.error(error);
+      return { ok: false, error };
     }
-
-    return await response.json();
+    return { ok: true, ...JSON.parse(raw) };
   } catch (error) {
-    console.error('Token refresh error:', error);
-    return null;
+    const msg = truncateError(`Google token refresh error: ${String(error)}`);
+    console.error(msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -203,21 +219,21 @@ serve(async (req: Request) => {
         );
       }
 
-      const newTokens = await refreshAccessToken(mailbox.refresh_token);
-      if (!newTokens) {
+      const refreshResult = await refreshAccessToken(mailbox.refresh_token);
+      if (!refreshResult.ok) {
         await serviceSupabase
           .from('connected_mailboxes')
-          .update({ status: 'expired', error_message: 'Token refresh failed' })
+          .update({ status: 'expired', error_message: refreshResult.error })
           .eq('id', mailbox.id);
-        
+
         return new Response(
-          JSON.stringify({ error: 'Token refresh failed. Please reconnect your mailbox.' }),
+          JSON.stringify({ error: refreshResult.error }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      accessToken = newTokens.access_token;
-      const expiresAt = new Date(Date.now() + (newTokens.expires_in * 1000)).toISOString();
+      accessToken = refreshResult.access_token;
+      const expiresAt = new Date(Date.now() + (refreshResult.expires_in * 1000)).toISOString();
       
       await serviceSupabase
         .from('connected_mailboxes')

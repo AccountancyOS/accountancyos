@@ -22,13 +22,19 @@ interface SendEmailRequest {
   reply_to_message_id?: string;
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number; refresh_token?: string } | null> {
+type RefreshResult =
+  | { ok: true; access_token: string; expires_in: number; refresh_token?: string }
+  | { ok: false; error: string };
+
+function truncateError(s: string): string {
+  return s.length > 500 ? s.slice(0, 500) : s;
+}
+
+async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> {
   try {
     const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: MICROSOFT_CLIENT_ID!,
         client_secret: MICROSOFT_CLIENT_SECRET!,
@@ -36,16 +42,24 @@ async function refreshAccessToken(refreshToken: string): Promise<{ access_token:
         grant_type: 'refresh_token',
       }),
     });
-
+    const raw = await response.text();
     if (!response.ok) {
-      console.error('Token refresh failed:', await response.text());
-      return null;
+      let detail = raw;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.error || parsed?.error_description) {
+          detail = [parsed.error, parsed.error_description].filter(Boolean).join(': ');
+        }
+      } catch { /* keep raw */ }
+      const error = truncateError(`Microsoft token refresh failed (${response.status}): ${detail}`);
+      console.error(error);
+      return { ok: false, error };
     }
-
-    return await response.json();
+    return { ok: true, ...JSON.parse(raw) };
   } catch (error) {
-    console.error('Token refresh error:', error);
-    return null;
+    const msg = truncateError(`Microsoft token refresh error: ${String(error)}`);
+    console.error(msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -121,31 +135,31 @@ serve(async (req: Request) => {
     // Check if token needs refresh
     if (mailbox.token_expires_at && new Date(mailbox.token_expires_at) < new Date()) {
       console.log('Refreshing token for send');
-      const newTokens = await refreshAccessToken(mailbox.refresh_token);
+      const refreshResult = await refreshAccessToken(mailbox.refresh_token);
 
-      if (!newTokens) {
+      if (!refreshResult.ok) {
         await supabase
           .from('connected_mailboxes')
           .update({
-            status: 'error',
-            error_message: 'Token refresh failed',
+            status: 'expired',
+            error_message: refreshResult.error,
             updated_at: new Date().toISOString(),
           })
           .eq('id', mailbox.id);
 
         return new Response(
-          JSON.stringify({ error: 'Token refresh failed. Please reconnect your Outlook account.' }),
+          JSON.stringify({ error: refreshResult.error }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      accessToken = newTokens.access_token;
+      accessToken = refreshResult.access_token;
       await supabase
         .from('connected_mailboxes')
         .update({
-          access_token: newTokens.access_token,
-          refresh_token: newTokens.refresh_token || mailbox.refresh_token,
-          token_expires_at: new Date(Date.now() + newTokens.expires_in * 1000).toISOString(),
+          access_token: refreshResult.access_token,
+          refresh_token: refreshResult.refresh_token || mailbox.refresh_token,
+          token_expires_at: new Date(Date.now() + refreshResult.expires_in * 1000).toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', mailbox.id);

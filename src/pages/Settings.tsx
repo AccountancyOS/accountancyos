@@ -536,15 +536,34 @@ export default function Settings() {
                       </div>
                     </div>
                       <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => syncMailboxMutation.mutate({ mailboxId: mailbox.id, provider: mailbox.provider })}
-                        disabled={isSyncing === mailbox.id || mailbox.status !== "active"}
-                      >
-                        <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing === mailbox.id ? "animate-spin" : ""}`} />
-                        Sync
-                      </Button>
+                      {(mailbox.status !== "active" || mailbox.error_message) ? (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            mailbox.provider === "outlook"
+                              ? connectOutlookMutation.mutate()
+                              : connectGmailMutation.mutate()
+                          }
+                          disabled={isConnecting}
+                        >
+                          {isConnecting ? (
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                          )}
+                          Reconnect
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => syncMailboxMutation.mutate({ mailboxId: mailbox.id, provider: mailbox.provider })}
+                          disabled={isSyncing === mailbox.id}
+                        >
+                          <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing === mailbox.id ? "animate-spin" : ""}`} />
+                          Sync
+                        </Button>
+                      )}
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="outline" size="sm">
