@@ -49,6 +49,7 @@ import {
   Plus,
   Play,
   Loader2,
+  Send,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -159,6 +160,9 @@ export default function Emails() {
   const processQueueMutation = useMutation({
     mutationFn: async () => {
       setIsProcessing(true);
+      if (organization?.id) {
+        await supabase.rpc("flush_email_queue_now", { p_organization_id: organization.id });
+      }
       const { data, error } = await supabase.functions.invoke("process-email-queue");
       if (error) throw error;
       return data;
@@ -172,6 +176,23 @@ export default function Emails() {
     },
     onSettled: () => {
       setIsProcessing(false);
+    },
+  });
+
+  // Send a single queued email immediately (overrides its scheduled_at).
+  const sendNowMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      const { error: rpcError } = await supabase.rpc("send_queued_email_now", { p_email_id: emailId });
+      if (rpcError) throw rpcError;
+      const { error: fnError } = await supabase.functions.invoke("process-email-queue");
+      if (fnError) throw fnError;
+    },
+    onSuccess: () => {
+      toast.success("Email sent");
+      queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to send email: ${error.message}`);
     },
   });
 
