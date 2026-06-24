@@ -18171,6 +18171,10 @@ export type Database = {
         Args: { p_onboarding_id: string }
         Returns: Json
       }
+      lifecycle_evaluate_onboarding_activation: {
+        Args: { p_application_id: string }
+        Returns: Json
+      }
       lifecycle_generate_deadlines_for_job: {
         Args: { p_facts?: Json; p_job_id: string }
         Returns: Json
