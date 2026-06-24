@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmailSearch } from "./EmailSearch";
 import { EmailViewer } from "./EmailViewer";
 import { format } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns";
 import { Mail, ArrowLeft, ArrowRight, Briefcase, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -176,6 +177,9 @@ export function EmailList({
                         {when && (
                           <span className="text-xs text-muted-foreground">
                             {format(new Date(when), "dd MMM yyyy HH:mm")}
+                            {item.status === "pending" && item.scheduled_at && new Date(item.scheduled_at).getTime() > Date.now() && (
+                              <> · sends in {formatDistanceToNowStrict(new Date(item.scheduled_at))}</>
+                            )}
                           </span>
                         )}
                       </div>
