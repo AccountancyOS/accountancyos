@@ -1,40 +1,18 @@
-## What you're actually editing today
+## Replace the templates email editor with the Word-style WYSIWYG editor
 
-The "Edit Variant" screen under Settings → Engagement Letter Variants edits the **cover email** — the message a client receives in their inbox, with the "View and Sign Engagement Letter" button. That's why you see HTML and a CTA button.
+The "Email Body" editor in `src/components/templates/EmailTemplateEditor.tsx` is still a monospace `<Textarea>` showing raw `{{merge_tags}}` — the exact same problem the engagement letter editor had before. Bring it in line with the WYSIWYG editor already used for engagement letter variants.
 
-The **actual letter** that opens when the client clicks that button is a different thing entirely. Right now it is **hardcoded in SQL** inside the `public_sign_engagement_letter` and `public_preview_engagement_letter` database functions — fixed wording for Scope, Fees, Confidentiality, Acceptance, with the service lines and totals pulled from the accepted quote. There is no editor for it anywhere in the app.
+### Changes
 
-## Fix
+1. **`src/components/templates/EmailTemplateEditor.tsx`** — Replace the Rich Text `<Textarea>` with the existing `LetterEditor` component (`src/components/engagement-letter/LetterEditor.tsx`).
+   - Map `mergeFields` → `placeholders` prop so the editor's "Insert Field" dropdown shows the same categorized list. The sidebar "Merge Fields" badges stay (they append to body).
+   - Keep the HTML tab as a raw `<Textarea>` for power users.
+   - Remove the `font-mono` look; the editor renders proper paragraphs, bold/italic/lists/links toolbar, and styled merge-field chips.
+   - Update the Preview card to render the body via `dangerouslySetInnerHTML` inside the same white letter-style box used in `EngagementLetterVariants`.
 
-Let users author the letter document itself, per variant, using the same WYSIWYG editor as the email body. Existing variants keep their email body; we add a parallel letter body alongside it. The match/fallback rules (client type, service code, engagement kind, default) already work for the email — letter reuses them.
+2. **Body storage stays HTML.** Existing plain-text bodies still render (TipTap accepts them); new edits save HTML. No migration or backend change.
 
-### Schema
-- Add `letter_body text` to `engagement_letter_template_variants` (nullable). No data migration needed; null means "use the built-in default wording", so nothing breaks for existing variants.
-- Grants/RLS unchanged — same table.
+3. **Out of scope:** Touching the HTML tab editor, merge-field schema, send pipeline, or any other settings screen. Only the templates editor UI changes.
 
-### Postgres functions
-- `public_sign_engagement_letter` and `public_preview_engagement_letter`: after resolving the matching variant via `resolve_engagement_letter_variant`, if `letter_body` is non-empty, render it with the merge fields below and use it as `document_content`. Otherwise fall back to the existing hardcoded HTML.
-- Merge fields supported in the letter body (rendered server-side):
-  - `{{firm_name}}`, `{{client_name}}`
-  - `{{services_list}}` — same `<ul><li>service — currency amount (frequency)</li></ul>` block built today
-  - `{{accepted_date}}` — DD Mon YYYY of quote acceptance
-  - `{{currency}}`, `{{total_one_off}}`, `{{total_monthly}}`
-  - `{{today}}`
-
-### UI changes (Settings → Engagement Letter Variants)
-- Rename the screen header to **"Engagement Letter & Email Templates"** and the existing Body field to **"Cover Email Body"** so the distinction is obvious.
-- Add a second WYSIWYG editor below: **"Engagement Letter Document"** using the same `LetterEditor` component. Empty = use the built-in default wording (shown as a hint).
-- Add a button **"Insert Default Wording"** that prefills the letter editor with the current hardcoded default so users have a starting point instead of a blank page.
-- Update the "Insert Field" dropdown on the letter editor to expose the letter-specific merge fields listed above (the email editor keeps its own field list).
-- Update the "Preview With Sample Data" modal: show two tabs — *Cover Email* and *Letter Document* — each rendering the corresponding body with sample merge values substituted.
-
-### Out of scope
-- Per-section / clause-library style builder for the letter (single rich-text body, same as the email).
-- Versioning, re-sign triggers, or change-management on existing letters already in flight — existing `engagement_letters.document_content` rows are immutable snapshots and stay as they were.
-- Touching the actual signing UI (`/engagement/:token`) — it just renders whatever `document_content` we hand it.
-
-### Files touched
-- New migration: add `letter_body` column, rewrite the two `public_*_engagement_letter` functions with the merge-field renderer.
-- `src/pages/settings/EngagementLetterVariants.tsx` — header rename, second editor, default-wording prefill, two-tab preview.
-- `src/components/engagement-letter/LetterEditor.tsx` — minor: accept a `placeholder` prop for the empty-state hint.
-- No edge-function changes (`send-engagement-letter` still sends the *email* body — the link in it now resolves to the new letter body).
+### Files
+- `src/components/templates/EmailTemplateEditor.tsx` (edit)
