@@ -1,0 +1,1 @@
+UPDATE public.email_queue SET scheduled_at = now(), status = 'pending', error_message = NULL, updated_at = now() WHERE id IN ('26a5e982-8bcb-4cdc-96ff-cd9d18ce9459','11b5aec3-8644-45f1-9c3c-64084ff18cc9');
