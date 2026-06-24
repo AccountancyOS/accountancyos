@@ -480,6 +480,7 @@ export default function Emails() {
                         <TableHead>Context</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
+                        <TableHead>Scheduled For</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -532,6 +533,20 @@ export default function Emails() {
                               </p>
                             </TableCell>
                             <TableCell>
+                              {email.scheduled_at ? (
+                                <div className="text-sm">
+                                  <p>{format(new Date(email.scheduled_at), "dd MMM yyyy HH:mm")}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(email.scheduled_at).getTime() <= Date.now()
+                                      ? "Ready"
+                                      : `In ${formatDistanceToNowStrict(new Date(email.scheduled_at))}`}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -539,6 +554,15 @@ export default function Emails() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  {(status === "draft" || status === "queued" || status === "pending" || status === "failed") && (
+                                    <DropdownMenuItem
+                                      onClick={() => sendNowMutation.mutate(email.id)}
+                                      disabled={sendNowMutation.isPending}
+                                    >
+                                      <Send className="h-4 w-4 mr-2" />
+                                      Send Now
+                                    </DropdownMenuItem>
+                                  )}
                                   {(status === "draft" || status === "queued") && (
                                     <DropdownMenuItem onClick={() => handleEditEmail(email)}>
                                       <Pencil className="h-4 w-4 mr-2" />
