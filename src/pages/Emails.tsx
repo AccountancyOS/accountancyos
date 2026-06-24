@@ -51,7 +51,7 @@ import {
   Loader2,
   Send,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
 
 type EmailStatus = "draft" | "queued" | "pending" | "failed" | "ignored";
