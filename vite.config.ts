@@ -4,7 +4,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 const cloudProjectId = "moxpdejnucjjcplleefn";
-const cloudAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6Im1veHBkZWpudWNqamNwbGxlZWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNzg1NDEsImV4cCI6MjA3OTY1NDU0MX0.h90FqnzVKqsxpMO9W2aWC1aCogvVswk4mb65VsUFeQ0";
+const cloudAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1veHBkZWpudWNqamNwbGxlZWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNzg1NDEsImV4cCI6MjA3OTY1NDU0MX0.h90FqnzVKqsxpMO9W2aWC1aCogvVswk4mb65VsUFeQ0";
 const cloudUrl = `https://${cloudProjectId}.supabase.co`;
 
 // https://vitejs.dev/config/
