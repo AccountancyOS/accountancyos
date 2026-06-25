@@ -19,12 +19,12 @@
 
 Do this on a **test/sandbox practice**, not a real client account.
 
-> ### ⚠️ HARD PREREQUISITES — do these BEFORE turning the flag on, or you WILL break onboarding
-> 1. **Reconcile the two lifecycle systems.** Your DB has both `organizations.canonical_lifecycle_enabled` (this Sprint 1 work) AND Lovable's `org_settings.canonical_spine_v1`. Both activate clients on quote-accept. Decide which one owns activation and turn the other OFF for the test org — otherwise both fire on the same acceptance.
-> 2. **Backfill `access_token` on all open onboarding applications.** Enforcement (`canonical_lifecycle_enabled = true`) requires a valid token at every onboarding step, validated against `onboarding_applications.access_token`. Any application created **before** access-tokens existed has `access_token = NULL` and can **never** validate — flipping the flag instantly bricks every in-flight onboarding (symptom: "Onboarding access token required or invalid", even with a fresh link). So first: backfill a token for every open `onboarding_applications` row, and confirm the quote-accept flow reliably sets one for new rows.
-> 3. **Confirm the token migrations are actually applied** (`validate_onboarding_access_token`, the 2-arg onboarding RPCs, `get_quote_by_token` returning `onboarding_access_token`). Re-assert any that are missing; don't trust the pending-list.
+> ### Prerequisite status (updated 2026-06-25 — most are now CLEARED)
+> 1. ✅ **Reconcile the two lifecycle systems.** DONE — reconciliation Increments 1 & 2 (`20260624223826`, `20260625062413`) dropped the spine's activate-on-accept and left `canonical_lifecycle_enabled` as the single live switch (`canonical_spine_v1` is now inert). See `sprint1-lifecycle-reconciliation-plan.md`.
+> 2. ✅ **Token enforcement no longer bricks pre-token onboardings.** Increment 1 made the onboarding guard *validate-if-present* (never hard-require), so turning the flag on is safe even with NULL tokens. (The `access_token` backfill is now only needed LATER, when re-introducing hard token enforcement — NOT to enable the gated model.)
+> 3. **Confirm the token migrations are applied** (`validate_onboarding_access_token`, the 2-arg onboarding RPCs, `get_quote_by_token` returning `onboarding_access_token`). Re-assert any that are missing; don't trust the pending-list.
 >
-> Until all three are done, **keep the flag OFF** (the dormant, legacy state). Emergency revert any time: `UPDATE public.organizations SET canonical_lifecycle_enabled = false WHERE canonical_lifecycle_enabled = true;`
+> **Net:** enabling the flag on a TEST org is now low-risk. Expect to surface a few flag-ON-only bugs (like the legacy path did) — fix-as-you-go. Emergency revert any time: `UPDATE public.organizations SET canonical_lifecycle_enabled = false WHERE canonical_lifecycle_enabled = true;`
 
 **1a. Turn the flag on for the test org.** Ask Lovable:
 > "Set `canonical_lifecycle_enabled = true` on the `organizations` row for `<test org name>` only."

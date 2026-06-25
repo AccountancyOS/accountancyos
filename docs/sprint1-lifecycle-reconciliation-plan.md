@@ -21,6 +21,14 @@
 
 **Engine choice (REVISED after reading the code):** keep **`lifecycle_approve_onboarding`'s own engine**. Reading the functions showed approve already creates client + engagements + jobs + portal access at approval, *flag-independently*, and its `service_id` model fits the gated flow where the client is created late (at approval). The spine engine resolves its client via `leads.converted_client_id`, which is NOT set in the gated flow — so the spine **cannot** be the approval engine without re-plumbing lead conversion. Net: no engine swap. approve stays the single activation engine; the spine's accept-side trigger is simply removed. (The spine functions are left in place, unused, so this is reversible.)
 
+## STATUS (2026-06-25): core reconciliation COMPLETE
+Increments 1 & 2 are applied. Together they resolved the conflict:
+- **No double activation** — the spine's accept trigger is dropped; `lifecycle_activate_client_services` and the deadline trigger are now **inert** (every remaining caller is inside a trigger that no longer fires, or only acts on `canonical_spine_v1` jobs which nothing creates). So `canonical_spine_v1` drives nothing live; no flag-consolidation needed.
+- **No token landmine** — enabling `canonical_lifecycle_enabled` no longer hard-requires a token.
+- **`canonical_lifecycle_enabled` is now the single meaningful switch.** With it ON: accept → pending, gates enforced at approve, link created, approve materialises engagements/jobs (its own engine). With it OFF: legacy path (today).
+
+**Remaining = enablement + verification, not more reconciliation code:** turn the flag on for the test org, walk the 5 scenarios, fix any flag-ON bugs (as we did for the legacy path), then reintroduce token enforcement after the backfill.
+
 ## Phased increments (each: one small migration → Lovable applies + confirms → owner verifies in-app)
 1. ✅ **Decouple token enforcement from the funnel** — `20260624223826`. `lifecycle_require_onboarding_token` now validate-if-present only; enabling the lifecycle flag no longer bricks pre-token onboardings.
 2. ✅ **Disable activate-on-accept** — `20260625062413`. Dropped `trg_quote_accepted_activate_canonical`; accept leaves a pending shell, approve is the single activation point. (No engine swap — see Engine choice above.)
