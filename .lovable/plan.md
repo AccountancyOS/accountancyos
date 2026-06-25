@@ -1,47 +1,60 @@
-## Goal
+## What's actually wrong
 
-When the reviewer ticks the AML checks and clicks **Mark as Verified**, that single action should:
+The deep audit (with file:line citations) identified **two independent bugs**. Neither throws an error, which is why error boundaries catch nothing and there are no console messages.
 
-1. Mark AML verified.
-2. Create the client/company, engagements, jobs, and portal access (today this only happens when the separate **Approve** button is clicked).
-3. Queue exactly one client email: *"You've passed AML verification — set up your client portal login."*
+### Bug 1 — Permissions race silently redirects `?tab=banking` → `?tab=overview`
+`src/portal/pages/PortalBookkeepingFull.tsx:56–79`
 
-## Changes
+On cold load, `usePortalBookkeepingPermissions()` is still in-flight, so `perms` is `undefined`. The component computes `showBanking = !!perms?.showBankAccounts` → `false`, then an effect runs:
 
-### 1. Database — new combined RPC `verify_aml_and_approve`
+```ts
+if (allowed[activeTab] === false) {
+  setActiveTab("overview");
+  setSearchParams({ tab: "overview" });
+}
+```
 
-Add one SECURITY DEFINER function that wraps the existing logic:
+This fires **before** the permissions query resolves, kicks the user off the Banking tab, and overwrites the URL. By the time perms load, `activeTab` is already `"overview"`. Net effect: the Banking tab never gets a chance to mount.
 
-- Calls the same body as `verify_aml` (sets `aml_status='verified'`, sets `aml_verified_at`, 5-year expiry, writes audit row).
-- Then calls `lifecycle_approve_onboarding(p_onboarding_id)` and returns its `jsonb` result merged with AML fields.
-- Returns early (no approval) if onboarding is already in a terminal state, so re-clicking is idempotent.
+Additionally, defaults in `src/portal/hooks/usePortalBookkeepingPermissions.ts:51–82` set `showBankAccounts: false` when no `portal_visibility_settings` row exists — so even after the race is fixed, the tab won't appear unless the row exists and the flag is on.
 
-Existing `verify_aml` and `lifecycle_approve_onboarding` stay in place for back-compat / direct admin use.
+### Bug 2 — `/auth` bounce (accountant login, not portal login)
+`src/lib/auth-context.tsx:272–279` + `src/App.tsx`
 
-### 2. Database — reword the portal invite email
+`AuthProvider` wraps every route including `/portal/*`. Its `useInactivityTimeout(!!user, signOut)` calls `signOut()` after 10 min of inactivity (or immediately on visibility-restore after 10+ min hidden), and `signOut` hard-navigates to `/auth` — the accountant login page. Portal users get dumped there with no way back into the portal. This is the reason you're currently on `/auth`.
 
-`lifecycle_grant_portal_access` is the only email queued on the happy path. Update its `INSERT INTO email_queue` so the subject and body reflect that the invite is the AML-pass + portal-setup message:
+There may also be a synchronous trigger from `enforceSessionLimits` (`auth-context.tsx:219`) signing portal users out if it treats them as duplicate sessions; we'll trace that as part of the fix.
 
-- **Subject:** `You've passed AML verification — set up your {{firm_name}} client portal`
-- **Body:** short HTML congratulating the client on completing AML, instructing them to set their portal password via the existing tokenised link, with the firm name and portal URL.
+## Fix plan
 
-No other email-queue insert fires on a first-day approval (the per-service "information request" emails inside `lifecycle_approve_onboarding` only queue when a quote line has an `information_request_template_id` *and* the trigger date is already in the past — keep that behaviour unchanged; user asked about the AML/portal path specifically).
+### 1. Stop the perms race (Bug 1)
+`src/portal/pages/PortalBookkeepingFull.tsx`
 
-### 3. Frontend — `src/components/onboarding/AMLVerificationPanel.tsx`
+- Read `isSuccess` from the perms query.
+- Guard the redirect effect: `if (!permsLoaded) return;` at the top.
+- Make the empty-tab case visible instead of silent: when the user navigates to `?tab=banking` but `showBankAccounts` is false after perms load, render a small "Banking is not enabled for this entity. Ask your accountant to enable it." card inside the tabs area instead of silently switching tabs. This guarantees we never blank-screen again from this pathway.
 
-- Replace the `supabase.rpc("verify_aml", …)` call in `handleVerify` with `supabase.rpc("verify_aml_and_approve", …)`.
-- Surface the approval result in the success toast: *"AML verified, client created, portal invite queued."* If `portal_access.ok === false`, show the same destructive toast variant already used in `OnboardingDetail.tsx`.
-- Continue to call `onVerified()` so the parent reloads and re-renders the now-approved application.
+### 2. Stop the portal /auth bounce (Bug 2)
+`src/lib/auth-context.tsx`
 
-### 4. Frontend — `src/pages/OnboardingDetail.tsx`
+- Detect portal routes via `useLocation()` and disable the inactivity timer there: `useInactivityTimeout(!!user && !isPortalRoute, signOut)`. The portal has its own session model via `PortalAppShim`.
+- When `signOut` is invoked on a portal route, navigate to `/portal/login` instead of `/auth`.
+- Audit `enforceSessionLimits` (`src/lib/session-enforcement.ts`) and skip the call when the user is on a portal route, since portal users won't have an `organization_users` row and the check is irrelevant.
 
-- Remove the **Approve Application** button and its `handleApproveClick` / `approveApplication` / AML-warning dialog wiring (AML verification is now the approval path).
-- Keep the **Reject** button untouched.
-- After `onVerified` reloads the application, show the post-approval state (client link, portal status) using the existing approved-state UI.
-- Emit the same automation events (`emitOnboardingApproved`, `emitClientOnboarded`) inside the AML panel's success handler (or hoist into a small callback the panel calls) so downstream automations still fire.
+### 3. Data check (must do, no code change)
+For the affected entity (Blue Tick test client), confirm `portal_visibility_settings.show_bank_accounts = true` and `allow_bank_connect = true`. If the row doesn't exist, banking will stay hidden regardless of the code fixes. I'll run a `SELECT` once we move to build mode and report what's there before/after fixing.
 
-### Technical notes
+### 4. Make future blanks impossible to miss
+`src/components/ui/error-boundary.tsx` already shows error message + first stack frame + Reload button. No change needed there — but I'll add a one-line console.info on each PortalBookkeepingFull mount with `{ activeTab, showBanking, permsLoaded }` so any future "blank tab" issue is one console glance away from a root cause.
 
-- `lifecycle_approve_onboarding` already returns `{ client_id, company_id, portal_access: { ok, portal_access_id, error? } }` — reuse that shape.
-- `verify_aml_and_approve` should run inside a single transaction; if approval fails, AML status should NOT roll back (clinical decision: the AML decision is independent and auditable). Achieve this by committing AML via a sub-block and raising the approval error to the client without undoing the AML update — use an inner `BEGIN … EXCEPTION` only around approval; on failure, return `{ aml_status: 'verified', approval_error: SQLERRM }` so the UI can show a partial-success toast and prompt the user to retry approval.
-- No changes to the queue worker, cron, or `email_queue` schema.
+## Out of scope
+
+- Moving `<AuthProvider>` so it doesn't wrap `/portal/*` at all. That's the cleaner long-term fix but is a structural change to `App.tsx` routing; flagged in audit point #3 for a separate pass.
+- Any change to `BankingTab.tsx`, `PortalBankHealthBanner`, or `ConnectBankDialog`. The audit confirmed none of these are throwing — the tab simply never renders.
+
+## Verification
+
+1. Cold-load `/portal/bookkeeping?tab=banking` → Banking tab content renders (assuming perms row enables it). No redirect to overview.
+2. With `show_bank_accounts = false`, the same URL shows the explanatory card instead of a blank panel.
+3. Leave a portal tab idle for >10 min → user is NOT bounced to `/auth`. If signed out, lands on `/portal/login`.
+4. Console shows the diagnostic line on every portal bookkeeping load.
