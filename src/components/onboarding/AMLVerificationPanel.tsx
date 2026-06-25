@@ -70,13 +70,22 @@ export function AMLVerificationPanel({
 
     setVerifying(true);
     try {
-      const { data, error } = await supabase.rpc("verify_aml", {
+      const { data, error } = await supabase.rpc("verify_aml_and_approve" as any, {
         p_onboarding_id: onboardingId,
       });
 
       if (error) throw error;
 
-      toast.success("AML verification completed");
+      const result = (data ?? {}) as any;
+      if (result.approval_error) {
+        toast.warning(
+          "AML verified, but client creation failed: " + result.approval_error
+        );
+      } else if (result.already_finalized) {
+        toast.success("AML verification completed");
+      } else {
+        toast.success("AML verified — client created and portal invite queued");
+      }
       onVerified();
     } catch (error: any) {
       console.error("Error verifying AML:", error);
