@@ -9,8 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Check, X, Users, Building2, AlertTriangle, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
-import { emitOnboardingApproved, emitClientOnboarded } from "@/lib/automation-triggers";
+import { Loader2, ArrowLeft, X, Users, Building2, CreditCard, Mail, Send, ClipboardList } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,32 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface ApprovalResult {
-  onboarding_id: string;
-  status: string;
-  client_id: string | null;
-  company_id: string | null;
-  engagement_ids: string[];
-  portal_access: {
-    portal_access_id?: string;
-    invite_token?: string;
-    email_queued?: boolean;
-    ok?: boolean;
-    error?: string;
-    sqlstate?: string;
-    skipped?: boolean;
-    reason?: string;
-  };
-  invitation_email_queued: boolean;
-}
-
 const OnboardingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [application, setApplication] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
@@ -68,7 +47,6 @@ const OnboardingDetail = () => {
   
   // Modal states
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [showAmlWarningDialog, setShowAmlWarningDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [showSendBackDialog, setShowSendBackDialog] = useState(false);
   const [sendBackStep, setSendBackStep] = useState<string>("engagement");
@@ -205,84 +183,6 @@ const OnboardingDetail = () => {
       });
     } finally {
       setRejecting(false);
-    }
-  };
-
-  // Handle approval click - check for AML warning first
-  const handleApproveClick = () => {
-    const amlComplete = application.id_document_uploaded && application.proof_of_address_uploaded;
-    
-    if (!amlComplete) {
-      setShowAmlWarningDialog(true);
-    } else {
-      approveApplication();
-    }
-  };
-
-  // Use lifecycle_approve_onboarding RPC
-  const approveApplication = async () => {
-    setApproving(true);
-    setShowAmlWarningDialog(false);
-    try {
-      const { data, error } = await supabase.rpc('lifecycle_approve_onboarding', {
-        p_onboarding_id: id
-      });
-
-      if (error) throw error;
-
-      const result = data as unknown as ApprovalResult;
-
-      // Emit automation events for the onboarding approval
-      if (organization?.id && id) {
-        await emitOnboardingApproved(
-          organization.id,
-          id,
-          result.client_id || undefined,
-          result.company_id || undefined
-        );
-        
-        // Also emit client_onboarded for the newly created client/company
-        if (result.client_id) {
-          await emitClientOnboarded(organization.id, result.client_id, 'client');
-        }
-        if (result.company_id) {
-          await emitClientOnboarded(organization.id, result.company_id, 'company');
-        }
-      }
-
-      const portalOk = result.portal_access?.portal_access_id
-        && result.portal_access?.ok !== false;
-
-      if (portalOk) {
-        toast({
-          title: "Application Approved Successfully",
-          description: result.client_id
-            ? "Client created and portal access granted"
-            : result.company_id
-            ? "Company created and portal access granted"
-            : "Application approved",
-        });
-      } else {
-        // Approval itself succeeded but the portal invite did not. Surface clearly.
-        const reason = result.portal_access?.error
-          || result.portal_access?.reason
-          || "Portal invite was not issued";
-        toast({
-          title: "Approved — But Portal Invite Failed",
-          description: `${reason}. The client record was created, but no portal invite email was sent. Please retry portal access from the client record.`,
-          variant: "destructive",
-        });
-      }
-
-      loadApplication();
-    } catch (error: any) {
-      toast({
-        title: "Error approving application",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setApproving(false);
     }
   };
 
