@@ -31,7 +31,7 @@ import { PortalVATApprovalPanel } from "../components/bookkeeping/PortalVATAppro
  */
 function PortalBookkeepingFullInner() {
   const { currentEntity } = usePortalEntity();
-  const { data: perms } = usePortalBookkeepingPermissions();
+  const { data: perms, isSuccess: permsLoaded } = usePortalBookkeepingPermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") || "overview";
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -62,7 +62,12 @@ function PortalBookkeepingFullInner() {
   const allowBankConnect = !!perms?.allowBankConnect;
 
   // If the active tab gets hidden by a permission change, fall back to overview.
+  // CRITICAL: only run after permissions have loaded — otherwise the initial
+  // render (with perms === undefined) silently kicks every deep-linked tab back
+  // to overview before the data arrives. That race was the source of the
+  // "blank Banking tab" with no console errors.
   useEffect(() => {
+    if (!permsLoaded) return;
     const allowed: Record<string, boolean> = {
       overview: true,
       reports: showReports,
@@ -76,7 +81,17 @@ function PortalBookkeepingFullInner() {
       setActiveTab("overview");
       setSearchParams({ tab: "overview" });
     }
-  }, [activeTab, showReports, showBanking, showSales, showPurchases, showReceipts, showVAT, setSearchParams]);
+  }, [activeTab, permsLoaded, showReports, showBanking, showSales, showPurchases, showReceipts, showVAT, setSearchParams]);
+
+  // Diagnostic — any future "blank tab" report can be triaged from one console line.
+  useEffect(() => {
+    console.info("[portal-bookkeeping] mount", {
+      activeTab,
+      permsLoaded,
+      showBanking,
+      entityId: currentEntity?.id,
+    });
+  }, [activeTab, permsLoaded, showBanking, currentEntity?.id]);
 
   if (!entity) {
     return (
@@ -130,6 +145,18 @@ function PortalBookkeepingFullInner() {
           </ScrollArea>
           <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-background to-transparent" />
         </div>
+
+        {/* Visible fallback so a disabled tab never renders as a blank panel. */}
+        {permsLoaded && activeTab === "banking" && !showBanking && (
+          <TabsContent value="banking" forceMount className="space-y-4">
+            <div className="border border-dashed rounded-lg p-8 text-center">
+              <p className="text-sm font-medium">Banking is not enabled for this entity.</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Ask your accountant to enable bank account visibility for you.
+              </p>
+            </div>
+          </TabsContent>
+        )}
 
         <TabsContent value="overview" className="space-y-4">
           <ErrorBoundary onError={onTabError("overview")}>
