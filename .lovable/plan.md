@@ -1,53 +1,47 @@
 ## Goal
 
-When a user clicks "Create Quote" from a CRM lead, the Create Quote dialog should open immediately with that lead pre-selected and a sensible default set of service lines pre-loaded based on the lead's `lead_type`.
+When the reviewer ticks the AML checks and clicks **Mark as Verified**, that single action should:
 
-## Current state
-
-- `LeadDetailPanel` already navigates with `?create=true&lead_id={id}` (lines 613, 660).
-- `Quotes.tsx` ignores those query params — `isCreateDialogOpen` only opens via the page header button, and `CreateQuoteDialog` does not accept `leadId` as a prop.
-- `CreateQuoteDialog` starts with a single empty line; lead is chosen from a Select.
+1. Mark AML verified.
+2. Create the client/company, engagements, jobs, and portal access (today this only happens when the separate **Approve** button is clicked).
+3. Queue exactly one client email: *"You've passed AML verification — set up your client portal login."*
 
 ## Changes
 
-### 1. `src/pages/Quotes.tsx`
-- Read `useSearchParams()` for `create` and `lead_id`.
-- In a `useEffect`, when `create=true`, open the dialog and remember the `lead_id`.
-- Strip those params from the URL after opening so a refresh doesn't re-open it.
-- Pass `initialLeadId` to `CreateQuoteDialog`.
+### 1. Database — new combined RPC `verify_aml_and_approve`
 
-### 2. `src/components/quotes/CreateQuoteDialog.tsx`
-- Add optional prop `initialLeadId?: string`.
-- Initialise `leadId` state from `initialLeadId`.
-- When `initialLeadId` is set, fetch that one lead by id (`leads` table → `id, first_name, last_name, email, lead_type`) so the Select displays the name even before the full leads list resolves. Fall back to the existing list lookup if needed.
-- Determine `leadType` from the fetched lead, then on dialog open auto-populate `lines` using the mapping below, matching `services_catalog` rows in the current org by `canonical_service_code` and using each service's `default_price` and a sensible billing frequency.
-- If a mapped service code is not present in the org's catalog, silently skip it (no error).
-- Only auto-populate when the dialog opens with `initialLeadId` AND `lines` is still the default single empty line — never overwrite user edits.
+Add one SECURITY DEFINER function that wraps the existing logic:
 
-### 3. Lead type → default services mapping
+- Calls the same body as `verify_aml` (sets `aml_status='verified'`, sets `aml_verified_at`, 5-year expiry, writes audit row).
+- Then calls `lifecycle_approve_onboarding(p_onboarding_id)` and returns its `jsonb` result merged with AML fields.
+- Returns early (no approval) if onboarding is already in a terminal state, so re-clicking is idempotent.
 
-Single source of truth in a new helper `src/lib/quote-defaults.ts`:
+Existing `verify_aml` and `lifecycle_approve_onboarding` stay in place for back-compat / direct admin use.
 
-```text
-sa_non_mtd       → self_assessment_non_mtd                                     (monthly)
-sa_mtd           → self_assessment_mtd_quarterly                               (monthly)
-limited_company  → accounts_production_ltd, corporation_tax_return,
-                   confirmation_statement                                      (monthly)
-llp              → llp_accounts, confirmation_statement                        (monthly)
-partnership      → self_assessment_non_mtd (partners' SAs are added later)     (monthly)
-charity          → accounts_production_ltd                                     (monthly)
-cgt              → capital_gains_tax_return                                    (now)
-other            → (no defaults — keep the single empty line)
-```
+### 2. Database — reword the portal invite email
 
-`helper signature: getDefaultServiceCodesForLeadType(leadType): { code: string; billing_frequency: "now" | "monthly" }[]`
+`lifecycle_grant_portal_access` is the only email queued on the happy path. Update its `INSERT INTO email_queue` so the subject and body reflect that the invite is the AML-pass + portal-setup message:
 
-### 4. Behaviour details
-- Pricing comes from `services_catalog.default_price` for that org (already what the dialog does on service select).
-- Dialog title stays the same; lead Select remains editable so the user can swap leads.
-- Cancel/close still navigates nowhere (user stays on `/quotes`); they can return to the lead from CRM.
+- **Subject:** `You've passed AML verification — set up your {{firm_name}} client portal`
+- **Body:** short HTML congratulating the client on completing AML, instructing them to set their portal password via the existing tokenised link, with the firm name and portal URL.
 
-## Out of scope
-- No DB migrations.
-- No changes to quote acceptance, services_catalog, or the LeadDetailPanel buttons (the existing `?create=true&lead_id=…` URL is already correct).
-- Companies/clients (post-conversion) — this only covers the CRM → quote flow for leads.
+No other email-queue insert fires on a first-day approval (the per-service "information request" emails inside `lifecycle_approve_onboarding` only queue when a quote line has an `information_request_template_id` *and* the trigger date is already in the past — keep that behaviour unchanged; user asked about the AML/portal path specifically).
+
+### 3. Frontend — `src/components/onboarding/AMLVerificationPanel.tsx`
+
+- Replace the `supabase.rpc("verify_aml", …)` call in `handleVerify` with `supabase.rpc("verify_aml_and_approve", …)`.
+- Surface the approval result in the success toast: *"AML verified, client created, portal invite queued."* If `portal_access.ok === false`, show the same destructive toast variant already used in `OnboardingDetail.tsx`.
+- Continue to call `onVerified()` so the parent reloads and re-renders the now-approved application.
+
+### 4. Frontend — `src/pages/OnboardingDetail.tsx`
+
+- Remove the **Approve Application** button and its `handleApproveClick` / `approveApplication` / AML-warning dialog wiring (AML verification is now the approval path).
+- Keep the **Reject** button untouched.
+- After `onVerified` reloads the application, show the post-approval state (client link, portal status) using the existing approved-state UI.
+- Emit the same automation events (`emitOnboardingApproved`, `emitClientOnboarded`) inside the AML panel's success handler (or hoist into a small callback the panel calls) so downstream automations still fire.
+
+### Technical notes
+
+- `lifecycle_approve_onboarding` already returns `{ client_id, company_id, portal_access: { ok, portal_access_id, error? } }` — reuse that shape.
+- `verify_aml_and_approve` should run inside a single transaction; if approval fails, AML status should NOT roll back (clinical decision: the AML decision is independent and auditable). Achieve this by committing AML via a sub-block and raising the approval error to the client without undoing the AML update — use an inner `BEGIN … EXCEPTION` only around approval; on failure, return `{ aml_status: 'verified', approval_error: SQLERRM }` so the UI can show a partial-success toast and prompt the user to retry approval.
+- No changes to the queue worker, cron, or `email_queue` schema.
