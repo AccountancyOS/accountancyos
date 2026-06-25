@@ -514,11 +514,9 @@ const OnboardingDetail = () => {
                 <CardContent className="py-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      {!canApprove && (
-                        <p className="text-sm text-muted-foreground">
-                          Engagement letter must be signed before approval
-                        </p>
-                      )}
+                      <p className="text-sm text-muted-foreground">
+                        Verifying AML above will create the client and send the portal invite.
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -527,17 +525,6 @@ const OnboardingDetail = () => {
                       >
                         <X className="mr-2 h-4 w-4" />
                         Reject
-                      </Button>
-                      <Button
-                        onClick={handleApproveClick}
-                        disabled={!canApprove || approving}
-                      >
-                        {approving ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check className="mr-2 h-4 w-4" />
-                        )}
-                        Approve & Create Client
                       </Button>
                     </div>
                   </div>
@@ -632,40 +619,6 @@ const OnboardingDetail = () => {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               Reject Application
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* AML Warning Dialog */}
-      <AlertDialog open={showAmlWarningDialog} onOpenChange={setShowAmlWarningDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              AML Documents Incomplete
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              The following AML documents have not been uploaded:
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                {!application.id_document_uploaded && <li>ID Document</li>}
-                {!application.proof_of_address_uploaded && <li>Proof of Address</li>}
-              </ul>
-              <p className="mt-3">
-                You can still approve this application, but it's recommended to collect AML documents before proceeding.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Go Back</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={approveApplication}
-              disabled={approving}
-            >
-              {approving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Continue Anyway
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
