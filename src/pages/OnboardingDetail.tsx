@@ -253,14 +253,6 @@ const OnboardingDetail = () => {
                       <Send className="mr-2 h-4 w-4" />
                       Send Back
                     </Button>
-                    <Button size="sm" onClick={handleApproveClick} disabled={!canApprove || approving}>
-                      {approving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="mr-2 h-4 w-4" />
-                      )}
-                      Approve & Create Client
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
