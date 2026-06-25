@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Building2, Plus } from "lucide-react";
 import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import { ConnectBankDialog } from "@/components/bookkeeping/ConnectBankDialog";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { PortalBankHealthBanner } from "./PortalBankHealthBanner";
 import type { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
 
@@ -66,7 +67,11 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
         </div>
       )}
 
-      <BankingTab entity={entity} />
+      {/* The shared accountant BankingTab assumes accountant app-context; contain any
+          crash here so it can't take down the whole portal, and surface the error. */}
+      <ErrorBoundary>
+        <BankingTab entity={entity} />
+      </ErrorBoundary>
 
       <ConnectBankDialog
         open={connectOpen}
