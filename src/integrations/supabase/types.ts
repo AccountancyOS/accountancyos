@@ -18936,6 +18936,10 @@ export type Database = {
         Returns: Json
       }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
+      verify_aml_and_approve: {
+        Args: { p_onboarding_id: string }
+        Returns: Json
+      }
       void_bill: {
         Args: { p_bill_id: string; p_reason?: string; p_user_id?: string }
         Returns: Json
