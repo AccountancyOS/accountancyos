@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback, ReactNode } from "react";
 import { User, Session, RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
 import { enforceSessionLimits } from "@/lib/session-enforcement";
 
@@ -46,6 +46,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [authFlow, setAuthFlow] = useState<AuthFlow>("normal");
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  // Portal routes have their own session model (PortalAppShim) and their own
+  // login page. AuthProvider must not sign portal users out to /auth.
+  const isPortalRoute = location.pathname.startsWith("/portal");
 
   // Fetch organization ID for current user
   const fetchOrganizationId = async (userId: string): Promise<string | null> => {
@@ -272,11 +276,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = useCallback(async () => {
     setAuthFlow("normal");
     await supabase.auth.signOut();
-    navigate("/auth");
-  }, [navigate]);
+    navigate(isPortalRoute ? "/portal/login" : "/auth");
+  }, [navigate, isPortalRoute]);
 
-  // 10-minute inactivity timeout
-  useInactivityTimeout(!!user, signOut);
+  // 10-minute inactivity timeout — accountant app only. The portal has its
+  // own session model and login page; do not bounce portal users to /auth.
+  useInactivityTimeout(!!user && !isPortalRoute, signOut);
 
   return (
     <AuthContext.Provider value={{ 
