@@ -56,9 +56,13 @@ export function AMLVerificationPanel({
   const isVerified = amlStatus === "verified";
   const canVerify = nameMatches && addressMatches && documentsGenuine && idDocumentUploaded && proofOfAddressUploaded;
 
-  const docByType: Record<string, { id: string; name: string; type: string; storagePath: string } | undefined> = {
-    id: documents.find((d) => d.type === "id"),
-    proof_of_address: documents.find((d) => d.type === "proof_of_address"),
+  const typeLabel = (type: string) => {
+    if (type === "id") return "ID Document";
+    if (type === "proof_of_address") return "Proof of Address";
+    return type
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
   };
 
   const handleVerify = async () => {
@@ -195,61 +199,56 @@ export function AMLVerificationPanel({
             <div className="space-y-3">
               <h4 className="font-medium text-sm">Uploaded Documents</h4>
               <div className="space-y-2">
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">ID Document</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {idDocumentUploaded ? (
-                      <Badge variant="default" className="bg-green-600">Uploaded</Badge>
-                    ) : (
+                {documents.length === 0 ? (
+                  <>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">ID Document</span>
+                      </div>
                       <Badge variant="outline">Not Uploaded</Badge>
-                    )}
-                    {docByType.id && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title={docByType.id.name}
-                        aria-label={`Download ${docByType.id.name}`}
-                        onClick={() => downloadDocument(docByType.id!.storagePath, docByType.id!.name)}
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Proof of Address</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {proofOfAddressUploaded ? (
-                      <Badge variant="default" className="bg-green-600">Uploaded</Badge>
-                    ) : (
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Proof of Address</span>
+                      </div>
                       <Badge variant="outline">Not Uploaded</Badge>
-                    )}
-                    {docByType.proof_of_address && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title={docByType.proof_of_address.name}
-                        aria-label={`Download ${docByType.proof_of_address.name}`}
-                        onClick={() =>
-                          downloadDocument(
-                            docByType.proof_of_address!.storagePath,
-                            docByType.proof_of_address!.name
-                          )
-                        }
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  </>
+                ) : (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm truncate">{doc.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {typeLabel(doc.type)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="default" className="bg-green-600">
+                          Uploaded
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title={doc.name}
+                          aria-label={`Download ${doc.name}`}
+                          onClick={() => downloadDocument(doc.storagePath, doc.name)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
