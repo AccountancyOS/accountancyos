@@ -13,7 +13,14 @@ interface Props {
 export function PortalBankHealthBanner({ entity, onReconnect }: Props) {
   const clientId = entity.type === "client" ? entity.id : null;
   const companyId = entity.type === "company" ? entity.id : null;
-  const { data, isLoading } = useEntityBankConnectionHealth(clientId, companyId);
+  const { data, isLoading, error } = useEntityBankConnectionHealth(clientId, companyId);
+
+  // bank_connections RLS may deny portal users (known gap). Degrade to "no banner"
+  // rather than letting a hook error bubble up and blank the tab.
+  if (error) {
+    console.warn("[PortalBankHealthBanner] bank connection health unavailable", error);
+    return null;
+  }
 
   if (isLoading || !data || data.length === 0) return null;
 

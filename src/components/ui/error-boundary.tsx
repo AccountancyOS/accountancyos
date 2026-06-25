@@ -39,6 +39,12 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      // First "at ..." stack frame (file:line) to make the error actionable.
+      const stackFrame = this.state.error?.stack
+        ?.split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.startsWith("at "));
+
       return (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardHeader>
@@ -47,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <CardTitle className="text-destructive">Something went wrong</CardTitle>
             </div>
             <CardDescription>
-              An unexpected error occurred. Please try again.
+              An unexpected error occurred. Please try again or reload the page.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -56,10 +62,24 @@ export class ErrorBoundary extends Component<Props, State> {
                 {this.state.error.message}
               </pre>
             )}
-            <Button onClick={this.handleReset} variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Try Again
-            </Button>
+            {stackFrame && (
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer select-none">Show details</summary>
+                <pre className="mt-2 bg-muted p-3 rounded-md overflow-auto max-h-40">
+                  {stackFrame}
+                </pre>
+              </details>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={this.handleReset} variant="outline" size="sm">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+              <Button onClick={() => window.location.reload()} variant="outline" size="sm">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Reload
+              </Button>
+            </div>
           </CardContent>
         </Card>
       );

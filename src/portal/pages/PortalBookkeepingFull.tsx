@@ -11,6 +11,7 @@ import { ReportsTab } from "@/components/bookkeeping/ReportsTab";
 import { VATReturnsTab } from "@/components/bookkeeping/VATReturnsTab";
 import { ReceiptsTab } from "@/components/bookkeeping/ReceiptsTab";
 import type { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { PortalAppShim } from "../contexts/PortalAppShim";
 import { PortalPageHeader } from "../components/PortalPageHeader";
@@ -88,6 +89,11 @@ function PortalBookkeepingFullInner() {
     );
   }
 
+  // Per-tab error logger so a crash in one reused accountant component names the
+  // tab + entity in the runtime-errors panel instead of blanking the portal.
+  const onTabError = (tab: string) => (error: Error) =>
+    console.error(`[portal-bookkeeping:${tab}] entity=${entity.id}`, error);
+
   return (
     <div className="p-6 space-y-6">
       <PortalPageHeader
@@ -126,39 +132,53 @@ function PortalBookkeepingFullInner() {
         </div>
 
         <TabsContent value="overview" className="space-y-4">
-          <PortalBookkeepingActions />
-          <PortalVATApprovalPanel />
-          <PortalQueriesPanel />
-          <BusinessOverviewTab entity={entity} onTabChange={handleTabChange} />
+          <ErrorBoundary onError={onTabError("overview")}>
+            <PortalBookkeepingActions />
+            <PortalVATApprovalPanel />
+            <PortalQueriesPanel />
+            <BusinessOverviewTab entity={entity} onTabChange={handleTabChange} />
+          </ErrorBoundary>
         </TabsContent>
         {showReports && (
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab entity={entity} />
+            <ErrorBoundary onError={onTabError("reports")}>
+              <ReportsTab entity={entity} />
+            </ErrorBoundary>
           </TabsContent>
         )}
         {showBanking && (
           <TabsContent value="banking" className="space-y-4">
-            <PortalBankingTab entity={entity} allowBankConnect={allowBankConnect} />
+            <ErrorBoundary onError={onTabError("banking")}>
+              <PortalBankingTab entity={entity} allowBankConnect={allowBankConnect} />
+            </ErrorBoundary>
           </TabsContent>
         )}
         {showSales && (
           <TabsContent value="sales" className="space-y-4">
-            <SalesModule entity={entity} />
+            <ErrorBoundary onError={onTabError("sales")}>
+              <SalesModule entity={entity} />
+            </ErrorBoundary>
           </TabsContent>
         )}
         {showPurchases && (
           <TabsContent value="purchases" className="space-y-4">
-            <PurchasesModule entity={entity} />
+            <ErrorBoundary onError={onTabError("purchases")}>
+              <PurchasesModule entity={entity} />
+            </ErrorBoundary>
           </TabsContent>
         )}
         {showReceipts && (
           <TabsContent value="receipts" className="space-y-4">
-            <ReceiptsTab entityType={entity.type} entityId={entity.id} />
+            <ErrorBoundary onError={onTabError("receipts")}>
+              <ReceiptsTab entityType={entity.type} entityId={entity.id} />
+            </ErrorBoundary>
           </TabsContent>
         )}
         {showVAT && (
           <TabsContent value="vat-returns" className="space-y-4">
-            <VATReturnsTab entityType={entity.type} entityId={entity.id} />
+            <ErrorBoundary onError={onTabError("vat-returns")}>
+              <VATReturnsTab entityType={entity.type} entityId={entity.id} />
+            </ErrorBoundary>
           </TabsContent>
         )}
       </Tabs>
