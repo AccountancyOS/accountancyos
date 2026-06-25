@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -23,7 +23,7 @@ import {
 import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import CreateQuoteDialog from "@/components/quotes/CreateQuoteDialog";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -46,6 +46,21 @@ const Quotes = () => {
   const { organization } = useOrganization();
   const navigate = useNavigate();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [initialLeadId, setInitialLeadId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (searchParams.get("create") === "true") {
+      const leadId = searchParams.get("lead_id") || undefined;
+      setInitialLeadId(leadId);
+      setIsCreateDialogOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("create");
+      next.delete("lead_id");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   type SortKey = "recipient" | "quote_number" | "status" | "total_amount" | "valid_until" | "created_at";
@@ -295,7 +310,11 @@ const Quotes = () => {
 
         <CreateQuoteDialog
           open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) setInitialLeadId(undefined);
+          }}
+          initialLeadId={initialLeadId}
         />
       </div>
     </DashboardLayout>
