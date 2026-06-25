@@ -210,11 +210,6 @@ const OnboardingDetail = () => {
     ? `${application.first_name} ${application.last_name}`
     : application.company_name;
 
-  // Approval logic: engagement letter REQUIRED, AML warns but doesn't block
-  const engagementSigned = !!engagementLetter?.signed_at;
-  const amlComplete = application.id_document_uploaded && application.proof_of_address_uploaded;
-  const canApprove = engagementSigned;
-
   return (
     <DashboardLayout>
       <div className="flex-1 overflow-auto">
