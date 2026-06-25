@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -24,10 +24,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, X, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
+import { getDefaultServiceCodesForLeadType } from "@/lib/quote-defaults";
 
 interface CreateQuoteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialLeadId?: string;
 }
 
 interface QuoteLine {
@@ -37,19 +39,20 @@ interface QuoteLine {
   billing_frequency: "now" | "monthly";
 }
 
-const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
+const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDialogProps) => {
   const { organization } = useOrganization();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const [leadId, setLeadId] = useState("");
+  const [leadId, setLeadId] = useState(initialLeadId || "");
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [showPricing, setShowPricing] = useState(true);
   const [lines, setLines] = useState<QuoteLine[]>([
     { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" },
   ]);
+  const autoPopulatedRef = useRef(false);
 
   const { data: leads } = useQuery({
     queryKey: ["leads", organization?.id],
@@ -57,7 +60,7 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
       if (!organization?.id) return [];
       const { data, error } = await supabase
         .from("leads")
-        .select("id, first_name, last_name, email")
+        .select("id, first_name, last_name, email, lead_type")
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -81,6 +84,47 @@ const CreateQuoteDialog = ({ open, onOpenChange }: CreateQuoteDialogProps) => {
     },
     enabled: !!organization?.id && open,
   });
+
+  // Reset selected lead when dialog opens with a new initialLeadId
+  useEffect(() => {
+    if (open) {
+      setLeadId(initialLeadId || "");
+      autoPopulatedRef.current = false;
+    }
+  }, [open, initialLeadId]);
+
+  // Auto-populate default service lines once leads + services + initialLeadId are available
+  useEffect(() => {
+    if (!open || autoPopulatedRef.current) return;
+    if (!initialLeadId || !leads || !services) return;
+    const lead = leads.find((l) => l.id === initialLeadId);
+    if (!lead) return;
+    const defaults = getDefaultServiceCodesForLeadType((lead as any).lead_type);
+    if (defaults.length === 0) {
+      autoPopulatedRef.current = true;
+      return;
+    }
+    // Only overwrite the initial single empty line — don't clobber user edits
+    const isInitial =
+      lines.length === 1 && !lines[0].service_id && lines[0].unit_price === 0;
+    if (!isInitial) {
+      autoPopulatedRef.current = true;
+      return;
+    }
+    const newLines: QuoteLine[] = [];
+    for (const def of defaults) {
+      const svc = services.find((s: any) => s.canonical_service_code === def.code);
+      if (!svc) continue;
+      newLines.push({
+        service_id: svc.id,
+        quantity: 1,
+        unit_price: svc.default_price ?? 0,
+        billing_frequency: def.billing_frequency,
+      });
+    }
+    if (newLines.length > 0) setLines(newLines);
+    autoPopulatedRef.current = true;
+  }, [open, initialLeadId, leads, services, lines]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
