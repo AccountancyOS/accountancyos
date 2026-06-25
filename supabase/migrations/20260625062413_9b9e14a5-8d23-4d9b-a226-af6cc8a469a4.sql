@@ -1,0 +1,22 @@
+-- ============================================================
+-- Reconciliation Increment 2: stop the canonical spine activating on ACCEPT
+-- (gated model — activation happens only at approval)
+-- ============================================================
+-- lifecycle_approve_onboarding already creates the client + engagements + jobs at
+-- approval, flag-independently — so it is already the single, correct activation
+-- point for the gated model. The spine's accept-side trigger
+-- (trg_quote_accepted_activate_canonical → lifecycle_activate_client_services) is
+-- redundant: in the gated flow the client is created at approval, so at accept the
+-- lead has no converted client and the engine RAISES "lead not converted", which
+-- the trigger swallows into an audit_log error every acceptance. Drop the trigger
+-- so acceptance leaves a clean pending shell and activation occurs only at approve.
+--
+-- The spine functions (lifecycle_activate_client_services / generate_jobs /
+-- generate_deadlines) are intentionally LEFT in place — unused on accept, still
+-- available — so this is reversible and nothing else that calls them breaks. The
+-- job-side trigger (trg_job_canonical_generate_deadlines) is left too: it only acts
+-- on jobs with automation_source='canonical_spine_v1', and approve creates jobs
+-- with automation_source='template', so it is a no-op for the gated flow.
+-- ============================================================
+
+DROP TRIGGER IF EXISTS trg_quote_accepted_activate_canonical ON public.quotes;
