@@ -83,7 +83,7 @@ export default function PortalPayments() {
         setPayingId(null);
         return;
       }
-      // Same-tab redirect so Stripe returns us to /portal/payments to verify.
+      // Same-tab redirect so Stripe returns to this portal surface to verify.
       window.location.href = payload.url;
     } catch (e) {
       toast.error("Could not start payment", { description: e instanceof Error ? e.message : undefined });
