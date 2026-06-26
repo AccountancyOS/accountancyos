@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { portalPath } from "../utils/portalPaths";
 
 export default function PortalLogin() {
   const navigate = useNavigate();
@@ -22,7 +23,10 @@ export default function PortalLogin() {
       toast.error(error.message);
       return;
     }
-    navigate("/portal/dashboard", { replace: true });
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    const safeReturnTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
+    navigate(safeReturnTo || portalPath("dashboard"), { replace: true });
   };
 
   return (
@@ -60,7 +64,7 @@ export default function PortalLogin() {
               {loading ? "Signing In..." : "Sign In"}
             </Button>
             <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
-              <Link to="/portal/forgot-password" className="underline hover:text-foreground">
+              <Link to={portalPath("forgotPassword")} className="underline hover:text-foreground">
                 Forgot Password?
               </Link>
               <span>Trouble signing in? Contact your accountant.</span>
