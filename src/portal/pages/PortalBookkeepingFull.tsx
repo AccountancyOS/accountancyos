@@ -19,6 +19,7 @@ import { usePortalBookkeepingPermissions } from "../hooks/usePortalBookkeepingPe
 import { PortalBookkeepingActions } from "../components/bookkeeping/PortalBookkeepingActions";
 import { PortalQueriesPanel } from "../components/bookkeeping/PortalQueriesPanel";
 import { PortalVATApprovalPanel } from "../components/bookkeeping/PortalVATApprovalPanel";
+import { isClientPortalDomain } from "../utils/portalPaths";
 
 /**
  * Full bookkeeping module inside the client portal. Reuses the accountant-side
@@ -33,7 +34,7 @@ function PortalBookkeepingFullInner() {
   const { currentEntity } = usePortalEntity();
   const { data: perms, isSuccess: permsLoaded } = usePortalBookkeepingPermissions();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") || "overview";
+  const initialTab = searchParams.get("tab") || (isClientPortalDomain() ? "banking" : "overview");
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const handleTabChange = (tab: string) => {
