@@ -8,6 +8,7 @@ import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import { ConnectBankDialog } from "@/components/bookkeeping/ConnectBankDialog";
 import { PortalBankHealthBanner } from "./PortalBankHealthBanner";
 import type { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
+import { portalPath } from "../../utils/portalPaths";
 
 interface Props {
   entity: BookkeepingEntity;
@@ -74,7 +75,7 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
         open={connectOpen}
         onOpenChange={setConnectOpen}
         entity={entity}
-        redirectPath="/portal/bookkeeping?tab=banking"
+        redirectPath={portalPath("banking")}
       />
     </div>
   );
