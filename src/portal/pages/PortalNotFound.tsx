@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { portalPath } from "../utils/portalPaths";
 
 export default function PortalNotFound() {
   return (
@@ -9,7 +10,7 @@ export default function PortalNotFound() {
         The page you are looking for does not exist in the client portal.
       </p>
       <Button asChild>
-        <Link to="/portal/dashboard">Back To Dashboard</Link>
+        <Link to={portalPath("dashboard")}>Back To Dashboard</Link>
       </Button>
     </div>
   );

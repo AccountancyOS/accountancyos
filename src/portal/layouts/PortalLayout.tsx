@@ -17,6 +17,7 @@ import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { usePortalConversations } from "../hooks/usePortalData";
 import { useAnyPortalBookkeepingAccess } from "../hooks/usePortalBookkeepingAccess";
 import { Badge } from "@/components/ui/badge";
+import { portalPath } from "../utils/portalPaths";
 import {
   Select,
   SelectContent,
@@ -25,28 +26,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const baseNavItems = [
-  { to: "/portal/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/portal/tasks", icon: CheckSquare, label: "Tasks" },
-  { to: "/portal/documents", icon: FolderOpen, label: "Documents" },
-  { to: "/portal/questionnaires", icon: ClipboardList, label: "Questionnaires" },
-  { to: "/portal/messages", icon: MessageSquare, label: "Messages" },
-  { to: "/portal/payments", icon: CreditCard, label: "Payments" },
-];
-
 export function PortalLayout() {
   const navigate = useNavigate();
   const { entities, currentEntity, setCurrentEntity } = usePortalEntity();
   const conversations = usePortalConversations();
   const unreadConversations = (conversations.data ?? []).filter((c) => c.unreadCount > 0).length;
   const bookkeepingAccess = useAnyPortalBookkeepingAccess();
+  const baseNavItems = [
+    { to: portalPath("dashboard"), icon: LayoutDashboard, label: "Dashboard" },
+    { to: portalPath("tasks"), icon: CheckSquare, label: "Tasks" },
+    { to: portalPath("documents"), icon: FolderOpen, label: "Documents" },
+    { to: portalPath("questionnaires"), icon: ClipboardList, label: "Questionnaires" },
+    { to: portalPath("messages"), icon: MessageSquare, label: "Messages" },
+    { to: portalPath("payments"), icon: CreditCard, label: "Payments" },
+  ];
   const navItems = bookkeepingAccess.data
-    ? [...baseNavItems, { to: "/portal/bookkeeping", icon: BarChart3, label: "Bookkeeping" }]
+    ? [...baseNavItems, { to: portalPath("bookkeeping"), icon: BarChart3, label: "Bookkeeping" }]
     : baseNavItems;
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    navigate("/portal/login", { replace: true });
+    navigate(portalPath("login"), { replace: true });
   };
 
   return (
@@ -92,7 +92,7 @@ export function PortalLayout() {
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isMessages = item.to === "/portal/messages";
+            const isMessages = item.to === portalPath("messages");
             return (
             <NavLink
               key={item.to}
@@ -119,7 +119,7 @@ export function PortalLayout() {
 
         <div className="px-3 py-4 border-t border-sidebar-border space-y-1">
           <NavLink
-            to="/portal/settings"
+            to={portalPath("settings")}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",

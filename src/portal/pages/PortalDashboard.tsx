@@ -13,6 +13,7 @@ import {
 } from "../hooks/usePortalData";
 import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { DeadlineListCard } from "../components/dashboard/DeadlineListCard";
+import { portalPath } from "../utils/portalPaths";
 
 function Tile({
   label,
@@ -77,17 +78,17 @@ export default function PortalDashboard() {
         }
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Tile label="Open Tasks" value={openTasks} icon={CheckSquare} to="/portal/tasks" loading={tasks.isLoading} />
-        <Tile label="Open Questionnaires" value={openQuestionnaires} icon={ClipboardList} to="/portal/questionnaires" loading={questionnaires.isLoading} />
-        <Tile label="Unpaid Invoices" value={unpaidInvoices} icon={CreditCard} to="/portal/payments" loading={payments.isLoading} />
-        <Tile label="Conversations" value={conversationCount} icon={MessageSquare} to="/portal/messages" loading={conversations.isLoading} />
+        <Tile label="Open Tasks" value={openTasks} icon={CheckSquare} to={portalPath("tasks")} loading={tasks.isLoading} />
+        <Tile label="Open Questionnaires" value={openQuestionnaires} icon={ClipboardList} to={portalPath("questionnaires")} loading={questionnaires.isLoading} />
+        <Tile label="Unpaid Invoices" value={unpaidInvoices} icon={CreditCard} to={portalPath("payments")} loading={payments.isLoading} />
+        <Tile label="Conversations" value={conversationCount} icon={MessageSquare} to={portalPath("messages")} loading={conversations.isLoading} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <DeadlineListCard
           title="Upcoming Deadlines"
           emptyMessage="No Upcoming Deadlines In The Next 90 Days."
           viewAllLabel="View All Deadlines"
-          viewAllTo="/portal/tasks"
+          viewAllTo={portalPath("tasks")}
           loading={deadlines.isLoading}
           rows={deadlines.data ?? []}
           dateField="dueDate"
@@ -96,7 +97,7 @@ export default function PortalDashboard() {
           title="Tax Payments Due"
           emptyMessage="No Tax Payments Due In The Next 90 Days."
           viewAllLabel="View All Payments"
-          viewAllTo="/portal/payments"
+          viewAllTo={portalPath("payments")}
           loading={taxPayments.isLoading}
           rows={taxPayments.data ?? []}
           dateField="paymentDate"

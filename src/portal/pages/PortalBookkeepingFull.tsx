@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -32,8 +32,9 @@ import { PortalVATApprovalPanel } from "../components/bookkeeping/PortalVATAppro
 function PortalBookkeepingFullInner() {
   const { currentEntity } = usePortalEntity();
   const { data: perms, isSuccess: permsLoaded } = usePortalBookkeepingPermissions();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") || "overview";
+  const initialTab = searchParams.get("tab") || (location.pathname === "/banking" ? "banking" : "overview");
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const handleTabChange = (tab: string) => {

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Building2, Shield, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { type BookkeepingEntity } from "./EntitySelector";
+import { isClientPortalDomain } from "@/portal/utils/portalPaths";
 
 interface ConnectBankDialogProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function ConnectBankDialog({ open, onOpenChange, entity, redirectPath = "
           entity_id: entity.id,
           organization_id: organization.id,
           redirect_path: redirectPath,
-          surface: redirectPath.startsWith('/portal') ? 'portal' : 'accountant',
+          surface: redirectPath.startsWith('/portal') || redirectPath.startsWith('/banking') || isClientPortalDomain() ? 'portal' : 'accountant',
         },
       });
 

@@ -3,6 +3,7 @@ import { AppContext, type AppContextType, type AppRole, type Organization } from
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { usePortalEntity } from "./PortalEntityContext";
+import { portalPath } from "../utils/portalPaths";
 
 /**
  * Provides a minimal AppContext implementation suitable for portal users so
@@ -65,7 +66,7 @@ export function PortalAppShim({ children }: { children: ReactNode }) {
       checkingSubscription: false,
       signOut: async () => {
         await supabase.auth.signOut();
-        navigate("/portal/login", { replace: true });
+        navigate(portalPath("login"), { replace: true });
       },
       refreshOrganization: async () => {},
       checkSubscription: async () => {},

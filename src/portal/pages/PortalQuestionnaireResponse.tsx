@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getPortalQuestionnaire } from "../services/portalQuestionnairesService";
+import { portalPath } from "../utils/portalPaths";
 
 /**
  * Portal questionnaire responder. Defers to the existing public token-based
@@ -22,7 +23,7 @@ export default function PortalQuestionnaireResponse() {
     if (data?.responseUrl) {
       window.location.replace(data.responseUrl);
     } else if (!isLoading && !data) {
-      navigate("/portal/questionnaires", { replace: true });
+      navigate(portalPath("questionnaires"), { replace: true });
     }
   }, [data, isLoading, navigate]);
 

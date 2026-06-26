@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
 import { enforceSessionLimits } from "@/lib/session-enforcement";
+import { isPortalSurface, portalPath } from "@/portal/utils/portalPaths";
 
 type AuthFlow = "normal" | "recovery";
 
@@ -49,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   // Portal routes have their own session model (PortalAppShim) and their own
   // login page. AuthProvider must not sign portal users out to /auth.
-  const isPortalRoute = location.pathname.startsWith("/portal");
+  const isPortalRoute = isPortalSurface(location.pathname);
 
   // Fetch organization ID for current user
   const fetchOrganizationId = async (userId: string): Promise<string | null> => {
@@ -276,7 +277,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = useCallback(async () => {
     setAuthFlow("normal");
     await supabase.auth.signOut();
-    navigate(isPortalRoute ? "/portal/login" : "/auth");
+    navigate(isPortalRoute ? portalPath("login") : "/auth");
   }, [navigate, isPortalRoute]);
 
   // 10-minute inactivity timeout — accountant app only. The portal has its

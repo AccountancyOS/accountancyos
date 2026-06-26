@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../services/portalContextService";
 import { PortalEntityProvider } from "../contexts/PortalEntityContext";
 import type { PortalEntity, PortalUserContext } from "../types";
+import { portalPath, withReturnTo } from "../utils/portalPaths";
 
 /**
  * PortalGuard
@@ -19,6 +20,7 @@ import type { PortalEntity, PortalUserContext } from "../types";
  * stub to real portal_access lookups.
  */
 export function PortalGuard() {
+  const location = useLocation();
   const [state, setState] = useState<
     | { status: "loading" }
     | { status: "unauth" }
@@ -59,7 +61,8 @@ export function PortalGuard() {
   }
 
   if (state.status === "unauth" || state.status === "no-access") {
-    return <Navigate to="/portal/login" replace />;
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={withReturnTo(portalPath("login"), returnTo)} replace />;
   }
 
   return (

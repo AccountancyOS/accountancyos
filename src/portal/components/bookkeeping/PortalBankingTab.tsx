@@ -8,6 +8,7 @@ import { BankingTab } from "@/components/bookkeeping/BankingTab";
 import { ConnectBankDialog } from "@/components/bookkeeping/ConnectBankDialog";
 import { PortalBankHealthBanner } from "./PortalBankHealthBanner";
 import type { BookkeepingEntity } from "@/components/bookkeeping/EntitySelector";
+import { portalPath } from "../../utils/portalPaths";
 
 interface Props {
   entity: BookkeepingEntity;
@@ -33,14 +34,15 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
       toast.success("Bank Connected", { description: "Importing transactions in the background." });
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-    } else if (connection === "error") {
-      const reason = searchParams.get("message") || "Please try again.";
+    } else if (connection === "error" || connection === "failed") {
+      const reason = searchParams.get("message") || searchParams.get("reason") || "Please try again.";
       toast.error("Bank Connection Failed", { description: reason });
     }
     const next = new URLSearchParams(searchParams);
     next.delete("connection");
     next.delete("entity");
     next.delete("message");
+    next.delete("reason");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, queryClient]);
 
@@ -74,7 +76,7 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
         open={connectOpen}
         onOpenChange={setConnectOpen}
         entity={entity}
-        redirectPath="/portal/bookkeeping?tab=banking"
+        redirectPath={portalPath("banking")}
       />
     </div>
   );

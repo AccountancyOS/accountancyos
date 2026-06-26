@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { portalPath } from "../utils/portalPaths";
 
 export default function PortalResetPassword() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function PortalResetPassword() {
       return;
     }
     toast.success("Password updated. You are now signed in.");
-    navigate("/portal/dashboard", { replace: true });
+    navigate(portalPath("dashboard"), { replace: true });
   };
 
   return (
@@ -68,7 +69,7 @@ export default function PortalResetPassword() {
                 This password reset link is invalid or has expired. Please request a new one.
               </p>
               <Button asChild className="w-full">
-                <Link to="/portal/forgot-password">Request New Link</Link>
+                <Link to={portalPath("forgotPassword")}>Request New Link</Link>
               </Button>
             </div>
           ) : (

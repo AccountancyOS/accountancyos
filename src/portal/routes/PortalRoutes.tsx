@@ -15,6 +15,7 @@ import PortalPayments from "../pages/PortalPayments";
 import PortalBookkeeping from "../pages/PortalBookkeeping";
 import PortalSettings from "../pages/PortalSettings";
 import PortalNotFound from "../pages/PortalNotFound";
+import { portalPath } from "../utils/portalPaths";
 
 /**
  * PortalRoutes
@@ -38,7 +39,7 @@ export default function PortalRoutes() {
 
       <Route element={<PortalGuard />}>
         <Route element={<PortalLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route index element={<Navigate to={portalPath("dashboard")} replace />} />
           <Route path="dashboard" element={<PortalDashboard />} />
           <Route path="tasks" element={<PortalTasks />} />
           <Route path="documents" element={<PortalDocuments />} />

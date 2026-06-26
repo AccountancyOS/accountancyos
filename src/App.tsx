@@ -70,6 +70,22 @@ import PublicQuoteView from "./pages/PublicQuoteView";
 import PublicOnboarding from "./pages/PublicOnboarding";
 import { Loader2 } from "lucide-react";
 import PortalRoutes from "./portal/routes/PortalRoutes";
+import { PortalGuard } from "./portal/guards/PortalGuard";
+import { PortalLayout } from "./portal/layouts/PortalLayout";
+import PortalLogin from "./portal/pages/PortalLogin";
+import PortalInvite from "./portal/pages/PortalInvite";
+import PortalForgotPassword from "./portal/pages/PortalForgotPassword";
+import PortalResetPassword from "./portal/pages/PortalResetPassword";
+import PortalDashboard from "./portal/pages/PortalDashboard";
+import PortalTasks from "./portal/pages/PortalTasks";
+import PortalDocuments from "./portal/pages/PortalDocuments";
+import PortalQuestionnaires from "./portal/pages/PortalQuestionnaires";
+import PortalQuestionnaireResponse from "./portal/pages/PortalQuestionnaireResponse";
+import PortalMessages from "./portal/pages/PortalMessages";
+import PortalPayments from "./portal/pages/PortalPayments";
+import PortalBookkeeping from "./portal/pages/PortalBookkeeping";
+import PortalSettings from "./portal/pages/PortalSettings";
+import { isClientPortalDomain, portalPath } from "./portal/utils/portalPaths";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -119,7 +135,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to={isClientPortalDomain() ? portalPath("login") : "/auth"} replace />;
   }
 
   // Portal users (no organization_users row) belong in /portal/*.
@@ -127,7 +143,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // can still preview the client view.
   const isPortalPreview = location.pathname.startsWith("/portal/preview/");
   if (isAccountantUser === false && !isPortalPreview) {
-    return <Navigate to="/portal" replace />;
+    return <Navigate to={portalPath("dashboard")} replace />;
   }
 
   return <AppProvider>{children}</AppProvider>;
@@ -574,6 +590,25 @@ const App = () => (
                 Note: /portal/preview/:entityType/:entityId above is the accountant
                 preview surface and remains owned by the accountant app. */}
             <Route path="/portal/*" element={<PortalRoutes />} />
+
+            {/* Client portal custom domain aliases, e.g. client.accountancyos.com/banking. */}
+            <Route path="/login" element={<PortalLogin />} />
+            <Route path="/invite" element={<PortalInvite />} />
+            <Route path="/forgot-password" element={<PortalForgotPassword />} />
+            <Route path="/reset-password" element={<PortalResetPassword />} />
+            <Route element={<PortalGuard />}>
+              <Route element={<PortalLayout />}>
+                <Route path="/dashboard" element={<PortalDashboard />} />
+                <Route path="/tasks" element={<PortalTasks />} />
+                <Route path="/documents" element={<PortalDocuments />} />
+                <Route path="/questionnaires" element={<PortalQuestionnaires />} />
+                <Route path="/questionnaires/:id" element={<PortalQuestionnaireResponse />} />
+                <Route path="/messages" element={<PortalMessages />} />
+                <Route path="/payments" element={<PortalPayments />} />
+                <Route path="/banking" element={<PortalBookkeeping />} />
+                <Route path="/profile" element={<PortalSettings />} />
+              </Route>
+            </Route>
             <Route
               path="/ops/health"
               element={
