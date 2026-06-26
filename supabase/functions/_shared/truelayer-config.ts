@@ -91,9 +91,13 @@ export function getPortalBaseUrl(): string {
 }
 
 // Pick the correct surface base URL from a validated, relative return path.
-// `/portal/*` -> portal base; everything else -> accountant base.
+// `/portal/*` and client-domain aliases like `/banking` -> portal base;
+// everything else -> accountant base.
 export function getBaseUrlForReturnPath(returnPath: string): string {
-  if (typeof returnPath === "string" && returnPath.startsWith("/portal/")) {
+  if (
+    typeof returnPath === "string" &&
+    (returnPath.startsWith("/portal/") || returnPath === "/banking" || returnPath.startsWith("/banking?"))
+  ) {
     return getPortalBaseUrl();
   }
   return getAppBaseUrl();
@@ -104,7 +108,7 @@ export function getBaseUrlForReturnPath(returnPath: string): string {
 // any path outside the bookkeeping/portal allow-list. Falls back to a
 // safe default that surfaces a failure state in the accountant app.
 const SAFE_FALLBACK = "/bookkeeping?tab=banking&connection=failed";
-const ALLOWED_PREFIXES = ["/portal/bookkeeping", "/bookkeeping"];
+const ALLOWED_PREFIXES = ["/portal/bookkeeping", "/bookkeeping", "/banking"];
 
 export function safeReturnPath(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) return SAFE_FALLBACK;
