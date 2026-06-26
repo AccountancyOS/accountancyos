@@ -85,8 +85,7 @@ export function getAppBaseUrl(): string {
 export function getPortalBaseUrl(): string {
   return (
     Deno.env.get("PORTAL_PUBLIC_URL") ||
-    Deno.env.get("APP_PUBLIC_URL") ||
-    "https://app.accountancyos.com"
+    "https://client.accountancyos.com"
   );
 }
 
