@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { portalPath } from "../utils/portalPaths";
 
 /**
  * Token-based invite acceptance.
@@ -54,7 +55,7 @@ export default function PortalInvite() {
         password,
       });
       if (signInError) throw signInError;
-      navigate("/portal/dashboard", { replace: true });
+      navigate(portalPath("dashboard"), { replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to accept invite.");
     } finally {
