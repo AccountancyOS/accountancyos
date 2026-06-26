@@ -34,14 +34,15 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
       toast.success("Bank Connected", { description: "Importing transactions in the background." });
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-    } else if (connection === "error") {
-      const reason = searchParams.get("message") || "Please try again.";
+    } else if (connection === "error" || connection === "failed") {
+      const reason = searchParams.get("message") || searchParams.get("reason") || "Please try again.";
       toast.error("Bank Connection Failed", { description: reason });
     }
     const next = new URLSearchParams(searchParams);
     next.delete("connection");
     next.delete("entity");
     next.delete("message");
+    next.delete("reason");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, queryClient]);
 
