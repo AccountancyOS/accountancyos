@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { portalPath } from "../utils/portalPaths";
 
 export default function PortalForgotPassword() {
   const [email, setEmail] = useState("");
@@ -16,7 +17,7 @@ export default function PortalForgotPassword() {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/portal/reset-password`,
+      redirectTo: `${window.location.origin}${portalPath("resetPassword")}`,
     });
     setLoading(false);
     if (error) {
@@ -43,7 +44,7 @@ export default function PortalForgotPassword() {
                 If an account exists for <span className="font-medium text-foreground">{email}</span>, a password reset link has been sent. Please check your inbox and spam folder.
               </p>
               <Button asChild variant="outline" className="w-full">
-                <Link to="/portal/login">Back to Sign In</Link>
+                <Link to={portalPath("login")}>Back to Sign In</Link>
               </Button>
             </div>
           ) : (
@@ -63,7 +64,7 @@ export default function PortalForgotPassword() {
                 {loading ? "Sending..." : "Send Reset Link"}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                <Link to="/portal/login" className="underline hover:text-foreground">
+                <Link to={portalPath("login")} className="underline hover:text-foreground">
                   Back to Sign In
                 </Link>
               </p>
