@@ -182,7 +182,7 @@ export default function ClientJobsTab({ clientId }: ClientJobsTabProps) {
         </Card>
       )}
 
-      <CreateJobDialog open={showCreate} onOpenChange={setShowCreate} />
+      <CreateJobDialog open={showCreate} onOpenChange={setShowCreate} preselectClientId={clientId} />
     </div>
   );
 }

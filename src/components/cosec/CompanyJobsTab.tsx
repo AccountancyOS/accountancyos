@@ -178,7 +178,7 @@ export function CompanyJobsTab({ companyId, organizationId }: CompanyJobsTabProp
         </Card>
       )}
 
-      <CreateJobDialog open={showCreate} onOpenChange={setShowCreate} />
+      <CreateJobDialog open={showCreate} onOpenChange={setShowCreate} preselectCompanyId={companyId} />
     </div>
   );
 }
