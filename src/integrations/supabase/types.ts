@@ -17669,6 +17669,7 @@ export type Database = {
         }
         Returns: Json
       }
+      email_queue_dispatch: { Args: never; Returns: undefined }
       emit_automation_event: {
         Args: {
           p_entity_id: string
