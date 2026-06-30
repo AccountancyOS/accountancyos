@@ -2589,6 +2589,7 @@ export type Database = {
           organization_id: string
           tax_allowability: string | null
           tax_mapping: Json | null
+          truelayer_account_id: string | null
           updated_at: string | null
           vat_treatment: string | null
         }
@@ -2610,6 +2611,7 @@ export type Database = {
           organization_id: string
           tax_allowability?: string | null
           tax_mapping?: Json | null
+          truelayer_account_id?: string | null
           updated_at?: string | null
           vat_treatment?: string | null
         }
@@ -2631,6 +2633,7 @@ export type Database = {
           organization_id?: string
           tax_allowability?: string | null
           tax_mapping?: Json | null
+          truelayer_account_id?: string | null
           updated_at?: string | null
           vat_treatment?: string | null
         }
