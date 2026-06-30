@@ -251,7 +251,10 @@ export function ConversationsTab({ clientId, companyId }: ConversationsTabProps)
           client_id: clientId || null,
           company_id: companyId || null,
           content,
-          sender_type: "accountant",
+          // client_messages.sender_type allows ('staff','client','system') — NOT
+          // 'accountant' (that's job_conversations' vocabulary). Using 'accountant'
+          // here violated the CHECK constraint, so every accountant send failed.
+          sender_type: "staff",
           sender_id: user?.id,
           message_type: type,
           visibility: type === "note" ? "internal_only" : "client_visible",
