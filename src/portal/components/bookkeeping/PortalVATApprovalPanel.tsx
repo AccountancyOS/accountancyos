@@ -29,7 +29,7 @@ export function PortalVATApprovalPanel() {
       if (!currentEntity) return [];
       const { data, error } = await supabase
         .from("vat_returns")
-        .select("id, period_start, period_end, total_vat_due, net_vat_due, client_approval_required, client_approved_at")
+        .select("id, period_start, period_end, box_3_total_vat_due, box_5_net_vat, client_approval_required, client_approved_at")
         .eq(entityCol, currentEntity.id)
         .eq("client_approval_required", true)
         .is("client_approved_at", null)
@@ -76,7 +76,7 @@ export function PortalVATApprovalPanel() {
                 Period {fmt(vr.period_start)} – {fmt(vr.period_end)}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="outline">Net VAT Due £{Number(vr.net_vat_due ?? vr.total_vat_due ?? 0).toFixed(2)}</Badge>
+                <Badge variant="outline">Net VAT Due £{Number(vr.box_5_net_vat ?? vr.box_3_total_vat_due ?? 0).toFixed(2)}</Badge>
                 <span>Approval requested by your accountant</span>
               </div>
             </div>

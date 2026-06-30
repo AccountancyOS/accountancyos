@@ -259,6 +259,8 @@ serve(async (req) => {
             account_subtype: 'CURRENT_ASSET',
             is_bank_account: true,
             is_active: true,
+            // Persist so the dedup lookup above matches on reconnect (no duplicate GL account).
+            truelayer_account_id: account.account_id,
           };
           
           if (authState.client_id) {
