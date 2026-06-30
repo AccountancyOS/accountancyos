@@ -6,94 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
-const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
-const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
-const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 interface SendEngagementLetterRequest {
   engagement_letter_id: string;
-}
-
-// Refresh Google access token
-async function refreshGoogleToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {
-  try {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID!,
-        client_secret: GOOGLE_CLIENT_SECRET!,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
-// Refresh Microsoft access token
-async function refreshMicrosoftToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {
-  try {
-    const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: MS_CLIENT_ID!,
-        client_secret: MS_CLIENT_SECRET!,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
-// Create RFC 2822 formatted email for Gmail
-function createRawEmailGmail(from: string, to: string, subject: string, bodyHtml: string): string {
-  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-  const bodyText = bodyHtml.replace(/<[^>]*>/g, '');
-  
-  const headers = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-  ];
-
-  return [
-    headers.join('\r\n'),
-    '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 7bit',
-    '',
-    bodyText,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/html; charset="UTF-8"',
-    'Content-Transfer-Encoding: 7bit',
-    '',
-    bodyHtml,
-    '',
-    `--${boundary}--`,
-  ].join('\r\n');
-}
-
-function base64UrlEncode(str: string): string {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
 }
 
 serve(async (req: Request) => {
@@ -299,138 +216,47 @@ serve(async (req: Request) => {
       </div>
     `;
 
-    let accessToken = mailbox.access_token;
-    let sendSuccess = false;
-    let sentMessageId: string | null = null;
-    let sentThreadId: string | null = null;
-
-    // Check if token needs refresh
-    if (mailbox.token_expires_at && new Date(mailbox.token_expires_at) <= new Date()) {
-      if (!mailbox.refresh_token) {
-        return new Response(
-          JSON.stringify({ error: 'Token expired. Please reconnect your mailbox in Settings.' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const refreshFn = mailbox.provider === 'outlook' ? refreshMicrosoftToken : refreshGoogleToken;
-      const newTokens = await refreshFn(mailbox.refresh_token);
-      
-      if (!newTokens) {
-        await serviceSupabase
-          .from('connected_mailboxes')
-          .update({ status: 'expired', error_message: 'Token refresh failed' })
-          .eq('id', mailbox.id);
-        
-        return new Response(
-          JSON.stringify({ error: 'Token refresh failed. Please reconnect your mailbox in Settings.' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      accessToken = newTokens.access_token;
-      const expiresAt = new Date(Date.now() + (newTokens.expires_in * 1000)).toISOString();
-      
-      await serviceSupabase
-        .from('connected_mailboxes')
-        .update({ access_token: accessToken, token_expires_at: expiresAt })
-        .eq('id', mailbox.id);
-    }
-
-    // Send email based on provider
-    if (mailbox.provider === 'gmail') {
-      const rawEmail = createRawEmailGmail(mailbox.email_address, recipientEmail, subject, bodyHtml);
-      
-      const sendResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ raw: base64UrlEncode(rawEmail) }),
+    // Enqueue via the canonical email pipeline. process-email-queue performs the
+    // actual mailbox send (token refresh, retry, audit, email_messages history), so
+    // engagement letters no longer bypass the queue. Routed to the user's connected
+    // mailbox via mailbox_id + provider.
+    const { error: enqueueError } = await serviceSupabase
+      .from('email_queue')
+      .insert({
+        organization_id: application.organization_id,
+        mailbox_id: mailbox.id,
+        provider: mailbox.provider,
+        to_email: recipientEmail,
+        to_name: recipientName,
+        subject,
+        body_html: bodyHtml,
+        client_id: application.client_id ?? null,
+        company_id: application.company_id ?? null,
+        context: 'engagement',
+        entity_type: 'engagement_letter',
+        entity_id: body.engagement_letter_id,
+        status: 'pending',
       });
 
-      if (sendResponse.ok) {
-        const result = await sendResponse.json();
-        sendSuccess = true;
-        sentMessageId = result.id;
-        sentThreadId = result.threadId;
-      } else {
-        const errorText = await sendResponse.text();
-        console.error('Gmail send failed:', errorText);
-      }
-    } else if (mailbox.provider === 'outlook') {
-      const sendResponse = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: {
-            subject,
-            body: { contentType: 'HTML', content: bodyHtml },
-            toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
-          },
-          saveToSentItems: true,
-        }),
-      });
-
-      if (sendResponse.ok || sendResponse.status === 202) {
-        sendSuccess = true;
-        sentMessageId = `outlook-${Date.now()}`;
-      } else {
-        const errorText = await sendResponse.text();
-        console.error('Outlook send failed:', errorText);
-      }
-    }
-
-    if (!sendSuccess) {
+    if (enqueueError) {
+      console.error('Failed to enqueue engagement letter email:', enqueueError);
       return new Response(
-        JSON.stringify({ error: 'Failed to send email via connected mailbox' }),
+        JSON.stringify({ error: 'Failed to queue engagement letter email' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Update engagement letter sent_at
+    // Mark the letter as sent/queued.
     const { error: updateError } = await serviceSupabase
       .from('engagement_letters')
       .update({ sent_at: new Date().toISOString() })
       .eq('id', body.engagement_letter_id);
+    if (updateError) console.error('Failed to update sent_at:', updateError);
 
-    if (updateError) {
-      console.error('Failed to update sent_at:', updateError);
-    }
-
-    // Store sent email in email_messages for conversations timeline
-    await serviceSupabase
-      .from('email_messages')
-      .insert({
-        organization_id: application.organization_id,
-        mailbox_id: mailbox.id,
-        message_id: sentMessageId || `engagement-${body.engagement_letter_id}`,
-        thread_id: sentThreadId,
-        from_email: mailbox.email_address,
-        to_emails: [recipientEmail],
-        subject,
-        body_html: bodyHtml,
-        sent_at: new Date().toISOString(),
-        direction: 'outbound',
-        is_read: true,
-        labels: ['SENT'],
-        link_reason: 'engagement_letter',
-        link_reference: body.engagement_letter_id,
-      });
-
-    console.log(`Engagement letter sent successfully via ${mailbox.provider} to ${recipientEmail}`);
+    console.log(`Engagement letter queued via ${mailbox.provider} to ${recipientEmail}`);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        sent_via: mailbox.email_address,
-        provider: mailbox.provider,
-        message_id: sentMessageId,
-      }),
+      JSON.stringify({ success: true, queued: true, provider: mailbox.provider }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
