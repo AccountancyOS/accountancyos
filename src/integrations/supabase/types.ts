@@ -18348,6 +18348,16 @@ export type Database = {
         Args: { _client_id: string; _company_id: string }
         Returns: boolean
       }
+      portal_categorise_transaction: {
+        Args: {
+          p_bank_transaction_id: string
+          p_contra_account_id: string
+          p_description?: string
+          p_vat_amount?: number
+          p_vat_code_id?: string
+        }
+        Returns: Json
+      }
       portal_explain_transaction: {
         Args: {
           _explanation: string
@@ -18363,6 +18373,15 @@ export type Database = {
       portal_has_perm: {
         Args: { _client_id: string; _company_id: string; _permission: string }
         Returns: boolean
+      }
+      portal_list_ledger_accounts: {
+        Args: { p_client_id: string; p_company_id: string }
+        Returns: {
+          account_type: string
+          code: string
+          id: string
+          name: string
+        }[]
       }
       portal_send_message: {
         Args: {
