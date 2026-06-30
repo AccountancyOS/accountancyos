@@ -1,4 +1,5 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import {
   LayoutDashboard,
   CheckSquare,
@@ -28,6 +29,7 @@ import {
 
 export function PortalLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { entities, currentEntity, setCurrentEntity } = usePortalEntity();
   const conversations = usePortalConversations();
   const unreadConversations = (conversations.data ?? []).filter((c) => c.unreadCount > 0).length;
@@ -142,7 +144,12 @@ export function PortalLayout() {
       </aside>
 
       <main className="pl-64">
-        <Outlet />
+        {/* Keyed by route so a crash on one page (e.g. the bookkeeping module) is
+            contained WITHOUT removing the sidebar — the client can always navigate
+            away — and the boundary resets when they do. */}
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );
