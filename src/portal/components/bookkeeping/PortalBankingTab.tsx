@@ -70,7 +70,8 @@ export function PortalBankingTab({ entity, allowBankConnect }: Props) {
 
       {/* Crash containment is handled by the per-tab ErrorBoundary in
           PortalBookkeepingFull, which also covers the health banner + connect dialog. */}
-      <BankingTab entity={entity} />
+      {/* View-only feed for the client; they categorise via their action queue. */}
+      <BankingTab entity={entity} canManage={false} />
 
       <ConnectBankDialog
         open={connectOpen}

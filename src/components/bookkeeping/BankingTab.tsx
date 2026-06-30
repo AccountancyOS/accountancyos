@@ -55,6 +55,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface BankingTabProps {
   entity: BookkeepingEntity;
+  /**
+   * Whether the viewer can manage transactions (categorise / uncategorise / exclude).
+   * Accountant app = true. Client portal = false: the feed is view-only there and the
+   * client categorises through their permission-gated action queue instead.
+   */
+  canManage?: boolean;
 }
 
 type ViewMode = "accounts" | "transactions";
@@ -71,7 +77,7 @@ interface BankAccount {
   account?: { code: string; name: string } | null;
 }
 
-export function BankingTab({ entity }: BankingTabProps) {
+export function BankingTab({ entity, canManage = true }: BankingTabProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("accounts");
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -200,6 +206,22 @@ export function BankingTab({ entity }: BankingTabProps) {
     },
   });
 
+  // Uncategorise: reverses the ledger posting and returns the txn to Unreviewed.
+  const unmatchMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const { error } = await supabase.rpc("unmatch_bank_transaction", {
+        p_bank_transaction_id: transactionId,
+        p_reason: "Uncategorised from banking feed",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      toast.success("Transaction uncategorised");
+    },
+    onError: (e: any) => toast.error(e?.message || "Could not uncategorise"),
+  });
+
   // Auto-match mutation
   const autoMatchMutation = useMutation({
     mutationFn: async () => {
@@ -213,7 +235,7 @@ export function BankingTab({ entity }: BankingTabProps) {
     },
     onSuccess: (result) => {
       if (result) {
-        toast.success(`Auto-matched ${result.matched} transactions`, {
+        toast.success(`Auto-categorised ${result.matched} transactions`, {
           description: `${result.skipped} transactions skipped (no 100% match)`,
         });
       }
@@ -251,9 +273,8 @@ export function BankingTab({ entity }: BankingTabProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "MATCHED":
-        return <Badge className="bg-primary/10 text-primary border-primary/20">Matched</Badge>;
       case "CATEGORIZED":
-        return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Categorized</Badge>;
+        return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Categorised</Badge>;
       case "EXCLUDED":
         return <Badge variant="secondary">Excluded</Badge>;
       case "UNREVIEWED":
@@ -455,7 +476,7 @@ export function BankingTab({ entity }: BankingTabProps) {
             <SelectContent>
               <SelectItem value="all">All Transactions</SelectItem>
               <SelectItem value="UNREVIEWED">Unreviewed</SelectItem>
-              <SelectItem value="MATCHED">Matched</SelectItem>
+              <SelectItem value="MATCHED">Categorised</SelectItem>
               <SelectItem value="CATEGORIZED">Categorized</SelectItem>
               <SelectItem value="EXCLUDED">Excluded</SelectItem>
             </SelectContent>
@@ -516,7 +537,7 @@ export function BankingTab({ entity }: BankingTabProps) {
                       <div className="font-medium">{transaction.description}</div>
                       {transaction.matched_entry && (
                         <div className="text-xs text-muted-foreground mt-1">
-                          Matched: {transaction.matched_entry.description}
+                          Categorised: {transaction.matched_entry.description}
                         </div>
                       )}
                     </div>
@@ -534,7 +555,7 @@ export function BankingTab({ entity }: BankingTabProps) {
                   </TableCell>
                   <TableCell>{getStatusBadge(transaction.status)}</TableCell>
                   <TableCell className="text-right">
-                    {transaction.status === "UNREVIEWED" && (
+                    {canManage && transaction.status === "UNREVIEWED" && (
                       <div className="flex gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="outline"
@@ -545,7 +566,7 @@ export function BankingTab({ entity }: BankingTabProps) {
                           }}
                         >
                           <Check className="h-4 w-4 mr-1" />
-                          Categorize
+                          Categorise
                         </Button>
                         <Button
                           variant="ghost"
@@ -553,6 +574,19 @@ export function BankingTab({ entity }: BankingTabProps) {
                           onClick={() => excludeMutation.mutate(transaction.id)}
                         >
                           <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {canManage && (transaction.status === "MATCHED" || transaction.status === "CATEGORIZED") && (
+                      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => unmatchMutation.mutate(transaction.id)}
+                          disabled={unmatchMutation.isPending}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Uncategorise
                         </Button>
                       </div>
                     )}
