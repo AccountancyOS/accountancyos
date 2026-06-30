@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
+import { EditDeadlineDialog, type EditableDeadline } from "./EditDeadlineDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +28,7 @@ interface DeadlinesTableProps {
 export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
   const { organization } = useOrganization();
   const navigate = useNavigate();
+  const [editing, setEditing] = useState<EditableDeadline | null>(null);
 
   const { data: deadlines, isLoading } = useQuery({
     queryKey: ["deadlines", organization?.id, filters],
@@ -243,6 +246,18 @@ export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditing({
+                        id: deadline.id,
+                        name: deadline.name,
+                        description: (deadline as { description?: string | null }).description ?? null,
+                        due_date: deadline.due_date,
+                      })}
+                    >
+                      Edit
+                    </Button>
                   </div>
                 </td>
               </tr>
@@ -250,6 +265,11 @@ export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
           })}
         </tbody>
       </table>
+      <EditDeadlineDialog
+        open={!!editing}
+        onOpenChange={(o) => { if (!o) setEditing(null); }}
+        deadline={editing}
+      />
     </div>
   );
 };
