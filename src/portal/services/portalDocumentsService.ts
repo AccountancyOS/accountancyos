@@ -7,7 +7,7 @@ import { getSignedUrl } from "../utils/storage";
  *  - job_documents WHERE client_visible = true (joined to jobs scoped to entity)
  *  - questionnaire_files via questionnaire_instances scoped to entity
  *  - onboarding_documents scoped to entity
- *  - engagement_letters scoped to entity
+ *  - receipts scoped to entity
  *
  * downloadUrl is resolved lazily via resolvePortalDocumentUrl(doc) so we don't
  * mint signed URLs we never use.
@@ -89,6 +89,27 @@ async function loadOnboardingDocuments(entity: PortalEntity): Promise<InternalDo
   }));
 }
 
+async function loadReceipts(entity: PortalEntity): Promise<InternalDoc[]> {
+  // Receipts the client uploaded (or that are visible to them) for this entity.
+  const col = entity.type === "client" ? "client_id" : "company_id";
+  const { data, error } = await supabase
+    .from("receipts")
+    .select("id, file_name, file_path, uploaded_at, vendor_name")
+    .eq(col, entity.id)
+    .order("uploaded_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map((r: any) => ({
+    id: r.id,
+    source: "receipt",
+    title: r.file_name || r.vendor_name || "Receipt",
+    uploadedAt: r.uploaded_at,
+    downloadUrl: null,
+    description: r.vendor_name ?? null,
+    _bucket: "receipts",
+    _path: r.file_path,
+  }));
+}
+
 export async function listPortalDocuments(
   entity: PortalEntity | null,
 ): Promise<PortalDocument[]> {
@@ -97,6 +118,7 @@ export async function listPortalDocuments(
     loadJobDocuments(entity),
     loadQuestionnaireFiles(entity),
     loadOnboardingDocuments(entity),
+    loadReceipts(entity),
   ]);
   const merged = groups.flat();
   merged.sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1));

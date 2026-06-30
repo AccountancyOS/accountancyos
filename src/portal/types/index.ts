@@ -53,7 +53,6 @@ export interface PortalTask {
 export type PortalDocumentSource =
   | "job_document"
   | "questionnaire_file"
-  | "engagement_letter"
   | "kyc_document"
   | "receipt";
 

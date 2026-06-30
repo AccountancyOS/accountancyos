@@ -12,7 +12,6 @@ import type { PortalDocument } from "../types";
 const SOURCE_LABEL: Record<string, string> = {
   job_document: "Job Document",
   questionnaire_file: "Questionnaire",
-  engagement_letter: "Engagement Letter",
   kyc_document: "Onboarding",
   receipt: "Receipt",
 };
