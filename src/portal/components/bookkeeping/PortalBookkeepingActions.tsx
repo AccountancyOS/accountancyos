@@ -11,10 +11,11 @@ import { usePortalBookkeepingPermissions } from "../../hooks/usePortalBookkeepin
 import { PortalTransactionExplainDialog } from "./PortalTransactionExplainDialog";
 
 /**
- * Client-facing action queue. Surfaces the two things a client uniquely does
- * inside bookkeeping: explain unrecognised bank transactions and approve VAT
- * returns the accountant has prepared. Everything else (categorising, posting,
- * filing) stays with the accountant.
+ * Client-facing action queue. Surfaces what a client does inside bookkeeping:
+ * categorise unmatched bank transactions (posting to the ledger when granted
+ * allow_client_post_to_ledger, otherwise explaining for accountant review) and
+ * approve VAT returns the accountant has prepared. Filing stays with the accountant,
+ * who can always re-categorise a client's posting.
  */
 export function PortalBookkeepingActions() {
   const { currentEntity } = usePortalEntity();
@@ -40,7 +41,7 @@ export function PortalBookkeepingActions() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!currentEntity && !!perms?.allowTransactionExplain,
+    enabled: !!currentEntity && (!!perms?.allowTransactionExplain || !!perms?.allowClientPostToLedger),
   });
 
   const { data: pendingVAT = [] } = useQuery({
@@ -73,10 +74,11 @@ export function PortalBookkeepingActions() {
     },
   });
 
-  const showExplain = !!perms?.allowTransactionExplain;
+  const canCategorise = !!perms?.allowClientPostToLedger;
+  const showActions = canCategorise || !!perms?.allowTransactionExplain;
   const showVAT = !!perms?.allowVATApproval;
 
-  if (!showExplain && !showVAT) return null;
+  if (!showActions && !showVAT) return null;
 
   const nothingPending = pendingTxns.length === 0 && pendingVAT.length === 0;
 
@@ -126,11 +128,11 @@ export function PortalBookkeepingActions() {
             </div>
           )}
 
-          {showExplain && pendingTxns.length > 0 && (
+          {showActions && pendingTxns.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <Receipt className="h-4 w-4" /> Transactions Needing An Explanation
+                  <Receipt className="h-4 w-4" /> {canCategorise ? "Transactions To Categorise" : "Transactions Needing An Explanation"}
                 </h4>
                 <Badge variant="secondary">{pendingTxns.length}</Badge>
               </div>
@@ -146,7 +148,7 @@ export function PortalBookkeepingActions() {
                     </div>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => setExplainTxn(txn)}>
-                    <HelpCircle className="h-4 w-4 mr-1" /> Explain
+                    <HelpCircle className="h-4 w-4 mr-1" /> {canCategorise ? "Categorise" : "Explain"}
                   </Button>
                 </div>
               ))}
@@ -159,6 +161,8 @@ export function PortalBookkeepingActions() {
         open={!!explainTxn}
         onOpenChange={(o) => !o && setExplainTxn(null)}
         transaction={explainTxn}
+        entity={currentEntity ? { type: currentEntity.type, id: currentEntity.id } : null}
+        canPost={canCategorise}
       />
     </>
   );
