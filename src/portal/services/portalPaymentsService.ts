@@ -13,7 +13,7 @@ export async function listPortalPayments(
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_number, reference, total_gross, currency, status, due_date, issue_date, amount_paid",
+      "id, invoice_number, reference, total_gross, currency, status, due_date, issue_date, amount_paid, paid_at",
     )
     .eq(col, entity.id)
     .order("issue_date", { ascending: false });
@@ -25,7 +25,8 @@ export async function listPortalPayments(
     currency: r.currency ?? "GBP",
     status: r.status,
     dueAt: r.due_date,
-    paidAt: Number(r.amount_paid ?? 0) >= Number(r.total_gross ?? 0) ? r.issue_date : null,
+    // Prefer the real payment timestamp; fall back to "fully paid" heuristic for legacy rows.
+    paidAt: r.paid_at ?? (Number(r.amount_paid ?? 0) >= Number(r.total_gross ?? 0) ? r.issue_date : null),
     payUrl: null,
   }));
 }
