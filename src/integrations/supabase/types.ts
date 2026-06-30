@@ -18184,6 +18184,15 @@ export type Database = {
         Args: { p_onboarding_id: string }
         Returns: Json
       }
+      lifecycle_create_manual_job: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_service_code: string
+          p_tax_year_start?: number
+        }
+        Returns: Json
+      }
       lifecycle_evaluate_onboarding_activation: {
         Args: { p_application_id: string }
         Returns: Json
@@ -18209,6 +18218,17 @@ export type Database = {
         }
         Returns: Json
       }
+      lifecycle_materialize_jobs: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_org: string
+          p_partnership_id: string
+          p_quote_id: string
+          p_source: string
+        }
+        Returns: Json
+      }
       lifecycle_onboarding_gates: {
         Args: { p_application_id: string }
         Returns: Json
@@ -18222,6 +18242,21 @@ export type Database = {
         Returns: Json
       }
       lifecycle_send_quote: { Args: { p_quote_id: string }; Returns: Json }
+      lifecycle_upsert_job_with_deadlines: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_engagement_id: string
+          p_org: string
+          p_period_end: string
+          p_period_label: string
+          p_period_start: string
+          p_service_code: string
+          p_service_name: string
+          p_source: string
+        }
+        Returns: string
+      }
       lock_period: {
         Args: {
           p_entity_id: string
