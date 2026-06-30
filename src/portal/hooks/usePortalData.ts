@@ -103,7 +103,13 @@ export function usePortalFinancialSummary() {
   const { currentEntity } = usePortalEntity();
   const visibility = usePortalVisibility();
   return useQuery({
-    queryKey: ["portal", "financial", entityKey(currentEntity)],
+    queryKey: [
+      "portal", "financial", entityKey(currentEntity),
+      // Re-derive if the practice toggles which financial metrics are exposed.
+      visibility.data
+        ? `${+visibility.data.showRevenue}${+visibility.data.showProfit}${+visibility.data.showCash}${+visibility.data.showVatPosition}`
+        : "",
+    ],
     queryFn: () => getPortalFinancialSummary(currentEntity, visibility.data!),
     enabled: !!currentEntity && !!visibility.data,
   });
