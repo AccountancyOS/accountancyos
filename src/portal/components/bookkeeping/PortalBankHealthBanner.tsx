@@ -15,8 +15,9 @@ export function PortalBankHealthBanner({ entity, onReconnect }: Props) {
   const companyId = entity.type === "company" ? entity.id : null;
   const { data, isLoading, error } = useEntityBankConnectionHealth(clientId, companyId);
 
-  // bank_connections RLS may deny portal users (known gap). Degrade to "no banner"
-  // rather than letting a hook error bubble up and blank the tab.
+  // get_bank_connection_health_for_entity raises 'forbidden' for clients without
+  // bookkeeping access or the 'show_bank_accounts' permission. For those, degrade to
+  // "no banner" rather than letting the error blank the tab. (Entitled clients DO see it.)
   if (error) {
     console.warn("[PortalBankHealthBanner] bank connection health unavailable", error);
     return null;
