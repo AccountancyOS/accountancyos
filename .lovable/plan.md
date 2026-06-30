@@ -1,35 +1,33 @@
-## Root Cause
+# Enable Bookkeeping Module for portal-a
 
-`https://client.accountancyos.com/banking` renders blank because the React Router in `src/App.tsx` only defines portal routes under `/portal/*`. On the `client.*` subdomain, the path `/banking` has no matching route, so it falls through to `NotFound` / the auth redirect and never mounts the portal banking screen.
+## Target
+- Portal user: `portal-a@accountancyos.test`
+- Linked client: **E2E Acceptor** (`5af184f0-6912-4d56-af1a-1ce324146fa0`)
+- Existing `portal_visibility_settings` row found with `full_bookkeeping_access = false`.
 
-The earlier edits added the `portalPaths` helper and updated internal navigation, but the top-level route aliases that actually make `/banking`, `/dashboard`, `/login`, etc. resolvable on the client domain were not wired into `App.tsx`. That is the missing piece.
+## Change
+Run a single data update:
 
-## Plan
+```sql
+UPDATE public.portal_visibility_settings
+SET full_bookkeeping_access = true,
+    updated_at = now()
+WHERE client_id = '5af184f0-6912-4d56-af1a-1ce324146fa0';
+```
 
-1. **Add domain-aware route aliases in `src/App.tsx`**
-   - Register top-level routes for the client portal: `/login`, `/forgot-password`, `/reset-password`, `/dashboard`, `/tasks`, `/documents`, `/questionnaires`, `/messages`, `/payments`, `/banking`, `/profile`.
-   - Each route renders the same component as its `/portal/*` counterpart, wrapped in `PortalGuard`.
-   - `/banking` mounts `PortalBookkeepingFull` with the Banking tab pre-selected.
-   - Keep all existing `/portal/*` routes intact so the in-app preview keeps working.
+This flips the master toggle described in `docs/portal-disabled-features.md`, which lets the portal user:
+- Categorise transactions
+- Match payments
+- Create invoices/bills
+- Connect a bank via TrueLayer
+- Approve VAT returns
 
-2. **Gate aliases to the client domain (optional hardening)**
-   - Either always register the aliases (simpler) or only register them when `isClientPortalDomain()` is true to avoid path collisions with future accountant-app routes. Recommend: always register, since none of the alias paths collide with current accountant routes.
+All writes will be stamped `created_by_portal=true`. Server-side enforcement (`portal_has_perm` + per-table RLS) is already in place — no schema changes required.
 
-3. **Login redirect**
-   - Ensure `PortalGuard` sends unauthenticated users on the client domain to `/login?returnTo=/banking` (already implemented via `withReturnTo`), and that `PortalLogin` honors `returnTo` after sign-in.
+## Out of scope
+- No code changes.
+- No new permissions / no role changes.
+- Not toggling any other portal user.
 
-4. **TrueLayer callback**
-   - Confirm the callback path used when initiating bank connect is `portalPath('banking')` so the redirect returns to `https://client.accountancyos.com/banking?...` rather than `/portal/bookkeeping`.
-
-5. **Verify**
-   - Load `https://client.accountancyos.com/banking` unauthenticated → should land on `/login?returnTo=/banking`.
-   - Sign in → should land back on `/banking` with the Banking tab rendered (no blank screen).
-   - Load `/dashboard` on the client domain → renders `PortalDashboard`.
-   - In-app preview `/portal/bookkeeping` still works unchanged.
-
-## Technical Notes
-
-- File to change: `src/App.tsx` (add `<Route>` entries for the alias paths inside the existing router, wrapped by `PortalGuard`).
-- Supporting files already in place: `src/portal/utils/portalPaths.ts`, `PortalGuard`, `PortalLogin`, `PortalBookkeepingFull` (reads `?tab=banking`).
-- No DB or edge function changes required.
-- No business-logic changes — purely routing.
+## Verification
+After the update, log in as `portal-a` and confirm the Bookkeeping tab in the portal sidebar is no longer in read-only mode.
