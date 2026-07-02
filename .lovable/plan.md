@@ -1,33 +1,25 @@
-# Enable Bookkeeping Module for portal-a
+## Fix the client portal redirect allow-list entry
 
-## Target
-- Portal user: `portal-a@accountancyos.test`
-- Linked client: **E2E Acceptor** (`5af184f0-6912-4d56-af1a-1ce324146fa0`)
-- Existing `portal_visibility_settings` row found with `full_bookkeeping_access = false`.
+### Problem
+The current allow-list entry is:
 
-## Change
-Run a single data update:
-
-```sql
-UPDATE public.portal_visibility_settings
-SET full_bookkeeping_access = true,
-    updated_at = now()
-WHERE client_id = '5af184f0-6912-4d56-af1a-1ce324146fa0';
+```text
+https://client.accountancyos.com/
 ```
 
-This flips the master toggle described in `docs/portal-disabled-features.md`, which lets the portal user:
-- Categorise transactions
-- Match payments
-- Create invoices/bills
-- Connect a bank via TrueLayer
-- Approve VAT returns
+The trailing `/` with no wildcard matches **only** the root URL. The password-reset link redirects to `https://client.accountancyos.com/reset-password`, which does not match, so Supabase silently discards it and substitutes the Site URL (`https://accountancyos.lovable.app` → forwarded to `app.accountancyos.com`). Result: the reset link keeps landing on the accountant app and shows "invalid or expired".
 
-All writes will be stamped `created_by_portal=true`. Server-side enforcement (`portal_has_perm` + per-table RLS) is already in place — no schema changes required.
+### Fix (one edit, by you)
+In **Cloud → Users → Auth Settings → URL Configuration → Redirect URLs**:
 
-## Out of scope
-- No code changes.
-- No new permissions / no role changes.
-- Not toggling any other portal user.
+1. Remove `https://client.accountancyos.com/`
+2. Add `https://client.accountancyos.com/**` (two asterisks — that's the wildcard syntax)
+3. Save
 
-## Verification
-After the update, log in as `portal-a` and confirm the Bookkeeping tab in the portal sidebar is no longer in read-only mode.
+<presentation-actions><presentation-open-backend>View Backend</presentation-open-backend></presentation-actions>
+
+### Verify
+- I'll re-run the redirect allow-list check and confirm the entry now ends in `/**`.
+- You then request a password reset from the client portal; the emailed link should land on `https://client.accountancyos.com/reset-password` with a valid recovery session.
+
+No code changes, no deploy.
