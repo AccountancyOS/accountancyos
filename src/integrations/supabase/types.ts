@@ -7001,6 +7001,7 @@ export type Database = {
         Row: {
           acknowledged_at: string | null
           acknowledged_by: string | null
+          attachments: Json
           body_html: string | null
           body_text: string | null
           client_id: string | null
@@ -7034,6 +7035,7 @@ export type Database = {
         Insert: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
+          attachments?: Json
           body_html?: string | null
           body_text?: string | null
           client_id?: string | null
@@ -7067,6 +7069,7 @@ export type Database = {
         Update: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
+          attachments?: Json
           body_html?: string | null
           body_text?: string | null
           client_id?: string | null
