@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { updateQueuedEmailSafe } from "@/lib/email-safe-service";
+import { SafeEmailHtml } from "@/components/email/SafeEmailHtml";
 import {
   Dialog,
   DialogContent,
@@ -195,9 +196,9 @@ export function EditQueuedEmailDialog({
             </div>
 
             {viewMode === "preview" ? (
-              <div 
+              <SafeEmailHtml
+                html={formData.body_html || formData.body_text || "<p>No content</p>"}
                 className="border rounded-md p-4 min-h-[200px] max-h-[300px] overflow-y-auto bg-background prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: formData.body_html || formData.body_text || "<p>No content</p>" }}
               />
             ) : (
               <Textarea
