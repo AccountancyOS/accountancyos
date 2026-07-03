@@ -24,7 +24,7 @@ project_id = "moxpdejnucjjcplleefn"
   [functions.generate-filing-pdf]
     verify_jwt = true
   [functions.generate-invoice-pdf]
-    verify_jwt = false
+    verify_jwt = true
   [functions.gmail-auth]
     verify_jwt = true
   [functions.gmail-callback]

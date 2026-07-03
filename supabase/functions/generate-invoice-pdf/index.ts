@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const money = (n: number, ccy = "GBP") =>
@@ -24,42 +23,40 @@ serve(async (req) => {
       return json({ error: "Missing invoice_id" }, 400);
     }
 
-    // Access gate: load the invoice as the CALLER (RLS decides). Service key bypasses (internal).
-    const isService = authHeader.includes(SERVICE_KEY);
-    const gate = isService
-      ? createClient(SUPABASE_URL, SERVICE_KEY)
-      : createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
-    const { data: invoice } = await gate
+    // Authenticated, caller-scoped client — RLS is authoritative end-to-end.
+    const supa = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+    const { data: { user } } = await supa.auth.getUser();
+    if (!user) return json({ error: "Unauthorized" }, 401);
+
+    const { data: invoice } = await supa
       .from("invoices")
       .select("*")
       .eq("id", invoice_id)
       .maybeSingle();
     if (!invoice) return json({ error: "Invoice not found or access denied" }, 404);
 
-    const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-
-    const { data: lines } = await svc
+    const { data: lines } = await supa
       .from("invoice_lines").select("*").eq("invoice_id", invoice_id).order("line_number");
 
     const entityCol = invoice.client_id ? "client_id" : "company_id";
-    const { data: settings } = await svc
+    const { data: settings } = await supa
       .from("invoice_settings").select("*").eq(entityCol, invoice.client_id || invoice.company_id).maybeSingle();
 
     // Business (the sender) name.
     let businessName = "";
     if (invoice.client_id) {
-      const { data: c } = await svc.from("clients").select("first_name,last_name").eq("id", invoice.client_id).maybeSingle();
+      const { data: c } = await supa.from("clients").select("first_name,last_name").eq("id", invoice.client_id).maybeSingle();
       businessName = [c?.first_name, c?.last_name].filter(Boolean).join(" ");
     } else {
-      const { data: co } = await svc.from("companies").select("company_name").eq("id", invoice.company_id).maybeSingle();
+      const { data: co } = await supa.from("companies").select("company_name").eq("id", invoice.company_id).maybeSingle();
       businessName = co?.company_name || "";
     }
 
-    // Logo bytes (private bucket → service download → embed).
+    // Logo bytes (private bucket → caller-scoped download → embed).
     let logoImg: any = null;
     const pdf = await PDFDocument.create();
     if (settings?.logo_url && !String(settings.logo_url).startsWith("http")) {
-      const { data: blob } = await svc.storage.from("invoice-branding").download(settings.logo_url);
+      const { data: blob } = await supa.storage.from("invoice-branding").download(settings.logo_url);
       if (blob) {
         const bytes = new Uint8Array(await blob.arrayBuffer());
         try {
