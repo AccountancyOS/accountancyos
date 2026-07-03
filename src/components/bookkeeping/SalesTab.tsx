@@ -20,7 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Eye, CreditCard, FileText } from "lucide-react";
+import { Plus, Search, Eye, CreditCard, FileText, Settings } from "lucide-react";
+import { InvoiceSettingsDialog } from "./InvoiceSettingsDialog";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { format } from "date-fns";
 import { InvoiceEditorDialog } from "./InvoiceEditorDialog";
@@ -49,6 +50,7 @@ export default function SalesTab({ entity }: SalesTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentInvoiceId, setPaymentInvoiceId] = useState<string | null>(null);
@@ -173,10 +175,16 @@ export default function SalesTab({ entity }: SalesTabProps) {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleNew}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Invoice
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setSettingsOpen(true)} disabled={!entity}>
+            <Settings className="mr-2 h-4 w-4" />
+            Invoice Settings
+          </Button>
+          <Button onClick={handleNew}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Invoice
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -285,6 +293,8 @@ export default function SalesTab({ entity }: SalesTabProps) {
           }}
         />
       )}
+
+      <InvoiceSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} entity={entity} />
     </div>
   );
 }
