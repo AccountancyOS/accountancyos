@@ -429,7 +429,7 @@ Deno.serve(async (req) => {
   try {
     const { data: rows, error: rowsError } = await supabase
       .from('email_queue')
-      .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by')
+      .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by, attachments')
       .eq('status', 'pending')
       .lte('scheduled_at', new Date().toISOString())
       .order('created_at', { ascending: true })
@@ -518,7 +518,11 @@ Deno.serve(async (req) => {
                 idempotency_key: row.id,
                 message_id: messageId,
                 unsubscribe_token: unsubscribeToken ?? undefined,
-              },
+                // Best-effort attachments (e.g. invoice PDF). Ignored by the SDK if unsupported.
+                ...(Array.isArray((row as any).attachments) && (row as any).attachments.length
+                  ? { attachments: (row as any).attachments }
+                  : {}),
+              } as any,
               { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
             )
           }

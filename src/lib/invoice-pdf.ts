@@ -23,3 +23,17 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Send the invoice to its customer: issues it (posts to Trade Debtors) if still a draft,
+ * generates the branded PDF, and emails the customer the customisable message with a
+ * secure download link (+ best-effort PDF attachment). Marks the invoice Sent.
+ */
+export async function sendInvoice(invoiceId: string): Promise<{ sent_to?: string }> {
+  const { data, error } = await supabase.functions.invoke("send-invoice", {
+    body: { invoice_id: invoiceId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data ?? {};
+}

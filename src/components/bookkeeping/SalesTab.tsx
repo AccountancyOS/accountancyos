@@ -20,9 +20,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Eye, CreditCard, FileText, Settings } from "lucide-react";
+import { Plus, Search, Eye, CreditCard, FileText, Settings, Send } from "lucide-react";
 import { InvoiceSettingsDialog } from "./InvoiceSettingsDialog";
-import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { downloadInvoicePdf, sendInvoice } from "@/lib/invoice-pdf";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { format } from "date-fns";
@@ -129,6 +129,17 @@ export default function SalesTab({ entity }: SalesTabProps) {
       toast.success("Invoice PDF downloaded", { id: "inv-pdf" });
     } catch (e: any) {
       toast.error("Could not generate PDF", { id: "inv-pdf", description: e?.message });
+    }
+  };
+
+  const handleSend = async (invoiceId: string) => {
+    try {
+      toast.loading("Sending invoice to customer…", { id: "inv-send" });
+      const res = await sendInvoice(invoiceId);
+      toast.success(`Invoice sent to ${res?.sent_to || "the customer"}`, { id: "inv-send" });
+      queryClient.invalidateQueries({ queryKey: ["sales-invoices"] });
+    } catch (e: any) {
+      toast.error("Could not send invoice", { id: "inv-send", description: e?.message });
     }
   };
 
@@ -256,6 +267,16 @@ export default function SalesTab({ entity }: SalesTabProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      {invoice.status !== "PAID" && invoice.status !== "VOIDED" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleSend(invoice.id)}
+                          title={invoice.status === "DRAFT" ? "Issue & send to customer" : "Send to customer"}
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
