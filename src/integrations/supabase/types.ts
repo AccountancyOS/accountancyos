@@ -9620,6 +9620,82 @@ export type Database = {
           },
         ]
       }
+      invoice_settings: {
+        Row: {
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_reference: string | null
+          bank_sort_code: string | null
+          client_id: string | null
+          company_id: string | null
+          created_at: string
+          email_body: string | null
+          email_subject: string | null
+          id: string
+          invoice_footer: string | null
+          logo_url: string | null
+          organization_id: string
+          payment_terms_days: number
+          updated_at: string
+        }
+        Insert: {
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_reference?: string | null
+          bank_sort_code?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          email_body?: string | null
+          email_subject?: string | null
+          id?: string
+          invoice_footer?: string | null
+          logo_url?: string | null
+          organization_id: string
+          payment_terms_days?: number
+          updated_at?: string
+        }
+        Update: {
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_reference?: string | null
+          bank_sort_code?: string | null
+          client_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          email_body?: string | null
+          email_subject?: string | null
+          id?: string
+          invoice_footer?: string | null
+          logo_url?: string | null
+          organization_id?: string
+          payment_terms_days?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount_paid: number
@@ -17432,6 +17508,10 @@ export type Database = {
       }
       can_manage_email_queue: {
         Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_manage_invoice_branding: {
+        Args: { p_entity_id: string }
         Returns: boolean
       }
       can_manage_practice_settings: {
