@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -516,7 +517,7 @@ export default function EngagementLetterVariants() {
                   <div className="font-medium text-zinc-900 mb-6">{previewSubject}</div>
                   <div
                     className="letter-editor-prose"
-                    dangerouslySetInnerHTML={{ __html: previewBody }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(previewBody) }}
                   />
                 </div>
               </div>
@@ -531,7 +532,7 @@ export default function EngagementLetterVariants() {
                   )}
                   <div
                     className="letter-editor-prose"
-                    dangerouslySetInnerHTML={{ __html: previewLetter }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(previewLetter) }}
                   />
                 </div>
               </div>

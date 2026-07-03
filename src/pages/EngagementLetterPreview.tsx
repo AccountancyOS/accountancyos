@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -123,7 +124,7 @@ export default function EngagementLetterPreview() {
           <CardContent>
             <div
               className="prose prose-sm dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: data.body }}
+              dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(data.body) }}
             />
           </CardContent>
         </Card>
