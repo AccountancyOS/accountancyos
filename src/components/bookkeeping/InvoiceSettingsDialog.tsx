@@ -11,7 +11,8 @@ import { toast } from "sonner";
 import { Loader2, Upload } from "lucide-react";
 import type { BookkeepingEntity } from "./EntitySelector";
 import {
-  getInvoiceSettings, upsertInvoiceSettings, uploadInvoiceLogo, type InvoiceSettings,
+  getInvoiceSettings, upsertInvoiceSettings, uploadInvoiceLogo, getInvoiceLogoSignedUrl,
+  type InvoiceSettings,
 } from "@/lib/invoice-settings-service";
 
 interface Props {
@@ -53,6 +54,13 @@ export function InvoiceSettingsDialog({ open, onOpenChange, entity }: Props) {
       });
     }
   }, [open, data]);
+
+  // Logos live in a private bucket — resolve a signed URL for the preview.
+  const { data: logoPreview } = useQuery({
+    queryKey: ["invoice-logo-preview", form.logo_url],
+    queryFn: () => getInvoiceLogoSignedUrl(form.logo_url),
+    enabled: open && !!form.logo_url,
+  });
 
   const set = (k: keyof InvoiceSettings, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -107,8 +115,10 @@ export function InvoiceSettingsDialog({ open, onOpenChange, entity }: Props) {
             <div className="space-y-2">
               <Label>Logo</Label>
               <div className="flex items-center gap-4">
-                {form.logo_url ? (
-                  <img src={form.logo_url} alt="Logo" className="h-14 w-auto max-w-[180px] object-contain border rounded p-1" />
+                {logoPreview ? (
+                  <img src={logoPreview} alt="Logo" className="h-14 w-auto max-w-[180px] object-contain border rounded p-1" />
+                ) : form.logo_url ? (
+                  <div className="h-14 w-28 border rounded flex items-center justify-center text-xs text-muted-foreground">Loading…</div>
                 ) : (
                   <div className="h-14 w-28 border border-dashed rounded flex items-center justify-center text-xs text-muted-foreground">No logo</div>
                 )}

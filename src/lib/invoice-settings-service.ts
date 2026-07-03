@@ -48,11 +48,23 @@ export async function upsertInvoiceSettings(entity: SettingsEntity, patch: Invoi
   if (error) throw error;
 }
 
-/** Upload a logo to the public invoice-branding bucket under <entity_id>/… and return its URL. */
+/**
+ * Upload a logo to the invoice-branding bucket under <entity_id>/… and return the storage
+ * PATH (the bucket is private on Cloud, so we store the path and mint signed URLs on read).
+ */
 export async function uploadInvoiceLogo(entity: SettingsEntity, file: File): Promise<string> {
   const ext = (file.name.split(".").pop() || "png").toLowerCase();
   const path = `${entity.id}/logo-${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from("invoice-branding").upload(path, file, { upsert: true });
   if (error) throw error;
-  return supabase.storage.from("invoice-branding").getPublicUrl(path).data.publicUrl;
+  return path;
+}
+
+/** Resolve a temporary signed URL for a stored logo path (bucket is private). */
+export async function getInvoiceLogoSignedUrl(path: string | null | undefined): Promise<string | null> {
+  if (!path) return null;
+  if (path.startsWith("http")) return path; // legacy full URL, if any
+  const { data, error } = await supabase.storage.from("invoice-branding").createSignedUrl(path, 60 * 60);
+  if (error) return null;
+  return data?.signedUrl ?? null;
 }
