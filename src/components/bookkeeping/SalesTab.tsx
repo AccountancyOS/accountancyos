@@ -22,6 +22,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Eye, CreditCard, FileText, Settings } from "lucide-react";
 import { InvoiceSettingsDialog } from "./InvoiceSettingsDialog";
+import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { toast } from "sonner";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 import { format } from "date-fns";
 import { InvoiceEditorDialog } from "./InvoiceEditorDialog";
@@ -118,6 +120,16 @@ export default function SalesTab({ entity }: SalesTabProps) {
   const handleRecordPayment = (invoiceId: string) => {
     setPaymentInvoiceId(invoiceId);
     setPaymentDialogOpen(true);
+  };
+
+  const handleDownloadPdf = async (invoiceId: string) => {
+    try {
+      toast.loading("Generating PDF…", { id: "inv-pdf" });
+      await downloadInvoicePdf(invoiceId);
+      toast.success("Invoice PDF downloaded", { id: "inv-pdf" });
+    } catch (e: any) {
+      toast.error("Could not generate PDF", { id: "inv-pdf", description: e?.message });
+    }
   };
 
   const getStatusLabel = (status: string) => {
@@ -252,7 +264,15 @@ export default function SalesTab({ entity }: SalesTabProps) {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {invoice.status !== "PAID" && invoice.status !== "VOID" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDownloadPdf(invoice.id)}
+                        title="Download PDF"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                      {invoice.status !== "PAID" && invoice.status !== "VOIDED" && (
                         <Button
                           variant="ghost"
                           size="icon"
