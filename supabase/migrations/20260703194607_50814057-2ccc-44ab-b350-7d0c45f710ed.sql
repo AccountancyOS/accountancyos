@@ -62,6 +62,19 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid entity_type');
   END IF;
 
+  -- Tenant isolation: p_organization_id is caller-supplied, so verify the entity actually
+  -- belongs to it (else a portal user permitted on their own entity could create invoices
+  -- under an arbitrary organization — cross-tenant IDOR).
+  IF NOT EXISTS (
+    SELECT 1 FROM public.clients
+      WHERE p_entity_type = 'client' AND id = p_entity_id AND organization_id = p_organization_id
+    UNION ALL
+    SELECT 1 FROM public.companies
+      WHERE p_entity_type = 'company' AND id = p_entity_id AND organization_id = p_organization_id
+  ) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Entity does not belong to organization');
+  END IF;
+
   -- Validate lines with safe parsing (no exceptions)
   FOR v_line IN SELECT * FROM jsonb_array_elements(p_lines)
   LOOP
