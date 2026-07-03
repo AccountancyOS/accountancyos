@@ -10,8 +10,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const money = (n: number, ccy = "GBP") =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy }).format(Number(n || 0));
+const money = (n: number, ccy?: string | null) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy || "GBP" }).format(Number(n || 0));
 const dt = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "—");
 const esc = (s: string) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!));
 
@@ -57,9 +57,11 @@ serve(async (req) => {
     const svc = createClient(SUPABASE_URL, SERVICE_KEY);
     const pdfBytes = Uint8Array.from(atob(pdfJson.pdf_base64), (c) => c.charCodeAt(0));
     const path = `${invoice_id}.pdf`;
-    await svc.storage.from("invoice-pdfs").upload(path, pdfBytes, { contentType: "application/pdf", upsert: true });
-    const { data: signed } = await svc.storage.from("invoice-pdfs").createSignedUrl(path, 60 * 60 * 24 * 90);
-    const link = signed?.signedUrl || "";
+    const { error: upErr } = await svc.storage.from("invoice-pdfs").upload(path, pdfBytes, { contentType: "application/pdf", upsert: true });
+    if (upErr) return json({ error: `Could not store the invoice PDF: ${upErr.message}` }, 500);
+    const { data: signed, error: signErr } = await svc.storage.from("invoice-pdfs").createSignedUrl(path, 60 * 60 * 24 * 90);
+    if (signErr || !signed?.signedUrl) return json({ error: "Could not create the invoice download link" }, 500);
+    const link = signed.signedUrl;
 
     // Business name + email template.
     const entityCol = invoice.client_id ? "client_id" : "company_id";

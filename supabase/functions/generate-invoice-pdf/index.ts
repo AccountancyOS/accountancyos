@@ -10,9 +10,18 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const money = (n: number, ccy = "GBP") =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy }).format(Number(n || 0));
+const money = (n: number, ccy?: string | null) =>
+  new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy || "GBP" }).format(Number(n || 0));
 const dt = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "—");
+
+// Chunked base64 — btoa(String.fromCharCode(...bytes)) overflows the argument limit on
+// any PDF over ~64KB (i.e. as soon as a logo is embedded).
+function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -68,7 +77,7 @@ serve(async (req) => {
     }
 
     // ---- Build the page ----
-    const page = pdf.addPage([595, 842]); // A4 portrait
+    let page = pdf.addPage([595, 842]); // A4 portrait
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const ink = rgb(0.1, 0.1, 0.12);
@@ -119,7 +128,7 @@ serve(async (req) => {
       right(`${Number(ln.vat_rate || 0)}%`, 470, y, 10);
       right(money(ln.net_amount, invoice.currency), R, y, 10);
       y -= 18;
-      if (y < 160) { y = 800; pdf.addPage([595, 842]); } // simple overflow guard
+      if (y < 160) { page = pdf.addPage([595, 842]); y = 800; } // continue on a fresh page
     }
 
     // Totals
@@ -148,7 +157,7 @@ serve(async (req) => {
     }
 
     const pdfBytes = await pdf.save();
-    const b64 = btoa(String.fromCharCode(...pdfBytes));
+    const b64 = toBase64(pdfBytes);
     return json({
       success: true,
       filename: `Invoice-${invoice.invoice_number || invoice_id}.pdf`,
