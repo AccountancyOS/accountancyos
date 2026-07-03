@@ -29,7 +29,7 @@ serve(async (req: Request) => {
 
     const { data: inv, error: invErr } = await admin
       .from("invoices")
-      .select("id, organization_id, total_gross, amount_paid, status")
+      .select("id, organization_id, client_id, company_id, total_gross, amount_paid, status")
       .eq("id", invoice_id)
       .maybeSingle();
     if (invErr || !inv) throw new Error("Invoice not found");
@@ -62,16 +62,35 @@ serve(async (req: Request) => {
     }
 
     const total = Number(inv.total_gross ?? 0);
-    await admin
-      .from("invoices")
-      .update({
-        amount_paid: total,
-        status: "PAID",
-        paid_at: new Date().toISOString().slice(0, 10),
-        stripe_checkout_session_id: session_id,
-      })
-      .eq("id", invoice_id)
-      .neq("status", "PAID");
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Post the receipt through the ledger engine (Dr Bank / Cr Trade Debtors, updates
+    // amount_paid + status) instead of a raw status flip. Resolve the entity's bank account
+    // so it posts; if that fails, fall back to a direct mark-paid so a real payment is never
+    // lost (and log it for reconciliation).
+    let bankQuery = admin.from("bookkeeping_accounts").select("id")
+      .eq("organization_id", inv.organization_id).eq("is_bank_account", true);
+    bankQuery = inv.client_id ? bankQuery.eq("client_id", inv.client_id) : bankQuery.eq("company_id", inv.company_id);
+    const { data: bankAcct } = await bankQuery.order("code").limit(1).maybeSingle();
+
+    const { data: payRes, error: payErr } = await admin.rpc("record_invoice_payment", {
+      p_invoice_id: invoice_id,
+      p_amount: total,
+      p_payment_date: today,
+      p_bank_account_id: bankAcct?.id ?? null,
+      p_bank_transaction_id: null,
+      p_reference: `Stripe ${session_id}`,
+      p_payment_method: "stripe",
+      p_user_id: null,
+      p_payment_fx_rate: 1.0, // pin to the 9-arg overload (avoids the ambiguous-overload error)
+    });
+
+    if (payErr || (payRes && (payRes as any).success === false)) {
+      console.warn("[portal-verify-invoice-payment] record_invoice_payment failed; falling back to direct paid update", payErr ?? payRes);
+      await admin.from("invoices").update({ amount_paid: total, status: "PAID", paid_at: today }).eq("id", invoice_id).neq("status", "PAID");
+    }
+    // Idempotency marker (record_invoice_payment doesn't set this).
+    await admin.from("invoices").update({ stripe_checkout_session_id: session_id }).eq("id", invoice_id);
 
     return new Response(JSON.stringify({ paid: true }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
