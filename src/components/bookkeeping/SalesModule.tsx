@@ -8,9 +8,12 @@ import type { BookkeepingEntity } from "./EntitySelector";
 
 interface SalesModuleProps {
   entity: BookkeepingEntity | null;
+  /** Portal permission gates (default true = accountant app). */
+  canCreate?: boolean;
+  canSend?: boolean;
 }
 
-export function SalesModule({ entity }: SalesModuleProps) {
+export function SalesModule({ entity, canCreate = true, canSend = true }: SalesModuleProps) {
   const [activeSubTab, setActiveSubTab] = useState("invoices");
 
   return (
@@ -24,7 +27,7 @@ export function SalesModule({ entity }: SalesModuleProps) {
         </TabsList>
 
         <TabsContent value="invoices" className="mt-4">
-          <SalesTab entity={entity} />
+          <SalesTab entity={entity} canCreate={canCreate} canSend={canSend} />
         </TabsContent>
 
         <TabsContent value="customers" className="mt-4">

@@ -34,6 +34,9 @@ import type { BookkeepingEntity } from "./EntitySelector";
 
 interface SalesTabProps {
   entity: BookkeepingEntity | null;
+  /** Portal permission gates (default true = accountant app). */
+  canCreate?: boolean;
+  canSend?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -45,7 +48,7 @@ const statusColors: Record<string, string> = {
   VOID: "secondary",
 };
 
-export default function SalesTab({ entity }: SalesTabProps) {
+export default function SalesTab({ entity, canCreate = true, canSend = true }: SalesTabProps) {
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -203,10 +206,12 @@ export default function SalesTab({ entity }: SalesTabProps) {
             <Settings className="mr-2 h-4 w-4" />
             Invoice Settings
           </Button>
-          <Button onClick={handleNew}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Invoice
-          </Button>
+          {canCreate && (
+            <Button onClick={handleNew}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Invoice
+            </Button>
+          )}
         </div>
       </div>
 
@@ -267,7 +272,7 @@ export default function SalesTab({ entity }: SalesTabProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      {invoice.status !== "PAID" && invoice.status !== "VOIDED" && (
+                      {canSend && invoice.status !== "PAID" && invoice.status !== "VOIDED" && (
                         <Button
                           variant="ghost"
                           size="icon"

@@ -184,7 +184,11 @@ function PortalBookkeepingFullInner() {
         {showSales && (
           <TabsContent value="sales" className="space-y-4">
             <ErrorBoundary onError={onTabError("sales")}>
-              <SalesModule entity={entity} />
+              <SalesModule
+                entity={entity}
+                canCreate={!!perms?.allowInvoiceCreate}
+                canSend={!!perms?.allowInvoiceSend && !perms?.requireReviewForInvoiceSending}
+              />
             </ErrorBoundary>
           </TabsContent>
         )}
