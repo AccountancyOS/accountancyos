@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { FileCheck, Send, CheckCircle, FileText, Download, RefreshCw, Clock, XCircle, Loader2, ExternalLink, Building, AlertCircle } from "lucide-react";
@@ -23,6 +24,8 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
   const navigate = useNavigate();
   const [chEnvironment, setChEnvironment] = useState<'test' | 'production'>('test');
   const [isSubmittingToCH, setIsSubmittingToCH] = useState(false);
+  // FIL-2/Fix 6: a manual "mark as filed" now requires the reference from where it was filed.
+  const [manualFilingReference, setManualFilingReference] = useState("");
 
   const { data: filing, isLoading } = useQuery({
     queryKey: ["job-filing", jobId],
@@ -80,7 +83,7 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
     mutationFn: async () => {
       if (!filing) throw new Error("No filing");
       const { data: { user } } = await supabase.auth.getUser();
-      const result = await markFilingAsFiled(filing.id, user?.id || "unknown");
+      const result = await markFilingAsFiled(filing.id, user?.id || "unknown", manualFilingReference);
       if (!result.success) throw new Error(result.error);
       
       // Mark job as complete
@@ -344,18 +347,30 @@ export function JobFilingTab({ jobId }: JobFilingTabProps) {
           )}
 
           {canFile && !isCHFiling && (
-            <Button
-              className="w-full justify-start"
-              onClick={() => markAsFiledMutation.mutate()}
-              disabled={markAsFiledMutation.isPending}
-            >
-              {markAsFiledMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle className="mr-2 h-4 w-4" />
-              )}
-              Mark as Filed
-            </Button>
+            <div className="space-y-2">
+              <Input
+                placeholder="Filing reference (from HMRC / Companies House)"
+                value={manualFilingReference}
+                onChange={(e) => setManualFilingReference(e.target.value)}
+                disabled={markAsFiledMutation.isPending}
+              />
+              <Button
+                className="w-full justify-start"
+                onClick={() => markAsFiledMutation.mutate()}
+                disabled={markAsFiledMutation.isPending || !manualFilingReference.trim()}
+              >
+                {markAsFiledMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                )}
+                Mark as Filed
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Enter the reference from where this was filed. To file through the app, use the
+                submission action instead.
+              </p>
+            </div>
           )}
 
           {/* Companies House Filing - CS01 only for Phase 1 */}

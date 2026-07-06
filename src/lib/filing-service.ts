@@ -4,6 +4,7 @@ import { buildPortalUrl } from "@/lib/app-config";
 import { executeAutoRollover } from "@/lib/auto-rollover-service";
 import { emitFilingSubmittedEvent, emitFilingAcceptedEvent, emitFilingRejectedEvent } from "@/lib/filing-event-service";
 import { isPayrollFilingType } from "@/lib/filing-api-provider";
+import { evaluateMarkFiled } from "@/lib/filing-mark-filed-gate";
 
 export type FilingStatus = 
   | "not_started" 
@@ -551,13 +552,21 @@ export async function markFilingAsFiled(
       return { success: true, nextYearJobId: filing.next_year_job_id };
     }
 
+    // FIL-2/Fix 6: close the silent "mark as filed" bypass. See evaluateMarkFiled below.
+    const gate = evaluateMarkFiled(filing.status, filingReference);
+    if (!gate.allowed) {
+      return { success: false, error: gate.error };
+    }
+    const trimmedReference = gate.reference;
+    const isManualFiling = gate.isManual;
+
     const { error } = await supabase
       .from("filings")
       .update({
         status: "filed",
         filed_at: new Date().toISOString(),
         filed_by: filedBy,
-        filing_reference: filingReference,
+        filing_reference: trimmedReference || filing.filing_reference || null,
         is_locked: true,
       })
       .eq("id", filingId);
@@ -566,7 +575,7 @@ export async function markFilingAsFiled(
       return { success: false, error: error.message };
     }
 
-    // Log audit
+    // Log audit (records whether this was a manual filing vs a marker on a real submission).
     await logAudit({
       organizationId: filing.organization_id,
       entityType: "filing",
@@ -575,7 +584,12 @@ export async function markFilingAsFiled(
       fieldName: "status",
       oldValue: filing.status,
       newValue: "filed",
-      metadata: { filing_reference: filingReference, filed_by: filedBy },
+      metadata: {
+        filing_reference: trimmedReference || filing.filing_reference || null,
+        filed_by: filedBy,
+        manual_filing: isManualFiling,
+        prior_status: filing.status,
+      },
     });
 
     // Execute auto-rollover (idempotent)
