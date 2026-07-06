@@ -70,4 +70,15 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 **Files:** `src/portal/pages/PortalInvite.tsx`, `src/portal/guards/PortalGuard.tsx`, `supabase/functions/accept-portal-invite-signup/index.ts`.
 **Checks:** build ✅, vitest ✅ 140/140, braces OK. Redeploy `accept-portal-invite-signup`. Full flow is *owner-verify* (needs a real invite + live DB).
 
-## Next: Fix 8 — single activation gate + kill duplicate job/rollover engines (LC-1/2/3). Large; DB migration(s). The core lifecycle-integrity P0 (duplicate jobs on the normal path).
+## Fix 10 — Email-queue idempotency + atomic worker claim (FUN-4) — ✅ DONE (commit d35bc2a)
+**Acceptance:** duplicate producer call / worker retry does not produce a second send; separate scheduled chasers + deliberate resends still send.
+**What changed (additive, no lifecycle changes):**
+- Migration `20260706144830`: `email_queue.claimed_at` + unique index on `idempotency_key` (NULLs distinct → unkeyed rows unaffected) + pending-claim index.
+- `process-email-queue`: reclaim-aware select (skip claimed rows; recover claims stale >10m) + atomic claim (`UPDATE … WHERE status='pending' AND claim-free RETURNING`) before send. Existing per-row send/retry semantics untouched.
+- Producers keyed + `upsert(onConflict,ignoreDuplicates)`: `send-invoice`, `send-engagement-letter` (date-bucketed — dedup same-day double-send, allow later resend); `chaser-tick` (per-occurrence key — retry dedups, distinct chasers preserved); `email-service.queueEmail` gains optional `idempotencyKey`.
+- `src/lib/email-idempotency.ts` + 9 tests pin the key contract.
+**Files:** migration `20260706144830`; edge `process-email-queue`,`send-invoice`,`send-engagement-letter`,`chaser-tick`; `src/lib/email-service.ts`,`src/lib/email-idempotency.ts`,`src/test/regression/email-idempotency.test.ts`.
+**Checks:** tsc 0 errors, build ✅, vitest ✅ 149/149 (9 new). Runtime dedup/claim behaviour is *owner-verify* (needs live DB).
+**Residual risk:** (1) apply migration BEFORE the worker deploy (the claim select references `claimed_at`). (2) The `email_queue`↔PGMQ bridge is not in git (likely Lovable-side / divergence) — the fix targets the `email_queue`-drain path the worker actually runs; if a live producer enqueues PGMQ directly, that path is out of scope. (3) `send-engagement-letter` already used `context:'engagement'` which isn't in the context CHECK — pre-existing, left as-is. (4) Failed `email_queue` rows follow existing (no auto-retry) semantics — unchanged by design.
+
+## Next: Fix 8 (parked — needs canonical-flag decision + staged rollout) or Fix 6 (filing approval gate, FIL-1/2). Per owner: Fix 10 → 8 → 6, but Fix 8 held for the staged lifecycle migration; recommend Fix 6 next while Fix 8 is parked.
