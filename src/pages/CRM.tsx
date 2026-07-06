@@ -110,6 +110,10 @@ const CRM = () => {
     notes: "",
     lead_type: "other" as ClientType,
     company_name: "",
+    company_number: "" as string,
+    // FUN-6: keep the full Companies House profile so it survives to lead creation and is
+    // available to the quote-accept / lead-conversion flow (which builds the company from it).
+    ch_company_profile: null as CHCompanyProfile | null,
   });
 
   useEffect(() => {
@@ -163,6 +167,10 @@ const CRM = () => {
         notes: formData.notes || null,
         pipeline_stage: "new",
         lead_type: formData.lead_type,
+        // FUN-6: persist the Companies House profile (was discarded on insert). The profile
+        // JSONB carries the company number + registered office, which the quote-accept /
+        // lead-conversion flow uses to build the company. (leads has no company_number column.)
+        ch_company_profile: formData.ch_company_profile as any,
       });
 
       if (error) throw error;
@@ -183,6 +191,8 @@ const CRM = () => {
         notes: "",
         lead_type: "other",
         company_name: "",
+        company_number: "",
+        ch_company_profile: null,
       });
       loadLeads();
     } catch (error: any) {
@@ -579,6 +589,9 @@ const CRM = () => {
               setFormData({
                 ...formData,
                 company_name: mappedData.company_name,
+                company_number: mappedData.company_number || "",
+                // FUN-6: keep the full profile so lead creation + conversion can use it.
+                ch_company_profile: profile,
               });
               toast({
                 title: "Company data loaded",
