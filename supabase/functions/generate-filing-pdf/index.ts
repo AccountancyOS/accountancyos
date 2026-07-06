@@ -37,6 +37,16 @@ const handler = async (req: Request): Promise<Response> => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    // SEC-3/Fix 2: the header was only checked for presence — the token was never validated,
+    // so any non-empty Authorization value could pull client PII. Validate it, and authorize
+    // against the filing's organization below.
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { filingId, documentType }: GeneratePDFRequest = await req.json();
 
@@ -68,6 +78,22 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("[generate-filing-pdf] Filing not found:", filingError);
       return new Response(JSON.stringify({ error: "Filing not found" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // SEC-3/Fix 2: authorize the caller against the filing's organization (derived from the
+    // verified filing, not the request body) before exposing any client PII.
+    const { data: pdfMembership, error: pdfMemberError } = await supabase
+      .from("organization_users")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .eq("organization_id", filing.organization_id)
+      .maybeSingle();
+    if (pdfMemberError || !pdfMembership) {
+      console.error("[generate-filing-pdf] Access denied to organization", filing.organization_id);
+      return new Response(JSON.stringify({ error: "Access denied to organization" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -182,10 +208,11 @@ const handler = async (req: Request): Promise<Response> => {
       // Continue without storage - we'll return the HTML directly
     }
 
-    // Get public URL
+    // SEC-3/Fix 2: mint a short-lived signed URL instead of a public URL — this document
+    // contains client PII (UTR/NI) and must not be served from a public bucket path.
     const { data: urlData } = await supabase.storage
       .from("filing-documents")
-      .getPublicUrl(storagePath);
+      .createSignedUrl(storagePath, 60 * 60); // 1 hour
 
     // Create filing document record
     const { error: docError } = await supabase
@@ -196,7 +223,7 @@ const handler = async (req: Request): Promise<Response> => {
         document_type: documentType,
         document_name: documentName,
         storage_path: storagePath,
-        public_url: urlData?.publicUrl,
+        public_url: urlData?.signedUrl,
         mime_type: "text/html",
         generated_at: new Date().toISOString(),
       });
@@ -211,7 +238,7 @@ const handler = async (req: Request): Promise<Response> => {
       id: documentId,
       name: documentName,
       type: documentType,
-      url: urlData?.publicUrl,
+      url: urlData?.signedUrl,
       generated_at: new Date().toISOString(),
     };
 
@@ -230,7 +257,7 @@ const handler = async (req: Request): Promise<Response> => {
         documentId,
         documentName,
         documentType,
-        url: urlData?.publicUrl,
+        url: urlData?.signedUrl,
         html: base64Html,
       }),
       {

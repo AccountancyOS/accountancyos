@@ -739,6 +739,24 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // SEC-2/Fix 2: this function runs on the service-role key, so verify_jwt alone is not a
+    // trust boundary (the public anon key is a valid JWT). Authenticate the caller here, and
+    // authorize against the filing's own organization below — never trust the body filingId.
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing authorization header' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
     const { filingId, environment = 'test' }: SubmissionRequest = await req.json();
     console.log(`[hmrc-ct-submit] Starting CT600 submission for filing ${filingId} in ${environment} mode`);
 
@@ -761,6 +779,22 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Filing not found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      );
+    }
+
+    // SEC-2/Fix 2: authorize the caller against the filing's organization (derived from the
+    // verified filing, not the request body).
+    const { data: membership, error: memberError } = await supabase
+      .from('organization_users')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .eq('organization_id', filing.organization_id)
+      .maybeSingle();
+    if (memberError || !membership) {
+      console.error('[hmrc-ct-submit] Access denied to organization', filing.organization_id);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Access denied to organization' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       );
     }
 

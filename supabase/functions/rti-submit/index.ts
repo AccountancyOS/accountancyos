@@ -40,6 +40,47 @@ serve(async (req) => {
       );
     }
 
+    // SEC-2/Fix 2: this runs on the service-role key, so verify_jwt alone is not a trust
+    // boundary (the anon key is a valid JWT). Authenticate the caller, then authorize against
+    // the filing's OWN organization (never trust the body filingId/organizationId).
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { data: filingRow, error: filingErr } = await supabase
+      .from("filings").select("organization_id").eq("id", filingId).maybeSingle();
+    if (filingErr || !filingRow) {
+      return new Response(
+        JSON.stringify({ error: "Filing not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (filingRow.organization_id !== organizationId) {
+      return new Response(
+        JSON.stringify({ error: "Organization mismatch" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { data: membership, error: memberError } = await supabase
+      .from("organization_users").select("organization_id")
+      .eq("user_id", user.id).eq("organization_id", filingRow.organization_id).maybeSingle();
+    if (memberError || !membership) {
+      return new Response(
+        JSON.stringify({ error: "Access denied to organization" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // In sandbox mode, simulate HMRC response
     const isSandbox = Deno.env.get('HMRC_MODE') !== 'production';
     
