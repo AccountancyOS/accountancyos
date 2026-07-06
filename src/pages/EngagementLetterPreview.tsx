@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 const SAMPLE_SUBJECT = "Engagement Letter For Jane Smith";
@@ -16,6 +20,7 @@ interface PreviewData {
   body: string;
   firmName: string;
   isSample: boolean;
+  signedAt: string | null;
 }
 
 export default function EngagementLetterPreview() {
@@ -23,6 +28,35 @@ export default function EngagementLetterPreview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PreviewData | null>(null);
+  // FUN-3: signing state — the emailed link is now an actual signing page.
+  const [fullName, setFullName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [signedAt, setSignedAt] = useState<string | null>(null);
+
+  const handleSign = async () => {
+    if (!token) return;
+    setSigning(true);
+    try {
+      // Cast: this RPC is newer than the generated Supabase types.
+      const { data: res, error: rpcErr } = await (supabase as any).rpc(
+        "public_sign_engagement_letter_by_token",
+        {
+          p_signature_token: token,
+          p_signature_data: { full_name: fullName.trim(), user_agent: navigator.userAgent },
+        },
+      );
+      if (rpcErr) throw rpcErr;
+      const out = res as { success?: boolean; error?: string; signed_at?: string } | null;
+      if (!out?.success) throw new Error(out?.error || "Could not record your signature.");
+      setSignedAt(out.signed_at || new Date().toISOString());
+      toast.success("Engagement letter signed. Thank you.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not record your signature.");
+    } finally {
+      setSigning(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +70,7 @@ export default function EngagementLetterPreview() {
             body: SAMPLE_BODY.replace(/\{\{firm_name\}\}/g, firmName),
             firmName,
             isSample: true,
+            signedAt: null,
           });
           setLoading(false);
         }
@@ -44,7 +79,7 @@ export default function EngagementLetterPreview() {
       try {
         const { data: letter, error: lerr } = await supabase
           .from("engagement_letters")
-          .select("id, organization_id, document_content, viewed_at")
+          .select("id, organization_id, document_content, viewed_at, signed_at")
           .eq("signature_token", token)
           .maybeSingle();
         if (lerr) throw lerr;
@@ -66,7 +101,9 @@ export default function EngagementLetterPreview() {
             body: (letter as any).document_content || "",
             firmName: org?.name || "Your Firm",
             isSample: false,
+            signedAt: (letter as any).signed_at ?? null,
           });
+          setSignedAt((letter as any).signed_at ?? null);
           setLoading(false);
         }
       } catch (e: any) {
@@ -128,6 +165,55 @@ export default function EngagementLetterPreview() {
             />
           </CardContent>
         </Card>
+
+        {/* FUN-3: signing. The emailed link now lets the client actually sign. */}
+        {!data.isSample && (
+          signedAt ? (
+            <Card className="border-emerald-500/40 bg-emerald-500/10">
+              <CardContent className="py-4 flex items-center gap-3 text-emerald-900 dark:text-emerald-100">
+                <CheckCircle2 className="h-5 w-5 shrink-0" />
+                <span className="text-sm">
+                  Signed on {new Date(signedAt).toLocaleString("en-GB")}. Thank you — no further action is needed.
+                </span>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Sign this engagement letter</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="full-name">Your full name</Label>
+                  <Input
+                    id="full-name"
+                    placeholder="e.g. Jane Smith"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    disabled={signing}
+                  />
+                </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={agreed}
+                    onChange={(e) => setAgreed(e.target.checked)}
+                    disabled={signing}
+                  />
+                  <span>
+                    I confirm I have read and agree to the terms of this engagement letter, and that
+                    typing my name constitutes my electronic signature.
+                  </span>
+                </label>
+                <Button onClick={handleSign} disabled={signing || !fullName.trim() || !agreed}>
+                  {signing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Sign engagement letter
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        )}
       </div>
     </div>
   );
