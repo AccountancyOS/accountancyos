@@ -88,6 +88,9 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 **Checks:** tsc 0, build ✅, vitest 154/154 (5 new). Frontend-only — ships with app build.
 **FIL-1 DEFERRED (same trap as SEC-7/Fix 8):** the structural gate (require `filing_approvals` + `model_snapshot_id`) is NOT enforced — `createFilingApproval` has no callers and `model_snapshot_id` is unpopulated, so enforcing it blind would block ALL filing. Prereq: wire approval creation + snapshot population into the filing flow, then add a DB trigger. Staged effort.
 
-## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-4 (email idempotency), FIL-2 (filing gate).
+## FUN-5 — Portal action completeness — ✅ DONE (3 of 4, commit e5a8839)
+Receipt upload (migration `20260706153650`: portal storage INSERT policy on `receipts`), portal Tasks "Mark done" action, and `send-invoice` send-authorization (org member OR `allow_invoice_send`). tsc 0 / build / 154 tests. Apply `20260706153650`; redeploy `send-invoice`. **DEFERRED:** portal document upload (table policy exists, but needs a storage-bucket policy + upload UI + job linkage — follow-up).
+
+## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-4 (email idempotency), FIL-2 (filing gate), FUN-5 (portal actions).
 ## Parked/deferred (need live access or staged rollout + owner decisions): SEC-6, SEC-7, Fix 8 (LC-1/2/3 lifecycle), FIL-1 (filing structural gate).
 ## Remaining unstarted P0/P1 that ARE shippable: FUN-2 (schedule automation cluster — but needs live cron verification), FUN-3 (engagement-letter sign link), FUN-5 (portal actions: receipt upload policy, tasks, doc upload), FUN-6 (CH profile + service assignment + orphan cleanup).
