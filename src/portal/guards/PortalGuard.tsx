@@ -60,9 +60,35 @@ export function PortalGuard() {
     );
   }
 
-  if (state.status === "unauth" || state.status === "no-access") {
+  if (state.status === "unauth") {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to={withReturnTo(portalPath("login"), returnTo)} replace />;
+  }
+
+  // Authenticated but no portal access: show an explicit screen instead of redirecting to
+  // login (which would immediately bounce them back — an infinite loop). FUN-1/F-06.
+  if (state.status === "no-access") {
+    return (
+      <div className="h-screen flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <h1 className="text-xl font-semibold">No portal access</h1>
+          <p className="text-muted-foreground">
+            You're signed in, but this account doesn't have access to a client portal yet. If you
+            were recently invited, ask your accountant to confirm your invitation — or sign out and
+            open the link from your invitation email again.
+          </p>
+          <button
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.href = portalPath("login");
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

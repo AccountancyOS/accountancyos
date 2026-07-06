@@ -45,16 +45,40 @@ export default function PortalInvite() {
         { body: { token, password, name } },
       );
       if (error) throw error;
-      const status = (data as { status?: string } | null)?.status;
-      if (status && status !== "ok" && status !== "success") {
-        const message = (data as { message?: string } | null)?.message ?? "Invite cannot be accepted.";
-        throw new Error(message);
+      const result = data as { status?: string; message?: string; email?: string; reason?: string } | null;
+      const status = result?.status;
+      if (status === "invalid_token") {
+        throw new Error(
+          result?.reason
+            ? `This invitation is no longer valid (${result.reason}). Please ask your accountant to resend it.`
+            : "This invitation link is no longer valid. Please ask your accountant to resend it.",
+        );
       }
+      // The signup function returns "created" (new user) or "already_exists" (re-used token /
+      // existing account) on success — both were previously treated as errors (FUN-1).
+      const ok = status === "created" || status === "already_exists" || status === "ok" || status === "success";
+      if (!ok) {
+        throw new Error(result?.message ?? "Invite cannot be accepted.");
+      }
+      // Sign in with the email the account was actually created under (returned by the
+      // function), so a typo in the form field can't cause "invalid credentials".
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+        email: result?.email || email,
         password,
       });
       if (signInError) throw signInError;
+      // Activate the portal_access row for the invited entity — the ONLY path that sets
+      // portal_access to active; without this the guard bounces the user back to login.
+      const { data: acceptData, error: acceptError } = await supabase.rpc(
+        "lifecycle_accept_portal_invitation",
+        { p_token: token },
+      );
+      if (acceptError) throw acceptError;
+      if ((acceptData as { success?: boolean } | null)?.success === false) {
+        throw new Error(
+          (acceptData as { error?: string } | null)?.error ?? "Could not activate your portal access.",
+        );
+      }
       navigate(portalPath("dashboard"), { replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to accept invite.");

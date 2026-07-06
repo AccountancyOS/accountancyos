@@ -117,11 +117,13 @@ Deno.serve(async (req) => {
   });
 
   if (!createErr) {
-    return json(req, { status: "created" });
+    // Return the invite email so the client signs in with the address the account was created
+    // under (not a user-typed one) — FUN-1/F-08.
+    return json(req, { status: "created", email });
   }
 
   if (isDuplicateEmailError(createErr as { message?: string; code?: string })) {
-    return json(req, { status: "already_exists" });
+    return json(req, { status: "already_exists", email });
   }
 
   console.warn("[accept-portal-invite-signup] createUser failed", createErr);
