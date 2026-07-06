@@ -7853,6 +7853,7 @@ export type Database = {
           organization_id: string
           sent_at: string | null
           signature_ip: string | null
+          signature_name: string | null
           signature_token: string | null
           signature_user_agent: string | null
           signed_at: string | null
@@ -7869,6 +7870,7 @@ export type Database = {
           organization_id: string
           sent_at?: string | null
           signature_ip?: string | null
+          signature_name?: string | null
           signature_token?: string | null
           signature_user_agent?: string | null
           signed_at?: string | null
@@ -7885,6 +7887,7 @@ export type Database = {
           organization_id?: string
           sent_at?: string | null
           signature_ip?: string | null
+          signature_name?: string | null
           signature_token?: string | null
           signature_user_agent?: string | null
           signed_at?: string | null
@@ -18628,6 +18631,10 @@ export type Database = {
             }
             Returns: Json
           }
+      public_sign_engagement_letter_by_token: {
+        Args: { p_signature_data?: Json; p_signature_token: string }
+        Returns: Json
+      }
       public_skip_billing:
         | { Args: { p_application_id: string }; Returns: Json }
         | {
