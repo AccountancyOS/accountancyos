@@ -35,6 +35,18 @@ serve(async (req) => {
     if (!invoice) return json({ error: "Invoice not found or access denied" }, 404);
     if (!invoice.contact_email) return json({ error: "This invoice has no customer email address" }, 400);
 
+    // FUN-5/Fix: authorize the SEND action. RLS lets any org member or bookkeeping-permitted
+    // portal user SELECT the invoice, but sending an already-issued invoice was otherwise
+    // ungated. Allow an org member (accountant) or a portal user with allow_invoice_send.
+    // (The DRAFT path below additionally re-checks via issue_invoice_safe.)
+    const [{ data: inOrg }, { data: canSend }] = await Promise.all([
+      supa.rpc("user_in_organization", { check_user_id: user.id, check_org_id: invoice.organization_id }),
+      supa.rpc("portal_has_perm", { _client_id: invoice.client_id, _company_id: invoice.company_id, _permission: "allow_invoice_send" }),
+    ]);
+    if (inOrg !== true && canSend !== true) {
+      return json({ error: "You don't have permission to send this invoice" }, 403);
+    }
+
     // Issue (post to Trade Debtors) if still a draft — via the user client so permissions apply.
     if (invoice.status === "DRAFT") {
       const { data: issued, error: issErr } = await supa.rpc("issue_invoice_safe", { p_invoice_id: invoice_id });
