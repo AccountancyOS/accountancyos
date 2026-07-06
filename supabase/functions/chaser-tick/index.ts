@@ -216,7 +216,10 @@ Deno.serve(async (req: Request) => {
           const { data: org } = await admin.from('organizations')
             .select('name').eq('id', run.organization_id).single();
 
-          await admin.from('email_queue').insert({
+          // FUN-4/Fix 10: carry the chaser's per-occurrence idempotency key onto the email row
+          // so a retried tick can't queue the same chaser email twice. Distinct chasers have
+          // distinct next_send_at -> distinct keys -> legitimately separate sends are preserved.
+          await admin.from('email_queue').upsert({
             organization_id: run.organization_id,
             to_email: toEmail,
             subject: renderedSubject,
@@ -225,7 +228,8 @@ Deno.serve(async (req: Request) => {
             source: 'chaser',
             source_id: inserted.id,
             from_name: org?.name || 'AccountancyOS',
-          });
+            idempotency_key: `chaser:${idempotencyKey}`,
+          }, { onConflict: 'idempotency_key', ignoreDuplicates: true });
         } catch (emailErr: unknown) {
           messageStatus = 'FAILED';
           failureReason = (emailErr as Error).message;

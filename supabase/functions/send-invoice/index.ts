@@ -90,7 +90,11 @@ serve(async (req) => {
     </div>`;
 
     // Queue via the canonical email pipeline. Attachment is best-effort; the link always works.
-    const { error: qErr } = await svc.from("email_queue").insert({
+    // FUN-4/Fix 10: idempotency key dedups an accidental double-send of the SAME invoice on the
+    // SAME day (double-click / retry). A deliberate resend on a later day gets a new key and is
+    // allowed. upsert(...ignoreDuplicates) turns a same-key collision into a no-op.
+    const idempotencyKey = `invoice-send:${invoice_id}:${new Date().toISOString().slice(0, 10)}`;
+    const { error: qErr } = await svc.from("email_queue").upsert({
       organization_id: invoice.organization_id,
       to_email: invoice.contact_email,
       to_name: invoice.contact_name,
@@ -99,13 +103,14 @@ serve(async (req) => {
       context: "invoice",
       entity_type: "invoice",
       entity_id: invoice_id,
+      idempotency_key: idempotencyKey,
       attachments: [{
         filename: pdfJson.filename || `Invoice-${invoice.invoice_number || invoice_id}.pdf`,
         content: pdfJson.pdf_base64,
         contentType: "application/pdf",
       }],
       status: "pending",
-    });
+    }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     if (qErr) return json({ error: `Could not queue the email: ${qErr.message}` }, 500);
 
     await svc.from("invoices").update({ sent_at: new Date().toISOString() }).eq("id", invoice_id);

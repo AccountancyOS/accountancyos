@@ -15,6 +15,12 @@ export interface QueueEmailOptions {
   entityType?: string;
   entityId?: string;
   scheduledAt?: Date;
+  /**
+   * FUN-4/Fix 10: deterministic key to dedup the same logical email (double-click / retry).
+   * Genuinely distinct events (separate scheduled chasers, deliberate resends) must use
+   * distinct keys. When set, a same-key collision is a no-op (the existing row is kept).
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -22,7 +28,7 @@ export interface QueueEmailOptions {
  */
 export async function queueEmail(options: QueueEmailOptions): Promise<{ success: boolean; queueId?: string; error?: string }> {
   try {
-    const insertData: EmailQueueInsert = {
+    const insertData = {
       organization_id: options.organizationId,
       to_email: options.toEmail,
       to_name: options.toName || null,
@@ -36,7 +42,24 @@ export async function queueEmail(options: QueueEmailOptions): Promise<{ success:
       scheduled_at: options.scheduledAt?.toISOString() || null,
       status: "pending",
       retry_count: 0,
-    };
+      ...(options.idempotencyKey ? { idempotency_key: options.idempotencyKey } : {}),
+    } as EmailQueueInsert & { idempotency_key?: string };
+
+    // With an idempotency key, dedup via ON CONFLICT DO NOTHING (ignoreDuplicates): a repeat
+    // call for the same event is a no-op rather than a second queued email.
+    if (options.idempotencyKey) {
+      const { data, error } = await supabase
+        .from("email_queue")
+        .upsert(insertData, { onConflict: "idempotency_key", ignoreDuplicates: true })
+        .select("id")
+        .maybeSingle();
+      if (error) {
+        console.error("Error queueing email:", error);
+        return { success: false, error: error.message };
+      }
+      // data === null means a row with this key already existed (deduped) — still success.
+      return { success: true, queueId: data?.id };
+    }
 
     const { data, error } = await supabase
       .from("email_queue")

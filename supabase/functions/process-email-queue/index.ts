@@ -427,11 +427,16 @@ Deno.serve(async (req) => {
   let emailQueueProcessed = 0
   let emailQueueFailed = 0
   try {
+    // FUN-4/Fix 10: only pick rows that are unclaimed, or whose claim has gone stale (a worker
+    // that crashed mid-send). This lets a second worker recover an orphaned row without
+    // double-sending a live one.
+    const staleClaimBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString() // 10 minutes
     const { data: rows, error: rowsError } = await supabase
       .from('email_queue')
       .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by, attachments')
       .eq('status', 'pending')
       .lte('scheduled_at', new Date().toISOString())
+      .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
       .order('created_at', { ascending: true })
       .limit(batchSize)
 
@@ -452,6 +457,21 @@ Deno.serve(async (req) => {
             .eq('id', row.id)
           emailQueueFailed++
           continue
+        }
+
+        // FUN-4/Fix 10: atomically claim the row before sending. The UPDATE takes a row lock, so
+        // if two worker runs race, only one sees status='pending' + a free claim and gets the
+        // row back; the other gets no row and skips — preventing a duplicate send.
+        const { data: claimed } = await supabase
+          .from('email_queue')
+          .update({ claimed_at: new Date().toISOString() })
+          .eq('id', row.id)
+          .eq('status', 'pending')
+          .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
+          .select('id')
+          .maybeSingle()
+        if (!claimed) {
+          continue // another worker already claimed or sent this row
         }
 
         const messageId = crypto.randomUUID()

@@ -222,7 +222,9 @@ serve(async (req: Request) => {
     // mailbox via mailbox_id + provider.
     const { error: enqueueError } = await serviceSupabase
       .from('email_queue')
-      .insert({
+      // FUN-4/Fix 10: idempotency key dedups an accidental double-send of the same engagement
+      // letter on the same day (double-click / retry); a deliberate later resend gets a new key.
+      .upsert({
         organization_id: application.organization_id,
         mailbox_id: mailbox.id,
         provider: mailbox.provider,
@@ -235,8 +237,9 @@ serve(async (req: Request) => {
         context: 'engagement',
         entity_type: 'engagement_letter',
         entity_id: body.engagement_letter_id,
+        idempotency_key: `engagement-letter:${body.engagement_letter_id}:${new Date().toISOString().slice(0, 10)}`,
         status: 'pending',
-      });
+      }, { onConflict: 'idempotency_key', ignoreDuplicates: true });
 
     if (enqueueError) {
       console.error('Failed to enqueue engagement letter email:', enqueueError);
