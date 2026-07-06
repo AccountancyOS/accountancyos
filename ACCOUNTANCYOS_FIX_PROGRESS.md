@@ -81,4 +81,13 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 **Checks:** tsc 0 errors, build ✅, vitest ✅ 149/149 (9 new). Runtime dedup/claim behaviour is *owner-verify* (needs live DB).
 **Residual risk:** (1) apply migration BEFORE the worker deploy (the claim select references `claimed_at`). (2) The `email_queue`↔PGMQ bridge is not in git (likely Lovable-side / divergence) — the fix targets the `email_queue`-drain path the worker actually runs; if a live producer enqueues PGMQ directly, that path is out of scope. (3) `send-engagement-letter` already used `context:'engagement'` which isn't in the context CHECK — pre-existing, left as-is. (4) Failed `email_queue` rows follow existing (no auto-retry) semantics — unchanged by design.
 
-## Next: Fix 8 (parked — needs canonical-flag decision + staged rollout) or Fix 6 (filing approval gate, FIL-1/2). Per owner: Fix 10 → 8 → 6, but Fix 8 held for the staged lifecycle migration; recommend Fix 6 next while Fix 8 is parked.
+## Fix 6 — Filing "mark as filed" gate (FIL-2) — ✅ DONE (commit f7cb0c0); FIL-1 structural gate DEFERRED
+**Acceptance:** a draft/manual filing can't be flipped to filed without a reference; an already-submitted filing still can; audit records manual-vs-real.
+**What changed (frontend/service only):** `markFilingAsFiled` now gates via pure `evaluateMarkFiled(status, ref)` — allowed only if status submitted/accepted OR a non-empty reference is supplied (blocks the silent empty/fabricated-reference flip). Audit metadata gains `manual_filing` + `prior_status`. `JobFilingTab`'s non-CH "Mark as Filed" now requires a reference input (was passing none). 5 tests.
+**Files:** `src/lib/filing-mark-filed-gate.ts` (new, pure), `src/lib/filing-service.ts`, `src/components/jobs/JobFilingTab.tsx`, `src/test/regression/filing-mark-filed-gate.test.ts`.
+**Checks:** tsc 0, build ✅, vitest 154/154 (5 new). Frontend-only — ships with app build.
+**FIL-1 DEFERRED (same trap as SEC-7/Fix 8):** the structural gate (require `filing_approvals` + `model_snapshot_id`) is NOT enforced — `createFilingApproval` has no callers and `model_snapshot_id` is unpopulated, so enforcing it blind would block ALL filing. Prereq: wire approval creation + snapshot population into the filing flow, then add a DB trigger. Staged effort.
+
+## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-4 (email idempotency), FIL-2 (filing gate).
+## Parked/deferred (need live access or staged rollout + owner decisions): SEC-6, SEC-7, Fix 8 (LC-1/2/3 lifecycle), FIL-1 (filing structural gate).
+## Remaining unstarted P0/P1 that ARE shippable: FUN-2 (schedule automation cluster — but needs live cron verification), FUN-3 (engagement-letter sign link), FUN-5 (portal actions: receipt upload policy, tasks, doc upload), FUN-6 (CH profile + service assignment + orphan cleanup).
