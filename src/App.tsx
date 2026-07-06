@@ -25,7 +25,6 @@ import OnboardingWizard from "./pages/OnboardingWizard";
 import OnboardingDiagnostics from "./pages/OnboardingDiagnostics";
 import Subscription from "./pages/Subscription";
 import ColorComparison from "./pages/ColorComparison";
-import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import Templates from "./pages/Templates";
 import TemplateDetail from "./pages/TemplateDetail";
