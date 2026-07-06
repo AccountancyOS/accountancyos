@@ -21,6 +21,13 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // FUN-2/Fix: cron-only worker (verify_jwt=false). Require the service-role key so it is not
+  // anonymously invokable. The pg_cron job sends it as the bearer.
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (bearer !== Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
