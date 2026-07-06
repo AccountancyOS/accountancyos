@@ -210,6 +210,13 @@ serve(async (req) => {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // SEC-8/Fix 3: internal/cron-only worker (verify_jwt=false), hits HMRC as service role.
+  // Require the service-role key so it is not anonymously invokable.
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (bearer !== supabaseKey) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
   const gatewayId = Deno.env.get('HMRC_CT_GATEWAY_ID');
   const gatewayPassword = Deno.env.get('HMRC_CT_GATEWAY_PASSWORD');
 

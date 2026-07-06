@@ -65,6 +65,30 @@ serve(async (req) => {
       throw new Error('Missing required parameters: organizationId and organizationName are required');
     }
 
+    // SEC-4/Fix 3: this runs on the service-role key and drives billing mutations, so it must
+    // authenticate the caller (verify_jwt alone accepts the anon key) and verify they belong to
+    // the organizationId they passed — otherwise anyone could start checkout for any org.
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: scMembership } = await supabase
+      .from('organization_users').select('organization_id')
+      .eq('user_id', user.id).eq('organization_id', organizationId).maybeSingle();
+    if (!scMembership) {
+      return new Response(JSON.stringify({ error: 'Access denied to organization' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Determine which price ID to use based on plan selection
     const selectedPlan = plan || 'team'; // Default to team if not specified
     let priceId: string | null = null;

@@ -55,7 +55,6 @@ serve(async (req) => {
     const {
       entity_type,
       entity_id,
-      organization_id: providedOrgId,
       redirect_path = '/bookkeeping',
       mode = 'connect',
       bank_connection_id = null,
@@ -75,23 +74,45 @@ serve(async (req) => {
       });
     }
 
-    // Derive organization_id from entity if not provided
-    let organization_id = providedOrgId;
-    if (!organization_id) {
-      const entityTable = entity_type === 'client' ? 'clients' : 'companies';
-      const { data: entity, error: entityError } = await supabase
-        .from(entityTable)
-        .select('organization_id')
-        .eq('id', entity_id)
-        .single();
-      
-      if (entityError || !entity) {
-        return new Response(JSON.stringify({ error: 'Entity not found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      organization_id = entity.organization_id;
+    // SEC-4/Fix 3: always derive the entity's TRUE organization (never trust a client-supplied
+    // organization_id) and authorize the caller against the entity. Without this, any
+    // authenticated user could attach a bank connection to any client/company in any org.
+    const entityTable = entity_type === 'client' ? 'clients' : 'companies';
+    const { data: entity, error: entityError } = await supabase
+      .from(entityTable)
+      .select('organization_id')
+      .eq('id', entity_id)
+      .single();
+    if (entityError || !entity) {
+      return new Response(JSON.stringify({ error: 'Entity not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const organization_id = entity.organization_id;
+
+    // The caller must actually have rights to this entity: a portal user with access to it, or
+    // (accountant surface) a member of its organization.
+    const clientIdForAuthz = entity_type === 'client' ? entity_id : null;
+    const companyIdForAuthz = entity_type === 'company' ? entity_id : null;
+    let authorized = false;
+    if (surface === 'portal') {
+      const { data: hasAccess } = await supabase.rpc('portal_user_has_entity_access', {
+        _user_id: user.id, _client_id: clientIdForAuthz, _company_id: companyIdForAuthz,
+      });
+      authorized = hasAccess === true;
+    } else {
+      const { data: inOrg } = await supabase.rpc('user_in_organization', {
+        check_user_id: user.id, check_org_id: organization_id,
+      });
+      authorized = inOrg === true;
+    }
+    if (!authorized) {
+      console.warn('truelayer-auth: caller not authorized for entity', { user: user.id, entity_id, surface });
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // For reconnect, verify the target connection exists, belongs to the

@@ -183,6 +183,27 @@ serve(async (req) => {
       connection = conn;
     }
 
+    // SEC-4/Fix 3: authorize the caller against the resolved connection. The
+    // bank_account_id/connection_id come from the request body, so without this any
+    // authenticated user could force a TrueLayer pull into any tenant (IDOR). Allow an org
+    // member (accountant surface) OR a portal user with access to the entity (client surface);
+    // the scheduled sync runs in a separate service-role function, not through here.
+    const [{ data: inOrg }, { data: portalAccess }] = await Promise.all([
+      supabase.rpc('user_in_organization', {
+        check_user_id: user.id, check_org_id: connection.organization_id,
+      }),
+      supabase.rpc('portal_user_has_entity_access', {
+        _user_id: user.id, _client_id: connection.client_id, _company_id: connection.company_id,
+      }),
+    ]);
+    if (inOrg !== true && portalAccess !== true) {
+      console.warn('truelayer-sync: caller not authorized', { user: user.id, org: connection.organization_id });
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Refresh token if needed
     const accessToken = await refreshTokenIfNeeded(supabase, connection, tlConfig);
     if (!accessToken) {

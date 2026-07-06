@@ -141,6 +141,14 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // SEC-8/Fix 3: internal/cron-only worker (verify_jwt=false). Require the service-role key so
+  // it is not anonymously invokable — otherwise it sweeps every connected mailbox and leaks
+  // addresses/sync state to the internet. The cron invokes it with the service-role bearer.
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (bearer !== SUPABASE_SERVICE_ROLE_KEY) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
   try {
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
