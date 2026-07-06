@@ -94,6 +94,11 @@ Receipt upload (migration `20260706153650`: portal storage INSERT policy on `rec
 ## FUN-3 — Engagement-letter signing link — ✅ DONE (commit 13e1ce1)
 The emailed `/engagement/{signature_token}` link was read-only (the sign RPC keyed on onboarding application_id, not the link's token). Added `public_sign_engagement_letter_by_token` (migration `20260706175800`, token-gated, idempotent, marks signed_at/ip/ua) + a signing form on EngagementLetterPreview (name + agreement + Sign, with signed confirmation). tsc 0 / build / 154 tests. Apply `20260706175800`. NOTE: records the signature (legal marker) but does not advance onboarding gate state — follow-up if standalone-link signing must also unblock onboarding.
 
-## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-3 (EL sign link), FUN-4 (email idempotency), FIL-2 (filing gate), FUN-5 (portal actions).
+## FUN-6 — Accountant-app completeness — ✅ 2 of 4 (commits 855f4ed, 7280723)
+- CH profile persist at lead capture (`855f4ed`): the CRM lookup dropped `ch_company_profile` on insert; now persisted so quote-accept/conversion can build the company. Frontend-only.
+- Orphan/dead-code cleanup (`7280723`): removed 10 zero-importer files (~1,600 lines) — the duplicate twins + dead libs. build+tsc+154 tests green after removal. Revertable if Lovable references any out-of-git.
+- DEFERRED: service-assignment UI (must materialize jobs/deadlines = parked Fix 8 lifecycle); overdue-scan scheduling (= FUN-2 automation cron, needs live-cron verification + CRON_SECRET).
+
+## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-3 (EL sign link), FUN-4 (email idempotency), FIL-2 (filing gate), FUN-5 (portal actions), FUN-6 (CH profile + dead-code cleanup).
 ## Parked/deferred (need live access or staged rollout + owner decisions): SEC-6, SEC-7, Fix 8 (LC-1/2/3 lifecycle), FIL-1 (filing structural gate).
 ## Remaining unstarted P0/P1 that ARE shippable: FUN-2 (schedule automation cluster — but needs live cron verification), FUN-3 (engagement-letter sign link), FUN-5 (portal actions: receipt upload policy, tasks, doc upload), FUN-6 (CH profile + service assignment + orphan cleanup).
