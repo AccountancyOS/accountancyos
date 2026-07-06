@@ -91,6 +91,9 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 ## FUN-5 — Portal action completeness — ✅ DONE (3 of 4, commit e5a8839)
 Receipt upload (migration `20260706153650`: portal storage INSERT policy on `receipts`), portal Tasks "Mark done" action, and `send-invoice` send-authorization (org member OR `allow_invoice_send`). tsc 0 / build / 154 tests. Apply `20260706153650`; redeploy `send-invoice`. **DEFERRED:** portal document upload (table policy exists, but needs a storage-bucket policy + upload UI + job linkage — follow-up).
 
-## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-4 (email idempotency), FIL-2 (filing gate), FUN-5 (portal actions).
+## FUN-3 — Engagement-letter signing link — ✅ DONE (commit 13e1ce1)
+The emailed `/engagement/{signature_token}` link was read-only (the sign RPC keyed on onboarding application_id, not the link's token). Added `public_sign_engagement_letter_by_token` (migration `20260706175800`, token-gated, idempotent, marks signed_at/ip/ua) + a signing form on EngagementLetterPreview (name + agreement + Sign, with signed confirmation). tsc 0 / build / 154 tests. Apply `20260706175800`. NOTE: records the signature (legal marker) but does not advance onboarding gate state — follow-up if standalone-link signing must also unblock onboarding.
+
+## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-3 (EL sign link), FUN-4 (email idempotency), FIL-2 (filing gate), FUN-5 (portal actions).
 ## Parked/deferred (need live access or staged rollout + owner decisions): SEC-6, SEC-7, Fix 8 (LC-1/2/3 lifecycle), FIL-1 (filing structural gate).
 ## Remaining unstarted P0/P1 that ARE shippable: FUN-2 (schedule automation cluster — but needs live cron verification), FUN-3 (engagement-letter sign link), FUN-5 (portal actions: receipt upload policy, tasks, doc upload), FUN-6 (CH profile + service assignment + orphan cleanup).
