@@ -52,5 +52,15 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 
 ---
 
-## Phase 1 (security) COMPLETE: Fixes 1–4? — Fix 4 next
-Fix 4 — multi-org context + portal visibility policies + anon token bypass (SEC-5, SEC-6, SEC-7): `get_user_organization_id` (remove from RLS / require explicit org), 8 portal SELECT policies → `portal_has_perm` honoring `show_*`, `lifecycle_require_onboarding_token` (require token unconditionally). This is a migration (DB-only).
+## Fix 4 — Multi-org context + portal visibility + anon token (SEC-5, SEC-6, SEC-7) — ⚠️ PARTIAL (commit 41b71a8)
+
+**SEC-5 ✅ DONE (migration 20260706103035):** the `organization_users` "view members" policy used `organization_id = get_user_organization_id()` (LIMIT-1 arbitrary org). Replaced with `user_in_organization(auth.uid(), organization_id)` (SECURITY DEFINER, recursion-safe, multi-org correct). Investigation correction: the audit's "cross-tenant P0" was an over-read — the single live usage *under*-returns for multi-org users (a correctness bug), not a leak. No other RLS usage of the function exists. *owner-verify* after apply.
+
+**SEC-6 ⏸️ DEFERRED (needs live-policy visibility):** the 8 portal SELECT policies ignoring `show_*` flags can't be safely fixed blind. There are **overlapping** portal policies per table — the named ones (`20251129230654`) *plus* blanket "Portal bookkeeping full access" policies created via dynamic SQL in `20260605122942`. RLS is permissive-OR, so tightening one leaves the blanket one granting access; a correct fix must reconcile ALL policies against the LIVE set (diverges from git) and confirm a helper maps `show_*`. It's P1 **visibility-contract** (NOT cross-tenant — portal membership to the entity is still required). Do with live-DB access.
+
+**SEC-7 ⏸️ DEFERRED (would break legacy onboarding):** requiring the onboarding token unconditionally breaks every **legacy** link — `PublicOnboarding.tsx:35-50` documents that legacy links carry no token and the RPCs treat NULL as "no token". The IDOR needs a guessed 122-bit application UUID (P1, low-exploitability). Prerequisite: thread tokens into legacy links (or confirm none remain), then flip enforcement.
+
+---
+
+## Phase 1 (security) status: SEC-1..SEC-5 shipped; SEC-6/SEC-7 need live access/prereqs.
+## Next: Phase 2 — Fix 8 (single activation gate + kill duplicate job/rollover engines: LC-1/2/3) OR Fix 5 (portal invite, FUN-1). Recommend Fix 5 next — small, unblocks all portal testing.
