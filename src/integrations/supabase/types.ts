@@ -7004,6 +7004,7 @@ export type Database = {
           attachments: Json
           body_html: string | null
           body_text: string | null
+          claimed_at: string | null
           client_id: string | null
           company_id: string | null
           context: string | null
@@ -7013,6 +7014,7 @@ export type Database = {
           entity_type: string | null
           error_message: string | null
           id: string
+          idempotency_key: string | null
           job_id: string | null
           last_error_code: string | null
           last_error_message: string | null
@@ -7038,6 +7040,7 @@ export type Database = {
           attachments?: Json
           body_html?: string | null
           body_text?: string | null
+          claimed_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: string | null
@@ -7047,6 +7050,7 @@ export type Database = {
           entity_type?: string | null
           error_message?: string | null
           id?: string
+          idempotency_key?: string | null
           job_id?: string | null
           last_error_code?: string | null
           last_error_message?: string | null
@@ -7072,6 +7076,7 @@ export type Database = {
           attachments?: Json
           body_html?: string | null
           body_text?: string | null
+          claimed_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: string | null
@@ -7081,6 +7086,7 @@ export type Database = {
           entity_type?: string | null
           error_message?: string | null
           id?: string
+          idempotency_key?: string | null
           job_id?: string | null
           last_error_code?: string | null
           last_error_message?: string | null
