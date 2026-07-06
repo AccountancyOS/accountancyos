@@ -34,5 +34,23 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 
 ---
 
-## Next: Fix 3 — Gate bank-connect + sync + stripe-checkout + mailbox sync (SEC-4, SEC-8)
-`truelayer-auth` (connect path: check `portal_has_perm('allow_bank_connect')`/`user_in_organization` for the entity before issuing state), `truelayer-sync` (IDOR: org-match the bank_account/connection), `stripe-checkout` (requireOrgContext, don't trust body org), `gmail-sync`/`outlook-sync` + `hmrc-ct-poll`/`hmrc-ct-delete` (require `SERVICE_ROLE_KEY`/`CRON_SECRET`).
+## Fix 3 — Gate bank-connect + sync + stripe-checkout + mailbox/HMRC workers (SEC-4, SEC-8) — ✅ DONE (commit 9d3609e)
+
+**Acceptance tests:** cross-entity/cross-org bank connect or sync → 403; anonymous call to a cron worker → 401; legit accountant/portal/cron paths still work.
+
+**What changed:**
+- `truelayer-auth`: dropped the trusted body `organization_id`; always derive the entity's true org and authorize the caller against the entity — `portal_user_has_entity_access` (portal) or `user_in_organization` (accountant). Closes: any authed user attaching a bank connection to any entity.
+- `truelayer-sync`: authorize the caller against the resolved connection (org member OR portal user with entity access) before syncing — fixes the body-id IDOR. Scheduled sync is a separate service-role fn, unaffected.
+- `stripe-checkout`: added `getUser` (was none despite verify_jwt) + membership check on the body `organizationId`.
+- `gmail-sync`/`outlook-sync`/`hmrc-ct-poll`/`hmrc-ct-delete`: `verify_jwt=false` internal workers → require `bearer === SERVICE_ROLE_KEY` (mirrors `gmail-send`). Verified the cron sends the service-role bearer (`20251203124749`) and none is called from the frontend.
+
+**Files:** `supabase/functions/{truelayer-auth,truelayer-sync,stripe-checkout,gmail-sync,outlook-sync,hmrc-ct-poll,hmrc-ct-delete}/index.ts`.
+
+**Checks:** brace-balance OK on all 7; `build` ✅; `vitest` ✅ 140/140. 401/403 runtime — *owner-verify* after deploy.
+
+**Remaining risk:** used explicit-user RPC helpers because these run on the service-role key (`auth.uid()` is null). `truelayer-auth` still permits the accountant surface to connect (org member) — closing the cross-tenant hole; whether accountants *should* connect at all is a product-policy choice, not a security gap. `hmrc-ct-poll/delete` are still unscheduled (Fix 9 schedules them).
+
+---
+
+## Phase 1 (security) COMPLETE: Fixes 1–4? — Fix 4 next
+Fix 4 — multi-org context + portal visibility policies + anon token bypass (SEC-5, SEC-6, SEC-7): `get_user_organization_id` (remove from RLS / require explicit org), 8 portal SELECT policies → `portal_has_perm` honoring `show_*`, `lifecycle_require_onboarding_token` (require token unconditionally). This is a migration (DB-only).
