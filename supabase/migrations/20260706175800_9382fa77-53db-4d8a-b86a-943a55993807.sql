@@ -9,10 +9,19 @@
 --
 -- This adds a token-gated sign RPC: the caller presents the letter's UNIQUE signature_token
 -- (the unguessable secret from the emailed link) and a signature payload; the RPC marks that
--- specific letter signed (mirroring the fields public_sign_engagement_letter sets: signed_at,
--- signature_ip, signature_user_agent). It is idempotent (already-signed returns success) and
--- rejects unknown/expired tokens.
+-- specific letter signed (signed_at) and persists the typed name as the signature. It is
+-- idempotent (already-signed returns success) and rejects unknown/expired tokens.
+--
+-- SECURITY: we deliberately DO NOT accept a caller-supplied IP for signature_ip — this RPC is
+-- called directly via PostgREST, so there is no trustworthy client IP available at the SQL
+-- layer (inet_client_addr() would be the connection pooler, not the end user), and storing a
+-- spoofable value in a legal audit field is worse than storing none. The user agent is kept as
+-- purely informational (it is self-reported by definition).
 -- ============================================================
+
+-- Persist the typed signature name (the actual signature). Additive.
+ALTER TABLE public.engagement_letters
+  ADD COLUMN IF NOT EXISTS signature_name text;
 
 CREATE OR REPLACE FUNCTION public.public_sign_engagement_letter_by_token(
   p_signature_token text,
@@ -50,7 +59,7 @@ BEGIN
 
   UPDATE public.engagement_letters
      SET signed_at = now(),
-         signature_ip = COALESCE(signature_ip, p_signature_data->>'ip'),
+         signature_name = COALESCE(signature_name, NULLIF(trim(p_signature_data->>'full_name'), '')),
          signature_user_agent = COALESCE(signature_user_agent, p_signature_data->>'user_agent'),
          viewed_at = COALESCE(viewed_at, now())
    WHERE id = v_letter.id;
