@@ -63,4 +63,11 @@ Execution backlog from `ACCOUNTANCYOS_FULL_CODE_AUDIT.md`, in strict priority or
 ---
 
 ## Phase 1 (security) status: SEC-1..SEC-5 shipped; SEC-6/SEC-7 need live access/prereqs.
-## Next: Phase 2 — Fix 8 (single activation gate + kill duplicate job/rollover engines: LC-1/2/3) OR Fix 5 (portal invite, FUN-1). Recommend Fix 5 next — small, unblocks all portal testing.
+
+## Fix 5 — Portal invite (FUN-1) — ✅ DONE (commit bf8de2c)
+**Acceptance:** fresh invite → set password → dashboard with entities; reused/expired token → friendly message; not a login loop.
+**What changed:** PortalInvite treated the signup fn's success statuses (`created`/`already_exists`) as errors and never called `lifecycle_accept_portal_invitation` (the only path that activates `portal_access`) → guard looped every invited user to login. Now: accept those statuses; friendly `invalid_token` message; sign in with the fn-returned email (fixes typo trap); call `lifecycle_accept_portal_invitation(p_token)` before navigating. `accept-portal-invite-signup` returns the email on success. `PortalGuard`: authenticated-but-no-access shows an explicit screen + sign-out (was a login loop, F-06).
+**Files:** `src/portal/pages/PortalInvite.tsx`, `src/portal/guards/PortalGuard.tsx`, `supabase/functions/accept-portal-invite-signup/index.ts`.
+**Checks:** build ✅, vitest ✅ 140/140, braces OK. Redeploy `accept-portal-invite-signup`. Full flow is *owner-verify* (needs a real invite + live DB).
+
+## Next: Fix 8 — single activation gate + kill duplicate job/rollover engines (LC-1/2/3). Large; DB migration(s). The core lifecycle-integrity P0 (duplicate jobs on the normal path).
