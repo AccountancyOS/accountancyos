@@ -94,11 +94,22 @@ Receipt upload (migration `20260706153650`: portal storage INSERT policy on `rec
 ## FUN-3 — Engagement-letter signing link — ✅ DONE (commit 13e1ce1)
 The emailed `/engagement/{signature_token}` link was read-only (the sign RPC keyed on onboarding application_id, not the link's token). Added `public_sign_engagement_letter_by_token` (migration `20260706175800`, token-gated, idempotent, marks signed_at/ip/ua) + a signing form on EngagementLetterPreview (name + agreement + Sign, with signed confirmation). tsc 0 / build / 154 tests. Apply `20260706175800`. NOTE: records the signature (legal marker) but does not advance onboarding gate state — follow-up if standalone-link signing must also unblock onboarding.
 
+## FUN-2 — Automation cluster — ✅ gated + chaser cron ready (commit cba67d3)
+Gated chaser-tick/chaser-trigger-scan/workflow-tick/process-automation-events (service-role bearer). Migration `20260706211705` schedules the chaser system (scan 6h, tick 15m, idempotent unschedule-first). Applying it ACTIVATES client-facing chasers — owner-controlled. workflow-tick/process-automation-events NOT scheduled (two competing engines — pick one first).
+
+## FUN-5 doc-upload — ✅ DONE (commit 68ebc79)
+Portal document upload: storage policy (migration `20260706212353`) + upload UI (job picker + file) + service. Apply `20260706212353`.
+
 ## FUN-6 — Accountant-app completeness — ✅ 2 of 4 (commits 855f4ed, 7280723)
 - CH profile persist at lead capture (`855f4ed`): the CRM lookup dropped `ch_company_profile` on insert; now persisted so quote-accept/conversion can build the company. Frontend-only.
 - Orphan/dead-code cleanup (`7280723`): removed 10 zero-importer files (~1,600 lines) — the duplicate twins + dead libs. build+tsc+154 tests green after removal. Revertable if Lovable references any out-of-git.
 - DEFERRED: service-assignment UI (must materialize jobs/deadlines = parked Fix 8 lifecycle); overdue-scan scheduling (= FUN-2 automation cron, needs live-cron verification + CRON_SECRET).
 
 ## Security/integrity fixes shipped: SEC-1..SEC-5, FUN-1 (portal invite), FUN-3 (EL sign link), FUN-4 (email idempotency), FIL-2 (filing gate), FUN-5 (portal actions), FUN-6 (CH profile + dead-code cleanup).
-## Parked/deferred (need live access or staged rollout + owner decisions): SEC-6, SEC-7, Fix 8 (LC-1/2/3 lifecycle), FIL-1 (filing structural gate).
+## REMAINING (all require an owner decision or would regress prod if done blind — NOT safely implementable now):
+- **Fix 8 (LC-1/2/3 duplicate jobs):** owner-parked; needs the canonical-flag rollout decision + the 6 staged conditions. The clean fix changes flag-OFF activation semantics system-wide.
+- **FIL-1 (filing structural gate):** needs a real approval-creation UI flow + model-snapshot population wired first; enforcing the gate blind blocks ALL filing (createFilingApproval has no callers).
+- **SEC-6 (portal show_* SELECT policies):** P1 visibility-contract (NOT cross-tenant). Overlapping "Portal bookkeeping full access" blanket policies must be reconciled against the LIVE policy set; wrong = broken portal reads. Needs live-DB visibility.
+- **SEC-7 (anon onboarding NULL-token):** P1, low-exploitability (unguessable 122-bit UUID). Enforcing the token unconditionally breaks legacy onboarding links (which carry no token). Needs token-threading into legacy links / a cutoff first.
+- **Service-assignment UI** (needs Fix 8 lifecycle) and **EL-sign onboarding-gate advancement** (needs the onboarding-flow coupling) — both depend on the parked lifecycle work.
 ## Remaining unstarted P0/P1 that ARE shippable: FUN-2 (schedule automation cluster — but needs live cron verification), FUN-3 (engagement-letter sign link), FUN-5 (portal actions: receipt upload policy, tasks, doc upload), FUN-6 (CH profile + service assignment + orphan cleanup).
