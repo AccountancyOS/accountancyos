@@ -133,3 +133,58 @@ export async function resolvePortalDocumentUrl(
   if (!internal._bucket || !internal._path) return null;
   return getSignedUrl(internal._bucket, internal._path);
 }
+// FUN-5 (deferred sub-part): portal document upload.
+export interface PortalUploadJob {
+  id: string;
+  name: string;
+  organizationId: string;
+}
+
+/** Jobs the portal user can attach an uploaded document to (their entity's jobs). */
+export async function listUploadableJobs(entity: PortalEntity): Promise<PortalUploadJob[]> {
+  const col = entity.type === "client" ? "client_id" : "company_id";
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id, job_name, organization_id")
+    .eq(col, entity.id)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map((j: any) => ({
+    id: j.id,
+    name: j.job_name || "Job",
+    organizationId: j.organization_id,
+  }));
+}
+
+/**
+ * Upload a document against a job. Mirrors the accountant document-service path
+ * (`${org}/${jobId}/${ts}_${name}` in the job-documents bucket) so the storage policy gates it,
+ * then inserts a client-visible job_documents row.
+ */
+export async function uploadPortalJobDocument(
+  job: PortalUploadJob,
+  file: File,
+  uploadedBy: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  const sanitized = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `${job.organizationId}/${job.id}/${Date.now()}_${sanitized}`;
+  const { error: upErr } = await supabase.storage
+    .from("job-documents")
+    .upload(filePath, file, { upsert: false });
+  if (upErr) return { success: false, error: upErr.message };
+
+  const { error: dbErr } = await (supabase as any).from("job_documents").insert({
+    organization_id: job.organizationId,
+    job_id: job.id,
+    file_name: file.name,
+    file_path: filePath,
+    uploaded_by: uploadedBy,
+    client_visible: true,
+  });
+  if (dbErr) {
+    // Roll back the storage object if the row insert fails.
+    await supabase.storage.from("job-documents").remove([filePath]);
+    return { success: false, error: dbErr.message };
+  }
+  return { success: true };
+}

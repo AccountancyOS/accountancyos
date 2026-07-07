@@ -1,12 +1,21 @@
-import { Download, FolderOpen } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, FolderOpen, Loader2, Upload } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { PortalPageHeader } from "../components/PortalPageHeader";
 import { PortalEmptyState } from "../components/PortalEmptyState";
 import { usePortalDocuments } from "../hooks/usePortalData";
-import { resolvePortalDocumentUrl } from "../services/portalDocumentsService";
+import {
+  resolvePortalDocumentUrl,
+  listUploadableJobs,
+  uploadPortalJobDocument,
+} from "../services/portalDocumentsService";
+import { usePortalEntity } from "../contexts/PortalEntityContext";
 import type { PortalDocument } from "../types";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -25,6 +34,71 @@ async function handleDownload(doc: PortalDocument) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function UploadCard() {
+  const { currentEntity } = usePortalEntity();
+  const queryClient = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [jobId, setJobId] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
+
+  const { data: jobs } = useQuery({
+    queryKey: ["portal", "upload-jobs", currentEntity?.type, currentEntity?.id],
+    queryFn: () => (currentEntity ? listUploadableJobs(currentEntity) : Promise.resolve([])),
+    enabled: !!currentEntity,
+  });
+
+  const upload = useMutation({
+    mutationFn: async () => {
+      const job = (jobs ?? []).find((j) => j.id === jobId);
+      if (!job || !file) throw new Error("Choose a job and a file first.");
+      const { data: { user } } = await supabase.auth.getUser();
+      const res = await uploadPortalJobDocument(job, file, user?.id ?? null);
+      if (!res.success) throw new Error(res.error || "Upload failed.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portal", "documents"] });
+      toast.success("Document uploaded.");
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Upload failed."),
+  });
+
+  // Nothing to attach a document to yet.
+  if (!jobs || jobs.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Upload a document</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Select value={jobId} onValueChange={setJobId} disabled={upload.isPending}>
+          <SelectTrigger>
+            <SelectValue placeholder="Which job is this for?" />
+          </SelectTrigger>
+          <SelectContent>
+            {jobs.map((j) => (
+              <SelectItem key={j.id} value={j.id}>{j.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <input
+          ref={fileRef}
+          type="file"
+          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:text-primary-foreground"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          disabled={upload.isPending}
+        />
+        <Button onClick={() => upload.mutate()} disabled={upload.isPending || !jobId || !file}>
+          {upload.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+          Upload
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PortalDocuments() {
   const { data, isLoading } = usePortalDocuments();
 
@@ -34,6 +108,7 @@ export default function PortalDocuments() {
         title="Documents"
         description="Documents shared between you and your accountant."
       />
+      <UploadCard />
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[0, 1, 2, 3].map((i) => (
