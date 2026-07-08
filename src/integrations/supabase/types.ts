@@ -18348,6 +18348,10 @@ export type Database = {
         Args: { p_application_id: string }
         Returns: Json
       }
+      lifecycle_reconciliation_report: {
+        Args: { _org_id: string }
+        Returns: Json
+      }
       lifecycle_require_onboarding_token: {
         Args: { p_access_token: string; p_application_id: string }
         Returns: undefined
