@@ -15,6 +15,8 @@ import { Plus, Calculator, Send, FileText, UserCheck, ShieldCheck, Loader2 } fro
 import { format, addMonths, endOfMonth, startOfMonth } from "date-fns";
 import { toast } from "sonner";
 import { approveVatReturnForFiling, revokeVatFilingApproval } from "@/lib/vat-filing-approval";
+import { submitVatReturnToHmrc } from "@/lib/vat-filing-submit";
+import { vatFilingState } from "@/lib/vat-filing-approval-model";
 
 interface VATReturnsTabProps {
   entityType: 'client' | 'company';
@@ -181,21 +183,19 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
     onError: (e: any) => toast.error(e.message ?? 'Failed to request approval'),
   });
 
+  // Stage C: real HMRC transport from the approved snapshot (no more fake status flip). Only an
+  // approved, client-cleared, unsubmitted return can be sent; status derives from the response.
   const submitMutation = useMutation({
-    mutationFn: async (vatReturnId: string) => {
-      const { error } = await supabase
-        .from('vat_returns')
-        .update({
-          status: 'submitted',
-          submitted_at: new Date().toISOString(),
-        })
-        .eq('id', vatReturnId);
-      if (error) throw error;
+    mutationFn: async (vr: any) => {
+      const res = await submitVatReturnToHmrc(vr, "sandbox");
+      if (!res.success) throw new Error(res.error || "HMRC submission failed");
+      return res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vat-returns'] });
-      toast.success("VAT return marked as submitted");
+      toast.success("VAT return submitted to HMRC (sandbox).");
     },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "HMRC submission failed"),
   });
 
   // Stage B: accountant approves an immutable snapshot of the VAT figures for filing.
@@ -336,15 +336,22 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
                       <ShieldCheck className="h-4 w-4 text-green-600" />
                     </Button>
                   )}
-                  {vr.status === 'draft' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => submitMutation.mutate(vr.id)}
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  )}
+                  {vr.status === 'draft' && (() => {
+                    const state = vatFilingState(vr as any);
+                    return (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title={state.submittable ? 'Submit to HMRC (sandbox)' : `Cannot submit: ${state.reason}`}
+                        onClick={() => submitMutation.mutate(vr)}
+                        disabled={!state.submittable || submitMutation.isPending}
+                      >
+                        {submitMutation.isPending
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <Send className="h-4 w-4" />}
+                      </Button>
+                    );
+                  })()}
                 </div>
               </TableCell>
             </TableRow>
