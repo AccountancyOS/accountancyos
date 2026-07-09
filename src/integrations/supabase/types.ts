@@ -16684,8 +16684,12 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           due_date: string
+          filing_approved_at: string | null
+          filing_approved_by: string | null
           hmrc_receipt: Json | null
           id: string
+          model_snapshot_hash: string | null
+          model_snapshot_id: string | null
           notes: string | null
           organization_id: string
           period_end: string
@@ -16717,8 +16721,12 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           due_date: string
+          filing_approved_at?: string | null
+          filing_approved_by?: string | null
           hmrc_receipt?: Json | null
           id?: string
+          model_snapshot_hash?: string | null
+          model_snapshot_id?: string | null
           notes?: string | null
           organization_id: string
           period_end: string
@@ -16750,8 +16758,12 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           due_date?: string
+          filing_approved_at?: string | null
+          filing_approved_by?: string | null
           hmrc_receipt?: Json | null
           id?: string
+          model_snapshot_hash?: string | null
+          model_snapshot_id?: string | null
           notes?: string | null
           organization_id?: string
           period_end?: string
@@ -17419,6 +17431,10 @@ export type Database = {
       approve_filing_safe: { Args: { p_filing_id: string }; Returns: Json }
       approve_invoice: {
         Args: { p_invoice_id: string; p_user_id?: string }
+        Returns: Json
+      }
+      approve_vat_return_for_filing: {
+        Args: { _vat_return_id: string }
         Returns: Json
       }
       assert_no_locked_period_write: {
@@ -18892,6 +18908,10 @@ export type Database = {
           p_revocation_reason: string
         }
         Returns: undefined
+      }
+      revoke_vat_return_filing_approval: {
+        Args: { _reason?: string; _vat_return_id: string }
+        Returns: Json
       }
       role_level: { Args: { r: string }; Returns: number }
       run_monthly_depreciation: {
