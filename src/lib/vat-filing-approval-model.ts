@@ -21,6 +21,23 @@ export interface VatFilingState {
   reason?: string;
 }
 
+/**
+ * Stage D contract: mirrors the DB trigger trg_enforce_vat_filing_gate. Returns true if the
+ * proposed update would be BLOCKED — i.e. it transitions the return into a submitted state
+ * without an approved snapshot (model_snapshot_id + filing_approved_at). Enforcement lives in the
+ * DB; this documents/tests the exact rule the trigger applies.
+ */
+export function vatSubmissionGateBlocked(
+  prev: Pick<VatFilingApprovalRow, "submitted_at"> & { status?: string | null },
+  next: VatFilingApprovalRow & { status?: string | null },
+): boolean {
+  const enteringSubmitted =
+    (next.status === "submitted" && prev.status !== "submitted") ||
+    (!!next.submitted_at && !prev.submitted_at);
+  if (!enteringSubmitted) return false;
+  return !next.model_snapshot_id || !next.filing_approved_at;
+}
+
 export function vatFilingState(r: VatFilingApprovalRow): VatFilingState {
   const submitted = !!r.submitted_at;
   const approved = !!r.filing_approved_at && !!r.model_snapshot_id;

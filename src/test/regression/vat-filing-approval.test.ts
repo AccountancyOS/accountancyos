@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { vatFilingState } from "@/lib/vat-filing-approval-model";
+import { vatFilingState, vatSubmissionGateBlocked } from "@/lib/vat-filing-approval-model";
 
 /**
  * Filing Stage B (VAT) — the submittability gate. Consumed by the approve UI (B), the submit
@@ -59,5 +59,38 @@ describe("vatFilingState (Stage B)", () => {
     expect(s.submitted).toBe(true);
     expect(s.submittable).toBe(false);
     expect(s.reason).toBe("Already submitted");
+  });
+});
+
+describe("vatSubmissionGateBlocked (Stage D — DB trigger contract)", () => {
+  it("blocks a status flip to submitted with no approved snapshot", () => {
+    expect(
+      vatSubmissionGateBlocked({ status: "draft" }, { status: "submitted" }),
+    ).toBe(true);
+  });
+
+  it("blocks setting submitted_at with no approved snapshot", () => {
+    expect(
+      vatSubmissionGateBlocked({ submitted_at: null }, { submitted_at: "2026-04-03" }),
+    ).toBe(true);
+  });
+
+  it("allows submitting with an approved snapshot (the Stage-C path)", () => {
+    expect(
+      vatSubmissionGateBlocked(
+        { status: "draft" },
+        { status: "submitted", model_snapshot_id: "snap-1", filing_approved_at: "2026-04-01" },
+      ),
+    ).toBe(false);
+  });
+
+  it("does not fire on non-submit edits or already-submitted rows", () => {
+    expect(vatSubmissionGateBlocked({ status: "draft" }, { status: "draft" })).toBe(false);
+    expect(
+      vatSubmissionGateBlocked(
+        { status: "submitted", submitted_at: "2026-04-03" },
+        { status: "submitted", submitted_at: "2026-04-03" },
+      ),
+    ).toBe(false);
   });
 });
