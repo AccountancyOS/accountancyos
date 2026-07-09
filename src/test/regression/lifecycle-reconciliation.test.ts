@@ -19,6 +19,9 @@ const CLEAN: LifecycleReconciliationReport = {
   duplicate_job_excess_rows: 0,
   null_label_duplicate_groups: 0,
   active_client_links: 5,
+  accepted_quotes_without_onboarding: 0,
+  onboarding_apps_unlinked: 0,
+  duplicate_onboarding_app_groups: 0,
   backstop_indexes_present: [
     "jobs_client_period_uq",
     "jobs_company_period_uq",
@@ -30,11 +33,31 @@ const CLEAN: LifecycleReconciliationReport = {
 };
 
 describe("summarizeReconciliation (Fix 8 Inc 1)", () => {
-  it("reports a fully clean org as clean and safe to tighten indexes", () => {
+  it("reports a fully clean org as clean, safe to tighten, and ready to flip canonical", () => {
     const s = summarizeReconciliation(CLEAN);
     expect(s.clean).toBe(true);
     expect(s.blocksIndexTightening).toBe(false);
+    expect(s.readyToFlipCanonical).toBe(true);
     expect(s.issues).toHaveLength(0);
+  });
+
+  it("a broken accept→approve handoff blocks the canonical flip but not index tightening", () => {
+    const s = summarizeReconciliation({
+      ...CLEAN,
+      accepted_quotes_without_onboarding: 2,
+      onboarding_apps_unlinked: 1,
+    });
+    expect(s.clean).toBe(true); // job data itself is clean
+    expect(s.blocksIndexTightening).toBe(false);
+    expect(s.readyToFlipCanonical).toBe(false); // handoff not sound
+    expect(s.issues.some((i) => i.includes("no onboarding application"))).toBe(true);
+    expect(s.issues.some((i) => i.includes("not linked"))).toBe(true);
+  });
+
+  it("duplicate onboarding applications block the canonical flip", () => {
+    const s = summarizeReconciliation({ ...CLEAN, duplicate_onboarding_app_groups: 1 });
+    expect(s.readyToFlipCanonical).toBe(false);
+    expect(s.issues.some((i) => i.includes("duplicate onboarding applications"))).toBe(true);
   });
 
   it("duplicate jobs block index tightening and are listed", () => {

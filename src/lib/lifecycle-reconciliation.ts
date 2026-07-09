@@ -17,6 +17,10 @@ export interface LifecycleReconciliationReport {
   duplicate_job_excess_rows?: number;
   null_label_duplicate_groups?: number;
   active_client_links?: number;
+  // Accept→approve handoff integrity (Inc 8.3) — must be clean before flipping an org to canonical.
+  accepted_quotes_without_onboarding?: number;
+  onboarding_apps_unlinked?: number;
+  duplicate_onboarding_app_groups?: number;
   backstop_indexes_present?: string[];
   backstop_indexes_missing?: string[];
 }
@@ -25,6 +29,9 @@ export interface ReconciliationSummary {
   clean: boolean;
   /** True when applying stricter uniqueness indexes would FAIL on existing duplicate data. */
   blocksIndexTightening: boolean;
+  /** True only when both the job data AND the accept→approve handoff are clean — the gate for
+   *  flipping this org to canonical lifecycle (Inc 8.3). */
+  readyToFlipCanonical: boolean;
   issues: string[];
 }
 
@@ -32,7 +39,12 @@ const n = (v: number | undefined) => v ?? 0;
 
 export function summarizeReconciliation(r: LifecycleReconciliationReport): ReconciliationSummary {
   if (!r.success) {
-    return { clean: false, blocksIndexTightening: true, issues: [r.error || "Report failed"] };
+    return {
+      clean: false,
+      blocksIndexTightening: true,
+      readyToFlipCanonical: false,
+      issues: [r.error || "Report failed"],
+    };
   }
 
   const issues: string[] = [];
@@ -47,6 +59,17 @@ export function summarizeReconciliation(r: LifecycleReconciliationReport): Recon
   if (n(r.null_label_duplicate_groups) > 0) {
     issues.push(`${r.null_label_duplicate_groups} null-label duplicate group(s)`);
   }
+  // Accept→approve handoff integrity (Inc 8.3).
+  if (n(r.accepted_quotes_without_onboarding) > 0) {
+    issues.push(`${r.accepted_quotes_without_onboarding} accepted quote(s) with no onboarding application`);
+  }
+  if (n(r.onboarding_apps_unlinked) > 0) {
+    issues.push(`${r.onboarding_apps_unlinked} onboarding application(s) not linked to a client/company`);
+  }
+  if (n(r.duplicate_onboarding_app_groups) > 0) {
+    issues.push(`${r.duplicate_onboarding_app_groups} quote(s) with duplicate onboarding applications`);
+  }
+
   if ((r.backstop_indexes_missing?.length ?? 0) > 0) {
     issues.push(`missing backstop indexes: ${r.backstop_indexes_missing!.join(", ")}`);
   }
@@ -63,5 +86,16 @@ export function summarizeReconciliation(r: LifecycleReconciliationReport): Recon
     n(r.both_entity_jobs) === 0 &&
     n(r.null_label_duplicate_groups) === 0;
 
-  return { clean, blocksIndexTightening, issues };
+  // Flipping an org to canonical is only safe when the accept→approve handoff is also sound.
+  const handoffClean =
+    n(r.accepted_quotes_without_onboarding) === 0 &&
+    n(r.onboarding_apps_unlinked) === 0 &&
+    n(r.duplicate_onboarding_app_groups) === 0;
+
+  return {
+    clean,
+    blocksIndexTightening,
+    readyToFlipCanonical: clean && handoffClean,
+    issues,
+  };
 }
