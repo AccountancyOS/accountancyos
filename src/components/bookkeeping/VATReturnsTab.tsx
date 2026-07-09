@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Calculator, Send, FileText, UserCheck } from "lucide-react";
+import { Plus, Calculator, Send, FileText, UserCheck, ShieldCheck, Loader2 } from "lucide-react";
 import { format, addMonths, endOfMonth, startOfMonth } from "date-fns";
 import { toast } from "sonner";
+import { approveVatReturnForFiling, revokeVatFilingApproval } from "@/lib/vat-filing-approval";
 
 interface VATReturnsTabProps {
   entityType: 'client' | 'company';
@@ -197,6 +198,31 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
     },
   });
 
+  // Stage B: accountant approves an immutable snapshot of the VAT figures for filing.
+  const approveMutation = useMutation({
+    mutationFn: async (vatReturnId: string) => {
+      const res = await approveVatReturnForFiling(vatReturnId);
+      if (!res.success) throw new Error(res.error || "Could not approve for filing");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vat-returns'] });
+      toast.success("VAT return approved for filing (snapshot locked).");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not approve for filing"),
+  });
+
+  const revokeApprovalMutation = useMutation({
+    mutationFn: async (vatReturnId: string) => {
+      const res = await revokeVatFilingApproval(vatReturnId);
+      if (!res.success) throw new Error(res.error || "Could not clear approval");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vat-returns'] });
+      toast.success("Filing approval cleared.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not clear approval"),
+  });
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       draft: "outline",
@@ -286,9 +312,33 @@ export function VATReturnsTab({ entityType, entityId }: VATReturnsTabProps) {
                       <UserCheck className={`h-4 w-4 ${vr.client_approval_required && !vr.client_approved_at ? 'text-amber-600' : ''}`} />
                     </Button>
                   )}
+                  {vr.status === 'draft' && !(vr as any).filing_approved_at && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Approve for filing (locks an immutable snapshot of these figures)"
+                      onClick={() => approveMutation.mutate(vr.id)}
+                      disabled={approveMutation.isPending}
+                    >
+                      {approveMutation.isPending
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <ShieldCheck className="h-4 w-4" />}
+                    </Button>
+                  )}
+                  {vr.status === 'draft' && (vr as any).filing_approved_at && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title={`Approved for filing${(vr as any).snapshot_hash ? ` · snapshot ${String((vr as any).snapshot_hash).slice(0, 8)}…` : ''} — click to clear`}
+                      onClick={() => revokeApprovalMutation.mutate(vr.id)}
+                      disabled={revokeApprovalMutation.isPending}
+                    >
+                      <ShieldCheck className="h-4 w-4 text-green-600" />
+                    </Button>
+                  )}
                   {vr.status === 'draft' && (
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => submitMutation.mutate(vr.id)}
                     >
