@@ -18349,7 +18349,7 @@ export type Database = {
         Returns: Json
       }
       lifecycle_reconciliation_report: {
-        Args: { _org_id: string }
+        Args: { p_organization_id: string }
         Returns: Json
       }
       lifecycle_require_onboarding_token: {
