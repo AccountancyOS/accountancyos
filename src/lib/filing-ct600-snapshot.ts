@@ -18,6 +18,7 @@ export type { CtComputationFigures };
 export interface CreateCt600SnapshotResult {
   success: boolean;
   snapshotId?: string;
+  snapshotHash?: string;
   error?: string;
 }
 
@@ -63,6 +64,7 @@ export async function createCt600FilingSnapshot(
   return {
     success: res.success,
     snapshotId: (res.snapshot as { id?: string } | undefined)?.id,
+    snapshotHash: res.snapshotHash,
     error: res.error,
   };
 }

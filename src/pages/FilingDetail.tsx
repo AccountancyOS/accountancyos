@@ -46,6 +46,7 @@ import {
   getDocumentTypesForFiling,
   updateFilingStatus,
 } from "@/lib/filing-service";
+import { approveCt600Filing, revokeCt600Approval, hasActiveCt600Approval } from "@/lib/ct600-filing-approval";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { FilingUnlockDialog } from "@/components/filings/FilingUnlockDialog";
 import { FilingVersionHistory } from "@/components/filings/FilingVersionHistory";
@@ -122,6 +123,40 @@ export default function FilingDetail() {
         toast({ title: "Error", description: result.error, variant: "destructive" });
       }
     },
+  });
+
+  // Stage B (CT600): accountant approval of an immutable CT600 snapshot.
+  const isCt600 = !!filing && ['CT600', 'ct600', 'corporation_tax'].includes(filing.filing_type);
+  const { data: ct600Approved } = useQuery({
+    queryKey: ["ct600-approval", filing?.id],
+    queryFn: () => hasActiveCt600Approval(filing!.id),
+    enabled: !!isCt600 && !!filing?.id,
+  });
+  const approveCt600Mutation = useMutation({
+    mutationFn: async () => {
+      if (!filing) throw new Error("No filing");
+      const res = await approveCt600Filing(filing.id);
+      if (!res.success) throw new Error(res.error || "Could not approve for filing");
+    },
+    onSuccess: () => {
+      invalidateFiling();
+      queryClient.invalidateQueries({ queryKey: ["ct600-approval", filing?.id] });
+      toast({ title: "CT600 approved for filing (snapshot locked)" });
+    },
+    onError: (e) => toast({ title: "Error", description: e instanceof Error ? e.message : "Could not approve", variant: "destructive" }),
+  });
+  const revokeCt600Mutation = useMutation({
+    mutationFn: async () => {
+      if (!filing) throw new Error("No filing");
+      const res = await revokeCt600Approval(filing.id);
+      if (!res.success) throw new Error(res.error || "Could not clear approval");
+    },
+    onSuccess: () => {
+      invalidateFiling();
+      queryClient.invalidateQueries({ queryKey: ["ct600-approval", filing?.id] });
+      toast({ title: "CT600 approval cleared" });
+    },
+    onError: (e) => toast({ title: "Error", description: e instanceof Error ? e.message : "Could not clear", variant: "destructive" }),
   });
 
   const generateDocsMutation = useMutation({
@@ -380,12 +415,43 @@ export default function FilingDetail() {
               />
             )}
 
+            {isCt600 && !isFiled && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>CT600 filing approval</CardTitle>
+                  <CardDescription>
+                    {ct600Approved
+                      ? "Approved — an immutable snapshot of the corporation-tax computation is locked for submission."
+                      : "Approve to lock an immutable snapshot of the corporation-tax computation before it can be submitted."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {ct600Approved ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => revokeCt600Mutation.mutate()}
+                      disabled={revokeCt600Mutation.isPending}
+                    >
+                      Clear approval
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => approveCt600Mutation.mutate()}
+                      disabled={approveCt600Mutation.isPending}
+                    >
+                      Approve for filing
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Filing Documents</CardTitle>
                   <CardDescription>
-                    {documents.length > 0 
+                    {documents.length > 0
                       ? `${documents.length} document(s) generated`
                       : "No documents generated yet"}
                   </CardDescription>
