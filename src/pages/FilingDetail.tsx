@@ -47,6 +47,7 @@ import {
   updateFilingStatus,
 } from "@/lib/filing-service";
 import { approveCt600Filing, revokeCt600Approval, hasActiveCt600Approval } from "@/lib/ct600-filing-approval";
+import { submitCt600ToHmrc } from "@/lib/ct600-filing-submit";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { FilingUnlockDialog } from "@/components/filings/FilingUnlockDialog";
 import { FilingVersionHistory } from "@/components/filings/FilingVersionHistory";
@@ -157,6 +158,21 @@ export default function FilingDetail() {
       toast({ title: "CT600 approval cleared" });
     },
     onError: (e) => toast({ title: "Error", description: e instanceof Error ? e.message : "Could not clear", variant: "destructive" }),
+  });
+  // Stage C (CT600): real HMRC transport from the approved snapshot (the function enforces the
+  // approval + snapshot-hash gate and records the attempt; status derives from its result).
+  const submitCt600Mutation = useMutation({
+    mutationFn: async () => {
+      if (!filing) throw new Error("No filing");
+      const res = await submitCt600ToHmrc(filing.id, "test");
+      if (!res.success) throw new Error(res.error || "HMRC submission failed");
+    },
+    onSuccess: () => {
+      invalidateFiling();
+      queryClient.invalidateQueries({ queryKey: ["ct600-approval", filing?.id] });
+      toast({ title: "CT600 submitted to HMRC (test)." });
+    },
+    onError: (e) => toast({ title: "Submission failed", description: e instanceof Error ? e.message : "HMRC submission failed", variant: "destructive" }),
   });
 
   const generateDocsMutation = useMutation({
@@ -425,15 +441,24 @@ export default function FilingDetail() {
                       : "Approve to lock an immutable snapshot of the corporation-tax computation before it can be submitted."}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="flex gap-2">
                   {ct600Approved ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => revokeCt600Mutation.mutate()}
-                      disabled={revokeCt600Mutation.isPending}
-                    >
-                      Clear approval
-                    </Button>
+                    <>
+                      <Button
+                        onClick={() => submitCt600Mutation.mutate()}
+                        disabled={submitCt600Mutation.isPending}
+                        title="Submit the approved CT600 to HMRC (test)"
+                      >
+                        {submitCt600Mutation.isPending ? "Submitting…" : "Submit to HMRC"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => revokeCt600Mutation.mutate()}
+                        disabled={revokeCt600Mutation.isPending || submitCt600Mutation.isPending}
+                      >
+                        Clear approval
+                      </Button>
+                    </>
                   ) : (
                     <Button
                       onClick={() => approveCt600Mutation.mutate()}
