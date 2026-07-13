@@ -11,6 +11,10 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = false
   [functions.chaser-trigger-scan]
     verify_jwt = false
+  [functions.dormant-lead-scan]
+    verify_jwt = false
+  [functions.invoice-overdue-scan]
+    verify_jwt = false
   [functions.check-subscription]
     verify_jwt = true
   [functions.cis-submit]
