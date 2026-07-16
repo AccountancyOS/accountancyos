@@ -1,42 +1,37 @@
-## Full redeploy plan
+# No changes required
 
-### 1. Frontend republish
+Claude's suggestion to pass `--header "Authorization: Bearer <TOKEN>"` does not apply to this MCP server. Here is why, and what to run instead.
 
-Call `preview_ui--publish` once. This rebuilds from current main and redeploys to the Lovable-hosted origin that backs **both** `app.accountancyos.com` and `client.accountancyos.com` — they are custom-domain aliases of the same single-project deployment (memory: `single-project-portal-under-src-portal`). There is no separate portal build to publish.
+## How the MCP endpoint is protected
 
-After the tool returns I will report the published URL back. Note: the tool schedules the deploy and returns immediately; the new build hash is not exposed via tooling. To confirm the hash, hard-refresh either domain and check the `index-*.js` filename in DevTools — I'll flag this to you rather than fabricate a value.
+- The Supabase Edge Function `mcp` is deployed with the Lovable Cloud default `verify_jwt = false` (no `[functions.mcp]` override exists in `supabase/config.toml`). The transport layer does not require a Supabase key.
+- Auth is enforced **inside** the function by `@lovable.dev/mcp-js`. It validates an **OAuth 2.1 access token** issued by Supabase Auth (`https://moxpdejnucjjcplleefn.supabase.co/auth/v1`) for this project, with `audience = authenticated` and a `client_id` claim.
+- The server publishes `/.well-known/oauth-protected-resource`, and Supabase Auth publishes `/.well-known/oauth-authorization-server` with dynamic client registration enabled. Any spec-compliant MCP client (Claude, Cursor, Codex, ChatGPT connectors) discovers these automatically and walks the OAuth flow.
 
-### 2. Migration backlog
+## What Claude Code should run
 
-Enumerate `supabase/migrations/` from `20260703145810` onward and apply each via `supabase--migration` in filename order. Each call requires your approval. Any that the DB reports as already applied are skipped and noted.
+```text
+claude mcp add lovable-accountancyos --transport http \
+  https://moxpdejnucjjcplleefn.supabase.co/functions/v1/mcp
+```
 
-Known files in that window (from prior turns):
-- `20260703145810` — Stage 1 ledger posting *(applied earlier)*
-- `20260703182847` — invoice settings *(applied earlier)*
-- `20260703191841` — `invoice-pdfs` storage bucket *(applied earlier)*
-- `20260703194607` — portal invoicing + IDOR fix *(applied earlier)*
-- `20260703195953` — follow-up fix
-- `20260703200043` — follow-up fix
+On first tool use Claude will:
+1. Register itself dynamically with Supabase Auth.
+2. Open the browser at `https://app.accountancyos.com/.lovable/oauth/consent?authorization_id=...` (the app's consent route).
+3. Prompt sign-in if needed (`/auth?next=...` returns the user to the consent page).
+4. Exchange the authorization code for a user-scoped access token and store it itself.
+5. Send that token on every MCP request; each tool call then runs as that user, with RLS applied inside the tool handlers.
 
-Before starting I will `ls supabase/migrations/` to catch anything newer than what I know about, plus a `supabase--read_query` against `supabase_migrations.schema_migrations` to diff applied vs on-disk so nothing is missed. Final list of *newly applied* migrations will be reported back.
+## Why NOT to pass a bearer header
 
-Also in scope: add the missing `email_queue.attachments jsonb` column. Edge-function logs show `process-email-queue` is currently crashing with `column email_queue.attachments does not exist`, which blocks **all** queued outbound email including invoice sends. Without this, redeploying `send-invoice` and `process-email-queue` is theatre. I will submit a small migration adding the column (nullable, default `'[]'::jsonb`) as part of the same batch unless you object.
+- The Supabase **publishable/anon key** is not an OAuth access token, has no `client_id` claim, and mcp-js will reject it with 401.
+- A copied **app-session JWT** (e.g. `access_token` from the browser localStorage) also lacks the OAuth `client_id` claim and is not the integration mechanism — mcp-js rejects it by design.
+- Passing any static bearer token bypasses the per-user OAuth flow, which defeats the whole point of the setup you just approved.
 
-### 3. Edge functions
+## Only case where a manual token would apply
 
-Single `supabase--deploy_edge_functions` call with:
-`generate-invoice-pdf`, `send-invoice`, `portal-verify-invoice-payment`, `process-email-queue`, `truelayer-callback`, `chaser-tick`, `send-engagement-letter`.
+If — and only if — the user later chooses to disable OAuth and expose the MCP server publicly (rejected earlier in this thread), a static bearer would still not be needed: it would simply be unauthenticated. Skip.
 
-I'll verify each folder exists under `supabase/functions/` first; any missing name is reported back rather than silently dropped.
+## Action
 
-### 4. Reconciliation report
-
-Final message will contain:
-- Published URL + instructions to read the new `index-*.js` bundle hash from DevTools (tool doesn't expose it)
-- List of migrations applied this run + list already-applied (skipped)
-- List of edge functions successfully redeployed + any that errored
-- Post-deploy `supabase--edge_function_logs` peek on `process-email-queue` and `send-invoice` to confirm they boot cleanly
-
-### Order of operations
-
-Migrations first (schema must be current before functions boot against it) → edge functions → frontend publish last (so the client bundle is querying the migrated schema). Each step gated on the prior succeeding.
+None. Reply to Claude that the endpoint is OAuth-protected via the MCP spec's built-in discovery flow, and connect with the plain `claude mcp add ... --transport http <URL>` command above.
