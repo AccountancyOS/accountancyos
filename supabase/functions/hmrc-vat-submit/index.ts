@@ -114,29 +114,9 @@ serve(async (req: Request) => {
       organizationId = filing.organization_id;
       companyId = filing.company_id;
 
-      // Check idempotency
-      if (filing.idempotency_key) {
-        const { data: existingSubmission } = await supabase
-          .from('filing_submissions')
-          .select('id, status, ch_transaction_id')
-          .eq('idempotency_key', filing.idempotency_key)
-          .eq('status', 'accepted')
-          .maybeSingle();
-
-        if (existingSubmission) {
-          console.log('Duplicate submission detected, returning existing result');
-          return new Response(
-            JSON.stringify({
-              success: true,
-              duplicate: true,
-              message: 'This filing has already been submitted and accepted',
-              submissionId: existingSubmission.id,
-              receiptId: existingSubmission.ch_transaction_id,
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
+      // T1-4: the duplicate pre-check used to live here, keyed off filings.idempotency_key — a
+      // DIFFERENT value from the key actually written to filing_submissions, and only reachable on
+      // the filingId path. It now runs below, on the computed key, for both paths.
     } else {
       // Fetch snapshot directly
       const { data: snapshotData, error: snapshotError } = await supabase
@@ -170,6 +150,47 @@ serve(async (req: Request) => {
         JSON.stringify({ success: false, message: 'Access denied to organization' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // T1-4: compute the submission's idempotency key up front, so the duplicate pre-check below and
+    // the INSERT further down agree on one key on BOTH the filingId and snapshotId paths.
+    // Mirrors src/lib/vat-submit-idempotency.ts (vatSubmitIdempotencyKey) — keep the two in step.
+    // Format preserved byte-for-byte from the original inline expression so keys already stored on
+    // filing_submissions still match.
+    const correlationId = `VAT-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const idempotencyScope = `${organizationId}::HMRC::VAT::${companyId || 'org'}`;
+    const idempotencyKey = snapshot
+      ? `${idempotencyScope}::${snapshot.period_start}::${snapshot.period_end}::${snapshot.snapshot_hash}`
+      : `${idempotencyScope}::${correlationId}`;
+    // Without a snapshot the key falls back to the per-attempt correlation id and can never
+    // collide, so there is no duplicate to look for — don't pretend the check ran.
+    const idempotencyIsDeterministic = !!snapshot;
+
+    // Duplicate pre-check (runs after the access check, so it cannot be used to probe for
+    // submissions in other organizations). The DB's partial unique index on
+    // filing_submissions.idempotency_key is the real backstop for the concurrent race; this is the
+    // friendly path that returns the original receipt instead of a 409.
+    if (idempotencyIsDeterministic) {
+      const { data: existingSubmission } = await supabase
+        .from('filing_submissions')
+        .select('id, status, ch_transaction_id')
+        .eq('idempotency_key', idempotencyKey)
+        .eq('status', 'accepted')
+        .maybeSingle();
+
+      if (existingSubmission) {
+        console.log('[hmrc-vat-submit] Duplicate submission detected, returning existing result');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            duplicate: true,
+            message: 'This filing has already been submitted and accepted',
+            submissionId: existingSubmission.id,
+            receiptId: existingSubmission.ch_transaction_id,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // T0-2/F1: the target HMRC environment is derived from the canonical integration config
@@ -317,7 +338,16 @@ serve(async (req: Request) => {
 
     // PHASE 3D: Enforce reconciliation acknowledgement before submission
     // This is a soft stop - once acknowledged, submission proceeds
-    if (!skipReconciliationCheck && filing?.id) {
+    //
+    // T1-4: this used to require filing?.id, so it never ran on the snapshotId path the UI calls —
+    // the gate was dead for real submissions. It now runs whenever we can resolve a period (the
+    // vat_periods lookup below already reads snapshot.period_start/end), i.e. on both paths.
+    // skipReconciliationCheck arrives in the request body ("for testing only"), so it is advisory:
+    // honoured in sandbox for transport testing, always ignored for a real HMRC filing.
+    // Mirrors src/lib/vat-submit-idempotency.ts (reconciliationCheckRequired).
+    const reconCheckRequired = environment === 'production' ? true : !skipReconciliationCheck;
+    const reconPeriodStart = snapshot?.period_start || filing?.filing_data?.period_start;
+    if (reconCheckRequired && reconPeriodStart) {
       // Get the VAT period for this filing
       const { data: vatPeriod } = await supabase
         .from('vat_periods')
@@ -343,7 +373,8 @@ serve(async (req: Request) => {
             await supabase.from('audit_log').insert({
               organization_id: organizationId,
               entity_type: 'filing',
-              entity_id: filingId,
+              // T1-4: the gate now also runs on the snapshotId path, where there is no filingId.
+              entity_id: filingId || snapshot?.id,
               action: 'vat_submission_blocked_reconciliation',
               user_id: user.id,
               metadata: {
@@ -370,7 +401,7 @@ serve(async (req: Request) => {
             await supabase.from('audit_log').insert({
               organization_id: organizationId,
               entity_type: 'filing',
-              entity_id: filingId,
+              entity_id: filingId || snapshot?.id,
               action: 'VAT_FILED_WITH_RECONCILIATION_WARNING',
               user_id: user.id,
               metadata: {
@@ -402,11 +433,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Generate correlation ID for this submission
-    const correlationId = `VAT-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const idempotencyKey = snapshot 
-      ? `${organizationId}::HMRC::VAT::${companyId || 'org'}::${snapshot.period_start}::${snapshot.period_end}::${snapshot.snapshot_hash}`
-      : `${organizationId}::HMRC::VAT::${companyId || 'org'}::${correlationId}`;
+    // correlationId / idempotencyKey were computed above, before the duplicate pre-check, so the
+    // key checked is the key written (T1-4).
 
     // Create submission record
     const { data: submission, error: submissionError } = await supabase
