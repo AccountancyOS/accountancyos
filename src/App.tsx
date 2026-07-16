@@ -591,6 +591,8 @@ const App = () => (
               }
             />
             <Route path="/engagement/:token" element={<EngagementLetterPreview />} />
+            {/* OAuth consent page for external MCP/OAuth clients (Lovable managed). */}
+            <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             {/* Client Portal — isolated under src/portal/, mounted at /portal/*.
                 Note: /portal/preview/:entityType/:entityId above is the accountant
                 preview surface and remains owned by the accountant app. */}
