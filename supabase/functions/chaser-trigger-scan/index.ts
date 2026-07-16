@@ -181,11 +181,12 @@ async function processPolicy(
           jobId = existing.job_id;
         } else {
           // Create or find the job
+          const periodLabel = computePeriodLabel(policy.trigger_type, periodStart, periodEnd);
           jobId = await ensureJobExists(
             admin, orgId, entityType, entityId,
             eng.client_id, eng.company_id,
             serviceType, policy.service_code,
-            periodStart, periodEnd
+            periodStart, periodEnd, periodLabel
           );
         }
 
@@ -315,6 +316,34 @@ async function computePeriodEnd(
   }
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Compute a non-null, period-deterministic label. Jobs must never be inserted with a NULL
+// period_label: the tightened jobs indexes (jobs_client_period_uq / jobs_company_period_uq,
+// NULLS NOT DISTINCT) treat NULL=NULL, so a second NULL-label job for the same (org, service,
+// entity) raises 23505 and kills this cron for that entity. Label ↔ period_end is 1:1 within a
+// service, so it stays consistent with the period_end dedupe below and with the core's
+// COALESCE(period_label,'') match. Conventions mirror lifecycle_upsert_job_with_deadlines.
+function computePeriodLabel(
+  triggerType: string,
+  periodStart: string | null,
+  periodEnd: string,
+): string {
+  const [ey, em] = periodEnd.split('-').map(Number);
+  switch (triggerType) {
+    case 'COMPANY_YEAR_END':
+      return `${ey} Year-End`;
+    case 'TAX_YEAR_END': {
+      const sy = periodStart ? Number(periodStart.split('-')[0]) : ey - 1;
+      return `${sy}/${String(ey).slice(2)}`;
+    }
+    // MTD_QUARTER_END, VAT_PERIOD_END, and any monthly/bookkeeping trigger: the period-end
+    // month-year is distinct per period.
+    default:
+      return `${MONTHS[(em - 1) % 12]} ${ey}`;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Idempotent Job Creation
 // ---------------------------------------------------------------------------
@@ -329,7 +358,8 @@ async function ensureJobExists(
   serviceType: string,
   serviceCode: string,
   periodStart: string | null,
-  periodEnd: string
+  periodEnd: string,
+  periodLabel: string
 ): Promise<string> {
   // First check if job already exists for this period
   let query = admin.from('jobs')
@@ -356,22 +386,28 @@ async function ensureJobExists(
     return existingJob.id;
   }
 
-  // Create new job
-  const jobName = `${serviceCode} - ${periodEnd}`;
-  const { data: newJob, error: createErr } = await admin.from('jobs').insert({
-    organization_id: orgId,
-    client_id: clientId,
-    company_id: companyId,
-    service_type: serviceType,
-    job_name: jobName,
-    status: 'blank',
-    period_start: periodStart,
-    period_end: periodEnd,
-  }).select('id').single();
+  // Create (or find) the job through the canonical core so it carries a non-NULL period_label
+  // and is deduped consistently with every other job writer. p_service_code = serviceType keeps
+  // jobs.service_type unchanged; the core also materialises the statutory deadline(s) for the
+  // canonical service codes it recognises (corporation_tax/confirmation_statement/payroll) and
+  // leaves the drifted codes (vat/accounts/self_assessment) deadline-less, as before.
+  const { data: newJobId, error: createErr } = await admin.rpc('lifecycle_upsert_job_with_deadlines', {
+    p_org: orgId,
+    p_client_id: clientId,
+    p_company_id: companyId,
+    p_engagement_id: null,
+    p_service_code: serviceType,
+    p_service_name: serviceCode,
+    p_period_start: periodStart,
+    p_period_end: periodEnd,
+    p_period_label: periodLabel,
+    p_source: 'chaser_trigger_scan',
+  });
 
-  if (createErr) {
-    throw new Error(`Failed to create job: ${createErr.message}`);
+  if (createErr || !newJobId) {
+    throw new Error(`Failed to create job: ${createErr?.message ?? 'no id returned'}`);
   }
+  const jobId = newJobId as unknown as string;
 
   // Record in tracking table
   await admin.from('chaser_job_periods').upsert({
@@ -380,10 +416,10 @@ async function ensureJobExists(
     entity_type: entityType,
     entity_id: entityId,
     period_end: periodEnd,
-    job_id: newJob.id,
+    job_id: jobId,
   }, { onConflict: 'organization_id,service_code,entity_id,period_end' });
 
-  return newJob.id;
+  return jobId;
 }
 
 // ---------------------------------------------------------------------------
