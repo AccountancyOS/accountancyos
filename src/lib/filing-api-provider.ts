@@ -133,36 +133,18 @@ export class HMRCSandboxProvider implements FilingAPIProvider {
   }
   
   private async submitStandardFiling(request: FilingSubmissionRequest): Promise<FilingSubmissionResponse> {
-    const validationErrors = await this.validateFiling(request);
-    if (validationErrors.length > 0) {
-      return {
-        success: false,
-        status: "rejected",
-        message: "Validation failed",
-        validationErrors,
-      };
-    }
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Generate mock submission ID and reference
-    const submissionId = `HMRC-SB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const filingReference = this.generateMockReference(request.filingType);
-    
-    return {
-      success: true,
-      submissionId,
-      filingReference,
-      status: "accepted",
-      message: "Filing accepted (sandbox mode)",
-      rawResponse: {
-        environment: "sandbox",
-        timestamp: new Date().toISOString(),
-        filingType: request.filingType,
-        taxYear: request.taxYear,
-      },
-    };
+    // T1-19/DEAD-1: this used to return status:"accepted" with an invented filing reference after a
+    // simulated delay. submitFilingToAuthority writes that result straight onto the filing's
+    // api_response/api_submission_id, so wiring SA/CT/VAT through here would record a statutory
+    // filing as accepted by HMRC when nothing was ever transmitted. A fabricated acceptance is
+    // worse than an error: it is indistinguishable from a real one after the fact.
+    //
+    // Real transport lives in the hmrc-*-submit edge functions (hmrc-vat-submit, hmrc-ct-submit),
+    // which submit from an approved, frozen model snapshot per the CLAUDE.md filing contract.
+    throw new Error(
+      `HMRCSandboxProvider: ${request.filingType} submission is not implemented. ` +
+        `Use the hmrc-*-submit edge functions, which submit from an approved model snapshot.`,
+    );
   }
   
   private async submitRTIFiling(request: FilingSubmissionRequest): Promise<FilingSubmissionResponse> {
@@ -470,11 +452,8 @@ export class HMRCSandboxProvider implements FilingAPIProvider {
     return errors;
   }
   
-  private generateMockReference(filingType: string): string {
-    const prefix = filingType.includes("SA") ? "SA" : filingType.includes("CT") ? "CT" : "TX";
-    const random = Math.random().toString(36).substr(2, 8).toUpperCase();
-    return `${prefix}-${random}`;
-  }
+  // generateMockReference removed with the fabricated-acceptance path above (T1-19): its only
+  // caller was submitStandardFiling. The RTI/CIS providers keep their own.
 }
 
 // ==================== COMPANIES HOUSE SANDBOX PROVIDER ====================
@@ -578,20 +557,9 @@ export function getAvailableProviders(): string[] {
 
 // ==================== CONVENIENCE FUNCTIONS ====================
 
-export async function submitFilingToAuthorityViaProvider(
-  request: FilingSubmissionRequest
-): Promise<FilingSubmissionResponse> {
-  const provider = getFilingProvider(request.filingBody);
-  if (!provider) {
-    return {
-      success: false,
-      status: "error",
-      message: `No provider available for ${request.filingBody}`,
-    };
-  }
-  
-  return provider.submitFiling(request);
-}
+// submitFilingToAuthorityViaProvider removed (T1-19/DEAD-1): it had no importers anywhere and
+// offered a second, unguarded route into the provider's submit path. filing-service's
+// submitFilingToAuthority is the one entry point.
 
 export async function checkFilingStatus(
   submissionId: string,
