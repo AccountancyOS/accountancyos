@@ -29,6 +29,11 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = true
   [functions.generate-invoice-pdf]
     verify_jwt = true
+  # One-click unsubscribe is followed by an email recipient, who is never authenticated. The
+  # function authenticates the link itself via consume_unsubscribe_token, so the token is the
+  # credential — a JWT requirement here just 401s every unsubscribe link (PECR/CAN-SPAM risk).
+  [functions.handle-email-unsubscribe]
+    verify_jwt = false
   [functions.send-invoice]
     verify_jwt = true
   [functions.gmail-auth]
