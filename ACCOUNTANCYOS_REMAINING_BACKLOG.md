@@ -1,0 +1,119 @@
+# AccountancyOS — Remaining Work Backlog (Full Re-Assessment)
+
+**Date:** 2026-07-13 · **Baseline:** commit f5f3749, 384 migrations, 59 edge functions · tsc 0, build green, 198 tests.
+**Method:** 6 parallel Fable domain auditors (security/RLS, lifecycle/Fix-8, filing/workpaper, edge functions, portal+accountant journeys, frontend/automation/stress). Each was told everything already shipped and asked to report only what remains, with evidence.
+
+Findings are deduplicated across auditors and ordered by tier. `CR` = blocks client-ready. `Live?` = needs live-DB verification first (Lovable deploys code not in git).
+
+---
+
+## TIER 0 — Live breakage / correctness NOW (do first)
+
+### T0-1 · REM-1 · My Fix 8.5 is actively breaking the live chaser cron — **P0, live now, CR** — 🟡 chaser-scan done (2026-07-13); other 4 writers are DORMANT in git (see note)
+> **2026-07-13 reachability finding:** the live invocation path was **only** `chaser-trigger-scan` (6h cron) — now fixed. The other 4 writers have **zero callers in the committed tree**: `automation-actions`←`automation-engine` (0 callers), `workflow-step-executor`←`workflow-orchestrator` (0 callers), `job-template-engine.generateJobFromTemplate`←`generateJobsForDeadline` (0 callers), `auto-rollover-service` = REM-2/T2-1 (delete-not-route). So they pose **no live 23505 risk as committed** (caveat: verify against Lovable's live wiring, which may differ). They still carry the latent NULL-label bug, but fixing them cleanly needs a design decision (period-less ad-hoc jobs + per-template vs per-service/period uniqueness) and is coupled to the AUTO-1 engine-scheduling decision — so they move to fast-follow, not blind-fix.
+The 8.5 index tightening (`NULLS NOT DISTINCT`) turned silent duplicate NULL-label jobs into hard `23505` errors, but the 5 rogue writers still insert NULL-label jobs (I deferred routing them through the core). `chaser-trigger-scan` runs on live cron every 6h; on the **second** chaser period for any recurring service it inserts a second NULL-label job → throws → **kills job creation + chaser runs for that entity from then on**. Flag-independent, live today.
+- Fix: route the 5 writers through `lifecycle_upsert_job_with_deadlines` with a computed `period_label`. Order: chaser-trigger-scan first (cron-live), then automation-actions/workflow-step-executor, then job-template-engine, then auto-rollover (superseded by T2-1).
+- Effort: **M** · Evidence: `chaser-trigger-scan/index.ts:361-370`, `auto-rollover-service.ts:113-131`, `automation-actions.ts:58-74`, `workflow-step-executor.ts:308-325`, `job-template-engine.ts:166-181`.
+
+### T0-2 · F1(edge) · hmrc-vat-submit reads token columns that don't exist in git — **P0, CR — ✅ DONE 2026-07-14** (live schema confirmed encrypted-only by owner)
+Rewrote `hmrc-vat-submit` token acquisition to the canonical `getValidHmrcAccessToken()` (encrypted `mtd_vat_*` columns + refresh); removed all plaintext-column references; environment now derived from `test_mode` (config-authoritative, request param advisory); early `mtd_vat_connected` check; token-helper failures → clean non-success before any submission record; no token/secret logging. Source-analysis regression test (7 checks) covers all 5 required proofs. tsc 0, 223 tests, build green. **Not yet production-transport-classified** — awaiting a successful sandbox submission exercise (owner step).
+### T0-2 (original) · F1(edge) · hmrc-vat-submit reads token columns that don't exist in git — was P0
+`hmrc-vat-submit/index.ts:228-232` selects `access_token/refresh_token/token_expires_at` from `organization_integrations_hmrc`, but the table only has `mtd_vat_*_encrypted` columns. Against git schema every Stage-C VAT submit returns 400 `HMRC_NOT_CONNECTED`; if the live DB drifted to plaintext columns it submits with an un-refreshed plaintext token. Either way production VAT filing is broken or unsafe.
+- Fix: rewrite token fetch to use `_shared/hmrc-auth.ts getValidHmrcAccessToken` (correct decrypt+refresh impl, currently **zero consumers**). Verify live schema first.
+- Effort: **M** · The single riskiest edge file alongside T1-4/T1-5.
+
+---
+
+## TIER 1 — Client-ready blockers
+
+### Security / confidentiality
+- **T1-1 · SEC-6 · Portal read policies ignore `show_*` flags — P1, CR — ✅ DONE 2026-07-13.** Migration `20260713130000_sec6_portal_read_visibility_flags.sql`: drift-proof dynamic drop of every portal SELECT policy (matched by the portal access helpers, catching the renamed + `TO public` variants) on the 9 tables, replaced with one `portal_has_perm(..., 'show_X')`-gated policy each. Invoices/lines/payments additionally restricted to **issued statuses** (`AWAITING_PAYMENT/PART_PAID/PAID/OVERDUE` — hides DRAFT/VOIDED; note real statuses are UPPERCASE, the auditor's `(draft,void)` was itself wrong). Also emits a WARNING for any residual portal `FOR ALL` policy (live-verify). **This also closes the portal P1 "payments list shows draft/void invoices" row below.**
+- **T1-2 · SEC-7 · Onboarding token gate accepts NULL token when canonical flag OFF — P1, CR, Live?.** `lifecycle_require_onboarding_token` validates a token only if one is supplied when the flag is off (the default for every org) → anon IDOR on public onboarding RPCs (read applicant PII, forge signature/billing/submission) if an `application_id` leaks. Fix: fail-closed regardless of flag — but first confirm the frontend threads `?token=` on legacy orgs. **S/M.**
+
+### Filing correctness (VAT + CT600 + RTI/CIS)
+- **T1-3 · CT600 submit projects from the MUTABLE store — P1, CR — 🟡 GUARDED 2026-07-14 (full re-projection deferred).** `hmrc-ct-submit` now loads the frozen `filing_model_snapshots` (`model_snapshot_id`) and **blocks submission (409 `COMPUTATION_DRIFT`) if the material tax figures (taxable total profits, corporation tax due) drifted from the approved snapshot** — guaranteeing filed figures equal the approved model. Chose a drift guard over a blind re-projection because the frozen snapshot's shape (nested camelCase) differs from the XML builder's flat input and lacks some fields (`net_capital_allowances`, `total_add_backs`, `associated_companies_count`) — a mis-map would file wrong figures. Pure `ct600MaterialFigureDrift` + 5 tests. **Follow-up (CT600 go-live, with T1-6):** freeze the full builder input in the snapshot and project the XML directly from it.
+- **T1-4 · F2(edge) · hmrc-vat-submit has no unique idempotency + approval/recon gates bypassed on the snapshotId path — P1, CR.** UI calls with `snapshotId` only; the dup pre-check and reconciliation gate both require `filingId`, so neither runs; `filing_submissions.idempotency_key` has no unique index. Double-click → two live HMRC POSTs. Fix: partial unique index on `filing_submissions(idempotency_key) WHERE status IN ('pending','accepted')` + look up by computed key on both paths + run recon on the snapshot path + ignore client `skipReconciliationCheck` outside sandbox. **S/M.**
+- **T1-5 · F3(edge) · hmrc-vat-submit has no server-side approval gate — P1, CR — ✅ DONE 2026-07-13.** Added a server-side production gate in `hmrc-vat-submit`: a `production` submission now requires the submitted snapshot to be the one approved on a not-yet-submitted `vat_returns` row (`model_snapshot_id` + `filing_approved_at`), else 403 `NOT_APPROVED` / 409 already-submitted. Closes the direct-invoke bypass of the client gate; enforces the CLAUDE.md non-negotiable. Sandbox left open for transport testing (the vat_returns status trigger still requires approval in all envs). Pure mirror `vatProductionSubmitBlockedReason` + 4 tests. **Note:** the function's production path is still separately blocked by T0-2/F1 (it reads token columns absent from git) — this gate is correct regardless and doesn't worsen F1.
+- **T1-6 · CT600 IRmark hardcoded '0' + client-selectable production endpoint — P1, CR (CT go-live only).** `hmrc-ct-submit/index.ts:693` emits `<IRmark…>0</IRmark>`; `environment` comes from the request body and can point at the live gateway. Fix: real IRmark (canonicalised SHA-1/base64) or hard-block `environment==='production'` behind an env flag until done. **M** (block) / **L** (real IRmark). (Filing F6 + edge F5.)
+- **T1-7 · RTI & CIS fabricate acceptance + zero idempotency — P1, CR (payroll go-live).** *Reconciled view:* the edge functions' **production transport is stubbed** (`rti-submit:120-132`, `cis-submit:146`), so no real HMRC duplicates yet — but the functions still insert `rti_submissions`/`cis_submissions` rows with **no idempotency key or unique constraint** (double-click → duplicate rows), and the client engines mark filed with a **fake IRmark**. So today it's a data-integrity + latent-transport risk, not a live-HMRC incident. Fix: idempotency guard + unique index now (one migration + function edit); real transport + real IRmark at payroll go-live. **M now / L later.** (Stress ST-1 + filing F1/F2 + edge F6.)
+
+### Data integrity / access control
+- **T1-8 · ST-2 · `filing_submissions.idempotency_key` has no unique constraint — P1, CR — ✅ DONE 2026-07-13 (index shipped by Lovable, code side by me).** The index is Lovable's migration `20260713130033_b54c61ba-...sql` (`filing_submissions_idempotency_key_inflight_uniq`, partial unique on `idempotency_key WHERE status IN ('pending','submitted','accepted')` + preflight dupe guard) — applied live. My parallel `20260713120000_filing_submissions_idempotency_unique.sql` was **dropped on 2026-07-16 as a duplicate**: it differed only by also covering `'submitting'`, which is a `filings` status and is never written to `filing_submissions` (verified: that table only takes pending/submitted/accepted/rejected/error/timeout/failed/blocked/submission_failed), so the two predicates are functionally identical and a second unique index on the same column would have been pure duplication. Code side (mine): fixed the ignore-the-insert-error bug in `ch-submit` and `hmrc-vat-submit` (they logged the failure then POSTed anyway) — both now halt with 409 on a unique-violation; `hmrc-ct-submit` (already halted) now returns 409 on duplicate too. These key off SQLSTATE 23505, so they work against Lovable's index unchanged.
+- **T1-9 · ST-3 · Suspended subscription unenforced — P1, CR — ✅ DONE 2026-07-14.** New `BillingGate` (rendered inside `AppProvider`, so it reads the ACTIVE org, not ProtectedRoute's arbitrary membership org) redirects to `/subscription` when `organization.billing_status === 'canceled'`; `/subscription` is exempt so the org can resubscribe. Pure `billing-gate-model.ts` (`billingBlocksAccess`) + 4 tests. **Scope note:** only `'canceled'` blocks — `past_due` (dunning grace) and `pending_payment` (pre-subscribe/onboarding) are intentionally NOT blocked to avoid trapping paying/new orgs; extending the blocking set is a product decision.
+
+### UI misrepresents state
+- **T1-10 · UI-1 · Error-as-empty on all 7 core list pages — P1, CR — ✅ DONE 2026-07-13.** New shared `src/components/QueryError.tsx` (retryable error state) wired into the `isError`/error branch of all 7: Jobs, Quotes, Filings, Clients (combined 2-query error), Deadlines, SalesTab invoices, and CRM (manual-load → added `loadError` state, no longer falls through to an empty pipeline). A failed fetch now shows "Couldn't load X · Try again" instead of a false "No X found".
+- **T1-11 · UI-2 · FX failure silently priced at 1.0 — P1, CR — ✅ DONE 2026-07-13.** `getFXRate` now returns `source:'fallback'` (not the misleading `'manual'`) when no rate can be determined, and validates cache/api rates via `isUsableRate` (new pure `fx-model.ts`). `JournalEditor` detects the fallback: toasts, shows a destructive inline alert, **disables Post**, and a defense-in-depth guard in the save mutation throws rather than post a parity-priced foreign-currency journal; a manual rate entry clears the block. New `fx-model.test.ts` (5 tests). Only caller was JournalEditor, so the contract change is contained.
+
+### Automation that never fires
+- **T1-12 · AUTO-1 · Automation engines unscheduled — P1, CR, owner decision.** `process-automation-events` (router) and `workflow-tick` (executor) are complementary but neither is scheduled → the whole Automations UI is a data sink. Fix: schedule both (PAE router + tick executor) with a kill-switch, or collapse tick into PAE. **M.** Needs your decision before scheduling.
+- **T1-13 · AUTO-2 · CRM follow-up sequences have no consumer — P1, CR, owner decision.** Settings UI writes `crm_followup_sequences/_steps`; zero edge-function references. Separate from the `automation_chaser_*` system the crons actually drive (two-systems trap). Fix: wire into chaser-tick, or hide the UI until consumed. **M.** (Automation AUTO-2 + portal.)
+- **T1-14 · AUTO-3 · invoice-overdue-scan never scheduled — P1, CR — 🟡 BLOCKED (see 2026-07-13 note under T2-4).** Not scheduled: the function selects `invoices.amount_due`/`total` which don't exist (real cols: `total_gross`/`amount_paid`) → 400 every run; and its emitted INVOICE_OVERDUE events are inert until AUTO-1 (T1-12) is scheduled. Needs a git-schema fix + the AUTO-1 decision first.
+- **T1-15 · F4(edge) · handle-email-unsubscribe missing from config.toml → links 401 — P1, CR.** `verify_jwt` defaults true, so one-click unsubscribe dead → PECR/compliance risk. Fix: add `[functions.handle-email-unsubscribe] verify_jwt = false`. **S.**
+
+### Accountant core workflows
+- **T1-16 · Add-service-to-existing-client is disabled — P1, CR.** `ClientServicesTab.tsx:92-95` button disabled; `engagements` table ready; zero insert paths outside onboarding → can't expand scope without re-onboarding (core revenue workflow). Fix: dialog picking `canonical_services` → insert `engagements` + job/deadline engine hook. **M.**
+- **T1-17 · SA & FRS105 accounts have no approve/submit — P1, CR.** Editors save drafts only; approval/snapshot layer is CT600-only. Violates the "no submission without approved-model" rule. Fix: replicate the CT600 approval-snapshot pattern for SA/FRS105 (transport can start as approve+mark-filed). **L.** (Portal + filing F4.)
+- **T1-18 · CS01/Companies House accounts live path is manual-mark-filed with a mutable snapshot & no DB gate — P1, CR.** CS01 submits to real Companies House with no approval stage. Fix: add the snapshot+approval+gate pattern before CH go-live. **M–L.** (Filing F4/F5.)
+
+### Prod hygiene that blocks launch
+- **T1-19 · DEAD-1 · Mock filing provider fabricates HMRC acceptance — P1, CR (latent).** `HMRCSandboxProvider.submitStandardFiling` returns `status:"accepted"` with fake references. Only reachable via payroll today, but one refactor from wiring SA/CT/VAT through it. Fix: delete the fake-accept path (throw "not implemented") + delete the never-imported `submitFilingToAuthorityViaProvider`. **S.**
+- **T1-20 · DEAD-2/5 + F10 · Test-only functions deployed with hardcoded creds — P1, CR.** `portal-qa-probe` and `seed-portal-test-users` create/sign real auth users with public password `PortalQA!2026` in the prod project and write real data. Fix: delete both + the seeded `*.test` users before client onboarding. **S.**
+
+---
+
+## TIER 2 — Important, not launch-blocking
+
+- **T2-1 · REM-2 · Dual rollover engines both live — P1.** DB trigger `tg_job_completed_rollover` (labelled) + frontend `executeAutoRollover` (NULL-label) → two next-year jobs; label mismatch defeats both dedupe layers, and the frontend insert now also 23505s (T0-1). Fix: delete the job-creation half of `executeAutoRollover`, keep the back-link. **S/M.**
+- **T2-2 · REM-3 · Lazy onboarding_applications creation — P1 (the one true canonical-flip blocker).** `public_get_quote_by_token` lazily inserts the application with no `ON CONFLICT` and no `quote_id` unique index; the accept RPC doesn't create it at all → pipeline stall if the client never reloads + dup race across tabs. Fix: partial unique index on `onboarding_applications(quote_id)` + create at accept with `ON CONFLICT DO NOTHING` + keep lazy path as backfill. **S.**
+- **T2-3 · SEC-NEW-1 · connected_mailboxes OAuth tokens plaintext, no column REVOKE — P2, pre-launch.** Unlike `bank_connections`, no `REVOKE SELECT` → a staff JWT can exfiltrate full-scope Gmail/Outlook tokens. Fix: `REVOKE SELECT (access_token, refresh_token) … FROM anon, authenticated`. **S.**
+- **T2-4 · F8/F9(edge) + AUTO-4/5/6 · Orphan service-role scanners unscheduled and ungated — P2 — 🟡 GATING DONE 2026-07-13, scheduling BLOCKED.**
+  - ✅ **Gating (F8) shipped:** service-role bearer gate added to all four (`invoice-overdue-scan`, `dormant-lead-scan`, `sla-check`, `session-cleanup`). The matching `config.toml` `verify_jwt=false` entries for the two that were missing came from **Lovable upstream** (`a7756a3`); my identical local hunk was **dropped on 2026-07-16** because it added a second copy of both `[functions.*]` blocks (duplicate TOML keys). Any-authenticated-user / anon trigger of these cross-tenant scanners is now closed. *Live-cron caveat:* none of the four is scheduled in git, so the bearer gate cannot break an existing job; if Lovable has a live cron for any of them that sends the **anon** key, that job would now 401 — worth confirming against the live `cron.job` list.
+  - 🔴 **Scheduling NOT shipped** — investigation found **all four reference schema absent from git**, so they'd 400 every run: `invoice-overdue-scan` → `invoices.amount_due`/`total` (real: `total_gross`/`amount_paid`); `dormant-lead-scan` → `leads.stage` + `last_activity_at` (real: `pipeline_stage`, no last_activity_at); `sla-check`/`session-cleanup` tables exist but columns unverified. They also emit into `automation_events`, inert until AUTO-1 (T1-12) runs. **Decision (owner, 2026-07-13): DEFER all scheduling to AUTO-1** — leave gated-but-unscheduled; fix-to-git-schema + schedule together with the AUTO-1 automation-engine decision (T1-12), since their events are inert until then.
+- **T2-5 · REM-8 · Duplicate VAT approval RPC with column drift — P2.** Lovable added `approve_vat_return_for_filing` (`model_snapshot_hash`) alongside my `record_vat_filing_approval` (`snapshot_hash`); UI calls only mine. No correctness break yet (gate accepts either). Fix: drop the duplicate + dead column (guard checklist first). **S.**
+- **T2-6 · REM-6 · Dormant canonical_spine_v1 third engine still installed — P2.** Spine functions + job-side trigger left installed; re-awaken if any writer stamps `automation_source='canonical_spine_v1'`. Fix: drop the trigger + the three spine functions. **S.**
+- **T2-7 · Portal & accountant UX gaps — P2.** ClientPortal action stubs (Send Email / New Job / Billing disabled); staff role isolation weak (most policies are org-access only, no per-client/role scoping on destructive ops); KYC pack fully built but unmounted; portal entity-switch keeps stale message thread; portal "View All Deadlines" → tasks page; engagement letters not viewable/signable in-portal. Mostly **S–M** each.
+- **T2-8 · F7(edge) · ENCRYPTION_KEY dev fallback — P2.** `'default-dev-key-change-in-production'` fallback in 3 files → tokens encrypted under a public key if env unset. Fix: throw at startup when unset. **S.**
+- **T2-9 · UI-3 · ProtectedRoute membership check fails OPEN — P2.** `return true` on error grants app access during a DB blip. Fix: fail to a retry screen. **S.**
+- **T2-10 · REM-4 · Rollover parity gap — P2.** VAT/payroll/CIS/bookkeeping have no canonical rollover; only the rogue chaser writer generated their recurring periods. Fix: extend `tg_job_completed_rollover` with VAT-quarter/payroll-month/CIS-month branches (after T0-1). **M.**
+- **T2-11 · REM-7 · questionnaire→records_received transition missing — P2.** Client submits questionnaire; the linked job never advances from `records_requested`. Fix: update the job in the `questionnaire_response` handler. **S.**
+- **T2-12 · ST-4/ST-5 · Double-submit gaps — P2.** Questionnaire submit button not disabled during mutation; rollover dedupe key mismatch (label-only). Fix: `|| isPending`; align rollover lookup to `period_label`. **S.**
+- **T2-13 · DEAD-3/4/6 · Prod-exposed diagnostics — P2.** `e2e-flow-validation` fires mutation-shaped probes from the main bundle; `/color-comparison` is a public unauthenticated route; `OpsHealth` statically imported. Fix: DEV-gate/lazy-load; delete color-comparison. **S.**
+
+---
+
+## TIER 3 — Cleanup / quality (non-blocking)
+
+- **T3-1 · QG-1 · Lint debt: 1081 problems (1045 errors), mostly `no-explicit-any`.** Lint is useless as a regression tripwire at this volume, and `any` on money/filing types is where FX/status bugs hide. Fix: demote `no-explicit-any` to warn repo-wide, error only in `src/lib/` money/filing modules; ratchet. **M.**
+- **T3-2 · QG-2 · Single 3.6MB JS chunk, zero code-splitting.** Fix: `React.lazy` per route group + Suspense. **M.**
+- **T3-3 · REM-9 · Legacy status vocab remnants in chaser functions — P3.** Dead-but-harmless `'in_progress'/'complete'` stop-checks; clean up alongside the T0-1 chaser fix.
+- **T3-4 · Filing hygiene — P3.** Stale comment in `filing-mark-filed-gate.ts`; dual workpaper stores; `send-engagement-letter` `select('*')` over-reads OAuth tokens; `stripe-connect-charge` dead 501 scaffold; 11 functions missing explicit config.toml entries (only F4 is actually wrong).
+- **T3-5 · Portal/accountant P3.** Reply button shown without `allow_query_respond` (RLS error instead of hidden); questionnaire "Open" on expired token (server rejects gracefully); services/engagement scope not visible in portal; workpaper TB auto-mapping is manual-only.
+
+---
+
+## Verified HELD (do not re-flag)
+Ledger payment/void/reverse RPC authz; VAT/CT600 DB filing gates (transition-only, fail-safe); new VAT approval RPC authz; email-queue atomic claim + idempotency; chaser cron scheduling; portal invite/guard/tasks flows; markFilingAsFiled reference requirement; `allow_query_respond` / questionnaire-expiry / `client_messages` scoping all enforced server-side (prior audit flags now closed); payroll approve / Stripe webhook / client soft-archive idempotency. Prior "rollover status:blank" claim retracted — `'blank'` is the canonical status.
+
+---
+
+## Recommended sequence (respecting one-small-increment-per-change)
+
+**Stop-the-bleeding (do now, mostly flag-independent):**
+1. T0-1 chaser-trigger-scan routing (live cron breaking) — then the other 4 rogue writers as fast-follow.
+2. T0-2 hmrc-vat-submit token schema — **verify live DB first**.
+
+**Client-ready blocker sweep (small additive increments):**
+3. T1-8 + T1-4: one migration — `filing_submissions` partial unique index (covers CH + VAT idempotency).
+4. T1-14 + T2-4: one migration — schedule + gate the four orphan crons.
+5. T1-15: config.toml unsubscribe one-liner.
+6. T1-11 (FX) → T1-10 (list-page error states): frontend correctness.
+7. T1-1 (SEC-6 portal read policies + invoice status) — one migration.
+8. T1-2 (SEC-7) — after confirming legacy `?token=` threading.
+9. T1-5 + T1-4 gates + T1-3 CT600 projection: filing-correctness pass.
+10. T1-7 RTI/CIS idempotency; T1-9 billing gate.
+11. T1-19 + T1-20: delete fake-accept path + QA/seed functions; T2-3 mailbox token REVOKE.
+
+**Owner-decision items (don't start blind):** T1-12/T1-13 (automation engine + CRM sequences: schedule-both vs collapse vs hide), T1-6 (CT600 prod: block vs real IRmark), T1-17/T1-18 (SA/FRS105/CS01 approval layer), and the canonical-lifecycle flip itself.
+
+**Shortest path to the first canonical-lifecycle org flip:** T2-2 (REM-3, the only true blocker) → T0-1 chaser fix → run `lifecycle_reconciliation_report` on the pilot → flip one org → verify same-day. Then T2-1/T2-6/T2-10 decoupled.
