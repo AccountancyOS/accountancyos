@@ -28,8 +28,8 @@ var list_clients_default = defineTool({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const sb = supabaseForUser(ctx);
-    let query = sb.from("clients").select("id, first_name, last_name, email, status, client_type").order("updated_at", { ascending: false }).limit(limit);
+    const sb7 = supabaseForUser(ctx);
+    let query = sb7.from("clients").select("id, first_name, last_name, email, status, client_type").order("updated_at", { ascending: false }).limit(limit);
     if (search) {
       const s = `%${search}%`;
       query = query.or(`first_name.ilike.${s},last_name.ilike.${s},email.ilike.${s}`);
@@ -68,8 +68,8 @@ var list_jobs_default = defineTool2({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const sb = supabaseForUser2(ctx);
-    let query = sb.from("jobs").select(
+    const sb7 = supabaseForUser2(ctx);
+    let query = sb7.from("jobs").select(
       "id, job_name, service_type, status, priority, filing_deadline, period_label, client_id, company_id, updated_at"
     ).order("updated_at", { ascending: false }).limit(limit);
     if (status) query = query.eq("status", status);
@@ -107,10 +107,10 @@ var list_deadlines_default = defineTool3({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const sb = supabaseForUser3(ctx);
+    const sb7 = supabaseForUser3(ctx);
     const now = /* @__PURE__ */ new Date();
     const until = new Date(now.getTime() + within_days * 864e5);
-    const { data, error } = await sb.from("deadlines").select(
+    const { data, error } = await sb7.from("deadlines").select(
       "id, name, deadline_type, filing_body, due_date, status, client_id, company_id, service_code"
     ).is("filed_at", null).gte("due_date", now.toISOString().slice(0, 10)).lte("due_date", until.toISOString().slice(0, 10)).order("due_date", { ascending: true }).limit(limit);
     if (error) {
@@ -123,18 +123,210 @@ var list_deadlines_default = defineTool3({
   }
 });
 
+// src/lib/mcp/tools/db-schema.ts
+import { createClient as createClient4 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.22.2";
+function sb(ctx) {
+  return createClient4(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var db_schema_default = defineTool4({
+  name: "db_schema",
+  title: "Describe database schema",
+  description: "Return every public table with its columns (name, type, nullable, default). Use this first to discover what to query with db_select/db_insert/db_update/db_delete.",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (_input, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb(ctx).rpc("mcp_list_schema");
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? {}, null, 2) }],
+      structuredContent: { schema: data ?? {} }
+    };
+  }
+});
+
+// src/lib/mcp/tools/db-select.ts
+import { createClient as createClient5 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z4 } from "npm:zod@^3.25.0";
+function sb2(ctx) {
+  return createClient5(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var OpEnum = z4.enum([
+  "eq",
+  "neq",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "like",
+  "ilike",
+  "is",
+  "in",
+  "contains"
+]);
+var db_select_default = defineTool5({
+  name: "db_select",
+  title: "Query any table",
+  description: "Read rows from any public table. RLS applies (acts as the signed-in user). Use db_schema first to discover columns.",
+  inputSchema: {
+    table: z4.string().min(1).describe("Public table name."),
+    columns: z4.string().default("*").describe("PostgREST select string, e.g. 'id, name' or '*'."),
+    filters: z4.array(z4.object({ column: z4.string(), op: OpEnum, value: z4.any() })).optional().describe("Optional filters combined with AND. Value type depends on op; 'in' takes an array."),
+    order: z4.object({ column: z4.string(), ascending: z4.boolean().default(true) }).optional(),
+    limit: z4.number().int().min(1).max(500).default(50)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ table, columns, filters, order, limit }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb2(ctx).from(table).select(columns).limit(limit);
+    for (const f of filters ?? []) {
+      q = q[f.op](f.column, f.value);
+    }
+    if (order) q = q.order(order.column, { ascending: order.ascending });
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { rows: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/db-insert.ts
+import { createClient as createClient6 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z5 } from "npm:zod@^3.25.0";
+function sb3(ctx) {
+  return createClient6(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var db_insert_default = defineTool6({
+  name: "db_insert",
+  title: "Insert rows",
+  description: "Insert one or more rows into a public table. RLS applies. Returns the inserted rows.",
+  inputSchema: {
+    table: z5.string().min(1),
+    rows: z5.union([z5.record(z5.any()), z5.array(z5.record(z5.any()))])
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  handler: async ({ table, rows }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb3(ctx).from(table).insert(rows).select();
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return { content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }], structuredContent: { rows: data ?? [] } };
+  }
+});
+
+// src/lib/mcp/tools/db-update.ts
+import { createClient as createClient7 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z6 } from "npm:zod@^3.25.0";
+function sb4(ctx) {
+  return createClient7(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var OpEnum2 = z6.enum(["eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "is", "in"]);
+var db_update_default = defineTool7({
+  name: "db_update",
+  title: "Update rows",
+  description: "Update rows in a public table matching the filters. RLS applies. At least one filter is required.",
+  inputSchema: {
+    table: z6.string().min(1),
+    values: z6.record(z6.any()),
+    filters: z6.array(z6.object({ column: z6.string(), op: OpEnum2, value: z6.any() })).min(1)
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  handler: async ({ table, values, filters }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb4(ctx).from(table).update(values);
+    for (const f of filters) q = q[f.op](f.column, f.value);
+    const { data, error } = await q.select();
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return { content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }], structuredContent: { rows: data ?? [] } };
+  }
+});
+
+// src/lib/mcp/tools/db-delete.ts
+import { createClient as createClient8 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z7 } from "npm:zod@^3.25.0";
+function sb5(ctx) {
+  return createClient8(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var OpEnum3 = z7.enum(["eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "is", "in"]);
+var db_delete_default = defineTool8({
+  name: "db_delete",
+  title: "Delete rows",
+  description: "Delete rows from a public table matching the filters. RLS applies. At least one filter is required.",
+  inputSchema: {
+    table: z7.string().min(1),
+    filters: z7.array(z7.object({ column: z7.string(), op: OpEnum3, value: z7.any() })).min(1)
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  handler: async ({ table, filters }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    let q = sb5(ctx).from(table).delete();
+    for (const f of filters) q = q[f.op](f.column, f.value);
+    const { data, error } = await q.select();
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return { content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }], structuredContent: { rows: data ?? [] } };
+  }
+});
+
+// src/lib/mcp/tools/db-rpc.ts
+import { createClient as createClient9 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z8 } from "npm:zod@^3.25.0";
+function sb6(ctx) {
+  return createClient9(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var db_rpc_default = defineTool9({
+  name: "db_rpc",
+  title: "Call a database function",
+  description: "Invoke a Postgres function exposed via PostgREST (RPC). RLS and function grants apply.",
+  inputSchema: {
+    function_name: z8.string().min(1),
+    args: z8.record(z8.any()).optional()
+  },
+  annotations: { readOnlyHint: false, openWorldHint: false },
+  handler: async ({ function_name, args }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb6(ctx).rpc(function_name, args ?? {});
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return { content: [{ type: "text", text: JSON.stringify(data ?? null, null, 2) }], structuredContent: { result: data ?? null } };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "moxpdejnucjjcplleefn";
 var mcp_default = defineMcp({
   name: "accountancyos-mcp",
   title: "AccountancyOS",
   version: "0.1.0",
-  instructions: "Read-only tools for an AccountancyOS practice. Use list_clients to look up clients, list_jobs to inspect work in progress, and list_upcoming_deadlines to see what is due. All calls act as the signed-in user and respect their organisation permissions.",
+  instructions: "Full-access tools for an AccountancyOS practice. list_clients / list_jobs / list_upcoming_deadlines are shortcuts for common reads. For anything else, call db_schema to discover tables, then db_select / db_insert / db_update / db_delete / db_rpc. All calls act as the signed-in user and are subject to that user's RLS permissions.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
-  tools: [list_clients_default, list_jobs_default, list_deadlines_default]
+  tools: [list_clients_default, list_jobs_default, list_deadlines_default, db_schema_default, db_select_default, db_insert_default, db_update_default, db_delete_default, db_rpc_default]
 });
 
 // lovable-mcp-supabase-entry.ts
