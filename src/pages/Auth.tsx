@@ -105,7 +105,12 @@ const Auth = () => {
       // send them back to the checkout/verification flow instead of the
       // dashboard so they can finish setting up billing.
       const pendingOrgId = localStorage.getItem("pending_org_id");
-      navigate(pendingOrgId ? "/complete-payment" : "/");
+      // Honour ?next=<same-origin path> so OAuth consent (and similar) return
+      // the user to the intended route rather than the dashboard.
+      const nextParam = searchParams.get("next");
+      const safeNext =
+        nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : null;
+      navigate(safeNext ?? (pendingOrgId ? "/complete-payment" : "/"));
     } catch (error: any) {
       toast({
         title: "Error signing in",

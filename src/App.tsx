@@ -67,6 +67,7 @@ import CompletePayment from "./pages/CompletePayment";
 import ConfirmEmail from "./pages/ConfirmEmail";
 import PublicQuoteView from "./pages/PublicQuoteView";
 import PublicOnboarding from "./pages/PublicOnboarding";
+import OAuthConsent from "./pages/OAuthConsent";
 import { Loader2 } from "lucide-react";
 import PortalRoutes from "./portal/routes/PortalRoutes";
 import { PortalGuard } from "./portal/guards/PortalGuard";
@@ -161,7 +162,12 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
   // Don't redirect if user is in password recovery mode
   if (user && authFlow !== "recovery") {
-    return <Navigate to="/" replace />;
+    // Preserve `?next=<same-origin path>` (e.g. OAuth consent) so signed-in
+    // users returning to /auth land back at the intended target.
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    return <Navigate to={safe} replace />;
   }
 
   return <>{children}</>;
@@ -585,6 +591,8 @@ const App = () => (
               }
             />
             <Route path="/engagement/:token" element={<EngagementLetterPreview />} />
+            {/* OAuth consent page for external MCP/OAuth clients (Lovable managed). */}
+            <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             {/* Client Portal — isolated under src/portal/, mounted at /portal/*.
                 Note: /portal/preview/:entityType/:entityId above is the accountant
                 preview surface and remains owned by the accountant app. */}
