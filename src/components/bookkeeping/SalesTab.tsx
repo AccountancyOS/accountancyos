@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryError } from "@/components/QueryError";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import { Button } from "@/components/ui/button";
@@ -77,7 +78,7 @@ export default function SalesTab({ entity, canCreate = true, canSend = true }: S
   });
 
   // Fetch invoices
-  const { data: invoices, isLoading } = useQuery({
+  const { data: invoices, isLoading, isError, refetch } = useQuery({
     queryKey: ["sales-invoices", entity?.type, entity?.id, statusFilter, customerFilter],
     queryFn: async () => {
       if (!entity || !organization?.id) return [];
@@ -219,6 +220,8 @@ export default function SalesTab({ entity, canCreate = true, canSend = true }: S
         <div className="flex items-center justify-center h-[300px]">
           <p className="text-muted-foreground">Loading invoices...</p>
         </div>
+      ) : isError ? (
+        <QueryError entity="invoices" onRetry={() => refetch()} />
       ) : filteredInvoices.length === 0 ? (
         <BookkeepingEmptyState
           icon={FileText}

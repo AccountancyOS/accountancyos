@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { QueryError } from "@/components/QueryError";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +48,7 @@ const Clients = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState<ClientType | null>(null);
 
-  const { data: clients, isLoading: clientsLoading } = useQuery({
+  const { data: clients, isLoading: clientsLoading, isError: clientsError, refetch: refetchClients } = useQuery({
     queryKey: ["clients", organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
@@ -68,7 +69,7 @@ const Clients = () => {
     enabled: !!organization?.id,
   });
 
-  const { data: companies, isLoading: companiesLoading } = useQuery({
+  const { data: companies, isLoading: companiesLoading, isError: companiesError, refetch: refetchCompanies } = useQuery({
     queryKey: ["companies", organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
@@ -137,6 +138,7 @@ const Clients = () => {
   }, [unifiedList, searchTerm, typeFilter]);
 
   const isLoading = clientsLoading || companiesLoading;
+  const isError = clientsError || companiesError;
 
   return (
     <DashboardLayout>
@@ -188,6 +190,8 @@ const Clients = () => {
 
             {isLoading ? (
               <TableSkeleton columns={5} rows={6} />
+            ) : isError ? (
+              <QueryError entity="clients" onRetry={() => { refetchClients(); refetchCompanies(); }} />
             ) : !filteredList.length ? (
               <div className="text-center py-12 border border-dashed rounded-lg">
                 <p className="text-muted-foreground">

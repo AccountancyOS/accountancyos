@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { QueryError } from "@/components/QueryError";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ const CRM = () => {
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
@@ -123,6 +125,8 @@ const CRM = () => {
   }, [organization]);
 
   const loadLeads = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase
         .from("leads")
@@ -137,6 +141,9 @@ const CRM = () => {
         ch_company_profile: lead.ch_company_profile,
       })));
     } catch (error: any) {
+      // Surface the failure AND render an error state — don't fall through to an empty pipeline,
+      // which would look like "no leads" when the load actually failed.
+      setLoadError(error?.message || "Failed to load leads");
       toast({
         title: "Error loading leads",
         description: error.message,
@@ -323,6 +330,16 @@ const CRM = () => {
               <Skeleton className="h-10 w-28" />
             </div>
             <PipelineSkeleton />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <QueryError entity="leads" message={loadError} onRetry={() => loadLeads()} />
         </div>
       </DashboardLayout>
     );

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { QueryError } from "@/components/QueryError";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
@@ -72,7 +73,7 @@ export default function Jobs() {
     enabled: !!companyFilter,
   });
 
-  const { data: jobs, isLoading } = useQuery({
+  const { data: jobs, isLoading, isError, refetch } = useQuery({
     queryKey: [...queryKeys.jobs(organization?.id || "", filters as Record<string, unknown>), companyFilter],
     queryFn: async () => {
       if (!organization?.id) return [];
@@ -357,6 +358,8 @@ export default function Jobs() {
         {/* Jobs Table */}
         {isLoading ? (
           <TableSkeleton columns={7} rows={6} />
+        ) : isError ? (
+          <QueryError entity="jobs" onRetry={() => refetch()} />
         ) : jobs && jobs.length > 0 ? (
           <div className="border rounded-lg animate-fade-in">
             <Table>

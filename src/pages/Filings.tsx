@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { QueryError } from "@/components/QueryError";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -45,7 +46,7 @@ export default function Filings() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filingTypeFilter, setFilingTypeFilter] = useState("all");
 
-  const { data: filings, isLoading } = useQuery({
+  const { data: filings, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.filings(organization?.id || "", { search: searchQuery, type: filingTypeFilter }),
     queryFn: async () => {
       let query = supabase
@@ -137,6 +138,8 @@ export default function Filings() {
 
             {isLoading ? (
               <TableSkeleton columns={7} rows={6} />
+            ) : isError ? (
+              <QueryError entity="filings" onRetry={() => refetch()} />
             ) : filings && filings.length > 0 ? (
               <Table>
                 <TableHeader>

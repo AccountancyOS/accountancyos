@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { QueryError } from "@/components/QueryError";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -67,7 +68,7 @@ const Quotes = () => {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const { data: quotes, isLoading } = useQuery({
+  const { data: quotes, isLoading, isError, refetch } = useQuery({
     queryKey: ["quotes", organization?.id],
     queryFn: async () => {
       if (!organization?.id) return [];
@@ -205,6 +206,8 @@ const Quotes = () => {
 
       {isLoading ? (
         <TableSkeleton columns={7} rows={6} />
+      ) : isError ? (
+        <QueryError entity="quotes" onRetry={() => refetch()} />
       ) : !quotes?.length ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
           <p className="text-muted-foreground mb-4">No quotes yet</p>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { QueryError } from "@/components/QueryError";
 import { Link, useNavigate } from "react-router-dom";
 import { EditDeadlineDialog, type EditableDeadline } from "./EditDeadlineDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,7 +31,7 @@ export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
   const navigate = useNavigate();
   const [editing, setEditing] = useState<EditableDeadline | null>(null);
 
-  const { data: deadlines, isLoading } = useQuery({
+  const { data: deadlines, isLoading, isError, refetch } = useQuery({
     queryKey: ["deadlines", organization?.id, filters],
     queryFn: async () => {
       if (!organization?.id) return [];
@@ -142,6 +143,10 @@ export const DeadlinesTable = ({ filters }: DeadlinesTableProps) => {
 
   if (isLoading) {
     return <div className="flex items-center justify-center p-12">Loading deadlines...</div>;
+  }
+
+  if (isError) {
+    return <QueryError entity="deadlines" onRetry={() => refetch()} className="m-4" />;
   }
 
   if (!deadlines?.length) {
