@@ -38,6 +38,24 @@ export function vatSubmissionGateBlocked(
   return !next.model_snapshot_id || !next.filing_approved_at;
 }
 
+/**
+ * T1-5 server-side contract: mirrors the production approval gate in hmrc-vat-submit. A submission
+ * to the real HMRC endpoint (environment 'production') requires the snapshot being submitted to be
+ * approved on a not-yet-submitted VAT return. Returns the blocking reason code, or null if allowed.
+ * Sandbox is intentionally not gated here (transport testing). Enforcement lives in the edge
+ * function; this documents/tests the exact rule.
+ */
+export function vatProductionSubmitBlockedReason(params: {
+  environment: string;
+  approved: { filing_approved_at?: string | null; submitted_at?: string | null } | null;
+}): "NOT_APPROVED" | "ALREADY_SUBMITTED" | null {
+  if (params.environment !== "production") return null;
+  const a = params.approved;
+  if (!a || !a.filing_approved_at) return "NOT_APPROVED";
+  if (a.submitted_at) return "ALREADY_SUBMITTED";
+  return null;
+}
+
 export function vatFilingState(r: VatFilingApprovalRow): VatFilingState {
   const submitted = !!r.submitted_at;
   const approved = !!r.filing_approved_at && !!r.model_snapshot_id;

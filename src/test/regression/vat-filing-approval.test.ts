@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { vatFilingState, vatSubmissionGateBlocked } from "@/lib/vat-filing-approval-model";
+import { vatFilingState, vatSubmissionGateBlocked, vatProductionSubmitBlockedReason } from "@/lib/vat-filing-approval-model";
 
 /**
  * Filing Stage B (VAT) — the submittability gate. Consumed by the approve UI (B), the submit
@@ -92,5 +92,36 @@ describe("vatSubmissionGateBlocked (Stage D — DB trigger contract)", () => {
         { status: "submitted", submitted_at: "2026-04-03" },
       ),
     ).toBe(false);
+  });
+});
+
+describe("vatProductionSubmitBlockedReason (T1-5 — hmrc-vat-submit production gate)", () => {
+  it("sandbox is never blocked by this gate (transport testing)", () => {
+    expect(vatProductionSubmitBlockedReason({ environment: "sandbox", approved: null })).toBeNull();
+  });
+
+  it("production blocks when the snapshot has no approved VAT return", () => {
+    expect(vatProductionSubmitBlockedReason({ environment: "production", approved: null })).toBe("NOT_APPROVED");
+    expect(
+      vatProductionSubmitBlockedReason({ environment: "production", approved: { filing_approved_at: null } }),
+    ).toBe("NOT_APPROVED");
+  });
+
+  it("production blocks a re-submit of an already-submitted return", () => {
+    expect(
+      vatProductionSubmitBlockedReason({
+        environment: "production",
+        approved: { filing_approved_at: "2026-04-01", submitted_at: "2026-04-03" },
+      }),
+    ).toBe("ALREADY_SUBMITTED");
+  });
+
+  it("production allows an approved, not-yet-submitted return", () => {
+    expect(
+      vatProductionSubmitBlockedReason({
+        environment: "production",
+        approved: { filing_approved_at: "2026-04-01", submitted_at: null },
+      }),
+    ).toBeNull();
   });
 });

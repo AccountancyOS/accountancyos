@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getValidHmrcAccessToken, HmrcAuthError } from "../_shared/hmrc-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,10 +60,12 @@ serve(async (req: Request) => {
     }
 
     // Parse request
-    const { 
-      filingId, 
-      snapshotId, 
-      environment = 'sandbox',
+    const {
+      filingId,
+      snapshotId,
+      // Advisory only — the authoritative sandbox/production choice is derived below from the
+      // canonical HMRC integration config (test_mode), not from the caller.
+      environment: requestedEnvironment = 'sandbox',
       vrn, // VAT Registration Number
       skipReconciliationCheck = false // For testing only
     } = await req.json();
@@ -74,8 +77,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Validate environment
-    if (!['sandbox', 'production'].includes(environment)) {
+    // Validate the advisory environment hint (rejected if garbage, but not authoritative).
+    if (!['sandbox', 'production'].includes(requestedEnvironment)) {
       return new Response(
         JSON.stringify({ success: false, message: 'Invalid environment. Must be "sandbox" or "production"' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -169,6 +172,69 @@ serve(async (req: Request) => {
       );
     }
 
+    // T0-2/F1: the target HMRC environment is derived from the canonical integration config
+    // (test_mode), not the request — the connected credentials dictate sandbox vs production. This
+    // also confirms the org actually has an HMRC MTD VAT connection before doing any work. No token
+    // material is read here (that goes through getValidHmrcAccessToken below).
+    const { data: hmrcConfig, error: hmrcConfigError } = await supabase
+      .from('organization_integrations_hmrc')
+      .select('test_mode, mtd_vat_connected')
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (hmrcConfigError || !hmrcConfig?.mtd_vat_connected) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'HMRC MTD authorization not configured. Please connect your HMRC account first.',
+          error_code: 'HMRC_NOT_CONNECTED',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const environment: 'sandbox' | 'production' = hmrcConfig.test_mode ? 'sandbox' : 'production';
+
+    // FIL-1 / T1-5: no PRODUCTION submission without an approved model version (CLAUDE.md
+    // non-negotiable: "No submission without an approved-model-version reference"). The snapshot
+    // being submitted must be the exact one an accountant approved on the VAT return —
+    // record_vat_filing_approval stamps vat_returns.model_snapshot_id + filing_approved_at. The
+    // client gate (vat-filing-submit) is advisory; this closes a direct-invoke bypass. Sandbox is
+    // left open for transport testing (the vat_returns status trigger still requires approval to
+    // mark a return submitted in any environment).
+    if (environment === 'production') {
+      const snapId = snapshot?.id ?? null;
+      const { data: approvedRows } = snapId
+        ? await supabase
+            .from('vat_returns')
+            .select('id, filing_approved_at, submitted_at')
+            .eq('model_snapshot_id', snapId)
+            .limit(1)
+        : { data: null };
+      const approvedReturn = approvedRows?.[0] ?? null;
+
+      if (!approvedReturn || !approvedReturn.filing_approved_at) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            message: 'This VAT return has not been approved for filing. Approve it before submitting to HMRC.',
+            error_code: 'NOT_APPROVED',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (approvedReturn.submitted_at) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            duplicate: true,
+            message: 'This VAT return has already been submitted.',
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Rate limiting: max 5 submissions per org per minute
     const rateLimitKey = `hmrc-vat:${organizationId}`;
     const windowMs = 60000;
@@ -224,20 +290,27 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get HMRC OAuth token for this organization
-    const { data: hmrcAuth, error: hmrcAuthError } = await supabase
-      .from('organization_integrations_hmrc')
-      .select('access_token, refresh_token, token_expires_at')
-      .eq('organization_id', organizationId)
-      .maybeSingle();
-
-    if (hmrcAuthError || !hmrcAuth?.access_token) {
+    // Get a valid HMRC access token via the canonical helper: it reads the encrypted MTD VAT
+    // columns (mtd_vat_*_encrypted), refreshes if near expiry, and never exposes plaintext token
+    // columns. On any failure (not connected, missing/expired refresh credentials, refresh failure)
+    // it throws HmrcAuthError with a stable code — surfaced here as a clean non-success response,
+    // before any submission record is created. Token material is never logged.
+    let hmrcAccessToken: string;
+    try {
+      const tokenResult = await getValidHmrcAccessToken(supabase, {
+        orgId: organizationId,
+        traceId: `vat-submit-${filingId ?? snapshotId ?? organizationId}`,
+      });
+      hmrcAccessToken = tokenResult.accessToken;
+    } catch (tokenError) {
+      const code = tokenError instanceof HmrcAuthError ? tokenError.code : 'HMRC_TOKEN_ERROR';
+      const message = tokenError instanceof HmrcAuthError
+        ? tokenError.message
+        : 'Could not obtain a valid HMRC access token. Please reconnect HMRC.';
+      // Log the code only — never the token, refresh token, or encrypted values.
+      console.error(`[hmrc-vat-submit] HMRC token acquisition failed: ${code}`);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'HMRC MTD authorization not configured. Please connect your HMRC account first.',
-          error_code: 'HMRC_NOT_CONNECTED'
-        }),
+        JSON.stringify({ success: false, message, error_code: code }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -353,8 +426,22 @@ serve(async (req: Request) => {
       .select('id')
       .single();
 
-    if (submissionError) {
+    if (submissionError || !submission) {
       console.error('Failed to create submission record:', submissionError);
+      // A unique-violation means another in-flight/accepted submission already holds this
+      // idempotency key. The snapshot path has no SELECT pre-check, so this index is the only
+      // guard against a concurrent double-submit — do NOT POST to HMRC again.
+      const isDuplicate = (submissionError as { code?: string } | null)?.code === '23505';
+      return new Response(
+        JSON.stringify({
+          success: false,
+          duplicate: isDuplicate,
+          error: isDuplicate
+            ? 'A submission for this VAT return is already in progress or complete.'
+            : 'Could not record the submission attempt; not submitted.',
+        }),
+        { status: isDuplicate ? 409 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     // Submit to HMRC
@@ -368,7 +455,7 @@ serve(async (req: Request) => {
       hmrcResponse = await fetch(hmrcEndpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${hmrcAuth.access_token}`,
+          'Authorization': `Bearer ${hmrcAccessToken}`,
           'Content-Type': 'application/json',
           'Accept': 'application/vnd.hmrc.1.0+json',
           'Gov-Client-Connection-Method': 'WEB_APP_VIA_SERVER',
