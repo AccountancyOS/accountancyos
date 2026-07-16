@@ -18439,6 +18439,7 @@ export type Database = {
         Args: { p_lead_id: string; p_reason?: string }
         Returns: undefined
       }
+      mcp_list_schema: { Args: never; Returns: Json }
       move_to_dlq: {
         Args: {
           dlq_name: string
