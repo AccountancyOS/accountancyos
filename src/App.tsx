@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppProvider } from "@/lib/app-context";
+import { BillingGate } from "@/components/BillingGate";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import Auth from "./pages/Auth";
 import Overview from "./pages/Overview";
@@ -146,7 +147,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={portalPath("dashboard")} replace />;
   }
 
-  return <AppProvider>{children}</AppProvider>;
+  return (
+    <AppProvider>
+      <BillingGate>{children}</BillingGate>
+    </AppProvider>
+  );
 };
 
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
