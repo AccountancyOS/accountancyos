@@ -769,7 +769,8 @@ serve(async (req) => {
           company_name, company_number, utr,
           address_line_1, address_line_2, city, postcode, country
         ),
-        ct_snapshot:ct_snapshot_id(*)
+        ct_snapshot:ct_snapshot_id(*),
+        model_snapshot:model_snapshot_id(*)
       `)
       .eq('id', filingId)
       .single();
@@ -883,6 +884,38 @@ serve(async (req) => {
     let ixbrlComputationArtefact = existingArtefacts?.find(a => a.artefact_type === 'IXBRL_CT_COMPUTATION');
 
     const ctData = ctSnapshot.snapshot_data || ctSnapshot;
+
+    // T1-3 / figures-of-record: the CT600 XML is projected from the (mutable) ct_computation_snapshot,
+    // but the approved artefact is the FROZEN filing_model_snapshots row (model_snapshot_id). Never
+    // file figures that differ from what was approved: block if the material tax figures have drifted
+    // since approval. (Projecting the XML directly from the frozen snapshot is a follow-up — it needs
+    // the snapshot to freeze the full builder input; this guarantees equivalence at submit time.)
+    const frozen = (filing as any).model_snapshot;
+    const frozenComputation = frozen?.snapshot_data?.computation;
+    if (frozenComputation) {
+      const round2 = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100;
+      const drift: string[] = [];
+      const cmp = (nowRaw: unknown, approvedRaw: unknown, label: string) => {
+        const now = Number(nowRaw);
+        const approved = Number(approvedRaw);
+        if (Number.isFinite(now) && Number.isFinite(approved) && Math.abs(round2(now) - round2(approved)) > 0.01) {
+          drift.push(`${label} (approved ${round2(approved)}, now ${round2(now)})`);
+        }
+      };
+      cmp(ctData.taxable_total_profits, frozenComputation.taxableTotalProfits, 'taxable total profits');
+      cmp(ctData.corporation_tax_due, frozenComputation.corporationTaxDue, 'corporation tax due');
+      if (drift.length > 0) {
+        console.error('[hmrc-ct-submit] Computation drift since approval:', drift);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `The CT computation has changed since it was approved for filing: ${drift.join('; ')}. Re-approve the CT600 before submitting.`,
+            error_code: 'COMPUTATION_DRIFT',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 }
+        );
+      }
+    }
 
     // Generate CT600 XML if missing
     if (!ct600Artefact) {
@@ -1116,11 +1149,20 @@ serve(async (req) => {
       .select()
       .single();
 
-    if (submissionError) {
+    if (submissionError || !submissionRecord) {
       console.error('[hmrc-ct-submit] Failed to create submission record:', submissionError);
+      // A unique-violation means a concurrent in-flight/accepted CT600 submission already holds
+      // this idempotency key — surface it as a duplicate rather than a generic failure.
+      const isDuplicate = (submissionError as { code?: string } | null)?.code === '23505';
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to create submission record' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        JSON.stringify({
+          success: false,
+          duplicate: isDuplicate,
+          error: isDuplicate
+            ? 'A submission for this filing is already in progress or complete.'
+            : 'Failed to create submission record',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: isDuplicate ? 409 : 500 }
       );
     }
 

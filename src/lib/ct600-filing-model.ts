@@ -43,3 +43,29 @@ export function ct600SubmissionGateBlocked(
   if (terminal(prev.status) || !terminal(next.status)) return false; // not a fresh transition in
   return !next.model_snapshot_id;
 }
+
+/**
+ * T1-3 contract: mirrors the hmrc-ct-submit drift guard. The CT600 XML is projected from the
+ * mutable ct_computation_snapshot, but the approved artefact is the frozen filing_model_snapshots
+ * row. Given the material tax figures frozen at approval and the current computation figures,
+ * returns the list of figures that have drifted beyond a 1p rounding tolerance. A non-empty result
+ * blocks submission — a CT600 must never be filed with figures that differ from the approved model.
+ */
+export function ct600MaterialFigureDrift(
+  approved: { taxableTotalProfits?: number | null; corporationTaxDue?: number | null } | null | undefined,
+  current: { taxable_total_profits?: number | null; corporation_tax_due?: number | null },
+): string[] {
+  if (!approved) return [];
+  const round2 = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100;
+  const drift: string[] = [];
+  const cmp = (nowRaw: unknown, approvedRaw: unknown, label: string) => {
+    const now = Number(nowRaw);
+    const app = Number(approvedRaw);
+    if (Number.isFinite(now) && Number.isFinite(app) && Math.abs(round2(now) - round2(app)) > 0.01) {
+      drift.push(label);
+    }
+  };
+  cmp(current.taxable_total_profits, approved.taxableTotalProfits, "taxable total profits");
+  cmp(current.corporation_tax_due, approved.corporationTaxDue, "corporation tax due");
+  return drift;
+}
