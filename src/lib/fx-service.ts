@@ -1,10 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isUsableRate } from "@/lib/fx-model";
 
 export const SUPPORTED_CURRENCIES = ['GBP', 'EUR', 'USD', 'AUD', 'CAD', 'ZAR', 'CHF', 'JPY', 'NZD', 'INR', 'SGD'];
 
 export interface FXRate {
   rate: number;
-  source: 'cache' | 'api' | 'identity' | 'manual';
+  // 'fallback' = the rate could NOT be determined (cache miss + edge failure/unusable value).
+  // The 1.0 returned with it is a placeholder the caller MUST surface/replace, never post as-is.
+  source: 'cache' | 'api' | 'identity' | 'manual' | 'fallback';
 }
 
 /**
@@ -30,9 +33,10 @@ export async function getFXRate(
       .eq('rate_date', date)
       .single();
 
-    if (cachedRate) {
+    if (cachedRate && isUsableRate(cachedRate.rate)) {
       return { rate: Number(cachedRate.rate), source: 'cache' };
     }
+    // No usable cached value — fall through to fetch a fresh rate.
 
     // Try edge function for fresh rate
     const { data, error } = await supabase.functions.invoke('fx-rates', {
@@ -45,15 +49,19 @@ export async function getFXRate(
     });
 
     if (error) throw error;
-    
+
+    if (!isUsableRate(data?.rate)) {
+      throw new Error(`fx-rates returned an unusable rate for ${baseCurrency}->${targetCurrency} on ${date}`);
+    }
     return {
       rate: Number(data.rate),
-      source: data.source || 'api',
+      source: (data.source as FXRate['source']) || 'api',
     };
   } catch (error) {
     console.error('Failed to fetch FX rate:', error);
-    // Fallback to 1.0 with warning
-    return { rate: 1.0, source: 'manual' };
+    // Could NOT determine a rate. Return a sentinel the caller MUST handle rather than silently
+    // pricing foreign currency at parity: rate 1.0 is a placeholder, source 'fallback' marks it unsafe.
+    return { rate: 1.0, source: 'fallback' };
   }
 }
 

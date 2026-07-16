@@ -57,6 +57,9 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
   const [transactionCurrency, setTransactionCurrency] = useState("GBP");
   const [fxRateToBase, setFxRateToBase] = useState(1.0);
   const [isFetchingRate, setIsFetchingRate] = useState(false);
+  // True when the last FX fetch could not determine a rate: the shown rate is unsafe and the
+  // journal must not be posted until the user supplies one manually.
+  const [fxRateIsFallback, setFxRateIsFallback] = useState(false);
   const [lines, setLines] = useState<JournalLine[]>([
     { account_id: "", debit: null, credit: null, description: "" },
     { account_id: "", debit: null, credit: null, description: "" },
@@ -123,6 +126,7 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
       setReverseDate(journal.reverse_date || "");
       setTransactionCurrency(journal.transaction_currency || "GBP");
       setFxRateToBase(Number(journal.fx_rate_to_base) || 1.0);
+      setFxRateIsFallback(false);
     } else {
       // Reset form
       setJournalDate(new Date().toISOString().split("T")[0]);
@@ -132,6 +136,7 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
       setReverseDate("");
       setTransactionCurrency("GBP");
       setFxRateToBase(1.0);
+      setFxRateIsFallback(false);
       setLines([
         { account_id: "", debit: null, credit: null, description: "" },
         { account_id: "", debit: null, credit: null, description: "" },
@@ -143,15 +148,29 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
   const fetchFXRate = async () => {
     if (transactionCurrency === "GBP") {
       setFxRateToBase(1.0);
+      setFxRateIsFallback(false);
       return;
     }
-    
+
     setIsFetchingRate(true);
     try {
       const result = await getFXRate("GBP", transactionCurrency, journalDate);
-      setFxRateToBase(result.rate);
+      if (result.source === "fallback") {
+        // Rate unknown — do NOT price at parity. Flag it and make the user enter it manually.
+        setFxRateIsFallback(true);
+        toast.error(`Couldn't fetch the ${transactionCurrency}→GBP rate for ${journalDate}`, {
+          description: "Enter the exchange rate manually before posting this journal.",
+        });
+      } else {
+        setFxRateToBase(result.rate);
+        setFxRateIsFallback(false);
+      }
     } catch (error) {
       console.error("Failed to fetch FX rate:", error);
+      setFxRateIsFallback(true);
+      toast.error("Couldn't fetch the exchange rate", {
+        description: "Enter the exchange rate manually before posting this journal.",
+      });
     } finally {
       setIsFetchingRate(false);
     }
@@ -170,6 +189,11 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
       if (!organization?.id || !user) throw new Error("Missing context");
       if (!validation.isValid) throw new Error("Debits must equal credits");
       if (isPeriodLocked) throw new Error(`Cannot post to locked period (locked until ${periodLock?.lock_date})`);
+      // Never post a foreign-currency journal at an unresolved (fallback) rate — that silently
+      // corrupts the ledger by treating the transaction currency as GBP.
+      if (isPosted && transactionCurrency !== "GBP" && fxRateIsFallback) {
+        throw new Error(`Enter the ${transactionCurrency}→GBP exchange rate before posting`);
+      }
 
       // Calculate base currency totals
       const baseDebit = calculateBaseCurrencyAmount(validation.totalDebit, fxRateToBase);
@@ -354,32 +378,47 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
 
           {/* FX Rate (show only for non-GBP) */}
           {transactionCurrency !== "GBP" && (
-            <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 border">
-              <div className="flex-1">
-                <Label className="text-sm">FX Rate (1 GBP = {transactionCurrency})</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Input
-                    type="number"
-                    step="0.0001"
-                    value={fxRateToBase}
-                    onChange={(e) => setFxRateToBase(parseFloat(e.target.value) || 1)}
-                    className="w-32"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={fetchFXRate}
-                    disabled={isFetchingRate}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${isFetchingRate ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </Button>
+            <div className={`flex flex-col gap-2 p-3 rounded-lg border ${fxRateIsFallback ? 'bg-destructive/10 border-destructive/40' : 'bg-muted/50'}`}>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Label className="text-sm">FX Rate (1 GBP = {transactionCurrency})</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      value={fxRateToBase}
+                      onChange={(e) => {
+                        setFxRateToBase(parseFloat(e.target.value) || 1);
+                        // A manually entered rate clears the unsafe-fallback state.
+                        setFxRateIsFallback(false);
+                      }}
+                      className="w-32"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchFXRate}
+                      disabled={isFetchingRate}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-1 ${isFetchingRate ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Base currency amounts will be calculated automatically
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Base currency amounts will be calculated automatically
-              </div>
+              {fxRateIsFallback && (
+                <Alert variant="destructive" className="py-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    The {transactionCurrency}→GBP rate couldn't be fetched, so it isn't priced. Enter the rate
+                    manually (or Refresh) before posting — the journal cannot be posted until you do.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
 
@@ -520,7 +559,12 @@ export function JournalEditor({ open, onOpenChange, entity, journal }: JournalEd
           </Button>
           <Button
             onClick={() => saveMutation.mutate(true)}
-            disabled={saveMutation.isPending || !validation.isValid || isPeriodLocked}
+            disabled={
+              saveMutation.isPending ||
+              !validation.isValid ||
+              isPeriodLocked ||
+              (transactionCurrency !== "GBP" && fxRateIsFallback)
+            }
           >
             Post Journal
           </Button>
