@@ -382,8 +382,22 @@ serve(async (req: Request) => {
       .select('id')
       .single();
 
-    if (submissionError) {
+    if (submissionError || !submission) {
       console.error('Failed to create submission record:', submissionError);
+      // A unique-violation means another in-flight/accepted submission already holds this
+      // idempotency key (a concurrent double-submit that slipped past the SELECT check above).
+      // Do NOT POST to Companies House again — that would be a duplicate statutory filing.
+      const isDuplicate = (submissionError as { code?: string } | null)?.code === '23505';
+      return new Response(
+        JSON.stringify({
+          success: false,
+          duplicate: isDuplicate,
+          error: isDuplicate
+            ? 'A submission for this filing is already in progress or complete.'
+            : 'Could not record the submission attempt; not submitted.',
+        }),
+        { status: isDuplicate ? 409 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     // Update filing status to submitting
