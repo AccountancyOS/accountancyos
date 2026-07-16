@@ -16,20 +16,28 @@
 -- already gated on that flag (20260713130000:73-76). Nothing has ever dropped or replaced this
 -- policy, so it is still live.
 --
--- REACHABILITY (be honest about it): in the git-visible schema public.journals has RLS enabled
--- (20251127012417:184) but NO SELECT policy at all — only journals_no_direct_insert/update/delete
--- (20251217154236), which are WITH CHECK(false)/USING(false) write blocks. RLS applies to tables
--- referenced inside a policy's USING expression, so that EXISTS should evaluate false for every
--- non-superuser and journal_lines should be unreadable today. BUT the accountant frontend selects
--- from public.journals over PostgREST (JournalsTab.tsx:45, JournalEditor.tsx:225, OpsHealth.tsx:219),
--- which only works if a SELECT policy exists LIVE that is absent from git — and live has diverged
--- from git on this project before. There is also no bookkeeping data yet, so an always-empty
--- Journals tab would not have been noticed either way.
+-- REACHABILITY (verified against the LIVE database on 2026-07-16). public.journals has RLS enabled
+-- (20251127012417:184), NOT forced, and carries TWO SELECT policies live:
+--   1. "Users can view journals in their organization" — USING user_has_organization_access(
+--      organization_id), from 20251127012417. The accountant path; correct and org-bounded.
+--   2. a portal path — USING portal_can_access_bookkeeping(client_id, company_id) — which exists
+--      LIVE but is ABSENT FROM GIT (live/git drift, confirmed by live inspection, not inferable
+--      from this repo).
+-- RLS is applied to tables referenced inside a policy's USING expression, so the EXISTS below
+-- resolves for a portal user via (2). The gap this migration closes is therefore REACHABLE, not
+-- theoretical: before this change, a portal user with any bookkeeping access to the entity could
+-- read journal line detail while show_detailed_ledger was switched off.
 --
--- Therefore this migration does NOT rely on journals lacking a SELECT policy. It fixes the
--- SPECIFICATION so the policy is correct whether or not journals is readable: reads require the
--- flag. If journals is unreadable the policy is simply fail-closed (zero rows), which is safe; if a
--- live SELECT policy on journals does exist, this closes a real read leak.
+-- (An earlier draft of this comment claimed journals had NO SELECT policy and that journal_lines
+-- was consequently unreadable. That was wrong — it came from a line-based grep that missed the
+-- two-line CREATE POLICY statement, and it also cited journals_no_direct_insert/update/delete,
+-- which 20260218184412 had already dropped. Corrected here so the record is not misleading; the
+-- executable SQL below is unchanged and was never affected by the error.)
+--
+-- OUT OF SCOPE, TRACKED SEPARATELY: policy (2) on journals itself carries NO show_* flag, so journal
+-- HEADER rows stay portal-readable with show_detailed_ledger off even after this migration. Fixing
+-- that means changing a live-only policy on a different table and needs its own migration and its
+-- own decision. This migration is journal_lines only.
 --
 -- Scope: journal_lines only. The 9 tables verified after SEC-6 applied are untouched.
 -- Additive/safe: no data change, no grants, no widening — strictly narrows an existing SELECT
