@@ -107,6 +107,301 @@
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
+      },
+      {
+        "name": "db_schema",
+        "title": "Describe database schema",
+        "description": "Return every public table with its columns (name, type, nullable, default). Use this first to discover what to query with db_select/db_insert/db_update/db_delete.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "db_select",
+        "title": "Query any table",
+        "description": "Read rows from any public table. RLS applies (acts as the signed-in user). Use db_schema first to discover columns.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Public table name."
+            },
+            "columns": {
+              "type": "string",
+              "default": "*",
+              "description": "PostgREST select string, e.g. 'id, name' or '*'."
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "neq",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "like",
+                      "ilike",
+                      "is",
+                      "in",
+                      "contains"
+                    ]
+                  },
+                  "value": {}
+                },
+                "required": [
+                  "column",
+                  "op"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Optional filters combined with AND. Value type depends on op; 'in' takes an array."
+            },
+            "order": {
+              "type": "object",
+              "properties": {
+                "column": {
+                  "type": "string"
+                },
+                "ascending": {
+                  "type": "boolean",
+                  "default": true
+                }
+              },
+              "required": [
+                "column"
+              ],
+              "additionalProperties": false
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          "required": [
+            "table"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "db_insert",
+        "title": "Insert rows",
+        "description": "Insert one or more rows into a public table. RLS applies. Returns the inserted rows.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "rows": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "table",
+            "rows"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "db_update",
+        "title": "Update rows",
+        "description": "Update rows in a public table matching the filters. RLS applies. At least one filter is required.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "values": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "neq",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "like",
+                      "ilike",
+                      "is",
+                      "in"
+                    ]
+                  },
+                  "value": {}
+                },
+                "required": [
+                  "column",
+                  "op"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "table",
+            "values",
+            "filters"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "db_delete",
+        "title": "Delete rows",
+        "description": "Delete rows from a public table matching the filters. RLS applies. At least one filter is required.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "column": {
+                    "type": "string"
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "neq",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "like",
+                      "ilike",
+                      "is",
+                      "in"
+                    ]
+                  },
+                  "value": {}
+                },
+                "required": [
+                  "column",
+                  "op"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "table",
+            "filters"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "db_rpc",
+        "title": "Call a database function",
+        "description": "Invoke a Postgres function exposed via PostgREST (RPC). RLS and function grants apply.",
+        "annotations": {
+          "readOnlyHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "function_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "function_name"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
       }
     ]
   }
