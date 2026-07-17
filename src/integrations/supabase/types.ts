@@ -754,6 +754,24 @@ export type Database = {
           },
         ]
       }
+      automation_engine_switches: {
+        Row: {
+          enabled: boolean
+          engine: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          engine: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          engine?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       automation_entity_link_suggestions: {
         Row: {
           accepted_at: string | null
@@ -17465,6 +17483,7 @@ export type Database = {
         Args: { p_rule_id: string; p_sample_event?: Json }
         Returns: Json
       }
+      automation_engine_enabled: { Args: { _engine: string }; Returns: boolean }
       bulk_apply_active_bank_rules: {
         Args: {
           p_bank_account_id?: string
