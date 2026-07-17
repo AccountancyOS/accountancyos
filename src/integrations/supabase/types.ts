@@ -754,6 +754,24 @@ export type Database = {
           },
         ]
       }
+      automation_engine_switches: {
+        Row: {
+          enabled: boolean
+          engine: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          engine: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          engine?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       automation_entity_link_suggestions: {
         Row: {
           accepted_at: string | null
@@ -818,11 +836,15 @@ export type Database = {
       }
       automation_events: {
         Row: {
+          attempts: number
+          claimed_at: string | null
           created_at: string
           entity_id: string
           entity_type: string
           event_type: string
+          failed_at: string | null
           id: string
+          last_error: string | null
           metadata: Json | null
           new_value: Json | null
           old_value: Json | null
@@ -831,11 +853,15 @@ export type Database = {
           processed_by_execution_id: string | null
         }
         Insert: {
+          attempts?: number
+          claimed_at?: string | null
           created_at?: string
           entity_id: string
           entity_type: string
           event_type: string
+          failed_at?: string | null
           id?: string
+          last_error?: string | null
           metadata?: Json | null
           new_value?: Json | null
           old_value?: Json | null
@@ -844,11 +870,15 @@ export type Database = {
           processed_by_execution_id?: string | null
         }
         Update: {
+          attempts?: number
+          claimed_at?: string | null
           created_at?: string
           entity_id?: string
           entity_type?: string
           event_type?: string
+          failed_at?: string | null
           id?: string
+          last_error?: string | null
           metadata?: Json | null
           new_value?: Json | null
           old_value?: Json | null
@@ -1460,6 +1490,7 @@ export type Database = {
       automation_workflow_instances: {
         Row: {
           cancelled_at: string | null
+          claimed_at: string | null
           client_id: string | null
           company_id: string | null
           context: Json
@@ -1485,6 +1516,7 @@ export type Database = {
         }
         Insert: {
           cancelled_at?: string | null
+          claimed_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: Json
@@ -1510,6 +1542,7 @@ export type Database = {
         }
         Update: {
           cancelled_at?: string | null
+          claimed_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: Json
@@ -17450,6 +17483,7 @@ export type Database = {
         Args: { p_rule_id: string; p_sample_event?: Json }
         Returns: Json
       }
+      automation_engine_enabled: { Args: { _engine: string }; Returns: boolean }
       bulk_apply_active_bank_rules: {
         Args: {
           p_bank_account_id?: string
