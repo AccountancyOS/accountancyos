@@ -818,11 +818,15 @@ export type Database = {
       }
       automation_events: {
         Row: {
+          attempts: number
+          claimed_at: string | null
           created_at: string
           entity_id: string
           entity_type: string
           event_type: string
+          failed_at: string | null
           id: string
+          last_error: string | null
           metadata: Json | null
           new_value: Json | null
           old_value: Json | null
@@ -831,11 +835,15 @@ export type Database = {
           processed_by_execution_id: string | null
         }
         Insert: {
+          attempts?: number
+          claimed_at?: string | null
           created_at?: string
           entity_id: string
           entity_type: string
           event_type: string
+          failed_at?: string | null
           id?: string
+          last_error?: string | null
           metadata?: Json | null
           new_value?: Json | null
           old_value?: Json | null
@@ -844,11 +852,15 @@ export type Database = {
           processed_by_execution_id?: string | null
         }
         Update: {
+          attempts?: number
+          claimed_at?: string | null
           created_at?: string
           entity_id?: string
           entity_type?: string
           event_type?: string
+          failed_at?: string | null
           id?: string
+          last_error?: string | null
           metadata?: Json | null
           new_value?: Json | null
           old_value?: Json | null
