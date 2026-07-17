@@ -474,10 +474,46 @@ function findNextEnabledStep(steps: StepRow[], currentIdx: number, stepToggles: 
 // Main handler
 // ============================================================
 
+// AUTO-1 — mirrors src/lib/automation-engine-model.ts (staleClaimCutoff / STALE_CLAIM_MINUTES).
+// Keep the two in step; the pure model is what the tests pin.
+const STALE_CLAIM_MINUTES = 10;
+function staleClaimCutoff(now: Date): string {
+  return new Date(now.getTime() - STALE_CLAIM_MINUTES * 60_000).toISOString();
+}
+
+// Per-request cache: a tick batch is usually many instances across few orgs.
+const orgEnabledCache = new Map<string, boolean>();
+
+// AUTO-1 — mirrors automationKillSwitchBlocks(). Semantics deliberately match the router's
+// existing check (`data?.automations_enabled !== false`): a missing row or NULL means ENABLED, only
+// an explicit false disables. If the two engines disagreed about an org, the switch would be
+// meaningless. Fails OPEN on a lookup error, matching the router, so a transient blip does not
+// silently halt every customer's automation.
+async function automationsDisabledForOrg(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  orgId: string,
+): Promise<boolean> {
+  if (orgEnabledCache.has(orgId)) return orgEnabledCache.get(orgId) === false;
+
+  const { data } = await supabase
+    .from("organizations")
+    .select("automations_enabled")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  const enabled = data?.automations_enabled !== false;
+  orgEnabledCache.set(orgId, enabled);
+  return !enabled;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Per-invocation cache; do not leak org state across warm invocations.
+  orgEnabledCache.clear();
 
   // FUN-2/Fix: cron/internal-only worker (verify_jwt=false). Require the service-role key so it
   // is not anonymously invokable (it can transition workflow instances across all orgs).
@@ -506,6 +542,8 @@ Deno.serve(async (req) => {
 
     if (mode === "resume" && eventKey) {
       // Resume instances waiting for this event
+      // AUTO-1: bounded. This select had no limit, so a widely-subscribed event key could pull an
+      // unbounded set into one invocation and time out mid-batch.
       const { data: waitingInstances } = await supabase
         .from("automation_workflow_instances")
         .select("*")
@@ -513,7 +551,9 @@ Deno.serve(async (req) => {
         .eq("waiting_for_event_key", eventKey)
         .is("paused_at", null)
         .is("cancelled_at", null)
-        .is("dead_lettered_at", null);
+        .is("dead_lettered_at", null)
+        .order("updated_at", { ascending: true })
+        .limit(limit);
 
       let resumed = 0;
       const errors: string[] = [];
@@ -545,17 +585,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Standard tick: advance running instances
+    // Standard tick: advance instances that are ready to run.
+    // AUTO-1: selects 'queued' (spawned by the router, never started) AND 'running' (mid-flight).
+    // This used to be status='running' only, which never matched the router's 'QUEUED' inserts, so
+    // no router-spawned instance was ever advanced. Vocabulary is now canonical lowercase and
+    // enforced by a CHECK constraint (20260717090000).
     const now = new Date().toISOString();
+    const staleClaimBefore = staleClaimCutoff(new Date());
     const { data: instances, error: fetchErr } = await supabase
       .from("automation_workflow_instances")
       .select("*")
-      .eq("status", "running")
+      .in("status", ["queued", "running"])
       .lte("next_run_at", now)
       .is("waiting_for_event_key", null)
       .is("paused_at", null)
       .is("cancelled_at", null)
       .is("dead_lettered_at", null)
+      // Skip instances a concurrent run is already working on; reclaim ones whose run died.
+      .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
       .order("next_run_at", { ascending: true })
       .limit(limit);
 
@@ -566,23 +613,72 @@ Deno.serve(async (req) => {
       });
     }
 
-    let processed = 0;
+    const scanned = (instances || []).length;
+    let claimed = 0;
     let advanced = 0;
+    let skippedKillSwitch = 0;
+    let skippedClaimLost = 0;
+    let failed = 0;
     const tickErrors: string[] = [];
 
     for (const raw of (instances || [])) {
       const instance = raw as unknown as WorkflowInstance;
       instance.context = (instance.context || {}) as Record<string, unknown>;
-      processed++;
+
+      // AUTO-1: honour the org kill-switch. This function previously had NO kill-switch check at
+      // all, so an org with automations_enabled=false still had its steps executed — client emails
+      // sent, jobs assigned, statuses changed. Checked BEFORE claiming: a disabled org's instances
+      // must be left completely untouched, not claimed and skipped.
+      if (await automationsDisabledForOrg(supabase, instance.org_id)) {
+        skippedKillSwitch++;
+        continue;
+      }
+
+      // Atomic claim: the same UPDATE ... WHERE claim-free RETURNING idiom as the email-queue
+      // worker. If another concurrent run claimed it first, this returns nothing and we move on —
+      // that is what stops two invocations executing the same step twice.
+      const { data: claimRow } = await supabase
+        .from("automation_workflow_instances")
+        .update({ claimed_at: new Date().toISOString() })
+        .eq("id", instance.id)
+        .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
+        .select("id")
+        .maybeSingle();
+
+      if (!claimRow) {
+        skippedClaimLost++;
+        continue;
+      }
+      claimed++;
 
       const result = await advanceInstance(supabase, instance);
       if (result.advanced) advanced++;
-      if (result.error) tickErrors.push(`${instance.id}: ${result.error}`);
+      if (result.error) {
+        failed++;
+        tickErrors.push(`${instance.id}: ${result.error}`);
+      }
+
+      // Release the claim so the next scheduled run can pick the instance straight up. Without
+      // this, an instance advancing on a short next_run_at would stall until the 10-minute stale
+      // window expired. advanceInstance owns status/next_run_at; this only clears the lease.
+      await supabase
+        .from("automation_workflow_instances")
+        .update({ claimed_at: null })
+        .eq("id", instance.id);
     }
 
-    console.log(`Workflow tick: ${processed} processed, ${advanced} advanced, ${tickErrors.length} errors`);
+    const summary = {
+      mode: "tick",
+      scanned,
+      claimed,
+      advanced,
+      skipped_kill_switch: skippedKillSwitch,
+      skipped_claim_lost: skippedClaimLost,
+      failed,
+    };
+    console.log("[workflow-tick]", JSON.stringify(summary));
 
-    return new Response(JSON.stringify({ mode: "tick", processed, advanced, errors: tickErrors }), {
+    return new Response(JSON.stringify({ ...summary, errors: tickErrors }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
