@@ -1460,6 +1460,7 @@ export type Database = {
       automation_workflow_instances: {
         Row: {
           cancelled_at: string | null
+          claimed_at: string | null
           client_id: string | null
           company_id: string | null
           context: Json
@@ -1485,6 +1486,7 @@ export type Database = {
         }
         Insert: {
           cancelled_at?: string | null
+          claimed_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: Json
@@ -1510,6 +1512,7 @@ export type Database = {
         }
         Update: {
           cancelled_at?: string | null
+          claimed_at?: string | null
           client_id?: string | null
           company_id?: string | null
           context?: Json
