@@ -46,3 +46,18 @@ export const MAX_EVENT_ATTEMPTS = 5;
 export function eventShouldDeadLetter(attemptsAfterThisFailure: number): boolean {
   return attemptsAfterThisFailure >= MAX_EVENT_ATTEMPTS;
 }
+
+/**
+ * Per-engine global kill-switch (increment 3). Independent of the per-ORG automations_enabled: this
+ * stops an entire engine across all orgs, e.g. to halt the executor during an incident without
+ * touching the router.
+ *
+ * Semantics are FAIL-CLOSED and the OPPOSITE of the per-org switch: the engine runs only when a
+ * switch row explicitly says enabled=true. A missing row, NULL, or a lookup the function could not
+ * resolve means DO NOT RUN. The switches table is seeded disabled, so applying the cron migration
+ * is inert until each engine is deliberately turned on — a wrong/absent value must never silently
+ * activate customer-facing automation.
+ */
+export function engineDisabled(enabled: boolean | null | undefined): boolean {
+  return enabled !== true;
+}

@@ -480,6 +480,10 @@ const STALE_CLAIM_MINUTES = 10;
 function staleClaimCutoff(now: Date): string {
   return new Date(now.getTime() - STALE_CLAIM_MINUTES * 60_000).toISOString();
 }
+// Fail-closed per-engine kill-switch: runs only on an explicit true. Mirrors engineDisabled().
+function engineDisabled(enabled: boolean | null | undefined): boolean {
+  return enabled !== true;
+}
 
 // Per-request cache: a tick batch is usually many instances across few orgs.
 const orgEnabledCache = new Map<string, boolean>();
@@ -526,6 +530,19 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // AUTO-1 inc 3: per-engine global kill-switch. Fail-closed — runs only when the 'executor'
+    // switch is explicitly enabled. Seeded disabled, so the cron is inert until deliberately turned
+    // on; independent of the per-org automations_enabled check applied per instance below.
+    const { data: executorEnabled } = await supabase.rpc("automation_engine_enabled", {
+      _engine: "executor",
+    });
+    if (engineDisabled(executorEnabled)) {
+      console.log("[workflow-tick] engine disabled — skipping");
+      return new Response(JSON.stringify({ skipped: "engine_disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     let limit = 50;
     let mode = "tick"; // "tick" | "resume"

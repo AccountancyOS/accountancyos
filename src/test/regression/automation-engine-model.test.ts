@@ -7,6 +7,7 @@ import {
   STALE_CLAIM_MINUTES,
   eventShouldDeadLetter,
   MAX_EVENT_ATTEMPTS,
+  engineDisabled,
 } from "@/lib/automation-engine-model";
 
 /**
@@ -66,6 +67,20 @@ describe("eventShouldDeadLetter (router, AUTO-1 inc 2)", () => {
 
   it("caps at 5 — a poisoned event is not retried forever", () => {
     expect(MAX_EVENT_ATTEMPTS).toBe(5);
+  });
+});
+
+describe("engineDisabled (per-engine kill-switch, AUTO-1 inc 3)", () => {
+  it("runs only when explicitly enabled", () => {
+    expect(engineDisabled(true)).toBe(false);
+  });
+
+  it("is fail-closed: missing row, NULL, or false all mean do-not-run", () => {
+    // Opposite of the per-org switch. Applying the cron migration must be inert until an engine is
+    // deliberately turned on, so anything other than an explicit true blocks.
+    expect(engineDisabled(false)).toBe(true);
+    expect(engineDisabled(null)).toBe(true);
+    expect(engineDisabled(undefined)).toBe(true);
   });
 });
 
@@ -138,6 +153,52 @@ describe("process-automation-events hardening (AUTO-1 increment 2)", () => {
 
   it("emits structured counters", () => {
     expect(f.structuredLog).toBe(true);
+  });
+});
+
+describe("per-engine kill-switch wiring (AUTO-1 increment 3)", () => {
+  const routerSrc = readFileSync(
+    resolve(process.cwd(), "supabase/functions/process-automation-events/index.ts"),
+    "utf8",
+  );
+  const tickSrc = readFileSync(
+    resolve(process.cwd(), "supabase/functions/workflow-tick/index.ts"),
+    "utf8",
+  );
+  const migration = readFileSync(
+    resolve(
+      process.cwd(),
+      "supabase/migrations/20260717110000_auto1_engine_switches_and_cron.sql",
+    ),
+    "utf8",
+  );
+
+  it("router checks its engine switch and returns before doing work", () => {
+    const gateIdx = routerSrc.indexOf('_engine: "router"');
+    const fetchIdx = routerSrc.indexOf('.from("automation_events")');
+    expect(gateIdx).toBeGreaterThan(-1);
+    expect(gateIdx).toBeLessThan(fetchIdx); // gate before the first event fetch
+    expect(/engineDisabled\(routerEnabled\)/.test(routerSrc)).toBe(true);
+  });
+
+  it("executor checks its engine switch and returns before selecting instances", () => {
+    const gateIdx = tickSrc.indexOf('_engine: "executor"');
+    const selectIdx = tickSrc.indexOf('.in("status", ["queued", "running"])');
+    expect(gateIdx).toBeGreaterThan(-1);
+    expect(gateIdx).toBeLessThan(selectIdx);
+    expect(/engineDisabled\(executorEnabled\)/.test(tickSrc)).toBe(true);
+  });
+
+  it("seeds both engines DISABLED so applying the cron migration is inert", () => {
+    expect(/'router', false/.test(migration)).toBe(true);
+    expect(/'executor', false/.test(migration)).toBe(true);
+    expect(/ON CONFLICT \(engine\) DO NOTHING/.test(migration)).toBe(true);
+  });
+
+  it("unschedules before scheduling each engine (idempotent, no double-fire)", () => {
+    expect(/cron\.unschedule\('process-automation-events'\)/.test(migration)).toBe(true);
+    expect(/cron\.unschedule\('workflow-tick'\)/.test(migration)).toBe(true);
+    expect((migration.match(/cron\.schedule\(/g) || []).length).toBe(2);
   });
 });
 

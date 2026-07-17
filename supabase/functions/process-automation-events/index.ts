@@ -38,6 +38,10 @@ const MAX_EVENT_ATTEMPTS = 5;
 function eventShouldDeadLetter(attemptsAfterThisFailure: number): boolean {
   return attemptsAfterThisFailure >= MAX_EVENT_ATTEMPTS;
 }
+// Fail-closed: runs only on an explicit true. Mirrors engineDisabled() in the pure model.
+function engineDisabled(enabled: boolean | null | undefined): boolean {
+  return enabled !== true;
+}
 
 /**
  * Generate execution hash for idempotency
@@ -671,6 +675,19 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // AUTO-1 inc 3: per-engine global kill-switch. Fail-closed — runs only when the 'router' switch
+    // is explicitly enabled. Seeded disabled, so the cron is inert until deliberately turned on;
+    // flipping the switch off stops the engine across all orgs with instant effect.
+    const { data: routerEnabled } = await supabase.rpc("automation_engine_enabled", {
+      _engine: "router",
+    });
+    if (engineDisabled(routerEnabled)) {
+      console.log("[process-automation-events] engine disabled — skipping");
+      return new Response(JSON.stringify({ skipped: "engine_disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Parse request body for optional parameters
     let organizationId: string | undefined;
