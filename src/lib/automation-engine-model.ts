@@ -30,3 +30,19 @@ export function automationKillSwitchBlocks(
 export function staleClaimCutoff(now: Date): string {
   return new Date(now.getTime() - STALE_CLAIM_MINUTES * 60_000).toISOString();
 }
+
+/**
+ * How many times the router may attempt an event before it is dead-lettered. The router used to
+ * leave a failing event's processed_at NULL, so it was re-selected and retried on EVERY run
+ * forever, with no bound and no visibility. After this many failed attempts the event is stamped
+ * failed_at (a visible dead-letter) and excluded from selection instead of retried indefinitely.
+ */
+export const MAX_EVENT_ATTEMPTS = 5;
+
+/**
+ * Given the attempt count AFTER incrementing for the current failure, whether the event should be
+ * dead-lettered (stamped failed_at) rather than left for another attempt.
+ */
+export function eventShouldDeadLetter(attemptsAfterThisFailure: number): boolean {
+  return attemptsAfterThisFailure >= MAX_EVENT_ATTEMPTS;
+}

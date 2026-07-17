@@ -5,6 +5,8 @@ import {
   automationKillSwitchBlocks,
   staleClaimCutoff,
   STALE_CLAIM_MINUTES,
+  eventShouldDeadLetter,
+  MAX_EVENT_ATTEMPTS,
 } from "@/lib/automation-engine-model";
 
 /**
@@ -51,6 +53,22 @@ describe("staleClaimCutoff", () => {
   });
 });
 
+describe("eventShouldDeadLetter (router, AUTO-1 inc 2)", () => {
+  it("does not dead-letter while attempts remain", () => {
+    expect(eventShouldDeadLetter(1)).toBe(false);
+    expect(eventShouldDeadLetter(MAX_EVENT_ATTEMPTS - 1)).toBe(false);
+  });
+
+  it("dead-letters once attempts reach the cap", () => {
+    expect(eventShouldDeadLetter(MAX_EVENT_ATTEMPTS)).toBe(true);
+    expect(eventShouldDeadLetter(MAX_EVENT_ATTEMPTS + 1)).toBe(true);
+  });
+
+  it("caps at 5 — a poisoned event is not retried forever", () => {
+    expect(MAX_EVENT_ATTEMPTS).toBe(5);
+  });
+});
+
 /**
  * No Deno test harness in this repo, so these are source-structure assertions against the actual
  * edge function — same convention as hmrc-vat-submit-token.test.ts. They pin the control-flow
@@ -76,6 +94,52 @@ export function workflowTickFindings(src: string) {
     structuredLog: /skipped_kill_switch/.test(src) && /scanned/.test(src),
   };
 }
+
+export function routerFindings(src: string) {
+  const claimIdx = src.indexOf('.update({ claimed_at: new Date().toISOString() })');
+  const routeIdx = src.indexOf("routeTriggerContractEvent(supabase, typedEvent)");
+  return {
+    /** Selection must skip claimed events and exclude dead-lettered ones. */
+    selectExcludesClaimedAndFailed:
+      /claimed_at\.is\.null,claimed_at\.lt\./.test(src) && /\.is\("failed_at", null\)/.test(src),
+    /** Must claim an event atomically before routing/executing it. */
+    claimsAtomically: claimIdx !== -1,
+    /** Claim must happen before the trigger-contract router spawns workflows. */
+    claimBeforeRoute: claimIdx !== -1 && routeIdx !== -1 && claimIdx < routeIdx,
+    /** A failing event must reach a visible dead-letter, not retry forever. */
+    deadLetters: /failed_at:/.test(src) && /eventShouldDeadLetter\(/.test(src),
+    tracksAttempts: /attempts/.test(src) && /last_error/.test(src),
+    /** The old behaviour: catch pushed to allErrors and left processed_at NULL. */
+    structuredLog: /dead_lettered/.test(src) && /scanned/.test(src),
+  };
+}
+
+describe("process-automation-events hardening (AUTO-1 increment 2)", () => {
+  const f = routerFindings(
+    readFileSync(
+      resolve(process.cwd(), "supabase/functions/process-automation-events/index.ts"),
+      "utf8",
+    ),
+  );
+
+  it("selection skips claimed events and excludes dead-lettered ones", () => {
+    expect(f.selectExcludesClaimedAndFailed).toBe(true);
+  });
+
+  it("claims an event atomically before routing it", () => {
+    expect(f.claimsAtomically).toBe(true);
+    expect(f.claimBeforeRoute).toBe(true);
+  });
+
+  it("dead-letters a repeatedly-failing event instead of retrying forever", () => {
+    expect(f.deadLetters).toBe(true);
+    expect(f.tracksAttempts).toBe(true);
+  });
+
+  it("emits structured counters", () => {
+    expect(f.structuredLog).toBe(true);
+  });
+});
 
 describe("workflow-tick hardening (AUTO-1 increment 1)", () => {
   const f = workflowTickFindings(

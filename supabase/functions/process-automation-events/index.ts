@@ -28,6 +28,17 @@ interface AutomationRule {
   is_active: boolean;
 }
 
+// AUTO-1 — mirrors src/lib/automation-engine-model.ts (staleClaimCutoff / eventShouldDeadLetter).
+// Keep in step with the pure model that the tests pin.
+const STALE_CLAIM_MINUTES = 10;
+function staleClaimCutoff(now: Date): string {
+  return new Date(now.getTime() - STALE_CLAIM_MINUTES * 60_000).toISOString();
+}
+const MAX_EVENT_ATTEMPTS = 5;
+function eventShouldDeadLetter(attemptsAfterThisFailure: number): boolean {
+  return attemptsAfterThisFailure >= MAX_EVENT_ATTEMPTS;
+}
+
 /**
  * Generate execution hash for idempotency
  */
@@ -677,11 +688,15 @@ Deno.serve(async (req) => {
 
     console.log(`Processing automation events. Org: ${organizationId || "all"}, Limit: ${limit}`);
 
-    // Fetch unprocessed events
+    // Fetch claimable events: unprocessed, not dead-lettered, and not currently claimed by another
+    // concurrent run (a claim older than the stale window may be reclaimed). AUTO-1 inc 2.
+    const staleClaimBefore = staleClaimCutoff(new Date());
     let query = supabase
       .from("automation_events")
       .select("*")
       .is("processed_at", null)
+      .is("failed_at", null)
+      .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
       .order("created_at", { ascending: true })
       .limit(limit);
 
@@ -709,7 +724,11 @@ Deno.serve(async (req) => {
     console.log(`Found ${events.length} unprocessed events`);
 
     const allErrors: string[] = [];
+    const scanned = events.length;
+    let claimed = 0;
     let processed = 0;
+    let skippedClaimLost = 0;
+    let deadLettered = 0;
 
     for (const event of events) {
       const typedEvent: AutomationEvent = {
@@ -723,6 +742,23 @@ Deno.serve(async (req) => {
         metadata: (event.metadata || {}) as Record<string, unknown>,
         created_at: event.created_at,
       };
+
+      // Atomic claim BEFORE any routing/execution: if a concurrent run claimed this event first,
+      // skip it. This is what stops routeTriggerContractEvent (which has no idempotency guard of
+      // its own) from double-spawning workflows. Same idiom as workflow-tick / the email worker.
+      const { data: claimRow } = await supabase
+        .from("automation_events")
+        .update({ claimed_at: new Date().toISOString() })
+        .eq("id", typedEvent.id)
+        .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
+        .select("id")
+        .maybeSingle();
+
+      if (!claimRow) {
+        skippedClaimLost++;
+        continue;
+      }
+      claimed++;
 
       try {
         // ------------------------------------------------------------
@@ -745,15 +781,23 @@ Deno.serve(async (req) => {
           .eq("is_active", true);
 
         if (rulesError) {
+          // Transient read error — leave processed_at NULL to retry, but release the claim so the
+          // next run picks it straight up instead of waiting out the 10-minute stale window. Not
+          // counted as an attempt: this is a lookup failure, not a poison event.
           allErrors.push(`Event ${typedEvent.id}: ${rulesError.message}`);
+          await supabase
+            .from("automation_events")
+            .update({ claimed_at: null })
+            .eq("id", typedEvent.id);
           continue;
         }
 
         if (!rules || rules.length === 0) {
-          // No matching rules - mark as processed
+          // No matching rules - mark as processed and release the claim. (Trigger-contract routing
+          // above may still have spawned a workflow; legacy rules simply had no match.)
           await supabase
             .from("automation_events")
-            .update({ processed_at: new Date().toISOString() })
+            .update({ processed_at: new Date().toISOString(), claimed_at: null })
             .eq("id", typedEvent.id);
           processed++;
           continue;
@@ -825,21 +869,47 @@ Deno.serve(async (req) => {
           console.log(`Executed rule "${typedRule.name}" for event ${typedEvent.id}: ${actionResult.success ? "success" : "failed"}`);
         }
 
-        // Mark event as processed
+        // Mark event as processed and release the claim.
         await supabase
           .from("automation_events")
-          .update({ processed_at: new Date().toISOString() })
+          .update({ processed_at: new Date().toISOString(), claimed_at: null })
           .eq("id", typedEvent.id);
 
         processed++;
       } catch (err) {
-        allErrors.push(`Event ${typedEvent.id}: ${err instanceof Error ? err.message : "Unknown error"}`);
+        // AUTO-1 inc 2: this used to only push to allErrors and leave processed_at NULL, so the
+        // event was re-selected and retried on every run forever. Now bound it: increment attempts,
+        // record the error, release the claim, and after MAX_EVENT_ATTEMPTS stamp failed_at (a
+        // visible dead-letter excluded from selection) instead of retrying indefinitely.
+        const message = err instanceof Error ? err.message : "Unknown error";
+        allErrors.push(`Event ${typedEvent.id}: ${message}`);
+
+        const attemptsAfter = ((event.attempts as number | null) ?? 0) + 1;
+        const deadLetter = eventShouldDeadLetter(attemptsAfter);
+        await supabase
+          .from("automation_events")
+          .update({
+            attempts: attemptsAfter,
+            last_error: message,
+            claimed_at: null,
+            failed_at: deadLetter ? new Date().toISOString() : null,
+          })
+          .eq("id", typedEvent.id);
+        if (deadLetter) deadLettered++;
       }
     }
 
-    console.log(`Processing complete: ${processed} events, ${allErrors.length} errors`);
+    const summary = {
+      scanned,
+      claimed,
+      processed,
+      skipped_claim_lost: skippedClaimLost,
+      dead_lettered: deadLettered,
+      errors: allErrors.length,
+    };
+    console.log("[process-automation-events]", JSON.stringify(summary));
 
-    return new Response(JSON.stringify({ processed, errors: allErrors }), {
+    return new Response(JSON.stringify({ ...summary, processed, errorDetail: allErrors }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
