@@ -13,6 +13,7 @@ import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck,
 import { GdprCompliancePanel } from "@/components/settings/GdprCompliancePanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
+import { isMailboxTokenStale, shouldOfferReconnect } from "@/lib/mailbox-health";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -515,6 +516,9 @@ export default function Settings() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{mailbox.email_address}</span>
                           {getStatusBadge(mailbox.status)}
+                          {isMailboxTokenStale((mailbox as { token_expires_at?: string | null }).token_expires_at, new Date()) && (
+                            <Badge variant="destructive">Token expired — reconnect</Badge>
+                          )}
                         </div>
                         <div className="text-sm text-muted-foreground flex items-center gap-3">
                           <span className="capitalize">{mailbox.provider}</span>
@@ -536,7 +540,35 @@ export default function Settings() {
                       </div>
                     </div>
                       <div className="flex items-center gap-2">
-                      {(mailbox.status !== "active" || mailbox.error_message) ? (
+                      {/* Reconnect is always available for OAuth mailboxes (gmail/outlook): the token
+                          can expire while the row still says 'active', so it must not be gated on
+                          status. Sync stays available alongside it. Non-OAuth mailboxes keep the
+                          status-gated behaviour. */}
+                      {shouldOfferReconnect(mailbox.provider) ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              mailbox.provider === "outlook"
+                                ? connectOutlookMutation.mutate()
+                                : connectGmailMutation.mutate()
+                            }
+                            disabled={isConnecting}
+                          >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${isConnecting ? "animate-spin" : ""}`} />
+                            Reconnect
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => syncMailboxMutation.mutate({ mailboxId: mailbox.id, provider: mailbox.provider })}
+                            disabled={isSyncing === mailbox.id}
+                          >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing === mailbox.id ? "animate-spin" : ""}`} />
+                            Sync
+                          </Button>
+                        </>
+                      ) : (mailbox.status !== "active" || mailbox.error_message) ? (
                         <Button
                           size="sm"
                           onClick={() =>
