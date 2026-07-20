@@ -81,6 +81,10 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // Pending Lovable application: add_service_to_client RPC (adds a service to an existing
   // client/company from the Services tab, delegating to lifecycle_upsert_job_with_deadlines).
   "20260720160000",
+  // Pending Lovable application: security publish-blockers — restrict user_sessions manage policy
+  // to admin/owner, close anon quote-token enumeration (re-apply of the never-landed 20260703204710),
+  // and restore security_invoker on connected_mailboxes_safe.
+  "20260720170000",
 ]);
 
 function versionFromFilename(name: string): string | null {
