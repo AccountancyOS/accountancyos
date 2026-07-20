@@ -40,30 +40,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS portal_access_unique_company_user
 --    - at most 10 active signatories per company
 -- =====================================================
 CREATE OR REPLACE FUNCTION public.enforce_signatory_rules()
-RETURNS TRIGGER
+RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  v_signatory_count integer;
 BEGIN
   IF NEW.is_signatory THEN
     IF NEW.resigned_at IS NOT NULL THEN
-      RAISE EXCEPTION 'A resigned officer cannot be a signatory';
-    END IF;
-
-    SELECT count(*) INTO v_signatory_count
-      FROM public.company_officers
-     WHERE company_id = NEW.company_id
-       AND is_signatory
-       AND id <> NEW.id;
-
-    IF v_signatory_count >= 10 THEN
-      RAISE EXCEPTION 'max 10 signatories';
+      -- A resigned officer cannot be a signatory. Auto-demote instead of
+      -- raising, so a Companies House resync that records a resignation via
+      -- ON CONFLICT DO UPDATE (which preserves the existing is_signatory)
+      -- is not rejected and does not abort the officer-promotion statement.
+      NEW.is_signatory := false;
+    ELSIF (
+      SELECT count(*) FROM public.company_officers
+      WHERE company_id = NEW.company_id AND is_signatory AND id <> NEW.id
+    ) >= 10 THEN
+      RAISE EXCEPTION 'A company can have at most 10 signatories';
     END IF;
   END IF;
-
   RETURN NEW;
 END;
 $$;
@@ -81,8 +77,10 @@ EXECUTE FUNCTION public.enforce_signatory_rules();
 --    another org's row for the same real-world company — a cross-tenant
 --    leak — so these are scoped to organization_id / company_id).
 -- =====================================================
+-- Non-partial so supabase-js/PostgREST onConflict can infer them; NULLs are
+-- distinct in unique indexes so rows with a NULL CH id never collide.
 CREATE UNIQUE INDEX IF NOT EXISTS company_persons_org_ch_officer_uq
-  ON public.company_persons (organization_id, ch_officer_id) WHERE ch_officer_id IS NOT NULL;
+  ON public.company_persons (organization_id, ch_officer_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS company_officers_company_ch_appointment_uq
-  ON public.company_officers (company_id, ch_appointment_id) WHERE ch_appointment_id IS NOT NULL;
+  ON public.company_officers (company_id, ch_appointment_id);
