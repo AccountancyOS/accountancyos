@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/table";
 import { Building2, User, Link2, UserPlus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AddClientDialog } from "@/components/clients/AddClientDialog";
 import { ClientTypeFilters } from "@/components/clients/ClientTypeFilters";
 import DashboardLayout from "@/components/DashboardLayout";
 import LinkedClientsTab from "@/components/accountant-linking/LinkedClientsTab";
@@ -151,11 +150,13 @@ const Clients = () => {
             </p>
           </div>
           <div className="flex gap-2">
+            {/* Direct "Add Client" removed intentionally: new clients must originate in the CRM and
+                go through formal onboarding, not be created ad-hoc from the client list. Linking to
+                an already-existing client remains available. */}
             <Button variant="outline" onClick={() => setShowLinkDialog(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
               Link Existing
             </Button>
-            <AddClientDialog />
           </div>
         </div>
 
