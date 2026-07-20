@@ -38,6 +38,7 @@ import {
 import { format } from "date-fns";
 import { formatStatus } from "@/lib/format-utils";
 import { RegistersTab } from "@/components/cosec/RegistersTab";
+import { CompanyDocumentsTab } from "@/components/companies/CompanyDocumentsTab";
 import { CS01WorkpaperTab } from "@/components/cosec/CS01WorkpaperTab";
 import { CompanyCoSecJobsTab } from "@/components/cosec/CompanyCoSecJobsTab";
 import { CompanyJobsTab } from "@/components/cosec/CompanyJobsTab";
@@ -620,19 +621,7 @@ const CompanyDetail = () => {
           </TabsContent>
 
           <TabsContent value="documents" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Company Documents</CardTitle>
-                <CardDescription>
-                  View and manage documents for this company
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground text-sm">
-                  Document management coming soon...
-                </p>
-              </CardContent>
-            </Card>
+            <CompanyDocumentsTab companyId={companyId!} />
           </TabsContent>
 
           <TabsContent value="services" className="mt-6">
