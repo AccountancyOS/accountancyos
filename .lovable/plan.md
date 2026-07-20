@@ -1,50 +1,42 @@
-# Migration + deploy batch — apply, verify, publish
+# Unblock publish and ship today's frontend batch
 
-## Pre-check summary (already confirmed against live DB in this turn)
+You're right — I mis-stated the scope. Today's UI edits (Timeline banner, Add-Client removal, Cosec fix, portal bookkeeping nav gating, PortalMessages subject dropdown, AddServiceDialog + ClientServicesTab, CompanyDocumentsTab + CompanyDetail) are in git but stale on `app.*` and `client.*` until we publish.
 
-| Item | Live state | Action |
-|---|---|---|
-| `20260720120500` mailbox safe view — `token_expires_at` column | **Already applied.** Recorded in `schema_migrations` as `20260720120811`; column exists on `connected_mailboxes_safe`. | Verify only, no re-apply. |
-| `20260717090000/100000/110000` automation hardening | **Objects present** (`claimed_at` on `automation_workflow_instances` and `automation_events`; `attempts` + `failed_at` on `automation_events`; `automation_engine_switches` table exists; `process-automation-events` and `workflow-tick` cron jobs both active). Version rows themselves are missing from `schema_migrations` — the objects landed via a later consolidated file. | Verify only, no re-apply (Bucket A / superseded, matches `docs/audits/unapplied-migrations.md`). |
-| `process-email-queue` cron | **Already present and active** — `cron.job` row `process-email-queue`, schedule `* * * * *`, `active=true`. (Fixed earlier this session, before the audit was written.) | Verify only, no create. |
-| `automation_workflow_instances.status` CHECK | Live constraint is the buggy 5-value lowercase set from `20260717090000` — pause/cancel/spawn *will* raise `constraint violation`. | **Apply `20260720140000`**. |
-| `notify_onboarding_approved` trigger fn | Exists; still queues the duplicate "welcome" email per source. | **Apply `20260720150000`**. |
-| `add_service_to_client` RPC | **Not in `pg_proc`.** | **Apply `20260720160000`**. |
+## The three findings and how each clears
 
-## Steps
+Verified against current source before writing this plan:
 
-1. **Apply 3 migrations, one call each (each opens its own approval card):**
-   - `20260720140000_fix_workflow_instance_status_vocabulary.sql` — swaps the CHECK to the full uppercase 7-value set, normalises existing rows, resets default to `'QUEUED'`, rebuilds `idx_workflow_instances_tick`. Idempotent.
-   - `20260720150000_drop_onboarding_welcome_email.sql` — `CREATE OR REPLACE` on `notify_onboarding_approved` to drop the `email_queue` insert; keeps the internal staff notification.
-   - `20260720160000_add_service_to_client_rpc.sql` — creates `add_service_to_client(uuid,uuid,uuid,date,date,text)` SECURITY DEFINER, granted to `authenticated` + `service_role`.
+1. **`agent_security` → `edit_queue_html_xss`** — **stale, mark as fixed.**
+   `src/components/email/EditQueuedEmailDialog.tsx` line 199 already renders through `<SafeEmailHtml html={...} />` (which sanitises via DOMPurify in `src/lib/sanitizeHtml.ts`). There is no `dangerouslySetInnerHTML` in that file anymore. The scanner is looking at an older revision.
+   Action: `security--manage_security_finding` → `mark_as_fixed` with the explanation that the raw sink was already replaced by `SafeEmailHtml`.
 
-2. **Post-migration verification (queried live after each approval):**
-   - `pg_get_constraintdef` on `automation_workflow_instances_status_check` lists all 7 UPPERCASE values.
-   - `pg_get_functiondef('notify_onboarding_approved')` shows no `INSERT INTO email_queue`.
-   - `SELECT proname FROM pg_proc WHERE proname='add_service_to_client'` returns 1 row; grants present.
-   - Confirm `schema_migrations` picked up each `2026072014/15/16` version (the working-agreement check).
+2. **`supabase` → `SUPA_anon_security_definer_function_executable`** — **ignore, architectural.**
+   The entire public-facing surface of this app is SECURITY DEFINER RPCs (quote acceptance by token, portal invite signup, onboarding token validation, etc.). Each function performs its own auth/tenant check internally (`user_has_organization_access`, token validation, etc.), which is the correct pattern for anon-callable RPCs. The scanner flags this as a generic pattern warning and it's `warn`-level, not a real defect.
+   Action: `ignore` with a rationale that also updates security memory so future scans don't re-block on the same pattern.
 
-3. **Re-verify previously-landed items (no changes):**
-   - `information_schema.columns` → `connected_mailboxes_safe.token_expires_at` present.
-   - `information_schema.columns` → `automation_workflow_instances.claimed_at`, `automation_events.claimed_at` + `attempts` + `failed_at` all present.
-   - `to_regclass('public.automation_engine_switches')` non-null; both router and executor rows exist (probe `SELECT engine, enabled FROM automation_engine_switches`).
-   - `cron.job` contains `process-email-queue`, schedule `* * * * *`, `active=true`.
+3. **`supabase` → `SUPA_authenticated_security_definer_function_executable`** — **ignore, architectural.**
+   Same story for the signed-in surface: every accountant-facing RPC (`lifecycle_send_quote`, `lifecycle_materialize_jobs`, `add_service_to_client`, `flush_email_queue_now`, `verify_aml_and_approve`, …) is SECURITY DEFINER with in-body `user_has_organization_access` tenancy checks. That's how tenant isolation is enforced on top of RLS, per the project's Security & Tenancy model.
+   Action: `ignore` with the same rationale.
 
-4. **Redeploy edge functions** (`supabase--deploy_edge_functions`): `workflow-tick`, `process-automation-events`, `process-email-queue`. Report the returned deploy IDs.
+Note on the `SUPA_security_definer_view` `error`-level linter row that also appears in the raw scanner output: it isn't part of the 3 items the publish tool counted (the publish gate is fed by the `critical_findings` list, which is what `preview_ui--publish` returned as "3"). If publish still returns a block after we clear items 1–3, I'll surface that separately rather than sweep it — SECURITY DEFINER views need real remediation, not an ignore.
 
-5. **Publish the frontend** so `client.accountancyos.com` picks up the current portal bundle (the Bank white-screen was traced to a stale bundle earlier). Uses `preview_ui--publish`. Post-publish, note that Live-database migrations approved above are already live because Cloud shares one DB — no separate prod approval needed. Ask the user to hard-refresh once the deploy notification fires (~1 min) to confirm the portal bundle matches `main`.
+## Update security memory
 
-6. **Report block** to the user with the exact verification output for each of the 6 items in point 5 of their request (portal bundle live, three new objects present, cron job present).
+Rewrite `security-memory` in one call to capture:
+- App shape: multi-tenant accountant/portal split, tenancy enforced by `user_has_organization_access` inside SECURITY DEFINER RPCs on top of RLS.
+- What to never do: expose raw HTML from any queue/inbox view without `sanitizeEmailHtml` / `SafeEmailHtml`; add anon-callable RPCs without an in-body token or org check; grant EXECUTE on a SECURITY DEFINER function without a matching internal auth check.
+- What not to re-flag: SECURITY DEFINER RPCs with in-body tenant checks (linter items 0028/0029) — those are the intended pattern here.
 
-## Notes / non-actions
+## Publish
 
-- No TypeScript regeneration is triggered manually — the Supabase types file regenerates automatically after each approved migration; the `add_service_to_client` RPC will appear in the generated `Database['public']['Functions']` map without a code change on my side.
-- No new cron file authored — the `process-email-queue` schedule is already correct; touching it risks re-creating drift.
-- No changes to `supabase/config.toml`.
-- No portal source edits — publish only.
+After the three findings are cleared, call `preview_ui--publish` with no slug/visibility change. Report:
+- The returned live URL(s) for `accountancyos.lovable.app` (Lovable URL) and both custom domains (`app.accountancyos.com`, `client.accountancyos.com`) — the last two update automatically because they're already connected.
+- Reminder that the deploy takes ~1 min and a hard-refresh on `app.*` and `client.*` will confirm today's UI batch is live.
+- No metadata edits: `index.html` already has the AccountancyOS title/description; nothing to change.
 
-## Technical details
+## Out of scope
 
-- Migration approvals must land in `schema_migrations` before the "done" report — per the working agreement from earlier this session, I'll `SELECT version FROM supabase_migrations.schema_migrations WHERE version LIKE '2026072014%'` (and 15/16) after each card and paste the row into the report.
-- Reconciliation of the missing `schema_migrations` rows for `20260717090000/100000/110000` is out of scope for this batch (they're already listed as Bucket A in `docs/audits/unapplied-migrations.md`); we do not backfill history rows.
-- Publish does not require a security scan re-run — the automation/onboarding/RPC changes here are not surfacing new public endpoints.
+- No new database migrations.
+- No edge function redeploys (already done in the previous turn).
+- No code changes — the XSS finding is stale, not open.
+- No visibility change (project stays public per current setting).
