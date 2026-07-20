@@ -17405,6 +17405,17 @@ export type Database = {
         Args: { p_bank_transaction_id: string; p_reconciliation_id: string }
         Returns: string
       }
+      add_service_to_client: {
+        Args: {
+          p_client_id: string
+          p_company_id: string
+          p_period_end: string
+          p_period_label: string
+          p_period_start: string
+          p_service_id: string
+        }
+        Returns: string
+      }
       allocate_credit_note: {
         Args: {
           p_allocations: Json
