@@ -6,8 +6,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ==================== CH SANDBOX MOCK DATA ====================
-// In production, this would call the real Companies House API
+const CH_API_BASE = "https://api.company-information.service.gov.uk";
+
+// ==================== Companies House Public Data API types ====================
+// Mirrors src/lib/companies-house-live.ts. Edge functions cannot import from
+// src/, so the pure helpers below are re-implemented inline and pinned by
+// src/test/regression/companies-house-sync-live.test.ts.
 
 interface CHOfficer {
   name: string;
@@ -18,7 +22,7 @@ interface CHOfficer {
   nationality?: string;
   country_of_residence?: string;
   occupation?: string;
-  links?: { self: string };
+  links?: { self?: string };
 }
 
 interface CHPSC {
@@ -29,7 +33,7 @@ interface CHPSC {
   date_of_birth?: { month: number; year: number };
   nationality?: string;
   country_of_residence?: string;
-  links?: { self: string };
+  links?: { self?: string };
 }
 
 interface CHCompanyProfile {
@@ -47,112 +51,222 @@ interface CHCompanyProfile {
     country?: string;
   };
   sic_codes?: string[];
+  accounts?: {
+    next_made_up_to?: string;
+    next_due?: string;
+    last_accounts?: { made_up_to?: string };
+  };
   confirmation_statement?: {
     last_made_up_to?: string;
     next_due?: string;
   };
 }
 
-// Generate sandbox mock data based on company number
-function generateMockCompanyProfile(companyNumber: string): CHCompanyProfile {
-  console.log(`[CH Sandbox] Generating mock profile for ${companyNumber}`);
-  
+interface PersonUpsert {
+  organization_id: string;
+  first_name: string;
+  last_name: string;
+  nationality?: string;
+  occupation?: string;
+  ch_officer_id?: string;
+}
+
+interface OfficerRow {
+  company_id: string;
+  person_id: string;
+  role: "director" | "secretary" | "llp_member" | "llp_designated_member";
+  appointed_at: string;
+  resigned_at: string | null;
+  ch_appointment_id?: string;
+}
+
+// ==================== Pure CH helpers (mirrors src/lib/companies-house-live.ts) ====================
+
+/**
+ * Basic auth header for Companies House API calls.
+ * Format: "Basic " + base64(key + ":") — key as username, empty password.
+ * NOT Bearer. The key is never logged; it only ever flows into this header.
+ */
+function chBasicAuthHeader(key: string): string {
+  return "Basic " + btoa(key + ":");
+}
+
+/**
+ * Parses Companies House officer name format "SURNAME, Forename" into parts.
+ * If no comma is found, treats the whole string as last_name.
+ */
+function parseChName(chName: string): { first_name: string; last_name: string } {
+  const parts = chName.split(",");
+  if (parts.length < 2) {
+    return { first_name: "", last_name: chName };
+  }
   return {
-    company_number: companyNumber,
-    company_name: `Sandbox Company ${companyNumber}`,
-    company_status: "active",
-    type: "ltd",
-    date_of_creation: "2020-01-15",
-    registered_office_address: {
-      address_line_1: "123 Sandbox Street",
-      locality: "London",
-      postal_code: "EC1A 1BB",
-      country: "United Kingdom",
-    },
-    sic_codes: ["62020", "62090"],
-    confirmation_statement: {
-      last_made_up_to: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      next_due: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    },
+    last_name: parts[0].trim(),
+    first_name: parts.slice(1).join(",").trim(),
   };
 }
 
-function generateMockOfficers(companyNumber: string): CHOfficer[] {
-  console.log(`[CH Sandbox] Generating mock officers for ${companyNumber}`);
-  
-  return [
-    {
-      name: "SMITH, John",
-      officer_role: "director",
-      appointed_on: "2020-01-15",
-      date_of_birth: { month: 3, year: 1980 },
-      nationality: "British",
-      country_of_residence: "United Kingdom",
-      occupation: "Company Director",
-      links: { self: `/company/${companyNumber}/appointments/abc123` },
-    },
-    {
-      name: "JONES, Sarah",
-      officer_role: "secretary",
-      appointed_on: "2020-06-01",
-      links: { self: `/company/${companyNumber}/appointments/def456` },
-    },
-  ];
+/**
+ * Maps a CH officer to a company_persons upsert row.
+ * Deliberately never includes `linked_client_id` — that is a manual
+ * person<->SA-client link and must survive a resync untouched.
+ */
+function mapChOfficerToPerson(o: CHOfficer, orgId: string): PersonUpsert {
+  const { first_name, last_name } = parseChName(o.name);
+
+  const result: PersonUpsert = {
+    organization_id: orgId,
+    first_name,
+    last_name,
+  };
+
+  if (o.nationality) result.nationality = o.nationality;
+  if (o.occupation) result.occupation = o.occupation;
+  if (o.links?.self) result.ch_officer_id = o.links.self;
+
+  return result;
 }
 
-function generateMockPSCs(companyNumber: string): CHPSC[] {
-  console.log(`[CH Sandbox] Generating mock PSCs for ${companyNumber}`);
-  
-  return [
-    {
-      name: "Mr John Smith",
-      natures_of_control: [
-        "ownership-of-shares-75-to-100-percent",
-        "voting-rights-75-to-100-percent",
-        "right-to-appoint-and-remove-directors",
-      ],
-      notified_on: "2020-01-15",
-      date_of_birth: { month: 3, year: 1980 },
-      nationality: "British",
-      country_of_residence: "United Kingdom",
-      links: { self: `/company/${companyNumber}/persons-with-significant-control/individual/ghi789` },
-    },
-  ];
+/**
+ * Maps a CH officer to a company_officers upsert row.
+ * Role mapping: secretary -> secretary; llp-member -> llp_member;
+ * llp-designated-member -> llp_designated_member; anything else -> director.
+ */
+function mapChOfficerToOfficerRow(o: CHOfficer, companyId: string, personId: string): OfficerRow {
+  let role: OfficerRow["role"];
+  switch (o.officer_role.toLowerCase()) {
+    case "secretary":
+      role = "secretary";
+      break;
+    case "llp-member":
+      role = "llp_member";
+      break;
+    case "llp-designated-member":
+      role = "llp_designated_member";
+      break;
+    case "director":
+    default:
+      role = "director";
+      break;
+  }
+
+  const result: OfficerRow = {
+    company_id: companyId,
+    person_id: personId,
+    role,
+    appointed_at: o.appointed_on,
+    resigned_at: o.resigned_on ?? null,
+  };
+
+  if (o.links?.self) result.ch_appointment_id = o.links.self;
+
+  return result;
+}
+
+// ==================== Companies House API client ====================
+// Never throws. Callers inspect `.ok` and translate any non-2xx CH response
+// into a clean `{ error, ch_status }` payload instead of crashing — this is
+// the fix for the live runtime error.
+
+type ChFetchResult = { ok: true; data: any } | { ok: false; status: number };
+
+async function chFetchJson(
+  path: string,
+  chApiKey: string,
+  params?: Record<string, string>,
+): Promise<ChFetchResult> {
+  try {
+    const url = new URL(`${CH_API_BASE}${path}`);
+    if (params) {
+      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    }
+    const resp = await fetch(url.toString(), {
+      headers: { Authorization: chBasicAuthHeader(chApiKey) },
+    });
+    if (!resp.ok) {
+      return { ok: false, status: resp.status };
+    }
+    const data = await resp.json();
+    return { ok: true, data };
+  } catch {
+    // Network-level failure talking to CH. Never crash the function.
+    return { ok: false, status: 0 };
+  }
 }
 
 // ==================== SYNC LOGIC ====================
 
+type SyncOutcome =
+  | {
+      success: true;
+      companyNumber: string;
+      profile: CHCompanyProfile;
+      officers: CHOfficer[];
+      pscs: CHPSC[];
+      discrepancies: any[];
+      stagedFieldDiffs: number;
+      cs01DeadlineCreated: boolean;
+      promotedOfficers: number;
+      syncedAt: string;
+    }
+  | { error: string; ch_status?: number };
+
 async function syncCompanyFromCH(
   supabase: any,
   companyId: string,
-  organizationId: string
-) {
-  console.log(`[CH Sync] Starting sync for company ${companyId}`);
-  
+  organizationId: string,
+  chApiKey: string,
+): Promise<SyncOutcome> {
   // Get company details from our database
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .select("id, company_number, company_name, organization_id, registered_office_address, sic_codes, company_type, confirmation_statement_made_up_to, confirmation_statement_next_due, client_id")
+    .select(
+      "id, company_number, company_name, organization_id, registered_office_address, sic_codes, company_type, confirmation_statement_made_up_to, confirmation_statement_next_due, client_id",
+    )
     .eq("id", companyId)
     .single();
-  
+
   if (companyError || !company) {
-    throw new Error(`Company not found: ${companyId}`);
+    return { error: `Company not found: ${companyId}` };
   }
-  
+
   if (company.organization_id !== organizationId) {
-    throw new Error("Access denied to this company");
+    return { error: "Access denied to this company" };
   }
-  
-  const companyNumber = company.company_number;
+
+  const companyNumber: string | undefined = company.company_number;
   if (!companyNumber) {
-    throw new Error("Company number is required for CH sync");
+    return { error: "Company number is required for CH sync" };
   }
-  
-  // Fetch mock data from "Companies House" (sandbox)
-  const chProfile = generateMockCompanyProfile(companyNumber);
-  const chOfficers = generateMockOfficers(companyNumber);
-  const chPSCs = generateMockPSCs(companyNumber);
+
+  // Fetch live data from the Companies House Public Data API.
+  const profileResult = await chFetchJson(`/company/${encodeURIComponent(companyNumber)}`, chApiKey);
+  if (!profileResult.ok) {
+    return { error: "Companies House profile lookup failed", ch_status: profileResult.status };
+  }
+  const chProfile: CHCompanyProfile = profileResult.data;
+
+  const officersResult = await chFetchJson(
+    `/company/${encodeURIComponent(companyNumber)}/officers`,
+    chApiKey,
+  );
+  if (!officersResult.ok) {
+    return { error: "Companies House officers lookup failed", ch_status: officersResult.status };
+  }
+  const chOfficers: CHOfficer[] = officersResult.data?.items ?? [];
+
+  // PSC endpoint returns 404 for companies with no PSC statement on record —
+  // that is a normal, non-error outcome, so treat it as an empty list.
+  let chPSCs: CHPSC[] = [];
+  const pscResult = await chFetchJson(
+    `/company/${encodeURIComponent(companyNumber)}/persons-with-significant-control`,
+    chApiKey,
+  );
+  if (pscResult.ok) {
+    chPSCs = pscResult.data?.items ?? [];
+  } else if (pscResult.status !== 404) {
+    return { error: "Companies House PSC lookup failed", ch_status: pscResult.status };
+  }
 
   // Persist the raw CH snapshot ONLY (no field overwrites). All field changes
   // go to companies_house_diff_staging for Owner review before being applied.
@@ -171,16 +285,28 @@ async function syncCompanyFromCH(
 
   if (snapshotError) {
     console.error("[CH Sync] Failed to store CH snapshot:", snapshotError);
-    throw new Error(`Failed to store CH snapshot: ${snapshotError.message}`);
+    return { error: `Failed to store CH snapshot: ${snapshotError.message}` };
   }
 
   // Build field-level diff candidates and stage them
   const diffCandidates: Array<{ field_path: string; current: unknown; incoming: unknown }> = [
-    { field_path: "registered_office_address", current: company.registered_office_address, incoming: chProfile.registered_office_address },
+    {
+      field_path: "registered_office_address",
+      current: company.registered_office_address,
+      incoming: chProfile.registered_office_address,
+    },
     { field_path: "sic_codes", current: company.sic_codes, incoming: chProfile.sic_codes },
     { field_path: "company_type", current: company.company_type, incoming: chProfile.type },
-    { field_path: "confirmation_statement_made_up_to", current: company.confirmation_statement_made_up_to, incoming: chProfile.confirmation_statement?.last_made_up_to },
-    { field_path: "confirmation_statement_next_due", current: company.confirmation_statement_next_due, incoming: chProfile.confirmation_statement?.next_due },
+    {
+      field_path: "confirmation_statement_made_up_to",
+      current: company.confirmation_statement_made_up_to,
+      incoming: chProfile.confirmation_statement?.last_made_up_to,
+    },
+    {
+      field_path: "confirmation_statement_next_due",
+      current: company.confirmation_statement_next_due,
+      incoming: chProfile.confirmation_statement?.next_due,
+    },
   ];
 
   const stagedDiffs = await stageFieldDiffs(
@@ -191,31 +317,40 @@ async function syncCompanyFromCH(
     companyNumber,
     diffCandidates,
   );
-  
+
+  // Phase 2 columns (companies.accounts_next_made_up_to / accounts_next_due)
+  // may not exist in the live schema yet. This write is best-effort and must
+  // never abort the sync — officer promotion and everything below it must
+  // still run even if it fails.
+  await persistAccountsDatesNonFatal(supabase, companyId, chProfile);
+
+  // Promote CH officers into the person spine (company_persons +
+  // company_officers). Non-fatal: a promotion failure must not abort the
+  // rest of the sync (diff staging / CS01 deadline / discrepancy detection).
+  const promotion = await promoteOfficersToPersonSpine(supabase, organizationId, companyId, chOfficers);
+  if (promotion.error) {
+    console.error("[CH Sync] Officer promotion failed (non-fatal):", promotion.error);
+  }
+
   // Compare with internal registers and identify discrepancies
-  const discrepancies = await compareWithInternalRegisters(
-    supabase,
-    companyId,
-    organizationId,
-    chOfficers,
-    chPSCs
-  );
-  
+  const discrepancies = await compareWithInternalRegisters(supabase, companyId, chOfficers, chPSCs);
+
   // Create sync event in register events
   await supabase.from("company_register_events").insert({
     company_id: companyId,
     event_type: "ch_sync",
-    event_date: new Date().toISOString().split('T')[0],
+    event_date: new Date().toISOString().split("T")[0],
     source: "ch_sync",
     details: {
       officers_count: chOfficers.length,
       pscs_count: chPSCs.length,
       discrepancies_found: discrepancies.length,
       staged_field_diffs: stagedDiffs,
+      promoted_officers: promotion.promoted,
       discrepancies: discrepancies,
     },
   });
-  
+
   // Generate CS01 deadline if confirmation_statement_next_due is available
   let cs01DeadlineCreated = false;
   if (chProfile.confirmation_statement?.next_due) {
@@ -224,14 +359,11 @@ async function syncCompanyFromCH(
       organizationId,
       companyId,
       chProfile.confirmation_statement.next_due,
-      chProfile.confirmation_statement.last_made_up_to
+      chProfile.confirmation_statement.last_made_up_to,
     );
     cs01DeadlineCreated = deadlineResult.created;
-    console.log(`[CH Sync] CS01 deadline generation: ${deadlineResult.message}`);
   }
-  
-  console.log(`[CH Sync] Completed sync for ${companyNumber}. Staged ${stagedDiffs} field diffs, found ${discrepancies.length} register discrepancies.`);
-  
+
   return {
     success: true,
     companyNumber,
@@ -241,8 +373,113 @@ async function syncCompanyFromCH(
     discrepancies,
     stagedFieldDiffs: stagedDiffs,
     cs01DeadlineCreated,
+    promotedOfficers: promotion.promoted,
     syncedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Persists accounts.next_made_up_to / next_due from the CH profile onto the
+ * new companies columns. These columns are added by a later migration and
+ * may not exist yet in the live schema — a failure here is swallowed so it
+ * can never abort the sync.
+ */
+async function persistAccountsDatesNonFatal(
+  supabase: any,
+  companyId: string,
+  chProfile: CHCompanyProfile,
+): Promise<void> {
+  const accountsNextMadeUpTo = chProfile.accounts?.next_made_up_to ?? null;
+  const accountsNextDue = chProfile.accounts?.next_due ?? null;
+  if (!accountsNextMadeUpTo && !accountsNextDue) return;
+
+  try {
+    const { error } = await supabase
+      .from("companies")
+      .update({
+        accounts_next_made_up_to: accountsNextMadeUpTo,
+        accounts_next_due: accountsNextDue,
+      })
+      .eq("id", companyId);
+    if (error) {
+      console.warn(
+        "[CH Sync] accounts_next_made_up_to/accounts_next_due write skipped (non-fatal):",
+        error.message,
+      );
+    }
+  } catch (err) {
+    console.warn("[CH Sync] accounts date persistence failed (non-fatal):", err);
+  }
+}
+
+/**
+ * Promotes CH officers into the person spine.
+ *
+ * company_persons is upserted on `ch_officer_id` and NEVER writes
+ * `linked_client_id` — that is a manual person<->SA-client link that must
+ * survive a resync untouched (upsert only overwrites columns present in the
+ * payload, so simply omitting the column is sufficient).
+ *
+ * company_officers is upserted on `ch_appointment_id`.
+ *
+ * Officers without a stable CH link (`links.self`) are skipped for
+ * promotion — there is no safe dedupe key for them — but never cause an
+ * error.
+ */
+async function promoteOfficersToPersonSpine(
+  supabase: any,
+  organizationId: string,
+  companyId: string,
+  chOfficers: CHOfficer[],
+): Promise<{ promoted: number; error?: string }> {
+  try {
+    const personRows: PersonUpsert[] = [];
+    for (const o of chOfficers) {
+      const person = mapChOfficerToPerson(o, organizationId);
+      if (!person.ch_officer_id) continue;
+      personRows.push(person);
+    }
+    if (personRows.length === 0) return { promoted: 0 };
+
+    const { data: upsertedPersons, error: personsError } = await supabase
+      .from("company_persons")
+      .upsert(personRows, { onConflict: "ch_officer_id" })
+      .select("id, ch_officer_id");
+
+    if (personsError || !upsertedPersons) {
+      return { promoted: 0, error: personsError?.message ?? "Failed to upsert company_persons" };
+    }
+
+    const personIdByChOfficerId = new Map<string, string>();
+    for (const p of upsertedPersons) {
+      if (p.ch_officer_id) personIdByChOfficerId.set(p.ch_officer_id, p.id);
+    }
+
+    const officerRows: OfficerRow[] = [];
+    for (const o of chOfficers) {
+      const chOfficerId = o.links?.self;
+      if (!chOfficerId) continue;
+      const personId = personIdByChOfficerId.get(chOfficerId);
+      if (!personId) continue;
+      const row = mapChOfficerToOfficerRow(o, companyId, personId);
+      if (!row.ch_appointment_id) continue;
+      officerRows.push(row);
+    }
+
+    if (officerRows.length === 0) return { promoted: 0 };
+
+    const { error: officersError } = await supabase
+      .from("company_officers")
+      .upsert(officerRows, { onConflict: "ch_appointment_id" });
+
+    if (officersError) {
+      return { promoted: 0, error: officersError.message };
+    }
+
+    return { promoted: officerRows.length };
+  } catch (err: any) {
+    return { promoted: 0, error: err?.message ?? "Officer promotion error" };
+  }
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
@@ -301,7 +538,7 @@ async function generateCS01Deadline(
   organizationId: string,
   companyId: string,
   nextDueDate: string,
-  madeUpToDate?: string
+  madeUpToDate?: string,
 ): Promise<{ created: boolean; message: string }> {
   try {
     // Check for existing CS01 deadline for this company with same due date
@@ -319,7 +556,7 @@ async function generateCS01Deadline(
     }
 
     const dueDate = new Date(nextDueDate);
-    
+
     // Calculate warning date (30 days before due)
     const warningDate = new Date(dueDate);
     warningDate.setDate(warningDate.getDate() - 30);
@@ -328,22 +565,20 @@ async function generateCS01Deadline(
     const activeWindowStart = new Date(dueDate);
     activeWindowStart.setDate(activeWindowStart.getDate() - 90);
 
-    const { error } = await supabase
-      .from("deadlines")
-      .insert({
-        organization_id: organizationId,
-        company_id: companyId,
-        name: "Confirmation Statement (CS01)",
-        deadline_type: "statutory",
-        filing_body: "COMPANIES_HOUSE",
-        service_code: "CS01",
-        due_date: nextDueDate,
-        period_end: madeUpToDate,
-        warning_date: warningDate.toISOString().split("T")[0],
-        active_window_start: activeWindowStart.toISOString().split("T")[0],
-        status: "pending",
-        risk_score: 0,
-      });
+    const { error } = await supabase.from("deadlines").insert({
+      organization_id: organizationId,
+      company_id: companyId,
+      name: "Confirmation Statement (CS01)",
+      deadline_type: "statutory",
+      filing_body: "COMPANIES_HOUSE",
+      service_code: "CS01",
+      due_date: nextDueDate,
+      period_end: madeUpToDate,
+      warning_date: warningDate.toISOString().split("T")[0],
+      active_window_start: activeWindowStart.toISOString().split("T")[0],
+      status: "pending",
+      risk_score: 0,
+    });
 
     if (error) {
       console.error("[CH Sync] Failed to create CS01 deadline:", error);
@@ -360,16 +595,16 @@ async function generateCS01Deadline(
 async function compareWithInternalRegisters(
   supabase: any,
   companyId: string,
-  organizationId: string,
   chOfficers: CHOfficer[],
-  chPSCs: CHPSC[]
+  chPSCs: CHPSC[],
 ) {
   const discrepancies: any[] = [];
-  
+
   // Get internal officers
   const { data: internalOfficers } = await supabase
     .from("company_officers")
-    .select(`
+    .select(
+      `
       id,
       role,
       appointed_at,
@@ -383,14 +618,16 @@ async function compareWithInternalRegisters(
         nationality,
         country_of_residence
       )
-    `)
+    `,
+    )
     .eq("company_id", companyId)
     .is("resigned_at", null);
-  
+
   // Get internal PSCs
   const { data: internalPSCs } = await supabase
     .from("company_pscs")
-    .select(`
+    .select(
+      `
       id,
       nature_of_control,
       notified_at,
@@ -404,22 +641,26 @@ async function compareWithInternalRegisters(
         nationality,
         country_of_residence
       )
-    `)
+    `,
+    )
     .eq("company_id", companyId)
     .is("ceased_at", null);
-  
+
   // Compare officers
-  const activeChOfficers = chOfficers.filter(o => !o.resigned_on);
-  
+  const activeChOfficers = chOfficers.filter((o) => !o.resigned_on);
+
   // Officers in CH but not in internal
   for (const chOfficer of activeChOfficers) {
     const chName = chOfficer.name.toLowerCase();
     const matchingInternal = (internalOfficers || []).find((io: any) => {
       const internalName = `${io.person?.last_name}, ${io.person?.first_name}`.toLowerCase();
-      return internalName === chName || 
-             `${io.person?.first_name} ${io.person?.last_name}`.toLowerCase() === chName.split(', ').reverse().join(' ');
+      return (
+        internalName === chName ||
+        `${io.person?.first_name} ${io.person?.last_name}`.toLowerCase() ===
+          chName.split(", ").reverse().join(" ")
+      );
     });
-    
+
     if (!matchingInternal) {
       discrepancies.push({
         type: "officer_missing_internal",
@@ -428,15 +669,17 @@ async function compareWithInternalRegisters(
       });
     }
   }
-  
+
   // Officers in internal but not in CH
-  for (const internalOfficer of (internalOfficers || [])) {
+  for (const internalOfficer of internalOfficers || []) {
     const internalName = `${internalOfficer.person?.last_name}, ${internalOfficer.person?.first_name}`.toUpperCase();
-    const matchingCH = activeChOfficers.find(cho => 
-      cho.name.toUpperCase() === internalName ||
-      cho.name.toUpperCase() === `${internalOfficer.person?.first_name} ${internalOfficer.person?.last_name}`.toUpperCase()
+    const matchingCH = activeChOfficers.find(
+      (cho) =>
+        cho.name.toUpperCase() === internalName ||
+        cho.name.toUpperCase() ===
+          `${internalOfficer.person?.first_name} ${internalOfficer.person?.last_name}`.toUpperCase(),
     );
-    
+
     if (!matchingCH) {
       discrepancies.push({
         type: "officer_missing_ch",
@@ -445,17 +688,19 @@ async function compareWithInternalRegisters(
       });
     }
   }
-  
+
   // Compare PSCs
-  const activeChPSCs = chPSCs.filter(p => !p.ceased_on);
-  
+  const activeChPSCs = chPSCs.filter((p) => !p.ceased_on);
+
   for (const chPSC of activeChPSCs) {
     const matchingInternal = (internalPSCs || []).find((ip: any) => {
       const internalName = `${ip.person?.first_name} ${ip.person?.last_name}`.toLowerCase();
-      return chPSC.name.toLowerCase().includes(internalName) || 
-             internalName.includes(chPSC.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, ''));
+      return (
+        chPSC.name.toLowerCase().includes(internalName) ||
+        internalName.includes(chPSC.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, ""))
+      );
     });
-    
+
     if (!matchingInternal) {
       discrepancies.push({
         type: "psc_missing_internal",
@@ -466,9 +711,11 @@ async function compareWithInternalRegisters(
       // Check nature of control differences
       const chControls = new Set(chPSC.natures_of_control);
       const internalControls = new Set(matchingInternal.nature_of_control || []);
-      
-      if (chControls.size !== internalControls.size || 
-          ![...chControls].every(c => internalControls.has(c))) {
+
+      if (
+        chControls.size !== internalControls.size ||
+        ![...chControls].every((c) => internalControls.has(c))
+      ) {
         discrepancies.push({
           type: "psc_control_mismatch",
           chData: chPSC,
@@ -478,14 +725,15 @@ async function compareWithInternalRegisters(
       }
     }
   }
-  
-  for (const internalPSC of (internalPSCs || [])) {
+
+  for (const internalPSC of internalPSCs || []) {
     const internalName = `${internalPSC.person?.first_name} ${internalPSC.person?.last_name}`;
-    const matchingCH = activeChPSCs.find(chp => 
-      chp.name.toLowerCase().includes(internalName.toLowerCase()) ||
-      internalName.toLowerCase().includes(chp.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, ''))
+    const matchingCH = activeChPSCs.find(
+      (chp) =>
+        chp.name.toLowerCase().includes(internalName.toLowerCase()) ||
+        internalName.toLowerCase().includes(chp.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, "")),
     );
-    
+
     if (!matchingCH) {
       discrepancies.push({
         type: "psc_missing_ch",
@@ -494,179 +742,103 @@ async function compareWithInternalRegisters(
       });
     }
   }
-  
+
   return discrepancies;
 }
 
+// ==================== Response helpers ====================
+
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ==================== HTTP HANDLER ====================
+// The entire handler is wrapped so that no path — a bad CH response, a
+// missing key, a DB error, an unexpected exception — ever crashes the
+// function. Every branch returns a clean JSON response.
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-  
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
+
     // Get auth header
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "No authorization header" }, 401);
     }
-    
+
     // Verify user
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token);
+
     if (authError || !user) {
       console.error("[CH Sync] Auth error:", authError);
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Invalid token" }, 401);
     }
-    
+
     const payload = await req.json();
     const action: string = payload.action || "sync";
 
-    // Public lookup actions. Uses the live Companies House Public Data API
-    // when CH_PROD_API_KEY (or CH_TEST_API_KEY) is configured, otherwise
-    // falls back to sandbox mock data so local/dev flows keep working.
+    // The CH API key is a live secret held in edge-function secrets. It is
+    // read ONLY here and only ever used to build the Authorization header —
+    // it is never logged, echoed, or included in any response.
     const CH_PROD_API_KEY = Deno.env.get("CH_PROD_API_KEY");
-    const CH_TEST_API_KEY = Deno.env.get("CH_TEST_API_KEY");
-    const chApiKey = CH_PROD_API_KEY || CH_TEST_API_KEY;
-    const chAuthHeader = chApiKey
-      ? `Basic ${btoa(`${chApiKey}:`)}`
-      : null;
+
+    if (!CH_PROD_API_KEY) {
+      return jsonResponse({ error: "Companies House API key is not configured" }, 500);
+    }
 
     if (action === "search") {
       const query: string = (payload.query || "").trim();
       if (!query) {
-        return new Response(
-          JSON.stringify({ items: [], total_results: 0 }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jsonResponse({ items: [], total_results: 0 }, 200);
+      }
+      const result = await chFetchJson("/search/companies", CH_PROD_API_KEY, {
+        q: query,
+        items_per_page: "20",
+      });
+      if (!result.ok) {
+        return jsonResponse(
+          { error: "Companies House search failed", ch_status: result.status },
+          502,
         );
       }
-      if (chAuthHeader) {
-        try {
-          const url = new URL("https://api.company-information.service.gov.uk/search/companies");
-          url.searchParams.set("q", query);
-          url.searchParams.set("items_per_page", "20");
-          const resp = await fetch(url.toString(), {
-            headers: { Authorization: chAuthHeader },
-          });
-          if (!resp.ok) {
-            const detail = await resp.text();
-            console.error(`[CH Search] ${resp.status}: ${detail}`);
-            return new Response(
-              JSON.stringify({ error: `Companies House search failed (${resp.status})` }),
-              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          const json = await resp.json();
-          return new Response(
-            JSON.stringify(json),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } catch (err) {
-          console.error("[CH Search] Exception:", err);
-          return new Response(
-            JSON.stringify({ error: "Companies House search error" }),
-            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      }
-      const base = query.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6) || "SANDBX";
-      const items = Array.from({ length: 4 }).map((_, i) => {
-        const number = `${base}${i + 1}`.padEnd(8, "0").slice(0, 8);
-        return {
-          company_number: number,
-          title: `${query} Sandbox ${i + 1} Ltd`,
-          company_status: "active",
-          address_snippet: "123 Sandbox Street, London, EC1A 1BB",
-          date_of_creation: "2020-01-15",
-          company_type: "ltd",
-        };
-      });
-      return new Response(
-        JSON.stringify({ items, total_results: items.length }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse(result.data, 200);
     }
 
     if (action === "profile") {
       const companyNumber: string = (payload.company_number || "").toString().trim().toUpperCase();
       if (!companyNumber) {
-        return new Response(
-          JSON.stringify({ error: "company_number is required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jsonResponse({ error: "company_number is required" }, 400);
+      }
+      const result = await chFetchJson(`/company/${encodeURIComponent(companyNumber)}`, CH_PROD_API_KEY);
+      if (!result.ok) {
+        return jsonResponse(
+          { error: "Companies House profile lookup failed", ch_status: result.status },
+          502,
         );
       }
-      if (chAuthHeader) {
-        try {
-          const resp = await fetch(
-            `https://api.company-information.service.gov.uk/company/${encodeURIComponent(companyNumber)}`,
-            { headers: { Authorization: chAuthHeader } }
-          );
-          if (!resp.ok) {
-            const detail = await resp.text();
-            console.error(`[CH Profile] ${resp.status}: ${detail}`);
-            return new Response(
-              JSON.stringify({ error: `Companies House profile failed (${resp.status})` }),
-              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          const json = await resp.json();
-          return new Response(
-            JSON.stringify(json),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } catch (err) {
-          console.error("[CH Profile] Exception:", err);
-          return new Response(
-            JSON.stringify({ error: "Companies House profile error" }),
-            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      }
-      const profile = generateMockCompanyProfile(companyNumber);
-      const today = new Date();
-      const inDays = (n: number) =>
-        new Date(today.getTime() + n * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      const enriched = {
-        ...profile,
-        accounts: {
-          next_made_up_to: inDays(180),
-          next_due: inDays(270),
-          last_accounts: { made_up_to: inDays(-180) },
-        },
-        confirmation_statement: {
-          last_made_up_to: inDays(-95),
-          next_due: inDays(270),
-        },
-      };
-      return new Response(
-        JSON.stringify(enriched),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse(result.data, 200);
     }
 
     const { companyId, organizationId } = payload;
 
     if (!companyId || !organizationId) {
-      return new Response(
-        JSON.stringify({ error: "companyId and organizationId are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "companyId and organizationId are required" }, 400);
     }
-    
-    console.log(`[CH Sync] Request from user ${user.id} for company ${companyId}`);
-    
+
     // Verify user has access to organization
     const { data: orgAccess, error: orgError } = await supabase
       .from("organization_users")
@@ -674,13 +846,10 @@ serve(async (req: Request) => {
       .eq("user_id", user.id)
       .eq("organization_id", organizationId)
       .single();
-    
+
     if (orgError || !orgAccess) {
       console.error("[CH Sync] Organization access denied:", orgError);
-      return new Response(
-        JSON.stringify({ error: "Access denied to organization" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Access denied to organization" }, 403);
     }
 
     // Enforce per-org opt-in. Sync is paused for organisations that have not
@@ -693,37 +862,30 @@ serve(async (req: Request) => {
 
     if (chIntegrationError) {
       console.error("[CH Sync] Integration lookup failed:", chIntegrationError);
-      return new Response(
-        JSON.stringify({ error: "Failed to verify Companies House integration" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Failed to verify Companies House integration" }, 500);
     }
 
     if (!chIntegration?.ch_sync_opt_in) {
-      console.warn(`[CH Sync] Opt-in not enabled for org ${organizationId}`);
-      return new Response(
-        JSON.stringify({
+      return jsonResponse(
+        {
           error: "ch_sync_opt_in_required",
           message:
             "Companies House sync is disabled for this organisation. An Owner must enable it in Settings → Companies House.",
-        }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        },
+        409,
       );
     }
 
-    const result = await syncCompanyFromCH(supabase, companyId, organizationId);
-    
-    return new Response(
-      JSON.stringify(result),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-    
+    const result = await syncCompanyFromCH(supabase, companyId, organizationId, CH_PROD_API_KEY);
+
+    if ("error" in result) {
+      return jsonResponse(result, result.ch_status ? 502 : 500);
+    }
+
+    return jsonResponse(result, 200);
   } catch (error: unknown) {
-    console.error("[CH Sync] Error:", error);
+    console.error("[CH Sync] Unhandled error:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: errorMessage }, 500);
   }
 });
