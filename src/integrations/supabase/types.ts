@@ -17651,6 +17651,22 @@ export type Database = {
         Args: { p_category: string; p_email: string; p_org_id: string }
         Returns: boolean
       }
+      claim_email_queue_row: {
+        Args: { p_email_id: string; p_stale_before: string }
+        Returns: {
+          attachments: Json
+          body_html: string
+          body_text: string
+          created_by: string
+          id: string
+          mailbox_id: string
+          organization_id: string
+          provider: string
+          subject: string
+          to_email: string
+          to_name: string
+        }[]
+      }
       claim_idempotency_key: {
         Args: {
           p_chaser_policy_id?: string
