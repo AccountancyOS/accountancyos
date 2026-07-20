@@ -78,6 +78,9 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // Pending Lovable application: drops the redundant "account is now active" onboarding email
   // from notify_onboarding_approved (keeps the internal staff notification).
   "20260720150000",
+  // Pending Lovable application: add_service_to_client RPC (adds a service to an existing
+  // client/company from the Services tab, delegating to lifecycle_upsert_job_with_deadlines).
+  "20260720160000",
 ]);
 
 function versionFromFilename(name: string): string | null {

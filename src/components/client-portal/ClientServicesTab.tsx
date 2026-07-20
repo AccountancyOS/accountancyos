@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { Plus, FileText, CheckCircle, Clock, AlertCircle, PowerOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeactivateBookkeepingDialog } from "./DeactivateBookkeepingDialog";
+import { AddServiceDialog } from "./AddServiceDialog";
 
 interface ClientServicesTabProps {
   clientId: string;
@@ -89,10 +90,7 @@ export function ClientServicesTab({ clientId }: ClientServicesTabProps) {
           <CardTitle>Active Services</CardTitle>
           <CardDescription>Services and engagements for this client</CardDescription>
         </div>
-        <Button size="sm" disabled>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Service
-        </Button>
+        <AddServiceDialog clientId={clientId} />
       </CardHeader>
       <CardContent>
         {!engagements || engagements.length === 0 ? (
