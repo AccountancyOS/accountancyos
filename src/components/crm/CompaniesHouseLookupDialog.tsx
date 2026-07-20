@@ -79,8 +79,8 @@ export function CompaniesHouseLookupDialog({
     setLoadingProfile(null);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusColor = (status?: string | null) => {
+    switch ((status ?? "").toLowerCase()) {
       case "active":
         return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
       case "dissolved":
@@ -150,7 +150,7 @@ export function CompaniesHouseLookupDialog({
                       </p>
                     </div>
                     <Badge className={getStatusColor(company.company_status)}>
-                      {company.company_status}
+                      {company.company_status ?? "unknown"}
                     </Badge>
                   </div>
                 </div>
