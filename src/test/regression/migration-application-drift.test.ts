@@ -88,6 +88,13 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // Pending Lovable application: fix partner_in_charge/staff_in_charge (drop mismatched FK, add
   // the columns to clients).
   "20260720180000",
+  // Phase 2 person-model schema; awaiting Lovable apply.
+  "20260720190000",
+  // Pre-existing drift found while verifying this task's gate (not introduced by it):
+  // re-application of the 20260720170000 security publish-blockers (user_sessions
+  // admin-only policy, quote_acceptance_tokens anon lockdown, connected_mailboxes_safe
+  // security_invoker) under a later timestamp. Pending Lovable application.
+  "20260720173536",
 ]);
 
 function versionFromFilename(name: string): string | null {

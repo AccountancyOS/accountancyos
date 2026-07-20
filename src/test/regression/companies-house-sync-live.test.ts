@@ -58,7 +58,7 @@ describe("companies-house-sync live-API source structure", () => {
       /\.from\(["']company_persons["']\)[\s\S]{0,400}/,
     )?.[0] ?? "";
     expect(personsUpsertBlock).toMatch(/\.upsert\(/);
-    expect(personsUpsertBlock).toMatch(/onConflict:\s*["']ch_officer_id["']/);
+    expect(personsUpsertBlock).toMatch(/onConflict:\s*["']organization_id,ch_officer_id["']/);
     // linked_client_id must never be written by the upsert payload builder —
     // a manual person<->SA-client link must survive a resync. (Explanatory
     // comments are fine; only the payload-construction code is checked.)
@@ -72,7 +72,7 @@ describe("companies-house-sync live-API source structure", () => {
       /\.from\(["']company_officers["']\)[\s\S]{0,400}/,
     )?.[0] ?? "";
     expect(officersUpsertBlock).toMatch(/\.upsert\(/);
-    expect(officersUpsertBlock).toMatch(/onConflict:\s*["']ch_appointment_id["']/);
+    expect(officersUpsertBlock).toMatch(/onConflict:\s*["']company_id,ch_appointment_id["']/);
   });
 
   it("persists accounts.next_made_up_to / next_due to the new company columns, non-fatally", () => {

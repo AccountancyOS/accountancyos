@@ -443,7 +443,7 @@ async function promoteOfficersToPersonSpine(
 
     const { data: upsertedPersons, error: personsError } = await supabase
       .from("company_persons")
-      .upsert(personRows, { onConflict: "ch_officer_id" })
+      .upsert(personRows, { onConflict: "organization_id,ch_officer_id" })
       .select("id, ch_officer_id");
 
     if (personsError || !upsertedPersons) {
@@ -470,7 +470,7 @@ async function promoteOfficersToPersonSpine(
 
     const { error: officersError } = await supabase
       .from("company_officers")
-      .upsert(officerRows, { onConflict: "ch_appointment_id" });
+      .upsert(officerRows, { onConflict: "company_id,ch_appointment_id" });
 
     if (officersError) {
       return { promoted: 0, error: officersError.message };
