@@ -17261,6 +17261,7 @@ export type Database = {
           provider: Database["public"]["Enums"]["mailbox_provider"] | null
           status: Database["public"]["Enums"]["mailbox_status"] | null
           sync_enabled: boolean | null
+          token_expires_at: string | null
           updated_at: string | null
           user_id: string | null
         }
@@ -17275,6 +17276,7 @@ export type Database = {
           provider?: Database["public"]["Enums"]["mailbox_provider"] | null
           status?: Database["public"]["Enums"]["mailbox_status"] | null
           sync_enabled?: boolean | null
+          token_expires_at?: string | null
           updated_at?: string | null
           user_id?: string | null
         }
@@ -17289,6 +17291,7 @@ export type Database = {
           provider?: Database["public"]["Enums"]["mailbox_provider"] | null
           status?: Database["public"]["Enums"]["mailbox_status"] | null
           sync_enabled?: boolean | null
+          token_expires_at?: string | null
           updated_at?: string | null
           user_id?: string | null
         }
