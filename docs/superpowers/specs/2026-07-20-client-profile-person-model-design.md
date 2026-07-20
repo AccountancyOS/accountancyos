@@ -58,14 +58,27 @@ Replace the mock with the real **Public Data API** (`https://api.company-informa
 
 - `companies.trading_as text` — trading name when different from the legal name.
 - `companies.primary_contact_person_id uuid REFERENCES company_persons(id) ON DELETE SET NULL` — the
-  designated primary contact (UI restricts the choice to the company's directors).
+  **correspondence** primary contact. May be ANY person associated with the company (an officer OR a
+  non-officer such as a bookkeeper). This is a contact designation, **not** a signing right.
 - `companies.accounts_next_made_up_to date`, `companies.accounts_next_due date` — from CH profile.
-- `company_officers.is_signatory boolean NOT NULL DEFAULT false` — a person who may sign the
-  accounts. **≤10 per company**, enforced in UI and by a `BEFORE INSERT/UPDATE` trigger.
+- `company_officers.is_signatory boolean NOT NULL DEFAULT false` — a **document signer** for
+  statutory accounts. Lives on `company_officers` because signers are drawn **only from active
+  directors/officers** (`resigned_at IS NULL`). **≤10 per company**, enforced in UI and by a
+  `BEFORE INSERT/UPDATE` trigger that also rejects setting it on a resigned officer.
+- `contacts.person_id uuid REFERENCES company_persons(id) ON DELETE SET NULL` — lets a
+  **non-officer** correspondence contact (bookkeeper, etc.) be tied to the person spine (so it can
+  become a primary contact and/or link to an SA client / portal) without being an officer. Officers
+  need no `contacts` row; they're associated via `company_officers`.
 - `portal_access` — add the missing company-side partial unique index
   `(organization_id, company_id, user_id) WHERE company_id IS NOT NULL AND is_active`.
 - "Dormant" is surfaced from CH `company_status` (`ch_company_profile` jsonb / real after sync), not
   a new column.
+
+**Roles are three distinct things, kept separate:**
+- **Contact** — anyone associated with the company (officers ∪ non-officer `contacts`). Correspondence only.
+- **Primary contact** — one designated correspondence contact (any person). No signing right implied.
+- **Signatory** — may sign statutory accounts. Only settable on **active officers**; ≤10 per company.
+A bookkeeper can be the primary contact but is never a signatory unless they are also a current officer.
 
 ### Component 3 — Portal multi-entity linking (accountant flow)
 
@@ -85,11 +98,14 @@ UI) is surfaced here with controls to designate the primary contact and toggle s
 
 ### Component 5 — Person / contact management
 
-On a company: list the people (via `company_officers` → `company_persons`); add people promoted from
-the CH import; designate one **primary contact** (must be a director); mark up to **10 signatories**;
-and **link a person to an SA client** — either associate an existing `clients` row or spin up a new
-SA `clients` record and set `company_persons.linked_client_id`. From here, "Give portal access"
-(Component 3).
+On a company, one combined **contact list** = active officers (via `company_officers` →
+`company_persons`) ∪ non-officer contacts (`contacts` with `person_id`). From it the accountant can:
+add people promoted from the CH import; add a non-officer contact (creates a `company_persons` +
+`contacts` row); designate one **primary contact** (any person in the list — correspondence);
+toggle **signatory** (only on active officers, ≤10); and **link a person to an SA client** —
+associate an existing `clients` row or create a new SA `clients` record and set
+`company_persons.linked_client_id`. From here, "Give portal access" (Component 3). The signer
+selector and the primary-contact selector are distinct controls with distinct eligibility.
 
 ## Phasing (all in this build unless noted)
 
