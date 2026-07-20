@@ -78,6 +78,13 @@ describe("companies-house-sync live-API source structure", () => {
   it("persists accounts.next_made_up_to / next_due to the new company columns, non-fatally", () => {
     expect(SRC).toMatch(/accounts_next_made_up_to/);
     expect(SRC).toMatch(/accounts_next_due/);
+    // The persistAccountsDatesNonFatal write must be wrapped in try/catch so a
+    // schema-not-found error (pre-migration) never aborts the sync.
+    const persistFn = SRC.match(
+      /async\s+function\s+persistAccountsDatesNonFatal[\s\S]*?\n}\n/,
+    )?.[0] ?? "";
+    expect(persistFn).toMatch(/try\s*\{/);
+    expect(persistFn).toMatch(/catch/);
   });
 
   it("keeps the existing scalar-diff staging and CS01-deadline creation", () => {
@@ -91,7 +98,11 @@ describe("companies-house-sync live-API source structure", () => {
   });
 
   it("never logs, echoes, or otherwise passes the CH API key to a console call", () => {
-    const consoleCalls = SRC.match(/console\.(log|error|warn|info|debug)\([^)]*\)/g) ?? [];
+    // Capture the full console statement to its terminator (;), not just to the
+    // first ), so that a key leaked after an inner ) is still caught.
+    // E.g.: console.error(`CH failed (status ${status}): key=${chApiKey}`)
+    // Old [^)]* would stop at (status) and miss the key; [\s\S]*?); captures the whole call.
+    const consoleCalls = SRC.match(/console\.(log|error|warn|info|debug)\([\s\S]*?\);/g) ?? [];
     for (const call of consoleCalls) {
       expect(call).not.toMatch(/CH_PROD_API_KEY/);
       expect(call).not.toMatch(/chApiKey/i);
