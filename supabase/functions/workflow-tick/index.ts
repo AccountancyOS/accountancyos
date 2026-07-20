@@ -327,7 +327,7 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
       .order("step_order", { ascending: true });
 
     if (stepsErr || !steps || steps.length === 0) {
-      await supabase.from("automation_workflow_instances").update({ status: "completed", next_run_at: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
+      await supabase.from("automation_workflow_instances").update({ status: "COMPLETED", next_run_at: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
       return { advanced: true };
     }
 
@@ -354,7 +354,7 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
       // Move to next
       const nextStep = findNextEnabledStep(steps, currentIdx, stepToggles);
       if (!nextStep) {
-        await supabase.from("automation_workflow_instances").update({ status: "completed", next_run_at: null, current_step_id: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
+        await supabase.from("automation_workflow_instances").update({ status: "COMPLETED", next_run_at: null, current_step_id: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
       } else {
         await supabase.from("automation_workflow_instances").update({ current_step_id: nextStep.id, next_run_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", instance.id);
       }
@@ -398,7 +398,7 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
 
       if (nextRetries >= MAX_RETRIES) {
         await supabase.from("automation_workflow_instances").update({
-          status: "failed",
+          status: "FAILED",
           error_message: result.error,
           last_error: result.error,
           retry_count: nextRetries,
@@ -446,7 +446,7 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
       nextStep = findNextEnabledStep(steps, currentIdx, stepToggles);
     }
     if (!nextStep) {
-      await supabase.from("automation_workflow_instances").update({ status: "completed", next_run_at: null, current_step_id: null, waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
+      await supabase.from("automation_workflow_instances").update({ status: "COMPLETED", next_run_at: null, current_step_id: null, waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
       await supabase.from("automation_workflow_events").insert({ instance_id: instance.id, org_id: instance.org_id, event_type: "instance_completed", payload: {} });
     } else {
       // Reset retry counters on successful step
@@ -456,7 +456,7 @@ async function advanceInstance(supabase: any, instance: WorkflowInstance): Promi
     return { advanced: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    await supabase.from("automation_workflow_instances").update({ status: "failed", error_message: msg, updated_at: new Date().toISOString() }).eq("id", instance.id);
+    await supabase.from("automation_workflow_instances").update({ status: "FAILED", error_message: msg, updated_at: new Date().toISOString() }).eq("id", instance.id);
     return { advanced: false, error: msg };
   }
 }
@@ -564,7 +564,7 @@ Deno.serve(async (req) => {
       const { data: waitingInstances } = await supabase
         .from("automation_workflow_instances")
         .select("*")
-        .eq("status", "waiting")
+        .eq("status", "WAITING")
         .eq("waiting_for_event_key", eventKey)
         .is("paused_at", null)
         .is("cancelled_at", null)
@@ -588,9 +588,9 @@ Deno.serve(async (req) => {
         const nextStep = findNextEnabledStep(steps || [], currentIdx, stepToggles);
 
         if (!nextStep) {
-          await supabase.from("automation_workflow_instances").update({ status: "completed", next_run_at: null, current_step_id: null, waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
+          await supabase.from("automation_workflow_instances").update({ status: "COMPLETED", next_run_at: null, current_step_id: null, waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
         } else {
-          await supabase.from("automation_workflow_instances").update({ status: "running", current_step_id: nextStep.id, next_run_at: new Date().toISOString(), waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
+          await supabase.from("automation_workflow_instances").update({ status: "RUNNING", current_step_id: nextStep.id, next_run_at: new Date().toISOString(), waiting_for_event_key: null, updated_at: new Date().toISOString() }).eq("id", instance.id);
         }
 
         await supabase.from("automation_workflow_events").insert({ instance_id: instance.id, org_id: instance.org_id, event_type: "event_received", payload: { event_key: eventKey } });
@@ -612,7 +612,7 @@ Deno.serve(async (req) => {
     const { data: instances, error: fetchErr } = await supabase
       .from("automation_workflow_instances")
       .select("*")
-      .in("status", ["queued", "running"])
+      .in("status", ["QUEUED", "RUNNING"])
       .lte("next_run_at", now)
       .is("waiting_for_event_key", null)
       .is("paused_at", null)

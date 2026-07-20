@@ -70,6 +70,11 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260709170448","20260709215252","20260713085410","20260716140000",
   "20260717090000","20260717100000","20260717110000","20260720120000",
   "20260720120500","20260720130000",
+  // Pending Lovable application: corrective fix that re-standardises
+  // automation_workflow_instances.status on the UPPERCASE 7-value set (undoes the
+  // incomplete lowercase CHECK from 20260717090000). Remove from this list and refresh the
+  // baseline once applied. See docs/audits/unapplied-migrations.md.
+  "20260720140000",
 ]);
 
 function versionFromFilename(name: string): string | null {

@@ -93,8 +93,9 @@ export function workflowTickFindings(src: string) {
   const killIdx = src.indexOf("automationsDisabledForOrg(supabase, instance.org_id)");
   const claimIdx = src.indexOf('.update({ claimed_at: new Date().toISOString() })');
   return {
-    /** The router spawns 'queued'; selecting only 'running' matched nothing it ever created. */
-    selectsQueuedAndRunning: /\.in\("status",\s*\["queued",\s*"running"\]\)/.test(src),
+    /** The router spawns 'QUEUED'; selecting only 'RUNNING' matched nothing it ever created.
+        Canonical vocabulary is UPPERCASE (matches the router + pause/resume/cancel RPCs). */
+    selectsQueuedAndRunning: /\.in\("status",\s*\["QUEUED",\s*"RUNNING"\]\)/.test(src),
     staleOnlyRunningSelect: /\.eq\("status",\s*"running"\)\s*\n\s*\.lte\("next_run_at"/.test(src),
     /** Must not execute steps for an org with automations switched off. */
     checksKillSwitch: killIdx !== -1,
@@ -156,6 +157,36 @@ describe("process-automation-events hardening (AUTO-1 increment 2)", () => {
   });
 });
 
+describe("workflow instance status vocabulary is canonical UPPERCASE 7-value", () => {
+  const tickSrc = readFileSync(
+    resolve(process.cwd(), "supabase/functions/workflow-tick/index.ts"),
+    "utf8",
+  );
+  const migration = readFileSync(
+    resolve(
+      process.cwd(),
+      "supabase/migrations/20260720140000_fix_workflow_instance_status_vocabulary.sql",
+    ),
+    "utf8",
+  );
+
+  it("executor writes no lowercase instance statuses (they'd violate the CHECK)", () => {
+    // The RPCs and router write UPPERCASE; the executor was the outlier. After the fix there must be
+    // no lowercase status write on automation_workflow_instances.
+    const lower = /automation_workflow_instances[\s\S]{0,120}?status: "(queued|running|waiting|completed|failed|paused|cancelled)"/;
+    expect(lower.test(tickSrc)).toBe(false);
+    expect(tickSrc.includes('.in("status", ["QUEUED", "RUNNING"])')).toBe(true);
+  });
+
+  it("the CHECK includes all 7 values — critically PAUSED and CANCELLED", () => {
+    // The bug in 20260717090000 was omitting PAUSED/CANCELLED, which the pause/cancel RPCs write.
+    for (const v of ["QUEUED", "RUNNING", "WAITING", "PAUSED", "CANCELLED", "COMPLETED", "FAILED"]) {
+      expect(migration.includes(`'${v}'`)).toBe(true);
+    }
+    expect(/DROP CONSTRAINT IF EXISTS automation_workflow_instances_status_check/.test(migration)).toBe(true);
+  });
+});
+
 describe("per-engine kill-switch wiring (AUTO-1 increment 3)", () => {
   const routerSrc = readFileSync(
     resolve(process.cwd(), "supabase/functions/process-automation-events/index.ts"),
@@ -183,7 +214,7 @@ describe("per-engine kill-switch wiring (AUTO-1 increment 3)", () => {
 
   it("executor checks its engine switch and returns before selecting instances", () => {
     const gateIdx = tickSrc.indexOf('_engine: "executor"');
-    const selectIdx = tickSrc.indexOf('.in("status", ["queued", "running"])');
+    const selectIdx = tickSrc.indexOf('.in("status", ["QUEUED", "RUNNING"])');
     expect(gateIdx).toBeGreaterThan(-1);
     expect(gateIdx).toBeLessThan(selectIdx);
     expect(/engineDisabled\(executorEnabled\)/.test(tickSrc)).toBe(true);
