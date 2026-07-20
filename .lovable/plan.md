@@ -1,11 +1,14 @@
-## Goal
-Redeploy the `companies-house-sync` edge function from the git source to clear the current 400 error and restore live Companies House search.
+## Pre-checks (done)
+
+- Neither `20260720190000` nor `20260720191000` is in `schema_migrations`.
+- Zero duplicate `(organization_id, ch_officer_id)` rows in `company_persons` — the new unique index will build cleanly.
 
 ## Steps
-1. Call `supabase--deploy_edge_functions` with `["companies-house-sync"]` to push the current `supabase/functions/companies-house-sync/index.ts` (live Basic-auth Public Data API, no mocks).
-2. Smoke test with `supabase--curl_edge_functions` — POST a small `search` action (e.g. `{ "action": "search", "query": "blue tick" }`) and confirm a 200 with real CH results, not `Companies House search failed (400)`.
-3. If it still 400s, pull `supabase--edge_function_logs` for `companies-house-sync`, inspect the CH response body the function relays, and report the exact upstream reason (most likely `CH_PROD_API_KEY` missing/wrong scope) — no code changes without your say-so.
 
-## Notes
-- Backend-only change, deploys immediately, no frontend publish required.
-- No migrations, no secret changes in this step.
+1. **Apply `20260720190000_company_profile_person_fields.sql`** — adds `companies.trading_as / primary_contact_person_id / accounts_next_made_up_to / accounts_next_due`, `company_officers.is_signatory`, `contacts.person_id`, `portal_access_unique_company_user`, `trg_enforce_signatory_rules`, and the org-scoped unique indexes on `company_persons` and `company_officers`. Verify by re-querying `schema_migrations` and confirming the two unique indexes exist.
+
+2. **Apply `20260720191000_add_service_person_rpcs.sql`** — the four RPCs (`set_primary_contact`, `set_signatory`, `link_person_to_sa_client`, `grant_person_portal_access`). Verify in `pg_proc`.
+
+3. **Security scan check** — call `security--get_scan_results` to confirm no critical findings block publish.
+
+4. **Publish frontend** — ships the CRM `getStatusColor` null-guard fix (243c69b) plus the person-model panels on the company overview page, which will now have their backing columns and RPCs available.
