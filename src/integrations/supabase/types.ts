@@ -4619,6 +4619,8 @@ export type Database = {
       }
       companies: {
         Row: {
+          accounts_next_due: string | null
+          accounts_next_made_up_to: string | null
           activated_at: string | null
           address_line_1: string | null
           address_line_2: string | null
@@ -4650,12 +4652,14 @@ export type Database = {
           partner_in_charge: string | null
           phone: string | null
           postcode: string | null
+          primary_contact_person_id: string | null
           registered_office_address: Json | null
           sic_codes: Json | null
           staff_in_charge: string | null
           status: string
           tags: Json | null
           trading_address: Json | null
+          trading_as: string | null
           trading_status: string | null
           updated_at: string
           utr: string | null
@@ -4667,6 +4671,8 @@ export type Database = {
           year_end_month: number | null
         }
         Insert: {
+          accounts_next_due?: string | null
+          accounts_next_made_up_to?: string | null
           activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
@@ -4698,12 +4704,14 @@ export type Database = {
           partner_in_charge?: string | null
           phone?: string | null
           postcode?: string | null
+          primary_contact_person_id?: string | null
           registered_office_address?: Json | null
           sic_codes?: Json | null
           staff_in_charge?: string | null
           status?: string
           tags?: Json | null
           trading_address?: Json | null
+          trading_as?: string | null
           trading_status?: string | null
           updated_at?: string
           utr?: string | null
@@ -4715,6 +4723,8 @@ export type Database = {
           year_end_month?: number | null
         }
         Update: {
+          accounts_next_due?: string | null
+          accounts_next_made_up_to?: string | null
           activated_at?: string | null
           address_line_1?: string | null
           address_line_2?: string | null
@@ -4746,12 +4756,14 @@ export type Database = {
           partner_in_charge?: string | null
           phone?: string | null
           postcode?: string | null
+          primary_contact_person_id?: string | null
           registered_office_address?: Json | null
           sic_codes?: Json | null
           staff_in_charge?: string | null
           status?: string
           tags?: Json | null
           trading_address?: Json | null
+          trading_as?: string | null
           trading_status?: string | null
           updated_at?: string
           utr?: string | null
@@ -4775,6 +4787,13 @@ export type Database = {
             columns: ["partner_in_charge"]
             isOneToOne: false
             referencedRelation: "organization_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_primary_contact_person_id_fkey"
+            columns: ["primary_contact_person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
             referencedColumns: ["id"]
           },
           {
@@ -4862,6 +4881,7 @@ export type Database = {
           company_id: string
           created_at: string
           id: string
+          is_signatory: boolean
           person_id: string
           resigned_at: string | null
           role: string
@@ -4874,6 +4894,7 @@ export type Database = {
           company_id: string
           created_at?: string
           id?: string
+          is_signatory?: boolean
           person_id: string
           resigned_at?: string | null
           role: string
@@ -4886,6 +4907,7 @@ export type Database = {
           company_id?: string
           created_at?: string
           id?: string
+          is_signatory?: boolean
           person_id?: string
           resigned_at?: string | null
           role?: string
@@ -5550,6 +5572,7 @@ export type Database = {
           name: string
           nino: string | null
           organization_id: string
+          person_id: string | null
           phone: string | null
           role: string | null
           updated_at: string | null
@@ -5568,6 +5591,7 @@ export type Database = {
           name: string
           nino?: string | null
           organization_id: string
+          person_id?: string | null
           phone?: string | null
           role?: string | null
           updated_at?: string | null
@@ -5586,6 +5610,7 @@ export type Database = {
           name?: string
           nino?: string | null
           organization_id?: string
+          person_id?: string | null
           phone?: string | null
           role?: string | null
           updated_at?: string | null
@@ -5611,6 +5636,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "company_persons"
             referencedColumns: ["id"]
           },
         ]
