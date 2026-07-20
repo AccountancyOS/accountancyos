@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import { MessageSquare, Send } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -27,6 +36,26 @@ export default function PortalMessages() {
   const messages = usePortalMessages(activeId);
   const send = useSendPortalMessage();
   const qc = useQueryClient();
+  const { currentEntity } = usePortalEntity();
+
+  // Open jobs for the current entity — a new conversation must be tied to one so every message is
+  // ringfenced to a job both the client and accountant can identify. "Open" = anything not completed.
+  const openJobs = useQuery({
+    queryKey: ["portal", "open-jobs", currentEntity?.type, currentEntity?.id],
+    queryFn: async () => {
+      if (!currentEntity) return [] as { id: string; job_name: string }[];
+      const col = currentEntity.type === "company" ? "company_id" : "client_id";
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("id, job_name")
+        .eq(col, currentEntity.id)
+        .neq("status", "completed")
+        .order("filing_deadline", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as { id: string; job_name: string }[];
+    },
+    enabled: !!currentEntity,
+  });
 
   useEffect(() => {
     if (activeId && messages.data && messages.data.length > 0) {
@@ -40,11 +69,11 @@ export default function PortalMessages() {
   const composing = activeId === null;
 
   const handleStartNew = async () => {
-    if (!composeBody.trim()) return;
+    if (!composeBody.trim() || !composeSubject) return;
     try {
       const newId = await send.mutateAsync({
         body: composeBody.trim(),
-        subject: composeSubject.trim() || null,
+        subject: composeSubject || null,
         parentMessageId: null,
       });
       setComposeSubject("");
@@ -127,11 +156,29 @@ export default function PortalMessages() {
             {composing ? (
               <>
                 <h2 className="text-base font-medium">New Message</h2>
-                <Input
-                  placeholder="Subject (optional)"
-                  value={composeSubject}
-                  onChange={(e) => setComposeSubject(e.target.value)}
-                />
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Which job is this about?</label>
+                  <Select value={composeSubject} onValueChange={setComposeSubject}>
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          openJobs.isLoading
+                            ? "Loading your jobs…"
+                            : (openJobs.data?.length ?? 0) === 0
+                              ? "No open jobs"
+                              : "Select a job…"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(openJobs.data ?? []).map((j) => (
+                        <SelectItem key={j.id} value={j.job_name}>
+                          {j.job_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Textarea
                   placeholder="Write your message…"
                   value={composeBody}
@@ -141,7 +188,7 @@ export default function PortalMessages() {
                 <div className="flex justify-end">
                   <Button
                     onClick={handleStartNew}
-                    disabled={!composeBody.trim() || send.isPending}
+                    disabled={!composeBody.trim() || !composeSubject || send.isPending}
                   >
                     <Send className="h-4 w-4 mr-2" />
                     Send
