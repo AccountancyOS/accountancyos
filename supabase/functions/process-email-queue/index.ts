@@ -431,11 +431,12 @@ Deno.serve(async (req) => {
     // that crashed mid-send). This lets a second worker recover an orphaned row without
     // double-sending a live one.
     const staleClaimBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString() // 10 minutes
+    const dueBefore = new Date().toISOString()
     const { data: rows, error: rowsError } = await supabase
       .from('email_queue')
       .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by, attachments')
       .eq('status', 'pending')
-      .lte('scheduled_at', new Date().toISOString())
+      .lte('scheduled_at', dueBefore)
       .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
       .order('created_at', { ascending: true })
       .limit(batchSize)
@@ -443,7 +444,23 @@ Deno.serve(async (req) => {
     if (rowsError) {
       console.error('Failed to read email_queue', { error: rowsError })
     } else {
+      console.log('email_queue due rows selected', {
+        count: rows?.length ?? 0,
+        batchSize,
+        dueBefore,
+        staleClaimBefore,
+        ids: (rows ?? []).map((row) => ({
+          id: row.id,
+          provider: row.provider ?? null,
+          hasMailbox: Boolean(row.mailbox_id),
+        })),
+      })
+
+      let selectedRows = 0
+      let claimedRows = 0
+
       for (const row of rows ?? []) {
+        selectedRows++
         if (!row.to_email || !row.subject || !row.body_html) {
           await supabase
             .from('email_queue')
@@ -462,30 +479,36 @@ Deno.serve(async (req) => {
         // FUN-4/Fix 10: atomically claim the row before sending. The UPDATE takes a row lock, so
         // if two worker runs race, only one sees status='pending' + a free claim and gets the
         // row back; the other gets no row and skips — preventing a duplicate send.
-        const { data: claimed } = await supabase
-          .from('email_queue')
-          .update({ claimed_at: new Date().toISOString() })
-          .eq('id', row.id)
-          .eq('status', 'pending')
-          .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
-          .select('id')
+        const { data: claimed, error: claimError } = await supabase
+          .rpc('claim_email_queue_row', {
+            p_email_id: row.id,
+            p_stale_before: staleClaimBefore,
+          })
           .maybeSingle()
+        if (claimError) {
+          console.error('email_queue claim failed', { id: row.id, error: claimError.message })
+          continue
+        }
         if (!claimed) {
+          console.log('email_queue claim skipped', { id: row.id })
           continue // another worker already claimed or sent this row
         }
+        claimedRows++
+
+        const queueRow = claimed as typeof row
 
         const messageId = crypto.randomUUID()
 
         // Mint a one-click unsubscribe token. The Lovable Email API rejects
         // transactional sends without one (`missing_unsubscribe`).
         let unsubscribeToken: string | null = null
-        if (row.organization_id) {
+        if (queueRow.organization_id) {
           const { data: tokenData, error: tokenErr } = await supabase.rpc(
             'enqueue_unsubscribe_token',
-            { p_org_id: row.organization_id, p_email: row.to_email, p_category: 'transactional' }
+            { p_org_id: queueRow.organization_id, p_email: queueRow.to_email, p_category: 'transactional' }
           )
           if (tokenErr) {
-            console.error('Failed to mint unsubscribe token', { id: row.id, error: tokenErr.message })
+            console.error('Failed to mint unsubscribe token', { id: queueRow.id, error: tokenErr.message })
           } else if (typeof tokenData === 'string') {
             unsubscribeToken = tokenData
           }
@@ -494,7 +517,7 @@ Deno.serve(async (req) => {
         await supabase.from('email_send_log').insert({
           message_id: messageId,
           template_name: 'email_queue',
-          recipient_email: row.to_email,
+          recipient_email: queueRow.to_email,
           status: 'pending',
         })
 
@@ -502,17 +525,23 @@ Deno.serve(async (req) => {
           let providerResponse: unknown
           let providerLabel: 'gmail' | 'outlook' | 'lovable' = 'lovable'
 
-          if (row.mailbox_id && row.provider) {
+          console.log('email_queue sending claimed row', {
+            id: queueRow.id,
+            provider: queueRow.provider ?? null,
+            hasMailbox: Boolean(queueRow.mailbox_id),
+          })
+
+          if (queueRow.mailbox_id && queueRow.provider) {
             // Send from the accountant's connected mailbox
-            const fnName = row.provider === 'outlook' ? 'outlook-send' : 'gmail-send'
-            providerLabel = row.provider === 'outlook' ? 'outlook' : 'gmail'
+            const fnName = queueRow.provider === 'outlook' ? 'outlook-send' : 'gmail-send'
+            providerLabel = queueRow.provider === 'outlook' ? 'outlook' : 'gmail'
             const { data: fnData, error: fnErr } = await supabase.functions.invoke(fnName, {
               body: {
-                mailbox_id: row.mailbox_id,
-                to: row.to_email,
-                subject: row.subject,
-                body_html: row.body_html,
-                body_text: row.body_text ?? htmlToText(row.body_html),
+                mailbox_id: queueRow.mailbox_id,
+                to: queueRow.to_email,
+                subject: queueRow.subject,
+                body_html: queueRow.body_html,
+                body_text: queueRow.body_text ?? htmlToText(queueRow.body_html),
               },
             })
             if (fnErr) throw new Error(`${fnName} invoke failed: ${fnErr.message ?? String(fnErr)}`)
@@ -527,20 +556,20 @@ Deno.serve(async (req) => {
           } else {
             providerResponse = await sendLovableEmail(
               {
-                to: row.to_email,
+                to: queueRow.to_email,
                 from: FROM_ADDRESS,
                 sender_domain: SENDER_DOMAIN,
-                subject: row.subject,
-                html: row.body_html,
-                text: row.body_text ?? htmlToText(row.body_html),
+                subject: queueRow.subject,
+                html: queueRow.body_html,
+                text: queueRow.body_text ?? htmlToText(queueRow.body_html),
                 purpose: 'transactional',
                 label: 'email_queue',
-                idempotency_key: row.id,
+                idempotency_key: queueRow.id,
                 message_id: messageId,
                 unsubscribe_token: unsubscribeToken ?? undefined,
                 // Best-effort attachments (e.g. invoice PDF). Ignored by the SDK if unsupported.
-                ...(Array.isArray((row as any).attachments) && (row as any).attachments.length
-                  ? { attachments: (row as any).attachments }
+                ...(Array.isArray((queueRow as any).attachments) && (queueRow as any).attachments.length
+                  ? { attachments: (queueRow as any).attachments }
                   : {}),
               } as any,
               { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
@@ -561,10 +590,10 @@ Deno.serve(async (req) => {
             await supabase.from('email_send_log').insert({
               message_id: messageId,
               template_name: 'email_queue',
-              recipient_email: row.to_email,
+              recipient_email: queueRow.to_email,
               status: 'failed',
               error_message: 'provider_no_ack: SDK resolved without provider message id',
-              metadata: { provider_response: providerResponse ?? null, email_queue_id: row.id },
+              metadata: { provider_response: providerResponse ?? null, email_queue_id: queueRow.id },
             })
             await supabase
               .from('email_queue')
@@ -575,7 +604,7 @@ Deno.serve(async (req) => {
                 last_error_message: 'Provider did not acknowledge send (no message id)',
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', row.id)
+              .eq('id', queueRow.id)
             emailQueueFailed++
             continue
           }
@@ -583,12 +612,12 @@ Deno.serve(async (req) => {
           await supabase.from('email_send_log').insert({
             message_id: messageId,
             template_name: 'email_queue',
-            recipient_email: row.to_email,
+            recipient_email: queueRow.to_email,
             status: 'sent',
             metadata: {
               provider_message_id: String(providerId),
               provider_response: providerResponse,
-              email_queue_id: row.id,
+              email_queue_id: queueRow.id,
               provider: providerLabel,
             },
           })
@@ -603,20 +632,20 @@ Deno.serve(async (req) => {
               last_error_message: null,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', row.id)
+            .eq('id', queueRow.id)
 
           emailQueueProcessed++
           await new Promise((r) => setTimeout(r, sendDelayMs))
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
-          console.error('email_queue send failed', { id: row.id, error: errorMsg })
+          console.error('email_queue send failed', { id: queueRow.id, error: errorMsg })
           await supabase.from('email_send_log').insert({
             message_id: messageId,
             template_name: 'email_queue',
-            recipient_email: row.to_email,
+            recipient_email: queueRow.to_email,
             status: 'failed',
             error_message: errorMsg.slice(0, 1000),
-            metadata: { email_queue_id: row.id },
+            metadata: { email_queue_id: queueRow.id },
           })
           await supabase
             .from('email_queue')
@@ -627,7 +656,7 @@ Deno.serve(async (req) => {
               last_error_message: errorMsg.slice(0, 1000),
               updated_at: new Date().toISOString(),
             })
-            .eq('id', row.id)
+            .eq('id', queueRow.id)
           emailQueueFailed++
 
           if (isRateLimited(error)) {
@@ -642,6 +671,10 @@ Deno.serve(async (req) => {
             break
           }
         }
+      }
+
+      if (selectedRows > 0 && claimedRows === 0) {
+        console.warn('email_queue rows selected but none claimed', { selectedRows })
       }
     }
   } catch (e) {
