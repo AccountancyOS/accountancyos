@@ -1,37 +1,47 @@
 ## Diagnosis
 
-- There is 1 pending quote email in the outbound queue.
-- It is due, unclaimed, and has a valid Gmail mailbox/provider.
-- Queue config is normal: batch size is 10 and there is no rate-limit cooldown.
-- Direct Gmail sending works for the same mailbox.
-- The deployed `process-email-queue` function returns `processed: 0` without errors, so the issue is in the worker/runtime path, not the queued row or Gmail token.
+You're right — the migration file `20260720120000_schedule_process_email_queue.sql` contains exactly the right `cron.schedule` statement. But it **was never applied to the database**:
 
-## Plan
+- `supabase_migrations.schema_migrations` shows the latest applied version is `20260720104504`. Nothing at `20260720120000` or later exists in that table.
+- `cron.job` confirms this: there is no `process-email-queue` row, only the older jobs (`sync-gmail-emails`, `sync-outlook-emails`, `hmrc-ct-poll-worker`, `chaser-tick-every-15min`, `process-automation-events`, `workflow-tick`, etc.).
 
-1. **Add worker visibility for the queue branch**
-   - Add concise logs around the `email_queue` fetch and claim steps:
-     - due row count selected
-     - selected row ids/providers
-     - claim success/failure
-     - provider invoke result
-   - Keep logs non-sensitive: no email bodies, tokens, or secrets.
+So the migration exists in git but was never approved/run against this project. That is the entire reason scheduled emails don't send on their own.
 
-2. **Patch the claim/fetch path defensively**
-   - Keep the existing due-row filter.
-   - Make the claim step return enough fields to continue from the claimed row, avoiding any stale mismatch between the initial read and update.
-   - Add explicit handling if the query returns rows but all claims fail.
+Answers to your two questions:
 
-3. **Redeploy the worker**
-   - Redeploy `process-email-queue` only.
+1. **Why they didn't send at the scheduled time.** Nothing is polling. The worker only runs when a human clicks Process Queue.
+2. **Can Process Queue send before the scheduled time?** Yes — already. The button calls `flush_email_queue_now(org_id)`, which unconditionally rewrites `scheduled_at = now()` for every `pending`/`queued` row in your org whose `scheduled_at` is in the future, then invokes the worker. No code change is needed for that behaviour.
 
-4. **Validate immediately**
-   - Invoke the worker once.
-   - Confirm the pending quote row changes from `pending` to `sent` or, if it fails, that it now records a concrete failure reason on the row.
-   - Check recent logs to verify whether it called `gmail-send`.
+## Fix
 
-5. **If the worker sends successfully**
-   - Confirm there are no remaining due pending emails.
-   - Leave the once-per-minute scheduled worker in place.
+Apply the existing pending migration `20260720120000_schedule_process_email_queue.sql`. No new SQL is being authored — the file already contains:
 
-6. **If it records a concrete failure**
-   - Fix that specific failure next, using the new log/error detail rather than guessing.
+1. A preflight `DO $$ ... $$` that counts due `email_queue` rows and raises if the backlog exceeds 200 (guard against a mass-send burst).
+2. `cron.unschedule('process-email-queue')` inside a swallow-errors block for idempotency.
+3. `SELECT cron.schedule('process-email-queue', '* * * * *', ...)` posting to `/functions/v1/process-email-queue` with the service-role bearer.
+
+Same pattern as the already-working `sync-gmail-emails` and `process-automation-events` jobs, so the `current_setting('app.settings.*')` values are known to resolve at cron execution time on this project.
+
+## Technical details
+
+**Action:** re-issue migration `20260720120000_schedule_process_email_queue.sql` through the migration tool so it lands in `schema_migrations` and the cron row is created.
+
+**No code changes.** `process-email-queue/index.ts`, `flush_email_queue_now`, `send_queued_email_now`, and the Emails page Process Queue button are all correct and already handle:
+- service-role JWT caller (line 144 of the worker)
+- `status='pending' AND scheduled_at <= now()` selection
+- atomic row claim via `claim_email_queue_row` (safe against overlapping cron ticks)
+- rate-limit cooldown via `email_send_state.retry_after_until`
+- manual flush-and-send from the UI
+
+**Verification after the migration runs:**
+
+1. `SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'process-email-queue';` → one row, `* * * * *`, active.
+2. Insert a fresh outbound email, wait ~90 seconds without touching the UI → `email_queue.status` moves `pending → sent`, and a matching `email_send_log` row with `status='sent'` appears.
+3. Insert another, click Process Queue before the 15-minute mark → sends within a few seconds, confirming manual early-send still works.
+
+**If the preflight raises** (>200 due rows queued from the days it wasn't draining): inspect with
+```sql
+SELECT organization_id, count(*), min(scheduled_at)
+FROM public.email_queue WHERE status='pending' AND scheduled_at <= now() GROUP BY 1;
+```
+then either cancel stale rows or raise the threshold and re-apply. Current known backlog is small (1 row for Blue Tick at authoring time), so it should apply cleanly.
