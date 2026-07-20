@@ -97,6 +97,11 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // admin-only policy, quote_acceptance_tokens anon lockdown, connected_mailboxes_safe
   // security_invoker) under a later timestamp. Pending Lovable application.
   "20260720173536",
+  // Lovable-pushed 2026-07-20 ~22:2x ("Verified migrations and sync") without an allow-list or
+  // baseline entry — arrived via rebase. Apply status not verifiable from here; if Lovable applied
+  // them, refresh docs/audits/unapplied-migrations-baseline.json and remove these; otherwise investigate.
+  "20260720222022",
+  "20260720222127",
 ]);
 
 function versionFromFilename(name: string): string | null {
