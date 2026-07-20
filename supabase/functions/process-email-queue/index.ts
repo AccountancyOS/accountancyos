@@ -479,21 +479,23 @@ Deno.serve(async (req) => {
         // FUN-4/Fix 10: atomically claim the row before sending. The UPDATE takes a row lock, so
         // if two worker runs race, only one sees status='pending' + a free claim and gets the
         // row back; the other gets no row and skips — preventing a duplicate send.
-        const { data: claimed } = await supabase
-          .from('email_queue')
-          .update({ claimed_at: new Date().toISOString() })
-          .eq('id', row.id)
-          .eq('status', 'pending')
-          .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
-          .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by, attachments')
+        const { data: claimed, error: claimError } = await supabase
+          .rpc('claim_email_queue_row', {
+            p_email_id: row.id,
+            p_stale_before: staleClaimBefore,
+          })
           .maybeSingle()
+        if (claimError) {
+          console.error('email_queue claim failed', { id: row.id, error: claimError.message })
+          continue
+        }
         if (!claimed) {
           console.log('email_queue claim skipped', { id: row.id })
           continue // another worker already claimed or sent this row
         }
         claimedRows++
 
-        const queueRow = claimed
+        const queueRow = claimed as typeof row
 
         const messageId = crypto.randomUUID()
 
