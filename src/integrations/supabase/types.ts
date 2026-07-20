@@ -18357,7 +18357,7 @@ export type Database = {
       }
       grant_person_portal_access: {
         Args: { p_person_id: string; p_user_email: string }
-        Returns: number
+        Returns: Json
       }
       has_any_role: {
         Args: { _org_id: string; _roles: string[]; _user_id: string }
@@ -18499,7 +18499,7 @@ export type Database = {
       }
       link_person_to_sa_client: {
         Args: { p_client_id: string; p_person_id: string }
-        Returns: undefined
+        Returns: Json
       }
       lock_period: {
         Args: {
@@ -19092,11 +19092,11 @@ export type Database = {
       send_queued_email_now: { Args: { p_email_id: string }; Returns: Json }
       set_primary_contact: {
         Args: { p_company_id: string; p_person_id: string }
-        Returns: undefined
+        Returns: Json
       }
       set_signatory: {
         Args: { p_officer_id: string; p_on: boolean }
-        Returns: undefined
+        Returns: Json
       }
       split_bank_transaction: {
         Args: { p_bank_transaction_id: string; p_splits: Json }
