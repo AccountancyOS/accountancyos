@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { usePortalEntity } from "../contexts/PortalEntityContext";
 import { usePortalConversations } from "../hooks/usePortalData";
+import { usePortalBookkeepingAccess } from "../hooks/usePortalBookkeepingAccess";
 import { Badge } from "@/components/ui/badge";
 import { portalPath } from "../utils/portalPaths";
 import {
@@ -32,6 +33,12 @@ export function PortalLayout() {
   const { entities, currentEntity, setCurrentEntity } = usePortalEntity();
   const conversations = usePortalConversations();
   const unreadConversations = (conversations.data ?? []).filter((c) => c.unreadCount > 0).length;
+  // Only surface Bookkeeping (and therefore the Banking / financial-snapshot tabs it contains) when
+  // the current entity actually has the bookkeeping service active. Otherwise it's inaccessible
+  // (server-side RLS blocks the data) and irrelevant, so it shouldn't appear in the nav at all.
+  // Gate on an explicit `=== true` so the item doesn't flash in while access is still loading.
+  const bookkeepingAccess = usePortalBookkeepingAccess();
+  const showBookkeeping = bookkeepingAccess.data === true;
   const navItems = [
     { to: portalPath("dashboard"), icon: LayoutDashboard, label: "Dashboard" },
     { to: portalPath("tasks"), icon: CheckSquare, label: "Tasks" },
@@ -39,7 +46,9 @@ export function PortalLayout() {
     { to: portalPath("questionnaires"), icon: ClipboardList, label: "Questionnaires" },
     { to: portalPath("messages"), icon: MessageSquare, label: "Messages" },
     { to: portalPath("payments"), icon: CreditCard, label: "Payments" },
-    { to: portalPath("bookkeeping"), icon: BarChart3, label: "Bookkeeping" },
+    ...(showBookkeeping
+      ? [{ to: portalPath("bookkeeping"), icon: BarChart3, label: "Bookkeeping" }]
+      : []),
   ];
 
   const handleSignOut = async () => {
