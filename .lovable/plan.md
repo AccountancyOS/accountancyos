@@ -1,37 +1,37 @@
-# No changes required
+## Diagnosis
 
-Claude's suggestion to pass `--header "Authorization: Bearer <TOKEN>"` does not apply to this MCP server. Here is why, and what to run instead.
+- There is 1 pending quote email in the outbound queue.
+- It is due, unclaimed, and has a valid Gmail mailbox/provider.
+- Queue config is normal: batch size is 10 and there is no rate-limit cooldown.
+- Direct Gmail sending works for the same mailbox.
+- The deployed `process-email-queue` function returns `processed: 0` without errors, so the issue is in the worker/runtime path, not the queued row or Gmail token.
 
-## How the MCP endpoint is protected
+## Plan
 
-- The Supabase Edge Function `mcp` is deployed with the Lovable Cloud default `verify_jwt = false` (no `[functions.mcp]` override exists in `supabase/config.toml`). The transport layer does not require a Supabase key.
-- Auth is enforced **inside** the function by `@lovable.dev/mcp-js`. It validates an **OAuth 2.1 access token** issued by Supabase Auth (`https://moxpdejnucjjcplleefn.supabase.co/auth/v1`) for this project, with `audience = authenticated` and a `client_id` claim.
-- The server publishes `/.well-known/oauth-protected-resource`, and Supabase Auth publishes `/.well-known/oauth-authorization-server` with dynamic client registration enabled. Any spec-compliant MCP client (Claude, Cursor, Codex, ChatGPT connectors) discovers these automatically and walks the OAuth flow.
+1. **Add worker visibility for the queue branch**
+   - Add concise logs around the `email_queue` fetch and claim steps:
+     - due row count selected
+     - selected row ids/providers
+     - claim success/failure
+     - provider invoke result
+   - Keep logs non-sensitive: no email bodies, tokens, or secrets.
 
-## What Claude Code should run
+2. **Patch the claim/fetch path defensively**
+   - Keep the existing due-row filter.
+   - Make the claim step return enough fields to continue from the claimed row, avoiding any stale mismatch between the initial read and update.
+   - Add explicit handling if the query returns rows but all claims fail.
 
-```text
-claude mcp add lovable-accountancyos --transport http \
-  https://moxpdejnucjjcplleefn.supabase.co/functions/v1/mcp
-```
+3. **Redeploy the worker**
+   - Redeploy `process-email-queue` only.
 
-On first tool use Claude will:
-1. Register itself dynamically with Supabase Auth.
-2. Open the browser at `https://app.accountancyos.com/.lovable/oauth/consent?authorization_id=...` (the app's consent route).
-3. Prompt sign-in if needed (`/auth?next=...` returns the user to the consent page).
-4. Exchange the authorization code for a user-scoped access token and store it itself.
-5. Send that token on every MCP request; each tool call then runs as that user, with RLS applied inside the tool handlers.
+4. **Validate immediately**
+   - Invoke the worker once.
+   - Confirm the pending quote row changes from `pending` to `sent` or, if it fails, that it now records a concrete failure reason on the row.
+   - Check recent logs to verify whether it called `gmail-send`.
 
-## Why NOT to pass a bearer header
+5. **If the worker sends successfully**
+   - Confirm there are no remaining due pending emails.
+   - Leave the once-per-minute scheduled worker in place.
 
-- The Supabase **publishable/anon key** is not an OAuth access token, has no `client_id` claim, and mcp-js will reject it with 401.
-- A copied **app-session JWT** (e.g. `access_token` from the browser localStorage) also lacks the OAuth `client_id` claim and is not the integration mechanism — mcp-js rejects it by design.
-- Passing any static bearer token bypasses the per-user OAuth flow, which defeats the whole point of the setup you just approved.
-
-## Only case where a manual token would apply
-
-If — and only if — the user later chooses to disable OAuth and expose the MCP server publicly (rejected earlier in this thread), a static bearer would still not be needed: it would simply be unauthenticated. Skip.
-
-## Action
-
-None. Reply to Claude that the endpoint is OAuth-protected via the MCP spec's built-in discovery flow, and connect with the plain `claude mcp add ... --transport http <URL>` command above.
+6. **If it records a concrete failure**
+   - Fix that specific failure next, using the new log/error detail rather than guessing.
