@@ -534,8 +534,16 @@ serve(async (req: Request) => {
     const payload = await req.json();
     const action: string = payload.action || "sync";
 
-    // Public lookup actions (sandbox mock data). These must work before any
-    // ch_sync_opt_in is recorded so leads/companies can be enriched at entry.
+    // Public lookup actions. Uses the live Companies House Public Data API
+    // when CH_PROD_API_KEY (or CH_TEST_API_KEY) is configured, otherwise
+    // falls back to sandbox mock data so local/dev flows keep working.
+    const CH_PROD_API_KEY = Deno.env.get("CH_PROD_API_KEY");
+    const CH_TEST_API_KEY = Deno.env.get("CH_TEST_API_KEY");
+    const chApiKey = CH_PROD_API_KEY || CH_TEST_API_KEY;
+    const chAuthHeader = chApiKey
+      ? `Basic ${btoa(`${chApiKey}:`)}`
+      : null;
+
     if (action === "search") {
       const query: string = (payload.query || "").trim();
       if (!query) {
@@ -543,6 +551,35 @@ serve(async (req: Request) => {
           JSON.stringify({ items: [], total_results: 0 }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      if (chAuthHeader) {
+        try {
+          const url = new URL("https://api.company-information.service.gov.uk/search/companies");
+          url.searchParams.set("q", query);
+          url.searchParams.set("items_per_page", "20");
+          const resp = await fetch(url.toString(), {
+            headers: { Authorization: chAuthHeader },
+          });
+          if (!resp.ok) {
+            const detail = await resp.text();
+            console.error(`[CH Search] ${resp.status}: ${detail}`);
+            return new Response(
+              JSON.stringify({ error: `Companies House search failed (${resp.status})` }),
+              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const json = await resp.json();
+          return new Response(
+            JSON.stringify(json),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (err) {
+          console.error("[CH Search] Exception:", err);
+          return new Response(
+            JSON.stringify({ error: "Companies House search error" }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
       const base = query.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6) || "SANDBX";
       const items = Array.from({ length: 4 }).map((_, i) => {
@@ -569,6 +606,33 @@ serve(async (req: Request) => {
           JSON.stringify({ error: "company_number is required" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      if (chAuthHeader) {
+        try {
+          const resp = await fetch(
+            `https://api.company-information.service.gov.uk/company/${encodeURIComponent(companyNumber)}`,
+            { headers: { Authorization: chAuthHeader } }
+          );
+          if (!resp.ok) {
+            const detail = await resp.text();
+            console.error(`[CH Profile] ${resp.status}: ${detail}`);
+            return new Response(
+              JSON.stringify({ error: `Companies House profile failed (${resp.status})` }),
+              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const json = await resp.json();
+          return new Response(
+            JSON.stringify(json),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (err) {
+          console.error("[CH Profile] Exception:", err);
+          return new Response(
+            JSON.stringify({ error: "Companies House profile error" }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
       const profile = generateMockCompanyProfile(companyNumber);
       const today = new Date();
