@@ -75,6 +75,9 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // incomplete lowercase CHECK from 20260717090000). Remove from this list and refresh the
   // baseline once applied. See docs/audits/unapplied-migrations.md.
   "20260720140000",
+  // Pending Lovable application: drops the redundant "account is now active" onboarding email
+  // from notify_onboarding_approved (keeps the internal staff notification).
+  "20260720150000",
 ]);
 
 function versionFromFilename(name: string): string | null {
