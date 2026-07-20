@@ -33,6 +33,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { EditQueuedEmailDialog } from "@/components/email/EditQueuedEmailDialog";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
+import { deriveEmailCounts } from "@/lib/email-counts-model";
 import {
   Search,
   Filter,
@@ -151,9 +152,28 @@ export default function Emails() {
       }
 
       const { data, error } = await query.limit(100);
-      
+
       if (error) throw error;
       return data as QueuedEmail[];
+    },
+    enabled: !!organization?.id,
+  });
+
+  // Tab-badge counts, independent of the active tab. Deliberately NOT keyed on statusFilter/
+  // contextFilter/searchQuery so the badges reflect the whole non-sent queue regardless of which
+  // tab is selected. Fetches only id, status — cheap enough to count.
+  const { data: countRows } = useQuery({
+    queryKey: ["email-queue-counts", organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+      const { data, error } = await supabase
+        .from("email_queue")
+        .select("id, status")
+        .eq("organization_id", organization.id)
+        .neq("status", "sent")
+        .limit(1000);
+      if (error) throw error;
+      return data as { id: string; status: string }[];
     },
     enabled: !!organization?.id,
   });
@@ -172,6 +192,7 @@ export default function Emails() {
     onSuccess: (data) => {
       toast.success(`Queue processed: ${data?.processed || 0} sent, ${data?.failed || 0} failed`);
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
     onError: (error: Error) => {
       toast.error(`Failed to process queue: ${error.message}`);
@@ -192,6 +213,7 @@ export default function Emails() {
     onSuccess: () => {
       toast.success("Email sent");
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
     onError: (error: Error) => {
       toast.error(`Failed to send email: ${error.message}`);
@@ -212,6 +234,7 @@ export default function Emails() {
     onSuccess: () => {
       toastHook({ title: "Email re-queued for sending" });
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
     onError: () => {
       toastHook({ title: "Failed to retry email", variant: "destructive" });
@@ -232,6 +255,7 @@ export default function Emails() {
     onSuccess: () => {
       toast.success("All failed emails re-queued for sending");
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
     onError: () => {
       toast.error("Failed to retry emails");
@@ -251,6 +275,7 @@ export default function Emails() {
     onSuccess: () => {
       toastHook({ title: "Email removed from queue" });
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
     onError: () => {
       toastHook({ title: "Failed to delete email", variant: "destructive" });
@@ -271,6 +296,7 @@ export default function Emails() {
     onSuccess: () => {
       toastHook({ title: "Email marked as ignored" });
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
     onError: () => {
       toastHook({ title: "Failed to update email", variant: "destructive" });
@@ -292,16 +318,9 @@ export default function Emails() {
     return "-";
   };
 
-  const filterByStatus = (status: EmailStatus | "all") => {
-    if (status === "all") return emails || [];
-    return (emails || []).filter(e => e.status === status);
-  };
-
-  const counts = {
-    draft: filterByStatus("draft").length,
-    queued: filterByStatus("queued").length + (emails || []).filter(e => e.status === "pending").length,
-    failed: filterByStatus("failed").length,
-  };
+  // Derived from the unfiltered counts query, so the badges (and the stat cards / Retry-All button
+  // that share them) stay stable regardless of the active tab. `all` is the total non-sent count.
+  const counts = deriveEmailCounts(countRows);
 
   return (
     <DashboardLayout>
@@ -443,7 +462,7 @@ export default function Emails() {
               <div className="border-b px-4">
                 <TabsList className="h-12 bg-transparent">
                   <TabsTrigger value="all" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-                    All ({emails?.length || 0})
+                    All ({counts.all})
                   </TabsTrigger>
                   <TabsTrigger value="draft" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                     Drafts ({counts.draft})
@@ -620,6 +639,7 @@ export default function Emails() {
         onOpenChange={setIsEditDialogOpen}
         onSaved={() => {
           queryClient.invalidateQueries({ queryKey: ["email-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
           setIsEditDialogOpen(false);
           setSelectedEmail(null);
         }}
