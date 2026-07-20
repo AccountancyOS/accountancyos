@@ -16,6 +16,9 @@
 - [ ] Backfill plan documented if existing rows must be updated.
 - [ ] RLS still enforced on every new public-schema table (with required `GRANT` block).
 - [ ] No `ALTER DATABASE` statements.
+- [ ] **Approval card confirmed green.** The migration is only real once a row exists in `supabase_migrations.schema_migrations` — the assistant message saying "applied" is not proof. Verify with a targeted `pg_proc` / `pg_class` / `information_schema` query for the object the migration introduced.
+- [ ] **Baseline refreshed.** After approval, add the new version(s) to `docs/audits/unapplied-migrations-baseline.json` so the `migration-application-drift` regression test keeps passing.
+- [ ] **Publish is a second gate.** Approving on Test/dev does NOT flow to Live automatically — re-verify against production after publish. See `docs/audits/unapplied-migrations.md` for the failure mode this guards against.
 
 ## 4. Security
 - [ ] No `USING (true)` policies on tenant-scoped tables.

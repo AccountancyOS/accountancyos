@@ -16732,6 +16732,7 @@ export type Database = {
           review_status: Database["public"]["Enums"]["bk_review_status"]
           reviewed_at: string | null
           reviewed_by: string | null
+          snapshot_hash: string | null
           status: string
           submitted_at: string | null
           submitted_by: string | null
@@ -16769,6 +16770,7 @@ export type Database = {
           review_status?: Database["public"]["Enums"]["bk_review_status"]
           reviewed_at?: string | null
           reviewed_by?: string | null
+          snapshot_hash?: string | null
           status?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -16806,6 +16808,7 @@ export type Database = {
           review_status?: Database["public"]["Enums"]["bk_review_status"]
           reviewed_at?: string | null
           reviewed_by?: string | null
+          snapshot_hash?: string | null
           status?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -17961,6 +17964,7 @@ export type Database = {
         Args: { p_organization_id: string }
         Returns: Json
       }
+      gen_onboarding_access_token: { Args: never; Returns: string }
       generate_filing_approval_token: {
         Args: { p_filing_id: string }
         Returns: string
@@ -18096,6 +18100,7 @@ export type Database = {
         Args: { constraint_name: string }
         Returns: string[]
       }
+      get_cron_job_status: { Args: { p_jobname: string }; Returns: Json }
       get_general_ledger_from_ledger: {
         Args: {
           p_account_id: string
@@ -18870,6 +18875,10 @@ export type Database = {
         Args: { p_new_status: string; p_notes?: string; p_subject_id: string }
         Returns: undefined
       }
+      record_vat_filing_approval: {
+        Args: { _snapshot_id: string; _vat_return_id: string }
+        Returns: Json
+      }
       regress_filing_status: {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined
@@ -18962,6 +18971,10 @@ export type Database = {
           p_revocation_reason: string
         }
         Returns: undefined
+      }
+      revoke_vat_filing_approval: {
+        Args: { _vat_return_id: string }
+        Returns: Json
       }
       revoke_vat_return_filing_approval: {
         Args: { _reason?: string; _vat_return_id: string }
@@ -19200,6 +19213,7 @@ export type Database = {
         Args: { p_context?: Json; p_template_id: string }
         Returns: Json
       }
+      vault_secret_exists: { Args: { p_name: string }; Returns: boolean }
       verify_aml: { Args: { p_onboarding_id: string }; Returns: Json }
       verify_aml_and_approve: {
         Args: { p_onboarding_id: string }

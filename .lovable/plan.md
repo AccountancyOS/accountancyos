@@ -1,47 +1,50 @@
-## Diagnosis
+## Short answer
 
-You're right — the migration file `20260720120000_schedule_process_email_queue.sql` contains exactly the right `cron.schedule` statement. But it **was never applied to the database**:
+Yes — very likely. A file-vs-database diff (allowing ±120 s for the small clock skew between the filename timestamp and the recorded `schema_migrations` version) shows **~87 migration files** in `supabase/migrations/` with no matching row in `supabase_migrations.schema_migrations`. The just-fixed `process-email-queue` cron migration is one of them; the same "authored but never approved/executed" pattern applies to the rest.
 
-- `supabase_migrations.schema_migrations` shows the latest applied version is `20260720104504`. Nothing at `20260720120000` or later exists in that table.
-- `cron.job` confirms this: there is no `process-email-queue` row, only the older jobs (`sync-gmail-emails`, `sync-outlook-emails`, `hmrc-ct-poll-worker`, `chaser-tick-every-15min`, `process-automation-events`, `workflow-tick`, etc.).
+Some of those 87 will be *false positives* — a later consolidated migration created the same object, so the object exists in the DB even though the specific file was never approved. Others will be *real gaps* where the object simply doesn't exist and a feature is silently broken (exactly the mode we hit with the email cron).
 
-So the migration exists in git but was never approved/run against this project. That is the entire reason scheduled emails don't send on their own.
+Until each one is checked against the live schema we can't tell which is which just from the diff.
 
-Answers to your two questions:
+## What I'll do
 
-1. **Why they didn't send at the scheduled time.** Nothing is polling. The worker only runs when a human clicks Process Queue.
-2. **Can Process Queue send before the scheduled time?** Yes — already. The button calls `flush_email_queue_now(org_id)`, which unconditionally rewrites `scheduled_at = now()` for every `pending`/`queued` row in your org whose `scheduled_at` is in the future, then invokes the worker. No code change is needed for that behaviour.
+1. **Produce the full unapplied list** (`docs/audits/unapplied-migrations.md`) — the 87 file versions, each with its filename, one-line purpose (parsed from the SQL header/first CREATE/ALTER statement), and the objects it touches (table / function / policy / cron / trigger / grant).
 
-## Fix
+2. **Classify each entry** by probing the live DB for the objects it should have created:
+   - `TABLE` / `COLUMN` → `information_schema`
+   - `FUNCTION` → `pg_proc`
+   - `POLICY` → `pg_policies`
+   - `TRIGGER` → `pg_trigger`
+   - `cron.schedule` → `cron.job`
+   - `GRANT` → `information_schema.role_table_grants`
 
-Apply the existing pending migration `20260720120000_schedule_process_email_queue.sql`. No new SQL is being authored — the file already contains:
+   Bucket into:
+   - **A. Superseded** — object exists, created by a later migration. No action, just record.
+   - **B. Genuinely missing** — object absent. Needs re-apply.
+   - **C. Needs manual review** — file mutates data, drops/renames, or edits an object that has since been re-defined. Diff by hand before re-applying.
 
-1. A preflight `DO $$ ... $$` that counts due `email_queue` rows and raises if the backlog exceeds 200 (guard against a mass-send burst).
-2. `cron.unschedule('process-email-queue')` inside a swallow-errors block for idempotency.
-3. `SELECT cron.schedule('process-email-queue', '* * * * *', ...)` posting to `/functions/v1/process-email-queue` with the service-role bearer.
+3. **Prioritise Bucket B** by feature area (email, cron, automation, portal, filing, security). Anything cron/security/RLS-related gets flagged as P0 because the failure mode is silent (same as the email cron).
 
-Same pattern as the already-working `sync-gmail-emails` and `process-automation-events` jobs, so the `current_setting('app.settings.*')` values are known to resolve at cron execution time on this project.
+4. **Fix plan per bucket-B entry**: for each, either
+   - re-issue the original file through the migration tool (if still safe and idempotent), or
+   - author a small "reconciliation" migration that creates only the missing objects (safer when the original file is no longer idempotent against the current schema).
+
+5. **Add a standing guardrail** so this can't silently recur:
+   - New Vitest regression test `src/test/regression/migration-application-drift.test.ts` that reads the file list from `supabase/migrations/`, queries `supabase_migrations.schema_migrations`, and fails if any file has no applied version within ±120 s. Runs in CI on every push.
+   - Extend `scripts/smoke-test.ts` with the same check so `bun smoke` catches drift against Live post-publish (this is the "Test-approved ≠ Live-approved" gotcha you flagged).
+   - Add a short entry to `docs/change-checklist.md` §3 ("Migration Safety") requiring the author to confirm the approval card returned green before closing the change.
+
+## Deliverables
+
+- `docs/audits/unapplied-migrations.md` — full audit with A/B/C classification and remediation owner per row.
+- One or more reconciliation migrations for bucket B (batched by feature area, each idempotent).
+- `src/test/regression/migration-application-drift.test.ts` + smoke-test extension.
+- Updated `docs/change-checklist.md`.
 
 ## Technical details
 
-**Action:** re-issue migration `20260720120000_schedule_process_email_queue.sql` through the migration tool so it lands in `schema_migrations` and the cron row is created.
-
-**No code changes.** `process-email-queue/index.ts`, `flush_email_queue_now`, `send_queued_email_now`, and the Emails page Process Queue button are all correct and already handle:
-- service-role JWT caller (line 144 of the worker)
-- `status='pending' AND scheduled_at <= now()` selection
-- atomic row claim via `claim_email_queue_row` (safe against overlapping cron ticks)
-- rate-limit cooldown via `email_send_state.retry_after_until`
-- manual flush-and-send from the UI
-
-**Verification after the migration runs:**
-
-1. `SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'process-email-queue';` → one row, `* * * * *`, active.
-2. Insert a fresh outbound email, wait ~90 seconds without touching the UI → `email_queue.status` moves `pending → sent`, and a matching `email_send_log` row with `status='sent'` appears.
-3. Insert another, click Process Queue before the 15-minute mark → sends within a few seconds, confirming manual early-send still works.
-
-**If the preflight raises** (>200 due rows queued from the days it wasn't draining): inspect with
-```sql
-SELECT organization_id, count(*), min(scheduled_at)
-FROM public.email_queue WHERE status='pending' AND scheduled_at <= now() GROUP BY 1;
-```
-then either cancel stale rows or raise the threshold and re-apply. Current known backlog is small (1 row for Blue Tick at authoring time), so it should apply cleanly.
+- Diff basis: filename timestamp vs `supabase_migrations.schema_migrations.version` with a 120-second tolerance to absorb the small clock skew Lovable introduces when it records the applied version (observed: file `20251125162929` → applied `20251125162931`, i.e. ~2 s). Anything outside that window is treated as unapplied.
+- Current head of `schema_migrations` is `20260720110128`; every file from `20260720120000` onward is unapplied by definition. Earlier gaps are the ones that need the object-existence probe to classify.
+- No changes to `supabase/config.toml` — auto-generated.
+- Reconciliation migrations will use `IF NOT EXISTS` / `CREATE OR REPLACE` / `DO $$ ... $$` guards so re-running against a partially-fixed DB is safe.
+- Verification pattern I'll adopt from this point onward (per our working agreement): after any migration is authored, query `schema_migrations` for the exact version and, for the primary object it creates, query the relevant catalog to prove it exists. Report both back before saying "done".
