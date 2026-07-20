@@ -78,7 +78,14 @@ export function AddCompanyContactDialog({
         role: form.role.trim() || null,
       };
       const { error: contactError } = await supabase.from("contacts").insert(contactInsert);
-      if (contactError) throw contactError;
+      if (contactError) {
+        // Best-effort rollback: the contacts insert failed after the
+        // company_persons row was already created, so remove it to avoid
+        // leaving an orphaned person (invisible in the UI, but a dangling
+        // DB row) behind.
+        await supabase.from("company_persons").delete().eq("id", person.id);
+        throw contactError;
+      }
 
       return person;
     },
