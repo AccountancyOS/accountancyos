@@ -75,7 +75,14 @@ export function CompanyCoSecJobsTab({ companyId, organizationId }: CompanyCoSecJ
           filings(id, status, filing_type, filed_at)
         `)
         .eq("company_id", companyId)
-        .in("service_type", ["CS01", "AP01", "TM01", "TM02", "SH01", "PSC01", "PSC04", "PSC07", "CH01"])
+        // Company-secretarial jobs are stored under several service_type values depending on how
+        // they were created: uppercase filing codes (manual, via this tab), "COSEC" (workflow
+        // template), and "confirmation_statement" (the canonical quote/onboarding path). Match all
+        // of them, otherwise auto-generated confirmation statements never appear here.
+        .in("service_type", [
+          "CS01", "AP01", "TM01", "TM02", "SH01", "PSC01", "PSC04", "PSC07", "CH01",
+          "COSEC", "confirmation_statement",
+        ])
         .order("created_at", { ascending: false });
       
       if (error) throw error;
