@@ -48,6 +48,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEntityServices } from "@/hooks/useEntityServices";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { YearEndEditor } from "@/components/company/YearEndEditor";
+import { CompanyProfilePanel } from "@/components/company/CompanyProfilePanel";
 import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { CompanyTextFieldEditor } from "@/components/company/CompanyTextFieldEditor";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
@@ -281,6 +282,9 @@ const CompanyDetail = () => {
           </TabsList>
 
           <TabsContent value="overview" className="mt-6 space-y-6">
+            {/* Rich, read-only company profile: status, trading-as, addresses, deadlines, primary contact */}
+            {companyId && <CompanyProfilePanel companyId={companyId} />}
+
             {/* Company Details Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Company Information */}
