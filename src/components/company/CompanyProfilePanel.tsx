@@ -6,21 +6,19 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Hash, Calendar, MapPin, Phone, User, FileText } from "lucide-react";
 import { formatDate } from "@/lib/format-utils";
-import { deriveCompanyStatus, type CompanyStatusLabel } from "@/lib/company-status-model";
+import { deriveCompanyStatus, type CompanyStatusLabel, type CompanyStatusInput } from "@/lib/company-status-model";
 import type { Tables } from "@/integrations/supabase/types";
 
 /**
  * The Phase-2 migration (supabase/migrations/20260720190000_company_profile_person_fields.sql)
- * added trading_as / primary_contact_person_id / accounts_next_made_up_to / accounts_next_due
- * to `companies`. The generated Supabase types regenerate from the live DB, which hasn't had
- * that migration applied yet, so those four columns aren't in `Tables<"companies">`. Extend the
- * generated Row locally and cast the query result, rather than sprinkling `as any` at every
- * access site below.
+ * added trading_as / primary_contact_person_id / accounts_next_due to `companies`. The generated
+ * Supabase types regenerate from the live DB, which hasn't had that migration applied yet, so
+ * those columns aren't in `Tables<"companies">`. Extend the generated Row locally and cast the
+ * query result, rather than sprinkling `as any` at every access site below.
  */
 type CompanyProfileRow = Tables<"companies"> & {
   trading_as: string | null;
   primary_contact_person_id: string | null;
-  accounts_next_made_up_to: string | null;
   accounts_next_due: string | null;
 };
 
@@ -76,13 +74,30 @@ function formatYearEnd(day: number | null, month: number | null): string | null 
   return `${day} ${MONTHS[month - 1]}`;
 }
 
-type DeadlineCategory = "accounts" | "ct600" | "cs01" | "vat" | "payroll";
+type DeadlineCategory =
+  | "accounts"
+  | "charity_accounts"
+  | "ct600"
+  | "ct_payment"
+  | "cs01"
+  | "vat"
+  | "payroll";
 
-const DEADLINE_ORDER: DeadlineCategory[] = ["accounts", "ct600", "cs01", "vat", "payroll"];
+const DEADLINE_ORDER: DeadlineCategory[] = [
+  "accounts",
+  "charity_accounts",
+  "ct600",
+  "ct_payment",
+  "cs01",
+  "vat",
+  "payroll",
+];
 
 const DEADLINE_LABELS: Record<DeadlineCategory, string> = {
   accounts: "Accounts",
+  charity_accounts: "Charity Accounts",
   ct600: "CT600",
+  ct_payment: "CT Payment",
   cs01: "Confirmation Statement",
   vat: "VAT Return",
   payroll: "Payroll",
@@ -90,18 +105,47 @@ const DEADLINE_LABELS: Record<DeadlineCategory, string> = {
 
 const OUTSTANDING_DEADLINE_STATUSES = ["pending", "in_progress", "overdue"];
 
+/**
+ * Exact service_code -> bucket map, built from the actual codes the
+ * deadline engine writes (src/lib/deadline-engine.ts). Deliberately exact
+ * (not substring) matching: CHARITY_ACCOUNTS and ACCOUNTS_FILING must not
+ * collapse into the same "Accounts" chip, and CT_PAYMENT (a payment
+ * obligation) must not collapse into the CT600 filing chip.
+ *
+ * Company-scoped codes covered here: ACCOUNTS_FILING, CHARITY_ACCOUNTS,
+ * CT600_FILING, CT_PAYMENT, CS01, VAT_RETURN, RTI_EPS, RTI_P60. Other codes
+ * the engine emits (SA_*, CGT_60DAY) are client-scoped, not company-scoped,
+ * and never appear on this panel's `deadlines` query. CIS_RETURN and
+ * CHARITY_AR are company-scoped but have no dedicated chip here; they fall
+ * through to the generic bucket below (unclassified, not mislabelled).
+ */
+const SERVICE_CODE_TO_CATEGORY: Record<string, DeadlineCategory> = {
+  ACCOUNTS_FILING: "accounts",
+  CHARITY_ACCOUNTS: "charity_accounts",
+  CT600_FILING: "ct600",
+  CT_PAYMENT: "ct_payment",
+  CS01: "cs01",
+  VAT_RETURN: "vat",
+  RTI_EPS: "payroll",
+  RTI_P60: "payroll",
+};
+
 function classifyDeadline(row: {
   service_code: string | null;
   canonical_service_code: string | null;
   deadline_type: string | null;
 }): DeadlineCategory | null {
-  const code = (row.service_code || row.canonical_service_code || row.deadline_type || "").toUpperCase();
+  const code = (row.service_code || row.canonical_service_code || row.deadline_type || "").toUpperCase().trim();
   if (!code) return null;
-  if (code.includes("CS01") || code.includes("CONFIRMATION")) return "cs01";
+
+  const known = SERVICE_CODE_TO_CATEGORY[code];
+  if (known) return known;
+
+  // Generic fallback for codes outside the known set above (e.g. future
+  // RTI variants, or free-text deadline_type values).
+  if (code.startsWith("RTI_") || code.includes("PAYROLL")) return "payroll";
+  if (code.includes("CONFIRMATION")) return "cs01";
   if (code.includes("VAT")) return "vat";
-  if (code.includes("CT600") || code.includes("CT_PAYMENT") || code.startsWith("CT")) return "ct600";
-  if (code.startsWith("RTI") || code.includes("PAYROLL")) return "payroll";
-  if (code.includes("ACCOUNTS")) return "accounts";
   return null;
 }
 
@@ -129,7 +173,7 @@ export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
           "company_name, status, company_number, incorporation_date, registered_office_address, " +
             "trading_address, phone, year_end_month, year_end_day, vat_number, vat_scheme, " +
             "vat_frequency, sic_codes, ch_company_profile, trading_as, primary_contact_person_id, " +
-            "accounts_next_made_up_to, accounts_next_due"
+            "accounts_next_due"
         )
         .eq("id", companyId)
         .single();
@@ -188,7 +232,7 @@ export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
 
   const derivedStatus = deriveCompanyStatus({
     status: company.status,
-    ch_company_profile: company.ch_company_profile as { company_status?: string | null } | null,
+    ch_company_profile: company.ch_company_profile as CompanyStatusInput["ch_company_profile"],
   });
   const statusBadge = STATUS_BADGE[derivedStatus];
 

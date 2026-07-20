@@ -8,15 +8,45 @@ describe("deriveCompanyStatus", () => {
     ).toBe("active");
   });
 
-  it("returns dormant when CH reports dormant, even if the practice relationship is active", () => {
+  it("returns dormant when CH's last accounts filing type is 'dormant', even if the practice relationship is active", () => {
     expect(
-      deriveCompanyStatus({ status: "active", ch_company_profile: { company_status: "dormant" } })
+      deriveCompanyStatus({
+        status: "active",
+        ch_company_profile: {
+          company_status: "active",
+          accounts: { last_accounts: { type: "dormant" } },
+        },
+      })
+    ).toBe("dormant");
+  });
+
+  it("is case/whitespace insensitive on the accounts.last_accounts.type value", () => {
+    expect(
+      deriveCompanyStatus({
+        status: "active",
+        ch_company_profile: {
+          company_status: "active",
+          accounts: { last_accounts: { type: " Dormant " } },
+        },
+      })
     ).toBe("dormant");
   });
 
   it("returns dissolved when CH reports dissolved", () => {
     expect(
       deriveCompanyStatus({ status: "archived", ch_company_profile: { company_status: "dissolved" } })
+    ).toBe("dissolved");
+  });
+
+  it("dissolved (by company_status) beats dormant (by last accounts filing type)", () => {
+    expect(
+      deriveCompanyStatus({
+        status: "active",
+        ch_company_profile: {
+          company_status: "dissolved",
+          accounts: { last_accounts: { type: "dormant" } },
+        },
+      })
     ).toBe("dissolved");
   });
 
@@ -31,8 +61,8 @@ describe("deriveCompanyStatus", () => {
 
   it("is case/whitespace insensitive on the CH status", () => {
     expect(
-      deriveCompanyStatus({ status: "active", ch_company_profile: { company_status: " Dormant " } })
-    ).toBe("dormant");
+      deriveCompanyStatus({ status: "active", ch_company_profile: { company_status: " Dissolved " } })
+    ).toBe("dissolved");
   });
 
   it("falls back to the practice lifecycle status when CH data is missing", () => {
