@@ -476,13 +476,15 @@ const CompanyDetail = () => {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <StaffAssignmentField
-                      companyId={company.id}
+                      entityId={company.id}
+                      entityKind="company"
                       field="partner_in_charge"
                       currentValue={company.partner_in_charge}
                       label="Partner in Charge"
                     />
                     <StaffAssignmentField
-                      companyId={company.id}
+                      entityId={company.id}
+                      entityKind="company"
                       field="staff_in_charge"
                       currentValue={company.staff_in_charge}
                       label="Staff in Charge"

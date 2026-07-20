@@ -21,6 +21,7 @@ import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab"
 import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
 import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPanel";
 import { EngagementLetterStatus } from "@/components/clients/EngagementLetterStatus";
+import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 import { EmailList } from "@/components/email/EmailList";
@@ -112,6 +113,24 @@ export default function ClientPortal() {
                 New Job
               </Button>
             </div>
+          </div>
+
+          {/* Partner / staff in charge */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+            <StaffAssignmentField
+              entityId={clientId!}
+              entityKind="client"
+              field="partner_in_charge"
+              currentValue={(client as { partner_in_charge?: string | null }).partner_in_charge ?? null}
+              label="Partner in Charge"
+            />
+            <StaffAssignmentField
+              entityId={clientId!}
+              entityKind="client"
+              field="staff_in_charge"
+              currentValue={(client as { staff_in_charge?: string | null }).staff_in_charge ?? null}
+              label="Staff in Charge"
+            />
           </div>
 
           {/* Tabs */}

@@ -85,6 +85,9 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // to admin/owner, close anon quote-token enumeration (re-apply of the never-landed 20260703204710),
   // and restore security_invoker on connected_mailboxes_safe.
   "20260720170000",
+  // Pending Lovable application: fix partner_in_charge/staff_in_charge (drop mismatched FK, add
+  // the columns to clients).
+  "20260720180000",
 ]);
 
 function versionFromFilename(name: string): string | null {

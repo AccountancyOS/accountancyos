@@ -12,7 +12,8 @@ import {
 import { toast } from "sonner";
 
 interface StaffAssignmentFieldProps {
-  companyId: string;
+  entityId: string;
+  entityKind: "client" | "company";
   field: "partner_in_charge" | "staff_in_charge";
   currentValue: string | null;
   label: string;
@@ -21,7 +22,7 @@ interface StaffAssignmentFieldProps {
 // Roles that may act as Partner in Charge. Staff in Charge is open to everyone.
 const PARTNER_ELIGIBLE_ROLES = new Set(["owner", "partner", "admin"]);
 
-export function StaffAssignmentField({ companyId, field, currentValue, label }: StaffAssignmentFieldProps) {
+export function StaffAssignmentField({ entityId, entityKind, field, currentValue, label }: StaffAssignmentFieldProps) {
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
 
@@ -59,13 +60,14 @@ export function StaffAssignmentField({ companyId, field, currentValue, label }: 
   const mutation = useMutation({
     mutationFn: async (userId: string | null) => {
       const { error } = await supabase
-        .from("companies")
+        .from(entityKind === "company" ? "companies" : "clients")
         .update({ [field]: userId })
-        .eq("id", companyId);
+        .eq("id", entityId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["company", companyId] });
+      queryClient.invalidateQueries({ queryKey: [entityKind, entityId] });
+      queryClient.invalidateQueries({ queryKey: ["client", entityId] });
       toast.success(`${label} updated`);
     },
     onError: (error: any) => {
