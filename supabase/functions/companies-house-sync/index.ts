@@ -1,18 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildVersionResponse, logColdStartIdentity } from "../_shared/release-version.ts";
+import { VERSION } from "./VERSION.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Release attestation (see docs/releases/production-release-convention.md §5).
-// The deployer sets RELEASE_SHA to the git commit it is deploying from; the
-// function reports it via `?action=version` and logs it on cold start. This is
-// an ATTESTATION for diagnosis, not cryptographic proof of provenance.
-const RELEASE_SHA = Deno.env.get("RELEASE_SHA") ?? "unset";
-const RELEASE_BUILT_AT = Deno.env.get("RELEASE_BUILT_AT") ?? null;
-console.log("[boot] companies-house-sync release_sha", RELEASE_SHA);
+// Release attestation (see docs/releases/production-release-convention.md §5, §2a).
+// Identity travels as a committed `VERSION.ts` stamped by scripts/stamp-release.ts —
+// NOT as an env var. Env-based identity would drift on the next unrelated deploy
+// because Lovable secrets are workspace-wide and persistent.
+logColdStartIdentity("companies-house-sync", VERSION);
 
 const CH_API_BASE = "https://api.company-information.service.gov.uk";
 
@@ -776,7 +776,7 @@ serve(async (req: Request) => {
   // Version attestation probe — no auth, no side effects. Lets an independent
   // post-release check confirm which commit the deployed function claims to be.
   if (new URL(req.url).searchParams.get("action") === "version") {
-    return jsonResponse({ sha: RELEASE_SHA, built_at: RELEASE_BUILT_AT }, 200);
+    return jsonResponse(buildVersionResponse("companies-house-sync", VERSION), 200);
   }
 
   try {
