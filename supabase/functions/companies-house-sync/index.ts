@@ -309,6 +309,7 @@ type SyncOutcome =
       stagedFieldDiffs: number;
       cs01DeadlineCreated: boolean;
       promotedOfficers: number;
+      promotedPscs: number;
       syncedAt: string;
     }
   | { error: string; ch_status?: number };
