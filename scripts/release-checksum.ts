@@ -67,7 +67,7 @@ export function computeChecksum(target: string): { kind: "migration" | "edge_fun
   throw new Error(`Not a file or directory: ${target}`);
 }
 
-if (import.meta.main) {
+if ((import.meta as any).main) {
   const target = process.argv[2];
   if (!target) {
     console.error("usage: bun scripts/release-checksum.ts <path>");

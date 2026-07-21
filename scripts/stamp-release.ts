@@ -51,4 +51,4 @@ function main() {
   console.log(`wrote ${target} (checksum=${checksum})`);
 }
 
-if (import.meta.main) main();
+if ((import.meta as any).main) main();

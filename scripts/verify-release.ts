@@ -82,4 +82,4 @@ async function main() {
   process.exit(anyFail ? 1 : 0);
 }
 
-if (import.meta.main) main();
+if ((import.meta as any).main) main();
