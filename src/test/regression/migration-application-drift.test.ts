@@ -120,6 +120,10 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260721170145",
   "20260721170839",
   "20260721174527",
+  // Increment A (client-data-collection design): backfills registered_office_address jsonb from
+  // the legacy flat address columns and adds companies.registered_office_dispute_note for the
+  // "flag a correction" affordance. Pending Lovable application.
+  "20260721180000",
 ]);
 
 function versionFromFilename(name: string): string | null {

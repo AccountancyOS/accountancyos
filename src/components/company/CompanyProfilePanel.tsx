@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Hash, Calendar, MapPin, Phone, User, FileText } from "lucide-react";
+import { Hash, Calendar, MapPin, Phone, User, FileText, Flag } from "lucide-react";
 import { formatDate } from "@/lib/format-utils";
 import { deriveCompanyStatus, type CompanyStatusLabel, type CompanyStatusInput } from "@/lib/company-status-model";
+import { RegisteredOfficeCorrectionDialog } from "@/components/company/RegisteredOfficeCorrectionDialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 /**
@@ -20,6 +23,7 @@ type CompanyProfileRow = Tables<"companies"> & {
   trading_as: string | null;
   primary_contact_person_id: string | null;
   accounts_next_due: string | null;
+  registered_office_dispute_note: string | null;
 };
 
 interface CompanyProfilePanelProps {
@@ -164,7 +168,9 @@ function deadlineUrgencyClass(dueDateIso: string): string {
  * CompanyDetail for that.
  */
 export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
-  const { data: company, isLoading: companyLoading } = useQuery({
+  const [isFlagCorrectionOpen, setIsFlagCorrectionOpen] = useState(false);
+
+  const { data: company, isLoading: companyLoading, refetch } = useQuery({
     queryKey: ["company-profile-panel", companyId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -173,7 +179,7 @@ export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
           "company_name, status, company_number, incorporation_date, registered_office_address, " +
             "trading_address, phone, year_end_month, year_end_day, vat_number, vat_scheme, " +
             "vat_frequency, sic_codes, ch_company_profile, trading_as, primary_contact_person_id, " +
-            "accounts_next_due"
+            "accounts_next_due, registered_office_dispute_note"
         )
         .eq("id", companyId)
         .single();
@@ -264,6 +270,7 @@ export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
   }).filter((d): d is { category: DeadlineCategory; label: string; dueDate: string } => d !== null);
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -328,34 +335,50 @@ export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
           )}
         </div>
 
-        {(registeredAddressLines.length > 0 || tradingAddressLines.length > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
-            {registeredAddressLines.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1 mb-1">
-                  <MapPin className="h-3.5 w-3.5" /> Registered Office
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
+          <div>
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5" /> Registered office &mdash; from Companies House
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 shrink-0"
+                title="Flag a correction"
+                onClick={() => setIsFlagCorrectionOpen(true)}
+              >
+                <Flag className="h-3 w-3" />
+              </Button>
+            </div>
+            {registeredAddressLines.length > 0 ? (
+              registeredAddressLines.map((line, i) => (
+                <p key={i} className="text-sm">
+                  {line}
                 </p>
-                {registeredAddressLines.map((line, i) => (
-                  <p key={i} className="text-sm">
-                    {line}
-                  </p>
-                ))}
-              </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">Not set</p>
             )}
-            {tradingAddressLines.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1 mb-1">
-                  <MapPin className="h-3.5 w-3.5" /> Trading Address
-                </p>
-                {tradingAddressLines.map((line, i) => (
-                  <p key={i} className="text-sm">
-                    {line}
-                  </p>
-                ))}
-              </div>
+            {company.registered_office_dispute_note && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1">
+                <Flag className="h-3 w-3" /> Flagged &mdash; see note
+              </p>
             )}
           </div>
-        )}
+          {tradingAddressLines.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase flex items-center gap-1 mb-1">
+                <MapPin className="h-3.5 w-3.5" /> Trading Address
+              </p>
+              {tradingAddressLines.map((line, i) => (
+                <p key={i} className="text-sm">
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
 
         {deadlineChips.length > 0 && (
           <div className="pt-4 border-t">
@@ -377,5 +400,14 @@ export function CompanyProfilePanel({ companyId }: CompanyProfilePanelProps) {
         )}
       </CardContent>
     </Card>
+
+    <RegisteredOfficeCorrectionDialog
+      companyId={companyId}
+      currentNote={company.registered_office_dispute_note}
+      open={isFlagCorrectionOpen}
+      onOpenChange={setIsFlagCorrectionOpen}
+      onSaved={() => refetch()}
+    />
+    </>
   );
 }

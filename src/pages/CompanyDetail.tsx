@@ -37,7 +37,8 @@ import {
   Pencil,
   Briefcase,
   MessageSquare,
-  Users
+  Users,
+  Flag
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatStatus } from "@/lib/format-utils";
@@ -56,6 +57,8 @@ import { CompanyProfilePanel } from "@/components/company/CompanyProfilePanel";
 import { CompanyContactsPanel } from "@/components/company/CompanyContactsPanel";
 import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { CompanyTextFieldEditor } from "@/components/company/CompanyTextFieldEditor";
+import { CompanyAddressFieldEditor, type CompanyAddressJson } from "@/components/company/CompanyAddressFieldEditor";
+import { RegisteredOfficeCorrectionDialog } from "@/components/company/RegisteredOfficeCorrectionDialog";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
 import { AddServiceDialog } from "@/components/client-portal/AddServiceDialog";
@@ -64,6 +67,26 @@ import { ConversationsTab } from "@/components/client-portal/ConversationsTab";
 import { ContactsList } from "@/components/contacts/ContactsList";
 import ClientQuestionnairesTab from "@/components/client-portal/ClientQuestionnairesTab";
 import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab";
+
+/**
+ * Formats a company address jsonb column for display. Accepts either the
+ * Companies-House-sync shape (address_line_1/address_line_2/locality/
+ * postal_code/country -- see companies-house-sync/index.ts) or the legacy
+ * city/postcode keys, so it renders correctly regardless of which shape a
+ * given row's jsonb was written in.
+ */
+function formatCompanyAddressLines(addr: Record<string, string | null | undefined> | null | undefined): string[] {
+  if (!addr || typeof addr !== "object") return [];
+  const lines: string[] = [];
+  if (addr.address_line_1) lines.push(addr.address_line_1);
+  if (addr.address_line_2) lines.push(addr.address_line_2);
+  const cityLine = [addr.locality || addr.city, addr.postal_code || addr.postcode]
+    .filter(Boolean)
+    .join(", ");
+  if (cityLine) lines.push(cityLine);
+  if (addr.country) lines.push(addr.country);
+  return lines;
+}
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -74,6 +97,8 @@ const CompanyDetail = () => {
   const [isYearEndOpen, setIsYearEndOpen] = useState(false);
   const [isUtrOpen, setIsUtrOpen] = useState(false);
   const [isAuthCodeOpen, setIsAuthCodeOpen] = useState(false);
+  const [isFlagCorrectionOpen, setIsFlagCorrectionOpen] = useState(false);
+  const [isTradingAddressOpen, setIsTradingAddressOpen] = useState(false);
 
   // Service gating for Payroll tab
   const { hasPayroll, isLoading: servicesLoading } = useEntityServices(
@@ -464,47 +489,80 @@ const CompanyDetail = () => {
                     </div>
                   )}
                   <div className="pt-2 border-t space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase">Registered Address</p>
-                    {(company.address_line_1 || company.city) ? (
-                      <div className="flex items-start gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          {company.address_line_1 && <p>{company.address_line_1}</p>}
-                          {company.address_line_2 && <p>{company.address_line_2}</p>}
-                          {(company.city || company.postcode) && (
-                            <p>{[company.city, company.postcode].filter(Boolean).join(", ")}</p>
-                          )}
-                          {company.country && <p>{company.country}</p>}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Not set</p>
-                    )}
-                  </div>
-                  {company.trading_address && (
-                    <div className="pt-2 border-t space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Trading Address</p>
-                      <div className="flex items-start gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          {(() => {
-                            const addr = company.trading_address as Record<string, string> | null;
-                            if (!addr) return null;
-                            return (
-                              <>
-                                {addr.address_line_1 && <p>{addr.address_line_1}</p>}
-                                {addr.address_line_2 && <p>{addr.address_line_2}</p>}
-                                {(addr.city || addr.postcode) && (
-                                  <p>{[addr.city, addr.postcode].filter(Boolean).join(", ")}</p>
-                                )}
-                                {addr.country && <p>{addr.country}</p>}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground uppercase">
+                        Registered office &mdash; from Companies House
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        title="Flag a correction"
+                        onClick={() => setIsFlagCorrectionOpen(true)}
+                      >
+                        <Flag className="h-3 w-3" />
+                      </Button>
                     </div>
-                  )}
+                    {(() => {
+                      const lines = formatCompanyAddressLines(
+                        company.registered_office_address as Record<string, string | null | undefined> | null
+                      );
+                      if (lines.length === 0) {
+                        return <p className="text-sm text-muted-foreground">Not set</p>;
+                      }
+                      return (
+                        <div className="flex items-start gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div>
+                            {lines.map((line, i) => (
+                              <p key={i}>{line}</p>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {(company as any).registered_office_dispute_note && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <Flag className="h-3 w-3" /> Flagged &mdash; see note
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Read-only. Corrected by filing a change at Companies House.
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground uppercase">
+                        Trading / correspondence address
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setIsTradingAddressOpen(true)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    {(() => {
+                      const lines = formatCompanyAddressLines(
+                        company.trading_address as Record<string, string | null | undefined> | null
+                      );
+                      if (lines.length === 0) {
+                        return <p className="text-sm text-muted-foreground">Not set</p>;
+                      }
+                      return (
+                        <div className="flex items-start gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div>
+                            {lines.map((line, i) => (
+                              <p key={i}>{line}</p>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -745,6 +803,27 @@ const CompanyDetail = () => {
           validate={(v) => (/^[A-Z0-9]{6}$/.test(v) ? null : "Auth codes are normally 6 letters or digits — please double-check this value.")}
           open={isAuthCodeOpen}
           onOpenChange={setIsAuthCodeOpen}
+          onSaved={() => refetch()}
+        />
+
+        {/* Registered office flag-a-correction (does not edit the CH-sourced address itself) */}
+        <RegisteredOfficeCorrectionDialog
+          companyId={companyId!}
+          currentNote={(company as any).registered_office_dispute_note}
+          open={isFlagCorrectionOpen}
+          onOpenChange={setIsFlagCorrectionOpen}
+          onSaved={() => refetch()}
+        />
+
+        {/* Trading / correspondence address editor (firm-owned, manually maintained) */}
+        <CompanyAddressFieldEditor
+          companyId={companyId!}
+          field="trading_address"
+          label="Trading / correspondence address"
+          description="The address used for day-to-day correspondence, if different from the Companies-House-registered office."
+          currentValue={company.trading_address as CompanyAddressJson | null}
+          open={isTradingAddressOpen}
+          onOpenChange={setIsTradingAddressOpen}
           onSaved={() => refetch()}
         />
       </div>
