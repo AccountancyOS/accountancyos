@@ -156,7 +156,26 @@ export async function getRegisterEvents(
     return [];
   }
 
-  return data || [];
+  const events = data || [];
+
+  // Enrich with actor profile (created_by FK points at auth.users, so PostgREST
+  // can't embed profiles directly — do a small second query and merge).
+  const actorIds = Array.from(
+    new Set(events.map((e: any) => e.created_by).filter(Boolean)),
+  ) as string[];
+
+  if (actorIds.length === 0) return events;
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, email")
+    .in("id", actorIds);
+
+  const byId = new Map((profiles || []).map((p: any) => [p.id, p]));
+  return events.map((e: any) => ({
+    ...e,
+    created_by_profile: e.created_by ? byId.get(e.created_by) ?? null : null,
+  }));
 }
 
 /**
