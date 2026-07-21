@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { VERSION } from "./VERSION.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,12 +8,12 @@ const corsHeaders = {
 };
 
 // Release attestation (see docs/releases/production-release-convention.md §5).
-// The deployer sets RELEASE_SHA to the git commit it is deploying from; the
-// function reports it via `?action=version` and logs it on cold start. This is
-// an ATTESTATION for diagnosis, not cryptographic proof of provenance.
-const RELEASE_SHA = Deno.env.get("RELEASE_SHA") ?? "unset";
-const RELEASE_BUILT_AT = Deno.env.get("RELEASE_BUILT_AT") ?? null;
-console.log("[boot] companies-house-sync release_sha", RELEASE_SHA);
+// The deployer stamps ./VERSION.ts with the git commit it is deploying from,
+// then deploys; the function reports it via `?action=version` and logs it on
+// cold start. A committed file is the reliable per-function carrier because the
+// executor (Lovable) has no per-function deploy-time env vars. This is an
+// ATTESTATION for diagnosis, not cryptographic proof of provenance.
+console.log("[boot] companies-house-sync source_sha", VERSION.source_sha);
 
 const CH_API_BASE = "https://api.company-information.service.gov.uk";
 
@@ -776,7 +777,7 @@ serve(async (req: Request) => {
   // Version attestation probe — no auth, no side effects. Lets an independent
   // post-release check confirm which commit the deployed function claims to be.
   if (new URL(req.url).searchParams.get("action") === "version") {
-    return jsonResponse({ sha: RELEASE_SHA, built_at: RELEASE_BUILT_AT }, 200);
+    return jsonResponse({ source_sha: VERSION.source_sha, built_at: VERSION.built_at }, 200);
   }
 
   try {
