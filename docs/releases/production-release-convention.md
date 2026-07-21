@@ -12,6 +12,26 @@
   database/function/app by a check that we run and that compares live state to the intended
   commit — never by the executor's own attestation alone.
 
+### 1a. Attestation-based, not Git-pinned (temporary posture)
+
+Under the current Lovable executor surface this convention delivers **attested, detective**
+release control — not preventive, Git-pinned deployment. Two capability gaps make this explicit:
+
+1. **No commit-pinned deploy.** `supabase--deploy_edge_functions` ships the workspace file tree
+   at invocation time. There is no `--rev` / tag / commit argument, so the executor cannot be
+   ordered to deploy "exactly commit X". We can only stamp identity into the tree, then deploy
+   the tree, then verify what came back.
+2. **No per-release, per-function env injection.** Secrets are workspace-wide and persistent.
+   `RELEASE_SHA` as an env var would apply to every function and drift on the next unrelated
+   deploy. Identity therefore travels as a **committed `VERSION.ts`** inside each function
+   directory, not as an env var.
+
+Every receipt produced under this convention MUST be marked
+`release_kind: "attestation-based"`. Fully preventive, Git-pinned deployment requires either a
+Lovable capability change (commit-pinned deploy + per-release env injection) or moving
+production to infrastructure controlled by our own CI pipeline. This limitation is recorded
+in §10.
+
 A migration filename is **not** an adequate identifier: the executor assigns its own applied
 timestamp, so the filename never matches `schema_migrations.version`. The binding identity of a
 release is the **git commit SHA + file path + content checksum**, mapped to the live deployment
@@ -29,6 +49,26 @@ declared **apply order**. Artifact types:
 Dependencies are explicit (e.g. "frontend depends on migration X"). Verification of a dependency
 **must pass before** the dependent artifact is applied/published. A coordinated release is never
 "half-applied": if a step fails verification, the release halts and dependent steps do not run.
+
+### 2a. Two commit SHAs per release (source vs. release)
+
+Stamping `VERSION.ts` mutates the workspace, so the commit whose tree is actually deployed is
+**not** the commit that was reviewed. Every release therefore carries two SHAs, and both are
+mandatory in the pending record and the receipt:
+
+- **`source_commit_sha`** — the reviewed, merged commit that authorises the change. This is
+  what a human approver signed off on and what appears in the PR.
+- **`release_commit_sha`** — the commit created *after* `VERSION.ts` is stamped with
+  `source_commit_sha`. This is the commit whose tree is actually shipped to Lovable, and the
+  value the live `?action=version` probe must return.
+
+`release_commit_sha` MUST be a direct descendant of `source_commit_sha` and MUST differ from it
+in exactly one file per stamped function: `supabase/functions/<name>/VERSION.ts`. Any other
+diff between the two SHAs invalidates the release and it must be redeclared.
+
+The **artifact checksum** in the receipt is computed against the **post-stamp workspace**
+(i.e. against `release_commit_sha`'s tree), never against `source_commit_sha`'s tree — the
+pre-stamp checksum does not describe what shipped.
 
 ## 3. Per-artifact requirements
 
@@ -52,13 +92,22 @@ that filenames can't provide.
 ```json
 {
   "release_id": "2026-07-21-person-model",
-  "commit_sha": "7bef041a...",
+  "release_kind": "attestation-based",
+  "source_commit_sha": "7bef041a...",
+  "release_commit_sha": "9c22b0e1...",
   "approver": "leon@bluetickaccountants.com",
+  "release_window": {
+    "locked_at": "2026-07-21T09:00:00Z",
+    "deployed_at": "2026-07-21T09:04:12Z",
+    "unlocked_at": "2026-07-21T09:11:40Z",
+    "workspace_clean_at_lock": true,
+    "head_equalled_release_commit_at_lock": true
+  },
   "artifacts": [
     {
       "type": "migration",
       "path": "supabase/migrations/20260720190000_company_profile_person_fields.sql",
-      "sha256": "…",
+      "sha256_post_stamp": "…",
       "executor_applied_version": "20260720224301",   // Lovable's own timestamp
       "executor_applied_at": "2026-07-20T22:43:01Z",
       "verification": {
@@ -70,10 +119,11 @@ that filenames can't provide.
     {
       "type": "function",
       "path": "supabase/functions/companies-house-sync",
-      "tree_sha": "…",
+      "tree_sha_post_stamp": "…",
+      "executor_deployed_at": "2026-07-21T09:04:12Z",
       "verification": {
         "method": "version-endpoint",
-        "evidence": "GET ?action=version → {\"sha\":\"7bef041a\",\"built_at\":\"…\"}",
+        "evidence": "GET /functions/v1/companies-house-sync?action=version → {\"sha\":\"9c22b0e1\",\"source_sha\":\"7bef041a\",\"built_at\":\"…\"} — matches release_commit_sha; behavioural smoke: CH profile fetch for 00000006 returned 200 with company_number field",
         "result": "pass"
       }
     }
@@ -83,6 +133,32 @@ that filenames can't provide.
 
 `executor_applied_version` is how we reconcile Lovable's re-timestamping: the receipt records
 *both* our commit SHA and Lovable's applied version, so the mapping is never lost.
+
+The probe MUST return **both** SHAs: `sha` (== `release_commit_sha`, what shipped) and
+`source_sha` (== `source_commit_sha`, what was reviewed). Verification asserts both.
+
+### 4a. Mandatory pre-deploy checks (executor is Lovable)
+
+Because the executor cannot be pinned to a commit, the release window is protected procedurally.
+Before calling `supabase--deploy_edge_functions` (or `supabase--migration`), the operator MUST,
+in order, and record each in the receipt under `release_window`:
+
+1. **Head equals release commit.** `git rev-parse HEAD` == `release_commit_sha`. If not, abort.
+2. **Workspace is clean.** `git status --porcelain` returns empty. No untracked, no unstaged,
+   no staged-but-uncommitted changes. If not, abort.
+3. **Post-stamp checksum recomputed and matches the pending record.** Recompute the artifact
+   checksum against the current tree and confirm it equals the value in
+   `docs/releases/pending/<id>.json`. If not, abort — the tree drifted after declaration.
+4. **Release window locked.** From `locked_at` until `unlocked_at`, no other workspace edits,
+   no other tool calls that mutate files, no other deploys. Any interruption voids the window
+   and the release must be redeclared.
+5. **Deploy.** Call the executor tool for exactly the declared artifacts, nothing else.
+6. **Independent verification.** Run the version probe against the **production** endpoint
+   (custom domain, not preview) and the declared behavioural smoke call. Record raw output as
+   evidence — not a bare "pass".
+7. **Unlock and commit receipt.** Append the record to `docs/releases/release-log.jsonl`.
+
+A release that skips any step is an **exception** under §7 and requires an incident record.
 
 ## 5. Edge function Git SHA exposure — attestation, not proof (required)
 
@@ -105,16 +181,26 @@ Every deployed function must still be able to state which commit it is. Mechanis
   // near the top of the request handler, before auth/business logic
   if (action === "version" || url.searchParams.get("action") === "version") {
     return jsonResponse(
-      { sha: Deno.env.get("RELEASE_SHA") ?? "unset", built_at: Deno.env.get("RELEASE_BUILT_AT") ?? null },
+      {
+        function: "companies-house-sync",
+        sha: VERSION.release_commit_sha,     // what shipped (post-stamp)
+        source_sha: VERSION.source_commit_sha, // what was reviewed
+        built_at: VERSION.built_at,
+        release_id: VERSION.release_id,
+      },
       200,
     );
   }
   ```
 
-The post-release check calls `…/functions/v1/<name>?action=version` and asserts the returned `sha`
-**equals the release commit SHA**. A mismatch (or `"unset"`) means the deployed code is definitely
-not the reviewed code — a failed release. A *match* is an attestation only (§5 opening): it must be
-paired with a behavioural spot-check on the changed path (§6) before the release counts as verified.
+Under the Lovable executor, identity is sourced from a committed `VERSION.ts` in the function
+directory, not from `Deno.env.get("RELEASE_SHA")` — workspace-wide secrets cannot carry
+per-function, per-release identity (see §1a). The post-release check calls
+`…/functions/v1/<name>?action=version` against the **production custom domain** and asserts
+`sha == release_commit_sha` AND `source_sha == source_commit_sha` AND
+`release_id == pending.release_id`. A mismatch on any of the three, or an `"unset"`/absent
+field, is a failed release. A full match is still attestation only (§5 opening) and must be
+paired with a behavioural spot-check on the changed path (§6).
 
 > A `RELEASE_SHA` env var is only as honest as the deployer that sets it. When CI owns the deploy,
 > the value is stamped from the actual checked-out commit and is trustworthy. While Lovable is the
@@ -165,6 +251,21 @@ paired with a behavioural spot-check on the changed path (§6) before the releas
   end-to-end, receipt creation, SHA stamping, and verification become steps in the deploy job, and a
   change cannot reach production without passing them. Only then is the convention enforced rather
   than verified-after-the-fact.
+
+## 10. Architectural limitation (recorded)
+
+**Fully preventive, Git-pinned production deployment is not achievable on the current Lovable
+Cloud executor surface.** Two independent gaps cause this:
+
+| Gap | Consequence | Remediation |
+| --- | ----------- | ----------- |
+| No commit-pinned deploy tool (`deploy_edge_functions` ships the current workspace tree) | Cannot prove "commit X was deployed"; only "the tree at deploy time claimed to be commit X" | Lovable adds `--rev` / commit argument, OR move production deploy to our own CI |
+| No per-release, per-function env injection (secrets are workspace-wide and persistent) | `RELEASE_SHA` cannot safely be an env var; identity must live in a committed `VERSION.ts` | Lovable adds per-deploy env vars, OR move production deploy to our own CI |
+
+While these gaps exist, this convention is **temporary containment and drift detection**, not
+proof of provenance. Every receipt is marked `release_kind: "attestation-based"`. When either
+gap closes, revise this section, introduce `release_kind: "git-pinned"`, and gate the receipt
+schema on the new capability.
 
 ## 9. Adoption — pilot before rollout
 
