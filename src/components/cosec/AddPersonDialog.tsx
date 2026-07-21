@@ -9,12 +9,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
+export interface EditPscData {
+  pscId: string;
+  personId: string;
+  title: string | null;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  nationality: string | null;
+  countryOfResidence: string | null;
+  serviceAddressLine1: string | null;
+  serviceCity: string | null;
+  servicePostcode: string | null;
+  natureOfControl: string[];
+  notifiedAt: string;
+  ceasedAt: string | null;
+}
+
 interface AddPersonDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   companyId: string;
   organizationId: string;
   type: "officer" | "psc";
+  /** When set (type must be "psc"), the dialog edits this existing PSC instead of creating a new one. */
+  editingPsc?: EditPscData | null;
 }
 
 const OFFICER_ROLES = [
@@ -35,30 +54,70 @@ const PSC_CONTROLS = [
   { value: "significant-influence-or-control", label: "Significant influence or control" },
 ];
 
-export function AddPersonDialog({ open, onOpenChange, companyId, organizationId, type }: AddPersonDialogProps) {
+export function AddPersonDialog({ open, onOpenChange, companyId, organizationId, type, editingPsc }: AddPersonDialogProps) {
   const queryClient = useQueryClient();
-  
-  const [formData, setFormData] = useState({
-    title: "",
-    firstName: "",
-    lastName: "",
-    dateOfBirth: "",
-    nationality: "British",
-    countryOfResidence: "United Kingdom",
+  const isEditMode = type === "psc" && !!editingPsc;
+
+  const buildDefaultFormData = () => ({
+    title: editingPsc?.title || "",
+    firstName: editingPsc?.firstName || "",
+    lastName: editingPsc?.lastName || "",
+    dateOfBirth: editingPsc?.dateOfBirth || "",
+    nationality: editingPsc?.nationality ?? "British",
+    countryOfResidence: editingPsc?.countryOfResidence ?? "United Kingdom",
     occupation: "",
-    serviceAddressLine1: "",
-    serviceCity: "",
-    servicePostcode: "",
+    serviceAddressLine1: editingPsc?.serviceAddressLine1 || "",
+    serviceCity: editingPsc?.serviceCity || "",
+    servicePostcode: editingPsc?.servicePostcode || "",
     // Officer specific
     role: "director",
     appointedAt: new Date().toISOString().split("T")[0],
     // PSC specific
-    natureOfControl: [] as string[],
-    notifiedAt: new Date().toISOString().split("T")[0],
+    natureOfControl: editingPsc?.natureOfControl ?? ([] as string[]),
+    notifiedAt: editingPsc?.notifiedAt || new Date().toISOString().split("T")[0],
+    ceasedAt: editingPsc?.ceasedAt || "",
   });
+
+  const [formData, setFormData] = useState(buildDefaultFormData);
 
   const mutation = useMutation({
     mutationFn: async () => {
+      if (isEditMode && editingPsc) {
+        // Update the person's identity fields
+        const { error: personError } = await supabase
+          .from("company_persons")
+          .update({
+            title: formData.title || null,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            date_of_birth: formData.dateOfBirth || null,
+            nationality: formData.nationality || null,
+            country_of_residence: formData.countryOfResidence || null,
+            service_address_line_1: formData.serviceAddressLine1 || null,
+            service_city: formData.serviceCity || null,
+            service_postcode: formData.servicePostcode || null,
+          })
+          .eq("id", editingPsc.personId)
+          .eq("organization_id", organizationId);
+
+        if (personError) throw personError;
+
+        // Update the PSC record itself (ch_psc_id is intentionally left untouched)
+        const { error: pscError } = await supabase
+          .from("company_pscs")
+          .update({
+            nature_of_control: formData.natureOfControl,
+            notified_at: formData.notifiedAt,
+            ceased_at: formData.ceasedAt || null,
+          })
+          .eq("id", editingPsc.pscId)
+          .eq("company_id", companyId);
+
+        if (pscError) throw pscError;
+
+        return null;
+      }
+
       // First create the person
       const { data: person, error: personError } = await supabase
         .from("company_persons")
@@ -108,35 +167,24 @@ export function AddPersonDialog({ open, onOpenChange, companyId, organizationId,
       return person;
     },
     onSuccess: () => {
-      toast.success(type === "officer" ? "Officer added" : "PSC added");
-      queryClient.invalidateQueries({ queryKey: ["company-officers", companyId] });
+      if (isEditMode) {
+        toast.success("PSC updated");
+      } else {
+        toast.success(type === "officer" ? "Officer added" : "PSC added");
+        queryClient.invalidateQueries({ queryKey: ["company-officers", companyId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["company-pscs", companyId] });
       queryClient.invalidateQueries({ queryKey: ["register-events", companyId] });
       onOpenChange(false);
       resetForm();
     },
     onError: (error: any) => {
-      toast.error("Failed to add person", { description: error.message });
+      toast.error(isEditMode ? "Failed to update PSC" : "Failed to add person", { description: error.message });
     },
   });
 
   const resetForm = () => {
-    setFormData({
-      title: "",
-      firstName: "",
-      lastName: "",
-      dateOfBirth: "",
-      nationality: "British",
-      countryOfResidence: "United Kingdom",
-      occupation: "",
-      serviceAddressLine1: "",
-      serviceCity: "",
-      servicePostcode: "",
-      role: "director",
-      appointedAt: new Date().toISOString().split("T")[0],
-      natureOfControl: [],
-      notifiedAt: new Date().toISOString().split("T")[0],
-    });
+    setFormData(buildDefaultFormData());
   };
 
   const toggleControl = (value: string) => {
@@ -152,7 +200,7 @@ export function AddPersonDialog({ open, onOpenChange, companyId, organizationId,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add {type === "officer" ? "Officer" : "PSC"}</DialogTitle>
+          <DialogTitle>{isEditMode ? "Edit PSC" : `Add ${type === "officer" ? "Officer" : "PSC"}`}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -302,6 +350,21 @@ export function AddPersonDialog({ open, onOpenChange, companyId, organizationId,
                   ))}
                 </div>
               </div>
+
+              {isEditMode && (
+                <div>
+                  <Label htmlFor="ceasedAt">Ceased Date</Label>
+                  <Input
+                    id="ceasedAt"
+                    type="date"
+                    value={formData.ceasedAt}
+                    onChange={(e) => setFormData(prev => ({ ...prev, ceasedAt: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Set this to record the PSC as ceased. Leave blank to keep them active.
+                  </p>
+                </div>
+              )}
             </>
           )}
 
@@ -346,7 +409,9 @@ export function AddPersonDialog({ open, onOpenChange, companyId, organizationId,
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending || !formData.firstName || !formData.lastName || (type === "psc" && formData.natureOfControl.length === 0)}
           >
-            {mutation.isPending ? "Adding..." : `Add ${type === "officer" ? "Officer" : "PSC"}`}
+            {isEditMode
+              ? (mutation.isPending ? "Saving..." : "Save Changes")
+              : (mutation.isPending ? "Adding..." : `Add ${type === "officer" ? "Officer" : "PSC"}`)}
           </Button>
         </DialogFooter>
       </DialogContent>

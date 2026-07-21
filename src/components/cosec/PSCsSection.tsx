@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Shield, AlertCircle, CheckCircle } from "lucide-react";
+import { Plus, Pencil, Shield, AlertCircle, CheckCircle } from "lucide-react";
 import { formatNatureOfControl, CHPSC } from "@/lib/ch-sync-service";
 import { format } from "date-fns";
-import { AddPersonDialog } from "./AddPersonDialog";
+import { AddPersonDialog, EditPscData } from "./AddPersonDialog";
 
 interface PSCsSectionProps {
   companyId: string;
@@ -18,6 +18,10 @@ interface PSCsSectionProps {
 
 export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingPsc, setEditingPsc] = useState<EditPscData | null>(null);
+  // Bumped on every open so AddPersonDialog remounts with fresh form state
+  // (it stays mounted between opens, and its form state is only seeded on mount).
+  const [dialogInstanceKey, setDialogInstanceKey] = useState(0);
 
   const { data: pscs, isLoading } = useQuery({
     queryKey: ["company-pscs", companyId],
@@ -37,7 +41,10 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
             last_name,
             date_of_birth,
             nationality,
-            country_of_residence
+            country_of_residence,
+            service_address_line_1,
+            service_city,
+            service_postcode
           )
         `)
         .eq("company_id", companyId)
@@ -50,6 +57,33 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
 
   const activePSCs = pscs?.filter(p => !p.ceased_at) || [];
   const ceasedPSCs = pscs?.filter(p => p.ceased_at) || [];
+
+  const openAddDialog = () => {
+    setEditingPsc(null);
+    setShowAddDialog(true);
+    setDialogInstanceKey(k => k + 1);
+  };
+
+  const openEditDialog = (psc: any) => {
+    setEditingPsc({
+      pscId: psc.id,
+      personId: psc.person?.id,
+      title: psc.person?.title ?? null,
+      firstName: psc.person?.first_name ?? "",
+      lastName: psc.person?.last_name ?? "",
+      dateOfBirth: psc.person?.date_of_birth ?? null,
+      nationality: psc.person?.nationality ?? null,
+      countryOfResidence: psc.person?.country_of_residence ?? null,
+      serviceAddressLine1: psc.person?.service_address_line_1 ?? null,
+      serviceCity: psc.person?.service_city ?? null,
+      servicePostcode: psc.person?.service_postcode ?? null,
+      natureOfControl: psc.nature_of_control ?? [],
+      notifiedAt: psc.notified_at,
+      ceasedAt: psc.ceased_at ?? null,
+    });
+    setShowAddDialog(true);
+    setDialogInstanceKey(k => k + 1);
+  };
 
   // Check if PSC exists in CH data
   const isInCH = (psc: any): boolean => {
@@ -74,7 +108,7 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
               <Shield className="h-5 w-5" />
               Persons with Significant Control ({activePSCs.length})
             </CardTitle>
-            <Button size="sm" onClick={() => setShowAddDialog(true)}>
+            <Button size="sm" onClick={openAddDialog}>
               <Plus className="h-4 w-4 mr-1" />
               Add PSC
             </Button>
@@ -94,6 +128,7 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                   <TableHead>Notified</TableHead>
                   <TableHead>Nationality</TableHead>
                   <TableHead className="text-right">CH Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -128,6 +163,12 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                         </Badge>
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(psc)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        Edit
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -152,6 +193,7 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                   <TableHead>Nature of Control</TableHead>
                   <TableHead>Notified</TableHead>
                   <TableHead>Ceased</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -175,6 +217,12 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                     <TableCell>
                       {psc.ceased_at && format(new Date(psc.ceased_at), "dd MMM yyyy")}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(psc)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        Edit
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -184,11 +232,13 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
       )}
 
       <AddPersonDialog
+        key={dialogInstanceKey}
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
         companyId={companyId}
         organizationId={organizationId}
         type="psc"
+        editingPsc={editingPsc}
       />
     </div>
   );
