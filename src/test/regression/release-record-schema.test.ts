@@ -49,16 +49,21 @@ describe("release records", () => {
 
 describe("release exceptions", () => {
   const dir = join(RELEASES_DIR, "exceptions");
-  if (!existsSync(dir)) return;
-  const files = readdirSync(dir).filter(
-    (f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md",
-  );
+  const files = existsSync(dir)
+    ? readdirSync(dir).filter(
+        (f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md",
+      )
+    : [];
+
+  it("directory scanned (may be empty)", () => {
+    expect(Array.isArray(files)).toBe(true);
+  });
 
   for (const f of files) {
     it(`${f}: closed exception has backfill_commit_sha`, () => {
       const src = readFileSync(join(dir, f), "utf8");
       const statusMatch = src.match(/^status:\s*(\w+)/m);
-      if (!statusMatch) return; // no frontmatter yet
+      if (!statusMatch) return;
       if (statusMatch[1] !== "closed") return;
       const sha = src.match(/^backfill_commit_sha:\s*([0-9a-f]{7,40})/m);
       expect(sha, `${f} is closed but has no backfill_commit_sha`).not.toBeNull();
