@@ -440,6 +440,13 @@ async function syncCompanyFromCH(
     console.error("[CH Sync] Officer promotion failed (non-fatal):", promotion.error);
   }
 
+  // Promote CH PSCs into the person spine (company_persons + company_pscs).
+  // Same non-fatal contract as officer promotion.
+  const pscPromotion = await promotePscsToPersonSpine(supabase, organizationId, companyId, chPSCs);
+  if (pscPromotion.error) {
+    console.error("[CH Sync] PSC promotion failed (non-fatal):", pscPromotion.error);
+  }
+
   // Compare with internal registers and identify discrepancies
   const discrepancies = await compareWithInternalRegisters(supabase, companyId, chOfficers, chPSCs);
 
@@ -456,6 +463,7 @@ async function syncCompanyFromCH(
       discrepancies_found: discrepancies.length,
       staged_field_diffs: stagedDiffs,
       promoted_officers: promotion.promoted,
+      promoted_pscs: pscPromotion.promoted,
       discrepancies: discrepancies,
     },
   });
