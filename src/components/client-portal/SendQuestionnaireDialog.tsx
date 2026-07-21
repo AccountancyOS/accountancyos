@@ -176,9 +176,9 @@ export function SendQuestionnaireDialog({ clientId, companyId, jobId, onClose }:
         <DialogHeader>
           <DialogTitle>Send Questionnaire</DialogTitle>
           <DialogDescription>
-            {generatedLink 
-              ? "Copy the secure link below to send to your client"
-              : "Send a records request questionnaire to the client"
+            {generatedLink
+              ? `Copy the secure link below to send to your ${companyId && !clientId ? "company" : "client"}`
+              : `Send a records request questionnaire to the ${companyId && !clientId ? "company" : "client"}`
             }
           </DialogDescription>
         </DialogHeader>

@@ -61,7 +61,7 @@ export default function ClientPortalTab({ clientId, onViewConversations }: Clien
   // scoped to a handful of the soonest outstanding deadlines (Overview is a
   // summary, the full breakdown no longer has its own tab).
   const { data: deadlines } = useQuery({
-    queryKey: ["client-deadlines", clientId, undefined],
+    queryKey: ["client-deadlines-summary", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deadlines")
