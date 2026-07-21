@@ -1,0 +1,98 @@
+{
+  "release_id": "2026-07-21-ch-sync-probe-pilot",
+  "release_kind": "attestation-based",
+  "status": "draft-awaiting-tooling",
+  "declared_at": "2026-07-21T00:00:00Z",
+  "approver": null,
+  "summary": "First attestation-based release under the revised convention. Adds ?action=version probe and cold-start identity log to companies-house-sync. No behavioural change to the sync path.",
+
+  "source_commit_sha": "9ec186a",
+  "source_commit_sha_note": "Reviewed baseline named by the user. To be re-confirmed as the exact merged commit on main immediately before stamping.",
+
+  "release_commit_sha": "TBD-post-stamp",
+  "release_commit_sha_note": "Set to the commit created by `scripts/stamp-release.ts` writing supabase/functions/companies-house-sync/VERSION.ts. MUST be a direct descendant of source_commit_sha differing only in that one file.",
+
+  "artifacts": [
+    {
+      "type": "function",
+      "path": "supabase/functions/companies-house-sync",
+      "checksum_scope": "function directory + imported _shared modules + deno.json / import_map if present",
+      "artifact_checksum_post_stamp": "TBD-post-stamp",
+      "artifact_checksum_tool": "scripts/release-checksum.ts (not yet implemented)",
+      "expected_probe_response": {
+        "function": "companies-house-sync",
+        "sha": "<release_commit_sha>",
+        "source_sha": "9ec186a",
+        "release_id": "2026-07-21-ch-sync-probe-pilot",
+        "built_at": "<iso8601 set at stamp time>"
+      }
+    }
+  ],
+
+  "dependencies": [],
+  "apply_order": ["supabase/functions/companies-house-sync"],
+
+  "pre_deploy_checks": [
+    "git rev-parse HEAD == release_commit_sha",
+    "git status --porcelain is empty",
+    "scripts/release-checksum.ts supabase/functions/companies-house-sync == artifact_checksum_post_stamp",
+    "release_window.locked_at recorded; no other tool calls until verification completes"
+  ],
+
+  "verification": {
+    "probe": {
+      "method": "GET",
+      "endpoint": "https://<production-domain>/functions/v1/companies-house-sync?action=version",
+      "assertions": [
+        "http_status == 200",
+        "body.sha == release_commit_sha",
+        "body.source_sha == source_commit_sha",
+        "body.release_id == release_id",
+        "body.built_at is a valid ISO-8601 timestamp"
+      ]
+    },
+    "behavioural_smoke": {
+      "method": "GET",
+      "description": "Read-only Companies House profile lookup against production; no writes, no ledger side-effects.",
+      "target_company_number": "00000006",
+      "assertions": [
+        "http_status == 200",
+        "body.company_number == \"00000006\""
+      ]
+    },
+    "result_policy": "Both probe and behavioural_smoke must pass. Any inconclusive result (timeout, non-2xx, network failure) marks the release failed, not green."
+  },
+
+  "release_window": {
+    "locked_at": null,
+    "deployed_at": null,
+    "unlocked_at": null,
+    "workspace_clean_at_lock": null,
+    "head_equalled_release_commit_at_lock": null
+  },
+
+  "rollback_plan": {
+    "strategy": "Redeploy the previous known-good release_commit_sha of companies-house-sync via the same runbook with a new release_id and rollback_of set to this release_id.",
+    "note": "The executor has no revert-deploy primitive; rollback is another attestation-based deploy."
+  },
+
+  "blockers": [
+    "scripts/release-checksum.ts not yet in workspace",
+    "scripts/stamp-release.ts not yet in workspace",
+    "scripts/verify-release.ts not yet in workspace",
+    "supabase/functions/_shared/release-version.ts not yet in workspace",
+    "supabase/functions/companies-house-sync/VERSION.ts not yet in workspace",
+    "companies-house-sync/index.ts does not yet short-circuit on ?action=version",
+    "Regression tests for probe shape / checksum determinism / receipt schema not yet in workspace"
+  ],
+
+  "explicit_non_goals": [
+    "No migration in this release.",
+    "No frontend publication in this release.",
+    "No behavioural change to companies-house-sync sync path.",
+    "No bulk rollout of the probe to other functions."
+  ],
+
+  "convention_reference": "docs/releases/production-release-convention.md (§1a, §2a, §4a, §5, §10)",
+  "runbook_reference": "docs/releases/pilot-runbook.md"
+}
