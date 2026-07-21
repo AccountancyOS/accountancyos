@@ -152,7 +152,20 @@ export default function JobDocumentsTab({ jobId, templateId }: JobDocumentsTabPr
   });
 
   const checklist: RecordChecklistItem[] = useMemo(
-    () => buildRecordsChecklist(recordDefinitions || [], requestTasks || []),
+    () =>
+      buildRecordsChecklist(
+        // Adapt the loosely-typed jsonb template items (id/name optional) to the
+        // strict model, dropping any without a usable name.
+        (recordDefinitions || [])
+          .filter((d) => typeof d.name === "string" && d.name.trim().length > 0)
+          .map((d) => ({
+            id: d.id,
+            name: d.name as string,
+            description: d.description,
+            isRequired: d.isRequired,
+          })),
+        requestTasks || []
+      ),
     [recordDefinitions, requestTasks]
   );
 

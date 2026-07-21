@@ -41,7 +41,8 @@ export type RecordState =
 
 /** Shape needed from a `records_requests_template` entry (RecordsRequestItem). */
 export interface RecordDefinitionItem {
-  id: string;
+  /** Optional — template items parsed from records_requests_template may omit it. */
+  id?: string;
   name: string;
   description?: string;
   isRequired?: boolean;
@@ -115,7 +116,7 @@ export function buildRecordsChecklist(
     return definitions.map((item) => {
       const match = findMatch(item, tasks);
       return {
-        id: item.id,
+        id: item.id ?? item.name,
         name: item.name,
         description: item.description,
         isRequired: item.isRequired ?? true,
