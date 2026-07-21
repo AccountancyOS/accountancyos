@@ -370,8 +370,17 @@ function UploadRow({
 
   const upload = async (file: File) => {
     setUploading(true);
+    const token = getAccessToken();
+    if (!token) {
+      toast.error("Session expired — please reopen your onboarding link from the original email.");
+      setUploading(false);
+      return;
+    }
     const ext = file.name.split(".").pop() ?? "bin";
-    const path = `${bundle.organization.id}/onboarding/${bundle.application.id}/${docType}-${Date.now()}.${ext}`;
+    // Path segment 4 MUST be the per-application access token — the storage
+    // INSERT policy `is_active_onboarding_upload_path` verifies it matches
+    // onboarding_applications.access_token before allowing the upload.
+    const path = `${bundle.organization.id}/onboarding/${bundle.application.id}/${token}/${docType}-${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("onboarding-documents")
       .upload(path, file, { upsert: false });
@@ -382,7 +391,7 @@ function UploadRow({
     }
     const { error: rpcErr } = await supabase.rpc("public_record_aml_upload", {
       p_application_id: bundle.application.id,
-      p_access_token: getAccessToken(),
+      p_access_token: token,
       p_document_type: docType,
       p_file_name: file.name,
       p_file_path: path,
