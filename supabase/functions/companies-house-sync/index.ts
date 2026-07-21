@@ -230,6 +230,7 @@ async function syncCompanyFromCH(
   companyId: string,
   organizationId: string,
   chApiKey: string,
+  actorUserId: string | null,
 ): Promise<SyncOutcome> {
   // Get company details from our database
   const { data: company, error: companyError } = await supabase
@@ -360,6 +361,7 @@ async function syncCompanyFromCH(
     event_type: "ch_sync",
     event_date: new Date().toISOString().split("T")[0],
     source: "ch_sync",
+    created_by: actorUserId,
     details: {
       officers_count: chOfficers.length,
       pscs_count: chPSCs.length,
