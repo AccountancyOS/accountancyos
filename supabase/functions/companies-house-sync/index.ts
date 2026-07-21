@@ -492,6 +492,7 @@ async function syncCompanyFromCH(
     stagedFieldDiffs: stagedDiffs,
     cs01DeadlineCreated,
     promotedOfficers: promotion.promoted,
+    promotedPscs: pscPromotion.promoted,
     syncedAt: new Date().toISOString(),
   };
 }
