@@ -6,6 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Release attestation (see docs/releases/production-release-convention.md §5).
+// The deployer sets RELEASE_SHA to the git commit it is deploying from; the
+// function reports it via `?action=version` and logs it on cold start. This is
+// an ATTESTATION for diagnosis, not cryptographic proof of provenance.
+const RELEASE_SHA = Deno.env.get("RELEASE_SHA") ?? "unset";
+const RELEASE_BUILT_AT = Deno.env.get("RELEASE_BUILT_AT") ?? null;
+console.log("[boot] companies-house-sync release_sha", RELEASE_SHA);
+
 const CH_API_BASE = "https://api.company-information.service.gov.uk";
 
 // ==================== Companies House Public Data API types ====================
@@ -763,6 +771,12 @@ function jsonResponse(body: unknown, status: number): Response {
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Version attestation probe — no auth, no side effects. Lets an independent
+  // post-release check confirm which commit the deployed function claims to be.
+  if (new URL(req.url).searchParams.get("action") === "version") {
+    return jsonResponse({ sha: RELEASE_SHA, built_at: RELEASE_BUILT_AT }, 200);
   }
 
   try {
