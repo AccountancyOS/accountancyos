@@ -911,7 +911,13 @@ serve(async (req: Request) => {
       );
     }
 
-    const result = await syncCompanyFromCH(supabase, companyId, organizationId, CH_PROD_API_KEY);
+    const result = await syncCompanyFromCH(
+      supabase,
+      companyId,
+      organizationId,
+      CH_PROD_API_KEY,
+      user?.id ?? null,
+    );
 
     if ("error" in result) {
       return jsonResponse(result, result.ch_status ? 502 : 500);
