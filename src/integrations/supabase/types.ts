@@ -18392,6 +18392,10 @@ export type Database = {
         Returns: undefined
       }
       is_active_onboarding_path: { Args: { p_name: string }; Returns: boolean }
+      is_active_onboarding_upload_path: {
+        Args: { p_name: string }
+        Returns: boolean
+      }
       is_canonical_lifecycle_enabled: {
         Args: { p_org_id: string }
         Returns: boolean
