@@ -13,7 +13,12 @@ const corsHeaders = {
 // cold start. A committed file is the reliable per-function carrier because the
 // executor (Lovable) has no per-function deploy-time env vars. This is an
 // ATTESTATION for diagnosis, not cryptographic proof of provenance.
-console.log("[boot] companies-house-sync source_sha", VERSION.source_sha);
+console.log(
+  "[boot] companies-house-sync source_sha",
+  VERSION.source_commit_sha,
+  "release_id",
+  VERSION.release_id,
+);
 
 const CH_API_BASE = "https://api.company-information.service.gov.uk";
 
@@ -777,7 +782,15 @@ serve(async (req: Request) => {
   // Version attestation probe — no auth, no side effects. Lets an independent
   // post-release check confirm which commit the deployed function claims to be.
   if (new URL(req.url).searchParams.get("action") === "version") {
-    return jsonResponse({ source_sha: VERSION.source_sha, built_at: VERSION.built_at }, 200);
+    return jsonResponse(
+      {
+        function: "companies-house-sync",
+        source_sha: VERSION.source_commit_sha,
+        release_id: VERSION.release_id,
+        built_at: VERSION.built_at,
+      },
+      200,
+    );
   }
 
   try {

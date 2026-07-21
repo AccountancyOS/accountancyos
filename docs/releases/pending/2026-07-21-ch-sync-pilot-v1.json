@@ -1,0 +1,35 @@
+{
+  "release_id": "2026-07-21-ch-sync-pilot-v1",
+  "release_kind": "attestation-based",
+  "description": "Pilot: deploy companies-house-sync (live CH rewrite + version probe) under the release convention.",
+  "source_commit_sha": "TO_FILL_AT_LOCK — git rev-parse HEAD at the moment the window is locked",
+  "release_commit_sha": "TO_FILL_AFTER_STAMP — the commit created by stamping VERSION.ts",
+  "approver": "leon@bluetickaccountants.com",
+  "artifacts": [
+    {
+      "type": "function",
+      "path": "supabase/functions/companies-house-sync",
+      "tree_sha_post_stamp": "TO_FILL",
+      "verification": {
+        "method": "version-probe + behavioural-smoke",
+        "command": "deno run --allow-net --allow-env scripts/verify-release.ts",
+        "asserts": [
+          "GET ?action=version → source_sha == source_commit_sha",
+          "GET ?action=version → release_id == 2026-07-21-ch-sync-pilot-v1",
+          "behavioural: action=search returns items[] (200) — proves live CH path, not stale mock"
+        ],
+        "evidence": "TO_FILL — raw probe JSON + smoke response",
+        "result": "pending"
+      }
+    }
+  ],
+  "release_window": {
+    "locked_at": "TO_FILL",
+    "workspace_clean_at_lock": "TO_FILL (git status --porcelain empty)",
+    "head_equalled_release_commit_at_lock": "TO_FILL",
+    "deployed_at": "TO_FILL",
+    "unlocked_at": "TO_FILL"
+  },
+  "rollback": "Re-stamp VERSION.ts to the prior source_commit_sha and redeploy companies-house-sync; the function's behaviour is unchanged by the stamp, so rollback is deploy-only. No DB/data changes in this release.",
+  "notes": "Pilot ONLY tests whether Lovable can faithfully execute a declared revision. If the probe returns unset/wrong source_sha, or the smoke fails, the executor must move to CI (see convention §8, §1a)."
+}

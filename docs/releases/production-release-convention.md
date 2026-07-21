@@ -123,7 +123,7 @@ that filenames can't provide.
       "executor_deployed_at": "2026-07-21T09:04:12Z",
       "verification": {
         "method": "version-endpoint",
-        "evidence": "GET /functions/v1/companies-house-sync?action=version → {\"sha\":\"9c22b0e1\",\"source_sha\":\"7bef041a\",\"built_at\":\"…\"} — matches release_commit_sha; behavioural smoke: CH profile fetch for 00000006 returned 200 with company_number field",
+        "evidence": "GET /functions/v1/companies-house-sync?action=version → {\"source_sha\":\"7bef041a\",\"release_id\":\"2026-07-21-...\",\"built_at\":\"…\"} — source_sha matches source_commit_sha, release_id matches pending; behavioural smoke: CH profile fetch for 00000006 returned 200 with company_number field",
         "result": "pass"
       }
     }
@@ -134,8 +134,10 @@ that filenames can't provide.
 `executor_applied_version` is how we reconcile Lovable's re-timestamping: the receipt records
 *both* our commit SHA and Lovable's applied version, so the mapping is never lost.
 
-The probe MUST return **both** SHAs: `sha` (== `release_commit_sha`, what shipped) and
-`source_sha` (== `source_commit_sha`, what was reviewed). Verification asserts both.
+The probe returns `source_sha` (== `source_commit_sha`, what was reviewed) and `release_id`. It
+**cannot** return `release_commit_sha` — a commit can never contain its own hash — so
+`release_commit_sha` is proven procedurally by §4a (`HEAD == release_commit_sha` + clean tree at
+deploy), not self-reported by the function.
 
 ### 4a. Mandatory pre-deploy checks (executor is Lovable)
 
@@ -171,10 +173,12 @@ verification of the changed behaviour (§6). Treat a matching SHA as necessary, 
 
 Every deployed function must still be able to state which commit it is. Mechanism:
 
-- At deploy time the deployer sets a **`RELEASE_SHA`** environment variable (secret) to the git
-  commit SHA being deployed. In a git-driven CI deploy this is `git rev-parse HEAD`; if Lovable is
-  the deployer it must inject the SHA it is deploying from.
-- Each function **logs `RELEASE_SHA` on cold start**: `console.log("[boot] release_sha", sha)`.
+- At deploy time the deployer stamps `VERSION.ts` (`source_commit_sha` + `release_id`) with the
+  reviewed commit being deployed, then deploys the tree. Env vars cannot carry per-function,
+  per-release identity under Lovable (see §1a); under CI the same stamp is written from the actual
+  checkout.
+- Each function **logs its stamp on cold start**:
+  `console.log("[boot] source_sha", VERSION.source_commit_sha)`.
 - Each function answers a **version probe** with no side effects:
 
   ```ts
@@ -183,10 +187,9 @@ Every deployed function must still be able to state which commit it is. Mechanis
     return jsonResponse(
       {
         function: "companies-house-sync",
-        sha: VERSION.release_commit_sha,     // what shipped (post-stamp)
-        source_sha: VERSION.source_commit_sha, // what was reviewed
-        built_at: VERSION.built_at,
+        source_sha: VERSION.source_commit_sha, // what was reviewed (release_commit_sha proven by §4a)
         release_id: VERSION.release_id,
+        built_at: VERSION.built_at,
       },
       200,
     );
@@ -197,9 +200,9 @@ Under the Lovable executor, identity is sourced from a committed `VERSION.ts` in
 directory, not from `Deno.env.get("RELEASE_SHA")` — workspace-wide secrets cannot carry
 per-function, per-release identity (see §1a). The post-release check calls
 `…/functions/v1/<name>?action=version` against the **production custom domain** and asserts
-`sha == release_commit_sha` AND `source_sha == source_commit_sha` AND
-`release_id == pending.release_id`. A mismatch on any of the three, or an `"unset"`/absent
-field, is a failed release. A full match is still attestation only (§5 opening) and must be
+`source_sha == source_commit_sha` AND `release_id == pending.release_id` (with §4a proving the
+shipped tree is `release_commit_sha`). A mismatch on either, or an `"unset"`/absent field, is a
+failed release. A full match is still attestation only (§5 opening) and must be
 paired with a behavioural spot-check on the changed path (§6).
 
 > A `RELEASE_SHA` env var is only as honest as the deployer that sets it. When CI owns the deploy,
