@@ -87,6 +87,31 @@ describe("companies-house-sync live-API source structure", () => {
     expect(persistFn).toMatch(/catch/);
   });
 
+  it("does not unconditionally overwrite an already-linked company_pscs row on resync — nature_of_control/notified_at/ceased_at are user-owned once linked", () => {
+    const promoteFn = SRC.match(/async function promotePscsToPersonSpine[\s\S]*?\n}\n/)?.[0] ?? "";
+    expect(promoteFn.length).toBeGreaterThan(0);
+    // Rows already keyed by ch_psc_id must be skipped before any company_pscs write.
+    expect(promoteFn).toMatch(/pscsByChId\.has\(chId\)/);
+    // The company_pscs write must not be an unconditional upsert of every
+    // candidate PSC — only newly-discovered (unlinked) rows are written.
+    expect(promoteFn).not.toMatch(/\.upsert\(pscRows/);
+  });
+
+  it("stitches a CH PSC onto an existing ch_psc_id-less company_pscs row instead of inserting a duplicate, and refuses to guess when ambiguous", () => {
+    const promoteFn = SRC.match(/async function promotePscsToPersonSpine[\s\S]*?\n}\n/)?.[0] ?? "";
+    expect(promoteFn).toMatch(/unlinkedPscs/);
+    expect(promoteFn).toMatch(/nameMatches\.length === 1/);
+    // More than one ch_psc_id-less match for the same person/name must not be
+    // auto-stitched — it should surface as a discrepancy instead.
+    expect(promoteFn).toMatch(/nameMatches\.length > 1/);
+  });
+
+  it("inserts a fresh company_persons row for a genuinely new PSC via a plain insert, not an upsert that could clobber an already-linked person", () => {
+    const personInsertBlock = SRC.match(/\/\/ \(4\) fresh insert[\s\S]{0,500}/)?.[0] ?? "";
+    expect(personInsertBlock).toMatch(/\.from\(["']company_persons["']\)\s*\n\s*\.insert\(personRow\)/);
+    expect(personInsertBlock).not.toMatch(/\.upsert\(/);
+  });
+
   it("keeps the existing scalar-diff staging and CS01-deadline creation", () => {
     expect(SRC).toMatch(/companies_house_diff_staging/);
     expect(SRC).toMatch(/CS01/);

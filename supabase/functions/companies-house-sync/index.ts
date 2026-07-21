@@ -612,10 +612,26 @@ async function promoteOfficersToPersonSpine(
  *   3. Person already linked to this company (as officer or PSC) whose
  *      normalised first+last name and date-of-birth month/year match the CH
  *      PSC — reuse (this is how PSC-is-also-a-director is stitched together).
- *   4. Otherwise insert a fresh company_persons row.
+ *   4. Otherwise insert a fresh company_persons row — a plain insert, not an
+ *      upsert. If a conflict is somehow hit anyway (shouldn't happen: the
+ *      existingPersons query above already covers the whole org), it fails
+ *      into the catch below and this PSC is skipped for the cycle rather
+ *      than silently overwriting an already-linked person's identity fields.
  *
- * company_pscs is upserted on `ch_psc_id`. PSCs without a stable CH link are
- * skipped for promotion — no safe dedupe key — but never cause an error.
+ * company_pscs linking is REVIEW-GATED, not an unconditional upsert:
+ *   - A ch_psc_id that already has a company_pscs row is left completely
+ *     untouched — nature_of_control / notified_at / ceased_at are user-owned
+ *     once linked. Any drift from CH is surfaced by
+ *     compareWithInternalRegisters (psc_control_mismatch) and the UI's
+ *     "Update from CH" action; it is never auto-applied here.
+ *   - A ch_psc_id with no existing row is stitched onto a single unlinked
+ *     (ch_psc_id IS NULL) company_pscs row for this company when exactly one
+ *     such row's person matches (by person_id via the stitch above, or by
+ *     name) — this prevents a duplicate row for a PSC that was added
+ *     manually before ever being linked to CH. CH fields are adopted only
+ *     onto genuinely-empty columns; ambiguous matches (more than one) are
+ *     left alone and surface as a discrepancy instead.
+ *   - Otherwise a new company_pscs row is inserted, as before.
  */
 async function promotePscsToPersonSpine(
   supabase: any,
@@ -648,6 +664,38 @@ async function promotePscsToPersonSpine(
       console.error("[CH Sync] PSC promotion — existing persons query failed:", existingErr.message);
     }
 
+    // Load this company's existing company_pscs rows so linking is
+    // review-gated: rows already keyed to a ch_psc_id are never overwritten,
+    // and unlinked (ch_psc_id IS NULL) rows are only stitched, never
+    // duplicated.
+    const { data: existingCompanyPscs, error: existingPscsErr } = await supabase
+      .from("company_pscs")
+      .select(
+        `
+        id,
+        person_id,
+        ch_psc_id,
+        nature_of_control,
+        notified_at,
+        ceased_at,
+        person:company_persons(first_name, last_name)
+      `,
+      )
+      .eq("company_id", companyId);
+    if (existingPscsErr) {
+      console.error("[CH Sync] PSC promotion — existing company_pscs query failed:", existingPscsErr.message);
+    }
+
+    const pscsByChId = new Map<string, any>();
+    const unlinkedPscs: any[] = [];
+    for (const row of existingCompanyPscs ?? []) {
+      if (row.ch_psc_id) {
+        pscsByChId.set(row.ch_psc_id, row);
+      } else {
+        unlinkedPscs.push(row);
+      }
+    }
+
     // Build a lookup by first+last (normalised) — restricted to persons linked
     // to *this* company via either officer or PSC rows.
     const nameKey = (first: string, last: string) => `${first}::${last}`;
@@ -671,7 +719,9 @@ async function promotePscsToPersonSpine(
       if (p.ch_officer_id) byChOfficerId.set(p.ch_officer_id, p);
     }
 
-    const pscRows: PscRow[] = [];
+    const pscInserts: PscRow[] = [];
+    const pscStitches: Array<{ id: string; update: Partial<PscRow> }> = [];
+
     for (const psc of candidates) {
       const chId = psc.links!.self as string;
       let personId: string | null = null;
@@ -681,7 +731,8 @@ async function promotePscsToPersonSpine(
       if (direct?.id) {
         personId = direct.id;
         // Stamp ch_psc_id on the existing person if not already set — cheap
-        // future-proofing so subsequent syncs skip the name matcher.
+        // future-proofing so subsequent syncs skip the name matcher. This is
+        // the only field ever written to an already-linked person here.
         if (!direct.ch_psc_id) {
           await supabase
             .from("company_persons")
@@ -717,7 +768,7 @@ async function promotePscsToPersonSpine(
         const personRow = mapChPscToPerson(psc, organizationId);
         const { data: inserted, error: insertError } = await supabase
           .from("company_persons")
-          .upsert(personRow, { onConflict: "organization_id,ch_psc_id" })
+          .insert(personRow)
           .select("id")
           .single();
         if (insertError || !inserted) {
@@ -727,20 +778,73 @@ async function promotePscsToPersonSpine(
         personId = inserted.id;
       }
 
-      pscRows.push(mapChPscToPscRow(psc, companyId, personId!));
+      // --- company_pscs linking: review-gated, never overwrites a linked row ---
+      if (pscsByChId.has(chId)) {
+        // Already linked — nature_of_control/notified_at/ceased_at are the
+        // user's source of truth. Drift is surfaced by
+        // compareWithInternalRegisters, not auto-applied here.
+        continue;
+      }
+
+      const nameMatches = unlinkedPscs.filter((row) => {
+        if (row.person_id && row.person_id === personId) return true;
+        return namesMatch(psc.name, `${row.person?.first_name ?? ""} ${row.person?.last_name ?? ""}`);
+      });
+
+      if (nameMatches.length === 1) {
+        const row = nameMatches[0];
+        const update: Partial<PscRow> = { ch_psc_id: chId };
+        // Adopt CH fields only where the row is genuinely empty — never
+        // overwrite a value the user already set.
+        if (!row.nature_of_control || row.nature_of_control.length === 0) {
+          update.nature_of_control = psc.natures_of_control ?? [];
+        }
+        if (!row.notified_at) {
+          update.notified_at = psc.notified_on;
+        }
+        if (!row.ceased_at && psc.ceased_on) {
+          update.ceased_at = psc.ceased_on;
+        }
+        pscStitches.push({ id: row.id, update });
+        // Consumed — remove from the pool so a second CH PSC with the same
+        // name can't double-stitch onto it.
+        unlinkedPscs.splice(unlinkedPscs.indexOf(row), 1);
+        continue;
+      }
+
+      if (nameMatches.length > 1) {
+        // Ambiguous — don't guess. Surfaces as a discrepancy instead.
+        continue;
+      }
+
+      pscInserts.push(mapChPscToPscRow(psc, companyId, personId!));
     }
 
-    if (pscRows.length === 0) return { promoted: 0 };
+    let promoted = 0;
 
-    const { error: pscsError } = await supabase
-      .from("company_pscs")
-      .upsert(pscRows, { onConflict: "company_id,ch_psc_id" });
-
-    if (pscsError) {
-      return { promoted: 0, error: pscsError.message };
+    for (const stitch of pscStitches) {
+      const { error } = await supabase
+        .from("company_pscs")
+        .update(stitch.update)
+        .eq("id", stitch.id);
+      if (error) {
+        console.error("[CH Sync] PSC stitch update failed:", error.message);
+        continue;
+      }
+      promoted += 1;
     }
 
-    return { promoted: pscRows.length };
+    if (pscInserts.length > 0) {
+      const { error: pscsError } = await supabase
+        .from("company_pscs")
+        .upsert(pscInserts, { onConflict: "company_id,ch_psc_id" });
+      if (pscsError) {
+        return { promoted, error: pscsError.message };
+      }
+      promoted += pscInserts.length;
+    }
+
+    return { promoted };
   } catch (err: any) {
     return { promoted: 0, error: err?.message ?? "PSC promotion error" };
   }

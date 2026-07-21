@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Shield, AlertCircle, CheckCircle, Trash2 } from "lucide-react";
+import { Plus, Pencil, Shield, AlertCircle, CheckCircle, Trash2, RefreshCw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +25,59 @@ interface PSCsSectionProps {
   companyId: string;
   organizationId: string;
   chPSCs?: CHPSC[];
+}
+
+function chNameMatches(chName: string, internalName: string): boolean {
+  if (!internalName.trim()) return false;
+  const cleaned = chName.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, "").trim();
+  const name = internalName.trim().toLowerCase();
+  return cleaned === name || cleaned.includes(name) || name.includes(cleaned);
+}
+
+/**
+ * Finds the CH PSC counterpart for an internal company_pscs row: by
+ * ch_psc_id first, falling back to a loose name match against the
+ * freshly-fetched CH snapshot (companies.ch_company_profile.pscs).
+ */
+function findChMatch(psc: any, chPSCs?: CHPSC[]): CHPSC | undefined {
+  if (!chPSCs || chPSCs.length === 0) return undefined;
+  if (psc.ch_psc_id) {
+    const byId = chPSCs.find((c) => c.links?.self === psc.ch_psc_id);
+    if (byId) return byId;
+  }
+  const name = `${psc.person?.first_name ?? ""} ${psc.person?.last_name ?? ""}`.trim();
+  if (!name) return undefined;
+  return chPSCs.find((c) => chNameMatches(c.name, name));
+}
+
+/**
+ * Compares a stored PSC against its matching CH record. Never auto-applies —
+ * this only tells the UI whether to show "Differs from Companies House" and
+ * what changed, so the user can explicitly accept CH's values.
+ */
+function diffAgainstCh(psc: any, chPSCs?: CHPSC[]): { match?: CHPSC; differs: boolean; details: string[] } {
+  const match = findChMatch(psc, chPSCs);
+  if (!match) return { match: undefined, differs: false, details: [] };
+
+  const details: string[] = [];
+
+  const internalControls = new Set<string>(psc.nature_of_control ?? []);
+  const chControls = new Set<string>(match.natures_of_control ?? []);
+  const controlsDiffer =
+    internalControls.size !== chControls.size || ![...chControls].every((c) => internalControls.has(c));
+  if (controlsDiffer) details.push("nature of control");
+
+  const internalNotified = psc.notified_at ? String(psc.notified_at).slice(0, 10) : null;
+  const chNotified = match.notified_on ? String(match.notified_on).slice(0, 10) : null;
+  if (chNotified && internalNotified && chNotified !== internalNotified) {
+    details.push("notified date");
+  }
+
+  const internalCeased = psc.ceased_at ? String(psc.ceased_at).slice(0, 10) : null;
+  const chCeased = match.ceased_on ? String(match.ceased_on).slice(0, 10) : null;
+  if (chCeased !== internalCeased) details.push("ceased date");
+
+  return { match, differs: details.length > 0, details };
 }
 
 export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionProps) {
@@ -52,6 +105,46 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
     },
     onError: (err: any) => {
       toast.error(err?.message ?? "Failed to remove PSC");
+    },
+  });
+
+  const updateFromChMutation = useMutation({
+    mutationFn: async ({ psc, chMatch }: { psc: any; chMatch: CHPSC }) => {
+      if (psc.person?.id) {
+        const personUpdate: Record<string, unknown> = {};
+        if (chMatch.nationality !== undefined) personUpdate.nationality = chMatch.nationality ?? null;
+        if (chMatch.country_of_residence !== undefined) {
+          personUpdate.country_of_residence = chMatch.country_of_residence ?? null;
+        }
+        if (Object.keys(personUpdate).length > 0) {
+          const { error: personError } = await supabase
+            .from("company_persons")
+            .update(personUpdate)
+            .eq("id", psc.person.id)
+            .eq("organization_id", organizationId);
+          if (personError) throw personError;
+        }
+      }
+
+      // ch_psc_id is intentionally left untouched — this is an explicit
+      // "accept CH's values" action, not a re-link.
+      const { error: pscError } = await supabase
+        .from("company_pscs")
+        .update({
+          nature_of_control: chMatch.natures_of_control ?? [],
+          notified_at: chMatch.notified_on,
+          ceased_at: chMatch.ceased_on ?? null,
+        })
+        .eq("id", psc.id)
+        .eq("company_id", companyId);
+      if (pscError) throw pscError;
+    },
+    onSuccess: () => {
+      toast.success("Updated from Companies House");
+      queryClient.invalidateQueries({ queryKey: ["company-pscs", companyId] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message ?? "Failed to update from Companies House");
     },
   });
 
@@ -97,9 +190,13 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
   };
 
   const openEditDialog = (psc: any) => {
+    if (!psc.person?.id) {
+      toast.error("This PSC has no linked person record and cannot be edited");
+      return;
+    }
     setEditingPsc({
       pscId: psc.id,
-      personId: psc.person?.id,
+      personId: psc.person.id,
       title: psc.person?.title ?? null,
       firstName: psc.person?.first_name ?? "",
       lastName: psc.person?.last_name ?? "",
@@ -168,7 +265,9 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activePSCs.map((psc) => (
+                {activePSCs.map((psc) => {
+                  const chDiff = diffAgainstCh(psc, chPSCs);
+                  return (
                   <TableRow key={psc.id}>
                     <TableCell className="font-medium">
                       {psc.person?.title} {psc.person?.first_name} {psc.person?.last_name}
@@ -187,7 +286,16 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                     </TableCell>
                     <TableCell>{psc.person?.nationality || "-"}</TableCell>
                     <TableCell className="text-right">
-                      {isInCH(psc) ? (
+                      {chDiff.differs ? (
+                        <Badge
+                          variant="outline"
+                          className="gap-1 text-amber-600 border-amber-200"
+                          title={`Differs from Companies House: ${chDiff.details.join(", ")}`}
+                        >
+                          <AlertCircle className="h-3 w-3" />
+                          Differs from CH
+                        </Badge>
+                      ) : isInCH(psc) ? (
                         <Badge variant="outline" className="gap-1 text-green-600 border-green-200">
                           <CheckCircle className="h-3 w-3" />
                           Synced
@@ -201,6 +309,18 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {chDiff.differs && chDiff.match && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-amber-600"
+                            disabled={updateFromChMutation.isPending}
+                            onClick={() => updateFromChMutation.mutate({ psc, chMatch: chDiff.match! })}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                            Update from CH
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => openEditDialog(psc)}>
                           <Pencil className="h-3.5 w-3.5 mr-1" />
                           Edit
@@ -221,7 +341,8 @@ export function PSCsSection({ companyId, organizationId, chPSCs }: PSCsSectionPr
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
