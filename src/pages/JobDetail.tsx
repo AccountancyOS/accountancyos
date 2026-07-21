@@ -35,6 +35,7 @@ import {
   capabilityTabVisible,
 } from "@/lib/job-workflow-model";
 import { JOB_TASK_STATUSES, CLIENT_TASK_STATUSES } from "@/lib/db-constants/check-constraints";
+import JobOverviewTab from "@/components/jobs/JobOverviewTab";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
@@ -57,7 +58,7 @@ export default function JobDetail() {
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("pipeline");
+  const [activeTab, setActiveTab] = useState("overview");
   const [showUndoDialog, setShowUndoDialog] = useState(false);
   const [undoReason, setUndoReason] = useState("");
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -69,8 +70,8 @@ export default function JobDetail() {
         .from("jobs")
         .select(`
           *,
-          clients!fk_jobs_client (id, first_name, last_name, email, client_type),
-          companies!fk_jobs_company (id, company_name, email, company_type)
+          clients!fk_jobs_client (id, first_name, last_name, email, phone, client_type),
+          companies!fk_jobs_company (id, company_name, email, phone, company_type, primary_contact_person_id)
         `)
         .eq("id", jobId)
         .single();
@@ -644,6 +645,7 @@ export default function JobDetail() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="records">Records</TabsTrigger>
             {showQuestionnaireTab && <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>}
@@ -655,6 +657,24 @@ export default function JobDetail() {
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="overview">
+            <JobOverviewTab
+              jobId={job.id}
+              job={job}
+              clientName={clientName}
+              clientTypeLabel={clientTypeLabel}
+              ownerName={ownerName}
+              filingDeadlineText={filingDeadlineText}
+              filingDeadlineColor={filingDeadlineColor}
+              unreadMessagesCount={unreadMessagesCount}
+              sourceJob={sourceJob}
+              nextYearJob={nextYearJob}
+              orgUsers={orgUsers}
+              onNavigateTab={setActiveTab}
+              primaryActionMutation={primaryActionMutation}
+            />
+          </TabsContent>
 
           <TabsContent value="pipeline">
             <div className="space-y-6">
