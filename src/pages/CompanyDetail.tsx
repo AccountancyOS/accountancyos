@@ -54,6 +54,7 @@ import { StaffAssignmentField } from "@/components/company/StaffAssignmentField"
 import { CompanyTextFieldEditor } from "@/components/company/CompanyTextFieldEditor";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
+import { AddServiceDialog } from "@/components/client-portal/AddServiceDialog";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 
 const CompanyDetail = () => {
@@ -635,6 +636,9 @@ const CompanyDetail = () => {
           </TabsContent>
 
           <TabsContent value="services" className="mt-6">
+            <div className="flex justify-end mb-4">
+              <AddServiceDialog companyId={companyId} />
+            </div>
             <ServiceStatusDashboard companyId={companyId} />
           </TabsContent>
 
