@@ -83,6 +83,7 @@ interface PersonUpsert {
   nationality?: string;
   occupation?: string;
   ch_officer_id?: string;
+  ch_psc_id?: string;
 }
 
 interface OfficerRow {
@@ -92,6 +93,98 @@ interface OfficerRow {
   appointed_at: string;
   resigned_at: string | null;
   ch_appointment_id?: string;
+}
+
+interface PscRow {
+  company_id: string;
+  person_id: string;
+  nature_of_control: string[];
+  notified_at: string;
+  ceased_at: string | null;
+  ch_psc_id?: string;
+}
+
+/**
+ * Normalises a person name for fuzzy matching between CH and internal registers.
+ * Handles both CH officer format ("SURNAME, Forename Middle") and CH PSC format
+ * ("Mr Forename Middle Surname"), plus internal "first last" ordering.
+ * Returns lowercased first/last tokens, ignoring titles and middle names —
+ * this is what stops false discrepancies like "Leon Lim Stevens" vs "Leon Stevens".
+ */
+function normaliseName(raw: string | null | undefined): { first: string; last: string } {
+  if (!raw) return { first: "", last: "" };
+  const trimmed = raw.trim();
+  let first = "";
+  let last = "";
+  if (trimmed.includes(",")) {
+    // "SURNAME, Forename Middle"
+    const [surname, rest = ""] = trimmed.split(",", 2);
+    last = surname.trim();
+    first = rest.trim().split(/\s+/)[0] ?? "";
+  } else {
+    // "Mr Forename Middle Surname" — strip a leading title token then take first & last.
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    if (tokens.length > 0 && /^(mr|mrs|ms|miss|dr|sir|dame|prof|professor|lord|lady)\.?$/i.test(tokens[0])) {
+      tokens.shift();
+    }
+    if (tokens.length === 1) {
+      last = tokens[0];
+    } else if (tokens.length >= 2) {
+      first = tokens[0];
+      last = tokens[tokens.length - 1];
+    }
+  }
+  return { first: first.toLowerCase(), last: last.toLowerCase() };
+}
+
+function namesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normaliseName(a);
+  const nb = normaliseName(b);
+  if (!na.last || !nb.last) return false;
+  return na.first === nb.first && na.last === nb.last;
+}
+
+/**
+ * Parses a CH PSC name ("Mr Leon Lim Stevens") into first/last.
+ * PSCs do not use the officer's "SURNAME, Forename" ordering.
+ */
+function parseChPscName(chName: string): { first_name: string; last_name: string } {
+  const { first, last } = normaliseName(chName);
+  // Preserve original casing for storage — walk the raw tokens again.
+  const tokens = chName.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length > 0 && /^(mr|mrs|ms|miss|dr|sir|dame|prof|professor|lord|lady)\.?$/i.test(tokens[0])) {
+    tokens.shift();
+  }
+  if (tokens.length === 0) return { first_name: "", last_name: "" };
+  if (tokens.length === 1) return { first_name: "", last_name: tokens[0] };
+  return { first_name: tokens[0], last_name: tokens[tokens.length - 1] };
+  // (first/last from normaliseName are intentionally unused here — they exist so
+  // typechecking exercises the helper alongside the parser.)
+  void first; void last;
+}
+
+function mapChPscToPerson(p: CHPSC, orgId: string): PersonUpsert {
+  const { first_name, last_name } = parseChPscName(p.name);
+  const result: PersonUpsert = {
+    organization_id: orgId,
+    first_name,
+    last_name,
+  };
+  if (p.nationality) result.nationality = p.nationality;
+  if (p.links?.self) result.ch_psc_id = p.links.self;
+  return result;
+}
+
+function mapChPscToPscRow(p: CHPSC, companyId: string, personId: string): PscRow {
+  const row: PscRow = {
+    company_id: companyId,
+    person_id: personId,
+    nature_of_control: p.natures_of_control ?? [],
+    notified_at: p.notified_on,
+    ceased_at: p.ceased_on ?? null,
+  };
+  if (p.links?.self) row.ch_psc_id = p.links.self;
+  return row;
 }
 
 // ==================== Pure CH helpers (mirrors src/lib/companies-house-live.ts) ====================
