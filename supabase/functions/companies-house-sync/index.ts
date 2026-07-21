@@ -149,8 +149,6 @@ function namesMatch(a: string | null | undefined, b: string | null | undefined):
  * PSCs do not use the officer's "SURNAME, Forename" ordering.
  */
 function parseChPscName(chName: string): { first_name: string; last_name: string } {
-  const { first, last } = normaliseName(chName);
-  // Preserve original casing for storage — walk the raw tokens again.
   const tokens = chName.trim().split(/\s+/).filter(Boolean);
   if (tokens.length > 0 && /^(mr|mrs|ms|miss|dr|sir|dame|prof|professor|lord|lady)\.?$/i.test(tokens[0])) {
     tokens.shift();
@@ -158,9 +156,6 @@ function parseChPscName(chName: string): { first_name: string; last_name: string
   if (tokens.length === 0) return { first_name: "", last_name: "" };
   if (tokens.length === 1) return { first_name: "", last_name: tokens[0] };
   return { first_name: tokens[0], last_name: tokens[tokens.length - 1] };
-  // (first/last from normaliseName are intentionally unused here — they exist so
-  // typechecking exercises the helper alongside the parser.)
-  void first; void last;
 }
 
 function mapChPscToPerson(p: CHPSC, orgId: string): PersonUpsert {
