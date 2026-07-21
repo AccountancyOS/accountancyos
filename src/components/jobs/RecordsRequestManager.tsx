@@ -69,7 +69,7 @@ const TRIGGER_EXPLAINER: { event: string; description: string }[] = [
   },
 ];
 
-interface ClientTask {
+export interface ClientTask {
   id: string;
   title: string;
   description: string | null;
@@ -94,14 +94,15 @@ interface RecordsRequestManagerProps {
   mode: "accountant" | "client";
 }
 
-export function RecordsRequestManager({ jobId, mode }: RecordsRequestManagerProps) {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [selectedTask, setSelectedTask] = useState<ClientTask | null>(null);
-  const [showVerifyDialog, setShowVerifyDialog] = useState(false);
-
-  // Fetch client tasks for this job
-  const { data: tasks, isLoading } = useQuery({
+/**
+ * Shared fetch of a job's records requests (client_tasks). Exported so other
+ * areas of the job screen (the merged Documents workspace's required-records
+ * checklist) can read the same data without a duplicate network fetch —
+ * TanStack Query dedupes/caches by query key, so this and
+ * RecordsRequestManager's own use of the hook share one cache entry.
+ */
+export function useJobRecordsRequests(jobId: string) {
+  return useQuery({
     queryKey: ["job-records-requests", jobId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -114,6 +115,16 @@ export function RecordsRequestManager({ jobId, mode }: RecordsRequestManagerProp
       return (data || []) as ClientTask[];
     },
   });
+}
+
+export function RecordsRequestManager({ jobId, mode }: RecordsRequestManagerProps) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [selectedTask, setSelectedTask] = useState<ClientTask | null>(null);
+  const [showVerifyDialog, setShowVerifyDialog] = useState(false);
+
+  // Fetch client tasks for this job
+  const { data: tasks, isLoading } = useJobRecordsRequests(jobId);
 
   // Verify task mutation
   const verifyMutation = useMutation({

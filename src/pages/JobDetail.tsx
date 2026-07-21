@@ -647,7 +647,6 @@ export default function JobDetail() {
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-            <TabsTrigger value="records">Records</TabsTrigger>
             {showQuestionnaireTab && <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>}
             {showWorkpaperTab && <TabsTrigger value="workpaper">Workpaper</TabsTrigger>}
             {showFilingTab && <TabsTrigger value="filing">Filing</TabsTrigger>}
@@ -684,10 +683,6 @@ export default function JobDetail() {
             </div>
           </TabsContent>
 
-          <TabsContent value="records">
-            <RecordsRequestManager jobId={job.id} mode="accountant" />
-          </TabsContent>
-
           <TabsContent value="questionnaire">
             <JobQuestionnaireTab 
               jobId={job.id}
@@ -713,7 +708,7 @@ export default function JobDetail() {
           </TabsContent>
 
           <TabsContent value="documents">
-            <JobDocumentsTab jobId={job.id} />
+            <JobDocumentsTab jobId={job.id} templateId={job.template_id} />
           </TabsContent>
 
           <TabsContent value="timeline">
