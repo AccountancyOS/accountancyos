@@ -116,6 +116,9 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260721084915",
   "20260721090337",
   "20260721090430",
+  // 2026-07-21 Lovable batch (PSC support etc.) — pending baseline reconciliation.
+  "20260721170145",
+  "20260721170839",
 ]);
 
 function versionFromFilename(name: string): string | null {
