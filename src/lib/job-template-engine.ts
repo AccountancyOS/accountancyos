@@ -523,7 +523,7 @@ export async function rollbackJobGeneration(
     await supabase
       .from("client_tasks")
       .delete()
-      .eq("template_id", jobId); // Records requests are linked via template_id
+      .eq("job_id", jobId); // Records requests are linked via job_id
 
     // Delete the job
     const { error: deleteError } = await supabase
@@ -801,7 +801,9 @@ async function createRecordsRequestsFromTemplate(
     // client_tasks_visibility_check: {client_visible, internal_only}
     visibility: "client_visible" as const,
     task_order: index,
-    template_id: jobId, // Link to job for reference
+    job_id: jobId, // Link to job — readers (useJobRecordsRequests, checklist) query client_tasks.job_id
+    // template_id is a FK to the (unrelated) communications `templates` table — no such id
+    // is available in this context, so leave it unset rather than pointing it at the job id.
     ...(entity.type === "company" ? { company_id: entity.id } : { client_id: entity.id }),
   }));
 

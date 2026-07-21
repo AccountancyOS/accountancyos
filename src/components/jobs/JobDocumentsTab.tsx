@@ -266,7 +266,7 @@ export default function JobDocumentsTab({ jobId, templateId }: JobDocumentsTabPr
               <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground mb-1 font-medium">No documents uploaded yet</p>
               <p className="text-sm text-muted-foreground mb-4">
-                Request documents from the client above, or upload one directly.
+                No documents uploaded yet — upload one directly.
               </p>
               <Button variant="outline" onClick={triggerUpload} disabled={uploading}>
                 <Upload className="mr-2 h-4 w-4" />
@@ -346,7 +346,7 @@ export default function JobDocumentsTab({ jobId, templateId }: JobDocumentsTabPr
               <ListChecks className="h-10 w-10 mx-auto mb-3 opacity-50" />
               <p className="font-medium">Nothing to check off yet</p>
               <p className="text-sm mt-1">
-                Add a records request above to start tracking required records for this job.
+                No records have been requested for this job yet.
               </p>
             </div>
           ) : (
