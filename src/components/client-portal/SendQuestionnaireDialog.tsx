@@ -36,7 +36,8 @@ interface Template {
 }
 
 interface SendQuestionnaireDialogProps {
-  clientId: string;
+  clientId?: string;
+  companyId?: string;
   jobId?: string;
   onClose?: () => void;
 }
@@ -51,7 +52,7 @@ interface PublicLinkResponse {
 // Component
 // ============================================
 
-export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuestionnaireDialogProps) {
+export function SendQuestionnaireDialog({ clientId, companyId, jobId, onClose }: SendQuestionnaireDialogProps) {
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -97,7 +98,8 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
         .from("questionnaire_instances")
         .insert([{
           organization_id: organization.id,
-          client_id: clientId,
+          client_id: clientId || null,
+          company_id: companyId || null,
           job_id: jobId || null,
           template_id: form.template_id,
           name: form.name || template.name,
@@ -133,7 +135,7 @@ export function SendQuestionnaireDialog({ clientId, jobId, onClose }: SendQuesti
 
       toast.success("Questionnaire created - copy the link below");
 
-      queryClient.invalidateQueries({ queryKey: ["questionnaire-instances", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["questionnaire-instances", clientId, companyId] });
       queryClient.invalidateQueries({ queryKey: ["job-questionnaires", jobId] });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to create questionnaire";

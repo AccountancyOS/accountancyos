@@ -10,28 +10,36 @@ import { format } from "date-fns";
 import { formatServiceType, formatStatus } from "@/lib/format-utils";
 
 interface ClientWorkpapersTabProps {
-  clientId: string;
+  clientId?: string;
+  companyId?: string;
 }
 
-export default function ClientWorkpapersTab({ clientId }: ClientWorkpapersTabProps) {
+export default function ClientWorkpapersTab({ clientId, companyId }: ClientWorkpapersTabProps) {
   const navigate = useNavigate();
 
   const { data: workpapers, isLoading } = useQuery({
-    queryKey: ["client-workpapers", clientId],
+    queryKey: ["client-workpapers", clientId, companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("workpaper_instances")
         .select(`
           *,
           job:jobs(id, job_name)
-        `)
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: false });
+        `);
+
+      if (clientId) {
+        query = query.eq("client_id", clientId);
+      }
+      if (companyId) {
+        query = query.eq("company_id", companyId);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
       return data;
     },
-    enabled: !!clientId,
+    enabled: !!clientId || !!companyId,
   });
 
   const getStatusColor = (status: string) => {
@@ -52,7 +60,7 @@ export default function ClientWorkpapersTab({ clientId }: ClientWorkpapersTabPro
       <CardHeader>
         <CardTitle>Workpapers</CardTitle>
         <CardDescription>
-          All workpapers for this client across all services and periods
+          All workpapers for this {companyId ? "company" : "client"} across all services and periods
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -126,7 +134,7 @@ export default function ClientWorkpapersTab({ clientId }: ClientWorkpapersTabPro
         ) : (
           <div className="text-center py-12">
             <FileSpreadsheet className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No workpapers for this client yet</p>
+            <p className="text-muted-foreground">No workpapers for this {companyId ? "company" : "client"} yet</p>
             <p className="text-sm text-muted-foreground mt-2">
               Workpapers are created automatically when questionnaires are submitted or jobs progress
             </p>

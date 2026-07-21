@@ -17,30 +17,38 @@ import { useState } from "react";
 import { SendQuestionnaireDialog } from "./SendQuestionnaireDialog";
 
 interface ClientQuestionnairesTabProps {
-  clientId: string;
+  clientId?: string;
+  companyId?: string;
 }
 
-export default function ClientQuestionnairesTab({ clientId }: ClientQuestionnairesTabProps) {
+export default function ClientQuestionnairesTab({ clientId, companyId }: ClientQuestionnairesTabProps) {
   const { organization } = useOrganization();
   const [selectedInstance, setSelectedInstance] = useState<any>(null);
 
   const { data: instances, isLoading } = useQuery({
-    queryKey: ["questionnaire-instances", clientId],
+    queryKey: ["questionnaire-instances", clientId, companyId],
     queryFn: async () => {
       if (!organization?.id) return [];
-      const { data, error } = await supabase
+      let query = supabase
         .from("questionnaire_instances")
         .select(`
           *,
           template:templates(name, service)
-        `)
-        .eq("client_id", clientId)
-        .order("sent_at", { ascending: false });
+        `);
+
+      if (clientId) {
+        query = query.eq("client_id", clientId);
+      }
+      if (companyId) {
+        query = query.eq("company_id", companyId);
+      }
+
+      const { data, error } = await query.order("sent_at", { ascending: false });
 
       if (error) throw error;
       return data;
     },
-    enabled: !!organization?.id && !!clientId,
+    enabled: !!organization?.id && (!!clientId || !!companyId),
   });
 
   const { data: responses } = useQuery({
@@ -92,7 +100,7 @@ export default function ClientQuestionnairesTab({ clientId }: ClientQuestionnair
               Records requests and information gathering
             </CardDescription>
           </div>
-          <SendQuestionnaireDialog clientId={clientId} />
+          <SendQuestionnaireDialog clientId={clientId} companyId={companyId} />
         </CardHeader>
         <CardContent>
           {isLoading ? (

@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Circle, Clock, MessageSquare } from "lucide-react";
+import { CheckCircle2, Circle, Clock, MessageSquare, Calendar, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { format, isPast } from "date-fns";
 import { AddTaskDialog } from "./AddTaskDialog";
 import { ServiceStatusDashboard } from "./ServiceStatusDashboard";
 import { BookkeepingPermissionsPanel } from "./BookkeepingPermissionsPanel";
@@ -48,6 +49,26 @@ export default function ClientPortalTab({ clientId, onViewConversations }: Clien
         .select("*")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!clientId && !!organization?.id,
+  });
+
+  // Compact deadlines summary — reuses the same table/shape as ClientDeadlinesTab,
+  // scoped to a handful of the soonest outstanding deadlines (Overview is a
+  // summary, the full breakdown no longer has its own tab).
+  const { data: deadlines } = useQuery({
+    queryKey: ["client-deadlines", clientId, undefined],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deadlines")
+        .select("*")
+        .eq("client_id", clientId)
+        .neq("status", "completed")
+        .order("due_date", { ascending: true })
         .limit(5);
 
       if (error) throw error;
@@ -239,6 +260,48 @@ export default function ClientPortalTab({ clientId, onViewConversations }: Clien
           </CardContent>
         </Card>
       </div>
+
+      {/* Upcoming Deadlines summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Upcoming Deadlines</CardTitle>
+          <CardDescription>Key statutory and service deadlines for this client</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {deadlines && deadlines.length > 0 ? (
+            <div className="space-y-2">
+              {deadlines.map((deadline) => {
+                const overdue = isPast(new Date(deadline.due_date));
+                return (
+                  <div
+                    key={deadline.id}
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      {overdue ? (
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                      ) : (
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="text-sm font-medium">{deadline.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        {format(new Date(deadline.due_date), "d MMM yyyy")}
+                      </span>
+                      {overdue && <Badge variant="destructive">Overdue</Badge>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No upcoming deadlines
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <ServiceStatusDashboard clientId={clientId} />
 

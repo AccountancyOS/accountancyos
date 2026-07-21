@@ -8,25 +8,31 @@ import { Calendar, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ClientDeadlinesTabProps {
-  clientId: string;
+  clientId?: string;
+  companyId?: string;
 }
 
-export function ClientDeadlinesTab({ clientId }: ClientDeadlinesTabProps) {
+export function ClientDeadlinesTab({ clientId, companyId }: ClientDeadlinesTabProps) {
   const { organization } = useOrganization();
 
   const { data: deadlines, isLoading } = useQuery({
-    queryKey: ["client-deadlines", clientId],
+    queryKey: ["client-deadlines", clientId, companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deadlines")
-        .select("*")
-        .eq("client_id", clientId)
-        .order("due_date", { ascending: true });
+      let query = supabase.from("deadlines").select("*");
+
+      if (clientId) {
+        query = query.eq("client_id", clientId);
+      }
+      if (companyId) {
+        query = query.eq("company_id", companyId);
+      }
+
+      const { data, error } = await query.order("due_date", { ascending: true });
 
       if (error) throw error;
       return data;
     },
-    enabled: !!clientId && !!organization?.id,
+    enabled: !!organization?.id && (!!clientId || !!companyId),
   });
 
   if (isLoading) {
@@ -34,7 +40,7 @@ export function ClientDeadlinesTab({ clientId }: ClientDeadlinesTabProps) {
       <Card>
         <CardHeader>
           <CardTitle>Upcoming Deadlines</CardTitle>
-          <CardDescription>Key statutory and service deadlines for this client</CardDescription>
+          <CardDescription>Key statutory and service deadlines for this {companyId ? "company" : "client"}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {[1, 2, 3].map((i) => (
@@ -132,7 +138,7 @@ export function ClientDeadlinesTab({ clientId }: ClientDeadlinesTabProps) {
       <Card>
         <CardHeader>
           <CardTitle>Upcoming Deadlines</CardTitle>
-          <CardDescription>Key statutory and service deadlines for this client</CardDescription>
+          <CardDescription>Key statutory and service deadlines for this {companyId ? "company" : "client"}</CardDescription>
         </CardHeader>
         <CardContent>
           {upcomingDeadlines.length === 0 && overdueDeadlines.length === 0 ? (

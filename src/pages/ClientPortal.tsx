@@ -5,7 +5,6 @@ import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mail, Phone, FileText, ArrowLeft } from "lucide-react";
@@ -18,19 +17,17 @@ import ClientQuestionnairesTab from "@/components/client-portal/ClientQuestionna
 import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab";
 import { ContactsList } from "@/components/contacts/ContactsList";
 import { ClientServicesTab } from "@/components/client-portal/ClientServicesTab";
-import { ClientDeadlinesTab } from "@/components/client-portal/ClientDeadlinesTab";
 import { HmrcAuthorisationPanel } from "@/components/clients/HmrcAuthorisationPanel";
 import { EngagementLetterStatus } from "@/components/clients/EngagementLetterStatus";
 import { StaffAssignmentField } from "@/components/company/StaffAssignmentField";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
-import { EmailList } from "@/components/email/EmailList";
 
 export default function ClientPortal() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { organization } = useOrganization();
-  const [activeTab, setActiveTab] = useState("portal");
+  const [activeTab, setActiveTab] = useState("overview");
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", clientId],
@@ -136,21 +133,18 @@ export default function ClientPortal() {
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="flex-wrap">
-              <TabsTrigger value="portal">Portal</TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="conversations">Conversations</TabsTrigger>
-              <TabsTrigger value="emails">Emails</TabsTrigger>
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="contacts">Contacts</TabsTrigger>
               <TabsTrigger value="questionnaires">Questionnaires</TabsTrigger>
               <TabsTrigger value="workpapers">Workpapers</TabsTrigger>
-              <TabsTrigger value="deadlines">Deadlines</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
-              <TabsTrigger value="billing">Billing</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="portal">
+            <TabsContent value="overview">
               <div className="space-y-6">
                 <ClientPortalTab clientId={client.id} onViewConversations={() => setActiveTab("conversations")} />
                 <HmrcAuthorisationPanel clientId={client.id} />
@@ -159,15 +153,6 @@ export default function ClientPortal() {
 
             <TabsContent value="conversations">
               <ConversationsTab clientId={client.id} />
-            </TabsContent>
-
-            <TabsContent value="emails">
-              <EmailList
-                clientId={client.id}
-                recipientEmail={client.email ?? undefined}
-                showQueue
-                title="Emails"
-              />
             </TabsContent>
 
             <TabsContent value="jobs">
@@ -190,27 +175,8 @@ export default function ClientPortal() {
               <ClientWorkpapersTab clientId={client.id} />
             </TabsContent>
 
-            <TabsContent value="deadlines">
-              <ClientDeadlinesTab clientId={client.id} />
-            </TabsContent>
-
-
             <TabsContent value="services">
               <ClientServicesTab clientId={client.id} />
-            </TabsContent>
-
-            <TabsContent value="billing">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Billing & Invoices</CardTitle>
-                  <CardDescription>
-                    View quotes, invoices, and payment history
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Billing view coming soon...</p>
-                </CardContent>
-              </Card>
             </TabsContent>
 
             <TabsContent value="settings">

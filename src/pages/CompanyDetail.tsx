@@ -19,6 +19,8 @@ import {
 import {
   Building2,
   ClipboardList,
+  ClipboardCheck,
+  FileSpreadsheet,
   FileText,
   Settings,
   FolderOpen,
@@ -35,8 +37,7 @@ import {
   Pencil,
   Briefcase,
   MessageSquare,
-  Users,
-  CreditCard
+  Users
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatStatus } from "@/lib/format-utils";
@@ -60,8 +61,9 @@ import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatus
 import { AddServiceDialog } from "@/components/client-portal/AddServiceDialog";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 import { ConversationsTab } from "@/components/client-portal/ConversationsTab";
-import { EmailList } from "@/components/email/EmailList";
 import { ContactsList } from "@/components/contacts/ContactsList";
+import ClientQuestionnairesTab from "@/components/client-portal/ClientQuestionnairesTab";
+import ClientWorkpapersTab from "@/components/client-portal/ClientWorkpapersTab";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -160,13 +162,16 @@ const CompanyDetail = () => {
   const getTabLabel = (tab: string) => {
     const labels: Record<string, string> = {
       overview: "Overview",
+      conversations: "Conversations",
+      jobs: "Jobs",
       registers: "Registers",
       "cosec-jobs": "CoSec Jobs",
       documents: "Documents",
-      conversations: "Conversations",
-      emails: "Emails",
       contacts: "Contacts",
-      billing: "Billing",
+      questionnaires: "Questionnaires",
+      workpapers: "Workpapers",
+      services: "Services",
+      payroll: "Payroll",
       settings: "Settings",
     };
     return labels[tab] || tab;
@@ -256,6 +261,14 @@ const CompanyDetail = () => {
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
+            <TabsTrigger value="conversations" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Conversations</span>
+            </TabsTrigger>
+            <TabsTrigger value="jobs" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden sm:inline">Jobs</span>
+            </TabsTrigger>
             <TabsTrigger value="registers" className="flex items-center gap-2 flex-1 sm:flex-initial relative">
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">Registers</span>
@@ -265,13 +278,29 @@ const CompanyDetail = () => {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="jobs" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <Briefcase className="h-4 w-4" />
-              <span className="hidden sm:inline">Jobs</span>
-            </TabsTrigger>
             <TabsTrigger value="cosec-jobs" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">CoSec Jobs</span>
+            </TabsTrigger>
+            <TabsTrigger value="documents" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <FolderOpen className="h-4 w-4" />
+              <span className="hidden sm:inline">Documents</span>
+            </TabsTrigger>
+            <TabsTrigger value="contacts" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Contacts</span>
+            </TabsTrigger>
+            <TabsTrigger value="questionnaires" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <ClipboardCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Questionnaires</span>
+            </TabsTrigger>
+            <TabsTrigger value="workpapers" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="hidden sm:inline">Workpapers</span>
+            </TabsTrigger>
+            <TabsTrigger value="services" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <ClipboardList className="h-4 w-4" />
+              <span className="hidden sm:inline">Services</span>
             </TabsTrigger>
             {(hasPayroll || servicesLoading) && (
               <TabsTrigger value="payroll" className="flex items-center gap-2 flex-1 sm:flex-initial">
@@ -279,30 +308,6 @@ const CompanyDetail = () => {
                 <span className="hidden sm:inline">Payroll</span>
               </TabsTrigger>
             )}
-            <TabsTrigger value="documents" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <FolderOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Documents</span>
-            </TabsTrigger>
-            <TabsTrigger value="conversations" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Conversations</span>
-            </TabsTrigger>
-            <TabsTrigger value="emails" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <Mail className="h-4 w-4" />
-              <span className="hidden sm:inline">Emails</span>
-            </TabsTrigger>
-            <TabsTrigger value="contacts" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Contacts</span>
-            </TabsTrigger>
-            <TabsTrigger value="services" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <ClipboardList className="h-4 w-4" />
-              <span className="hidden sm:inline">Services</span>
-            </TabsTrigger>
-            <TabsTrigger value="billing" className="flex items-center gap-2 flex-1 sm:flex-initial">
-              <CreditCard className="h-4 w-4" />
-              <span className="hidden sm:inline">Billing</span>
-            </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Settings</span>
@@ -606,13 +611,8 @@ const CompanyDetail = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="registers" className="mt-6">
-            {organization?.id && (
-              <RegistersTab 
-                companyId={companyId!} 
-                organizationId={organization.id} 
-              />
-            )}
+          <TabsContent value="conversations" className="mt-6">
+            <ConversationsTab companyId={companyId} />
           </TabsContent>
 
           <TabsContent value="jobs" className="mt-6">
@@ -621,20 +621,52 @@ const CompanyDetail = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="cosec-jobs" className="mt-6">
+          <TabsContent value="registers" className="mt-6">
             {organization?.id && (
-              <CompanyCoSecJobsTab 
-                companyId={companyId!} 
-                organizationId={organization.id} 
+              <RegistersTab
+                companyId={companyId!}
+                organizationId={organization.id}
               />
             )}
           </TabsContent>
 
+          <TabsContent value="cosec-jobs" className="mt-6">
+            {organization?.id && (
+              <CompanyCoSecJobsTab
+                companyId={companyId!}
+                organizationId={organization.id}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="documents" className="mt-6">
+            <CompanyDocumentsTab companyId={companyId!} />
+          </TabsContent>
+
+          <TabsContent value="contacts" className="mt-6">
+            <ContactsList companyId={companyId} />
+          </TabsContent>
+
+          <TabsContent value="questionnaires" className="mt-6">
+            <ClientQuestionnairesTab companyId={companyId} />
+          </TabsContent>
+
+          <TabsContent value="workpapers" className="mt-6">
+            <ClientWorkpapersTab companyId={companyId} />
+          </TabsContent>
+
+          <TabsContent value="services" className="mt-6">
+            <div className="flex justify-end mb-4">
+              <AddServiceDialog companyId={companyId} />
+            </div>
+            <ServiceStatusDashboard companyId={companyId} />
+          </TabsContent>
+
           <TabsContent value="payroll" className="mt-6">
             {organization?.id && hasPayroll ? (
-              <CompanyPayrollTab 
-                companyId={companyId!} 
-                organizationId={organization.id} 
+              <CompanyPayrollTab
+                companyId={companyId!}
+                organizationId={organization.id}
               />
             ) : (
               <Card className="border-dashed">
@@ -646,7 +678,7 @@ const CompanyDetail = () => {
                     Payroll Not Enabled
                   </h3>
                   <p className="text-muted-foreground mb-6 max-w-md">
-                    Payroll is not configured for this company. 
+                    Payroll is not configured for this company.
                     Add it to their engagement to start using payroll features.
                   </p>
                   <Button onClick={() => setActiveTab("settings")}>
@@ -655,48 +687,6 @@ const CompanyDetail = () => {
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
-
-          <TabsContent value="documents" className="mt-6">
-            <CompanyDocumentsTab companyId={companyId!} />
-          </TabsContent>
-
-          <TabsContent value="conversations" className="mt-6">
-            <ConversationsTab companyId={companyId} />
-          </TabsContent>
-
-          <TabsContent value="emails" className="mt-6">
-            <EmailList
-              companyId={companyId}
-              recipientEmail={company.email ?? undefined}
-              showQueue
-              title="Emails"
-            />
-          </TabsContent>
-
-          <TabsContent value="contacts" className="mt-6">
-            <ContactsList companyId={companyId} />
-          </TabsContent>
-
-          <TabsContent value="services" className="mt-6">
-            <div className="flex justify-end mb-4">
-              <AddServiceDialog companyId={companyId} />
-            </div>
-            <ServiceStatusDashboard companyId={companyId} />
-          </TabsContent>
-
-          <TabsContent value="billing" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Billing & Invoices</CardTitle>
-                <CardDescription>
-                  View quotes, invoices, and payment history
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Billing view coming soon...</p>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
