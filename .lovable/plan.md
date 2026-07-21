@@ -1,63 +1,61 @@
-## Correction to the earlier claim
+## Scope
 
-The statement "a CH function redeploy from git covers the PSC sync" is **not** true, and neither was my earlier report that PSC promotion was working end-to-end.
+Frontend-only + one-off data cleanup. No changes to `companies-house-sync` — that work is coming from you in git and Lovable's part is a redeploy afterwards.
 
-Two pieces were required:
-1. Migration `20260721170839` — adds `company_persons.ch_psc_id` and unique indexes. **Applied on live** (verified).
-2. `companies-house-sync` function rewrite that promotes PSCs. **Deployed on live** (verified — `booted` events in logs from today).
+## Fix 1 — Row-level actions on the PSC card
 
-But the live edge-function log for the most recent sync shows:
+The PSC card currently renders read-only rows. Add a per-row action menu (kebab in the far-right cell of each row, same pattern as officers if there's one there, otherwise a plain `DropdownMenu` with a `MoreHorizontal` trigger) with:
 
-```
-[CH Sync] PSC promotion failed (non-fatal): there is no unique or exclusion
-constraint matching the ON CONFLICT specification
-```
+- **Delete PSC** — soft delete via `UPDATE company_pscs SET ceased_at = now(), ceased_reason = 'Removed manually'` (or a hard delete if there is no `ceased_at` on the schema — I'll verify against the live table before wiring). Confirmation dialog: "Remove Leon Stevens as a PSC? This will not file a PSC07 with Companies House."
+- **Edit PSC** — opens the same dialog used by "+ Add PSC" pre-filled with the row's data. Out of scope for this pass if the edit dialog doesn't exist yet; the Delete action alone solves the immediate blocker.
 
-So PSC promotion is running and silently failing on every sync — which is why phantom PSC discrepancies keep coming back.
+Files (to be confirmed on read):
+- `src/components/company-registers/PSCsCard.tsx` (or whatever mounts the "Persons with Significant Control (2)" card)
+- reuse existing `DropdownMenu`, `AlertDialog` from shadcn
+- add a `deletePsc(pscId)` call against the `company_pscs` table via the supabase client; invalidate the registers query so the row disappears.
 
-## Root cause (verified against the live DB)
+RLS: `company_pscs` already has org-scoped RLS (four policies). No policy work needed — deletes will succeed for org staff/owners and be denied for anyone else.
 
-Both PSC unique indexes are **partial**:
+## Fix 2 — Correct the "CH Status" badge
 
-```
-company_persons_org_ch_psc_uq   ... WHERE (ch_psc_id IS NOT NULL)
-company_pscs_company_ch_psc_uq  ... WHERE (ch_psc_id IS NOT NULL)
-```
+Right now both rows read "Not in CH". The rule should be:
 
-The function upserts with `onConflict: "organization_id,ch_psc_id"` and `onConflict: "company_id,ch_psc_id"`. PostgREST/supabase-js emits a bare `ON CONFLICT (col, col)` clause — no `WHERE` predicate. Postgres will only infer a **partial** unique index when the target list *and* the predicate match, so the inference fails and the whole upsert aborts with the exact error above.
+- `ch_psc_id IS NOT NULL` → green "Synced with CH" badge
+- `ch_psc_id IS NULL` → amber "Not in CH" badge (this row was added manually and has no CH counterpart yet)
 
-The officer path works because it has both a partial index (`company_persons_org_ch_officer_unique`) **and** a plain unique index (`company_persons_org_ch_officer_uq`). The PSC path only has the partial one.
+That's a two-line change in the badge cell renderer. After Fix 1 removes the manual duplicate, only the CH-synced row remains and shows green.
 
-## Fix
+## Fix 3 — One-off cleanup for Churchills London Ltd (data, not code)
 
-New migration adding the missing plain unique indexes so `ON CONFLICT (organization_id, ch_psc_id)` and `ON CONFLICT (company_id, ch_psc_id)` can be inferred (Postgres allows multiple NULLs in a plain unique index, so no NULL-vs-NULL collision):
+Once the UI delete is in, either:
+
+- (a) You delete the manual "Owns 75-100%" row through the UI. Done. The CH-synced row remains with the correct 50-75% figure.
+- (b) Or I run this one-off via a targeted operation (still needs your say-so since it's a data change to your live register):
 
 ```sql
-CREATE UNIQUE INDEX IF NOT EXISTS company_persons_org_ch_psc_unique
-  ON public.company_persons (organization_id, ch_psc_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS company_pscs_company_ch_psc_unique
-  ON public.company_pscs (company_id, ch_psc_id);
+DELETE FROM public.company_pscs
+ WHERE company_id = 'e1f4ebf7-9d99-4ca8-a2aa-61c4e804626f'
+   AND id = '376cf437-5ccf-4bb1-9145-ee63fe77d8a9';
 ```
 
-Leave the existing partial indexes in place — they don't hurt and they document intent.
+Recommend (a) — the UI delete proves the affordance works and leaves an audit trail through the app path.
 
-No function change needed. No redeploy needed.
+## Not in this plan
 
-## Verification (re-verify end-to-end, as approved)
+- Any change to `companies-house-sync`. The legacy-PSC stitch (so future syncs auto-merge manual rows into their CH counterpart) is your git PR — Lovable's job is redeploy-from-git afterwards.
+- Any change to the `psc_control_mismatch` discrepancy detection. Once the manual duplicate is gone, the mismatch disappears here anyway; a proper Accept-CH / Keep-Internal resolve UI is still deferred.
+- Editing PSC control fields inline. Deferred with the resolve UI.
 
-1. Apply migration.
-2. Re-run CH sync on BASSAGE EYES LTD from the Registers tab.
-3. Check `edge_logs` for `companies-house-sync` — the "PSC promotion failed" line must be **gone**.
-4. Query live: `SELECT count(*) FROM public.company_pscs WHERE company_id = '<bassage>' AND ch_psc_id IS NOT NULL;` should be ≥ 1.
-5. Reload the Registers tab — the amber "PSC 'Leon Lim Stevens' exists in CH but not in internal registers" panel should clear, and no reciprocal "exists internally but not in CH" should appear.
-6. Delete any leftover manually-added "Leon Stevens" PSC row from before the fix, if the dedupe leaves a duplicate.
+## Verification
 
-## Files
+1. Reload the Churchills workspace → each PSC row shows a kebab menu.
+2. Delete the top "Owns 75-100%" row. Toast confirms; card refreshes; count drops to `(1)`.
+3. Remaining row shows a green "Synced with CH" badge.
+4. Registers timeline shows no fresh discrepancy on next sync (the control-mismatch panel should be gone).
+5. Re-run CH sync → `promoted_pscs: 0`, `discrepancies_found: 0`.
 
-- New migration `supabase/migrations/<ts>_ch_psc_onconflict_indexes.sql` — the two `CREATE UNIQUE INDEX` statements above. No RLS/grants (indexes only).
+## Files touched
 
-## Not in scope
-
-- Officer/PSC discrepancy one-click resolve UI.
-- Backfilling `ch_psc_id` onto legacy manually-created PSC rows (fuzzy name matcher in the function already handles those).
+- `src/components/company-registers/PSCsCard.tsx` (or equivalent — will be confirmed on the first read)
+- possibly a small `usePscMutations.ts` next to it for the delete mutation
+- no migration, no edge function change
