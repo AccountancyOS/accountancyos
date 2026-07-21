@@ -3,6 +3,7 @@
  * Use these functions for consistent date and currency formatting across the app
  */
 import { format, formatDistanceToNow, parseISO, isValid } from "date-fns";
+import { CLIENT_TYPE_LABELS } from "./client-types";
 
 // Re-export formatCurrency from bookkeeping-utils for convenience
 export { formatCurrency } from "./bookkeeping-utils";
@@ -120,6 +121,11 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
   ct600: "CT600",
   company_accounts: "Company Accounts",
   vat_return: "VAT Return",
+  // Client-type-shaped service_type values (jobs.service_type is sometimes set
+  // directly from a client/lead type, e.g. "sa_non_mtd" — without these, those
+  // render as raw-code fallbacks like "Sa Non Mtd"). Reuse the canonical
+  // client-type labels so the two vocabularies never drift apart.
+  ...CLIENT_TYPE_LABELS,
   // Uppercase codes (used by some templates/filings)
   Accounts: "Accounts",
   SA: "Self Assessment",

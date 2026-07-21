@@ -23,9 +23,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send } from "lucide-react";
+import { ArrowLeft, ExternalLink, RefreshCw, ChevronRight, Zap, FileText, AlertTriangle, Undo2, Clock, Layers, Send, CheckCircle2 } from "lucide-react";
 import { format, differenceInDays, isFuture } from "date-fns";
-import { formatServiceType, formatStatus } from "@/lib/format-utils";
+import { formatServiceType, formatPriority, formatRelativeDate } from "@/lib/format-utils";
+import { getClientTypeLabel } from "@/lib/client-types";
+import {
+  STAGE_LABEL,
+  stepperState,
+  primaryAction,
+  getAllowedNextStatuses,
+  capabilityTabVisible,
+} from "@/lib/job-workflow-model";
+import { JOB_TASK_STATUSES, CLIENT_TASK_STATUSES } from "@/lib/db-constants/check-constraints";
 import JobTasksTab from "@/components/jobs/JobTasksTab";
 import JobConversationTab from "@/components/jobs/JobConversationTab";
 import JobDocumentsTab from "@/components/jobs/JobDocumentsTab";
@@ -39,7 +48,7 @@ import { JobAuditTrail } from "@/components/jobs/JobAuditTrail";
 import { RecordsRequestManager } from "@/components/jobs/RecordsRequestManager";
 import { ComposeEmailDialog } from "@/components/email/ComposeEmailDialog";
 import { rollbackJobGeneration } from "@/lib/job-template-engine";
-import { completeJob, updateJobStatus, type JobStatus } from "@/lib/job-status-service";
+import { updateJobStatus, type JobStatus } from "@/lib/job-status-service";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -60,8 +69,8 @@ export default function JobDetail() {
         .from("jobs")
         .select(`
           *,
-          clients!fk_jobs_client (id, first_name, last_name, email),
-          companies!fk_jobs_company (id, company_name, email)
+          clients!fk_jobs_client (id, first_name, last_name, email, client_type),
+          companies!fk_jobs_company (id, company_name, email, company_type)
         `)
         .eq("id", jobId)
         .single();
@@ -130,28 +139,146 @@ export default function JobDetail() {
     enabled: !!jobId,
   });
 
-  const markCompleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!jobId) throw new Error("Job ID is required");
-      
-      // Use centralized job status service with automation triggers
-      const result = await completeJob(jobId, {
-        reason: "Manually marked complete by user",
+  // Owner (jobs.assigned_to) display-name resolution — same org-users -> profiles
+  // pattern used by StaffAssignmentField (src/components/company/StaffAssignmentField.tsx).
+  // Same query key too, so the two share a cache when both are mounted.
+  const { data: orgUsers } = useQuery({
+    queryKey: ["org-users", organization?.id],
+    queryFn: async () => {
+      if (!organization?.id) return [];
+
+      const { data: members, error: membersError } = await supabase
+        .from("organization_users")
+        .select("user_id, role")
+        .eq("organization_id", organization.id);
+      if (membersError) throw membersError;
+      if (!members || members.length === 0) return [];
+
+      const userIds = members.map((m) => m.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, first_name, last_name, email")
+        .in("id", userIds);
+      if (profilesError) throw profilesError;
+
+      const byId = new Map((profiles || []).map((p: any) => [p.id, p]));
+      return members.map((m) => {
+        const p: any = byId.get(m.user_id);
+        const name = p?.first_name && p?.last_name
+          ? `${p.first_name} ${p.last_name}`
+          : p?.email || m.user_id.slice(0, 8);
+        return { id: m.user_id, name };
       });
-      
-      if (!result.success) {
-        throw new Error(result.error || "Failed to complete job");
-      }
-      
-      // Also update progress to 100%
-      await supabase
-        .from("jobs")
-        .update({ progress: 100 })
-        .eq("id", jobId);
     },
-    onSuccess: () => {
+    enabled: !!organization?.id,
+  });
+
+  // Capability gate (canonical_job_templates.requires_*) for tab visibility.
+  // Looked up via jobs.canonical_service_code (narrowed by job_template_code
+  // when present). FAIL-OPEN: capabilityTabVisible() treats a missing/errored
+  // lookup the same as an absent flag — visible unless explicitly false.
+  const { data: jobCapabilities } = useQuery({
+    queryKey: ["job-template-capabilities", job?.canonical_service_code, job?.job_template_code],
+    queryFn: async () => {
+      if (!job?.canonical_service_code) return null;
+      let query = supabase
+        .from("canonical_job_templates")
+        .select("requires_questionnaire, requires_workpaper, requires_filing")
+        .eq("canonical_service_code", job.canonical_service_code)
+        .eq("active", true);
+      if (job.job_template_code) {
+        query = query.eq("job_template_code", job.job_template_code);
+      }
+      const { data, error } = await query.limit(1).maybeSingle();
+      if (error) return null;
+      return data;
+    },
+    enabled: !!job?.canonical_service_code,
+  });
+
+  // Job-health strip counts — lightweight, reuse existing table keys.
+  const { data: openTasksCount = 0 } = useQuery({
+    queryKey: ["job-open-tasks-count", jobId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("job_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("job_id", jobId)
+        .neq("status", "done" satisfies (typeof JOB_TASK_STATUSES)[number]);
+      if (error) return 0;
+      return count ?? 0;
+    },
+    enabled: !!jobId,
+  });
+
+  // client_tasks.status is ("not_started" | "in_progress" | "complete") — NOT
+  // "pending" (there is no such value in the client_tasks_status_check
+  // constraint). "Outstanding" = anything not yet complete.
+  const { data: outstandingRequestsCount = 0 } = useQuery({
+    queryKey: ["job-outstanding-requests-count", jobId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("client_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("job_id", jobId)
+        .neq("status", "complete" satisfies (typeof CLIENT_TASK_STATUSES)[number]);
+      if (error) return 0;
+      return count ?? 0;
+    },
+    enabled: !!jobId,
+  });
+
+  // job_conversations has no read-receipt column, so "unread" is a proxy:
+  // client-side messages sent after the most recent accountant message (or
+  // all client-side messages, if the accountant hasn't replied yet).
+  const { data: unreadMessagesCount = 0 } = useQuery({
+    queryKey: ["job-unread-messages-count", jobId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("job_conversations")
+        .select("sender_type, created_at")
+        .eq("job_id", jobId)
+        .is("task_id", null)
+        .order("created_at", { ascending: true });
+      if (error || !data) return 0;
+      let lastAccountantAt: string | null = null;
+      for (const m of data) {
+        if (m.sender_type === "accountant") lastAccountantAt = m.created_at;
+      }
+      return data.filter(
+        (m) => m.sender_type !== "accountant" && (!lastAccountantAt || m.created_at > lastAccountantAt)
+      ).length;
+    },
+    enabled: !!jobId,
+  });
+
+  // State-aware primary action (replaces the old always-shown "Mark Complete").
+  // targetStatus always comes from primaryAction(), which is verified by test
+  // to only ever return an allowed DB-trigger transition.
+  const primaryActionMutation = useMutation({
+    mutationFn: async (targetStatus: JobStatus) => {
+      if (!jobId) throw new Error("Job ID is required");
+
+      const result = await updateJobStatus(jobId, targetStatus, {
+        reason: "Advanced via job workspace primary action",
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update job status");
+      }
+
+      if (targetStatus === "completed") {
+        await supabase.from("jobs").update({ progress: 100 }).eq("id", jobId);
+      }
+
+      return targetStatus;
+    },
+    onSuccess: (targetStatus) => {
       queryClient.invalidateQueries({ queryKey: ["job", jobId] });
-      toast.success("Job marked as completed");
+      toast.success(`Status updated to ${STAGE_LABEL[targetStatus]}`);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update job status");
     },
   });
 
@@ -220,8 +347,47 @@ export default function JobDetail() {
     job.status === "blank";
 
   // Check if template has been updated since job creation
-  const templateUpdated = template && jobExtended.template_version && 
+  const templateUpdated = template && jobExtended.template_version &&
     template.version > jobExtended.template_version;
+
+  const clientTypeLabel = getClientTypeLabel(
+    job.clients?.client_type || job.companies?.company_type || null
+  );
+
+  const ownerName = job.assigned_to
+    ? orgUsers?.find((u) => u.id === job.assigned_to)?.name || "…"
+    : "Unassigned";
+
+  // Filing-deadline urgency threshold, by service type (unchanged logic — now
+  // shared between the header and the health strip instead of living inline
+  // in the old status bar).
+  const getFilingDeadlineThreshold = (st: string | null): number => {
+    if (!st) return 14;
+    const s = st.toLowerCase();
+    if (["accounts", "company_accounts", "self_assessment", "sa", "corporation_tax", "ct600", "advisory"].includes(s)) return 30;
+    if (["vat", "vat_return", "payroll", "cis", "company_sec", "cs01"].includes(s)) return 7;
+    return 14;
+  };
+  const filingThreshold = getFilingDeadlineThreshold(job.service_type);
+  const filingDeadlineColor = daysRemaining !== null && daysRemaining < 0
+    ? "text-destructive"
+    : daysRemaining !== null && daysRemaining <= filingThreshold
+    ? "text-amber-600"
+    : "text-muted-foreground";
+  const filingDeadlineText = job.filing_deadline
+    ? `${format(new Date(job.filing_deadline), "dd MMM yyyy")}${
+        daysRemaining !== null
+          ? ` (${daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d left`})`
+          : ""
+      }`
+    : "—";
+
+  const action = primaryAction(job.status as JobStatus);
+  const allowedNextStatuses = getAllowedNextStatuses(job.status as JobStatus);
+
+  const showQuestionnaireTab = capabilityTabVisible(jobCapabilities?.requires_questionnaire);
+  const showWorkpaperTab = capabilityTabVisible(jobCapabilities?.requires_workpaper);
+  const showFilingTab = capabilityTabVisible(jobCapabilities?.requires_filing);
 
   return (
     <DashboardLayout>
@@ -238,9 +404,16 @@ export default function JobDetail() {
 
         {/* Header */}
         <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold">{job.job_name}</h1>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold">{job.job_name}</h1>
+              {job.priority && job.priority !== "normal" && (
+                <Badge variant="outline" className="text-xs">
+                  {formatPriority(job.priority)}
+                </Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span>
                 Client:{" "}
                 <button
@@ -248,12 +421,25 @@ export default function JobDetail() {
                   className="text-foreground hover:underline"
                 >
                   {clientName}
-                </button>
+                </button>{" "}
+                ({clientTypeLabel})
               </span>
               <span>•</span>
               <span>{formatServiceType(job.service_type)}</span>
               <span>•</span>
               <span>{job.period_label || format(new Date(job.period_end || new Date()), "MMM yyyy")}</span>
+              <span>•</span>
+              <span>Owner: {ownerName}</span>
+              {job.internal_target_date && (
+                <>
+                  <span>•</span>
+                  <span>Due: {format(new Date(job.internal_target_date), "dd MMM yyyy")}</span>
+                </>
+              )}
+              <span>•</span>
+              <span>
+                Filing: <span className={filingDeadlineColor}>{filingDeadlineText}</span>
+              </span>
             </div>
           </div>
 
@@ -272,9 +458,12 @@ export default function JobDetail() {
               <ExternalLink className="mr-2 h-4 w-4" />
               View Client Portal
             </Button>
-            {job.status !== "completed" && (
-              <Button onClick={() => markCompleteMutation.mutate()}>
-                Mark Complete
+            {action && (
+              <Button
+                onClick={() => primaryActionMutation.mutate(action.targetStatus)}
+                disabled={primaryActionMutation.isPending}
+              >
+                {action.label}
               </Button>
             )}
           </div>
@@ -341,67 +530,103 @@ export default function JobDetail() {
           </div>
         )}
 
-        {/* Status Bar */}
-        <div className="flex items-center gap-6 p-4 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Status:</span>
-            <Badge>{formatStatus(job.status)}</Badge>
-          </div>
-          {job.filing_deadline && (() => {
-            const getThreshold = (st: string | null): number => {
-              if (!st) return 14;
-              const s = st.toLowerCase();
-              if (["accounts", "company_accounts", "self_assessment", "sa", "corporation_tax", "ct600", "advisory"].includes(s)) return 30;
-              if (["vat", "vat_return", "payroll", "cis", "company_sec", "cs01"].includes(s)) return 7;
-              return 14;
-            };
-            const threshold = getThreshold(job.service_type);
-            const deadlineColor = daysRemaining !== null && daysRemaining < 0 ? "text-destructive"
-              : daysRemaining !== null && daysRemaining <= threshold ? "text-amber-600"
-              : "text-muted-foreground";
-            return (
+        {/* Consolidated Workflow — replaces the old separate Status badge + Workflow
+            select (both read/wrote the same jobs.status field). */}
+        <Card>
+          <CardContent className="py-4 px-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Filing Deadline:</span>
-                <span className="font-medium">
-                  {format(new Date(job.filing_deadline), "dd MMM yyyy")}
-                  {daysRemaining !== null && (
-                    <span className={`${deadlineColor} ml-2`}>
-                      ({daysRemaining < 0 ? `${Math.abs(daysRemaining)} days overdue` : `${daysRemaining} days remaining`})
-                    </span>
-                  )}
-                </span>
+                <span className="text-sm text-muted-foreground">Stage:</span>
+                <Badge>{STAGE_LABEL[job.status as JobStatus]}</Badge>
               </div>
-            );
-          })()}
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-sm text-muted-foreground">Workflow:</span>
-            <Select
-              value={job.status}
-              onValueChange={async (value: string) => {
-                const result = await updateJobStatus(job.id, value as JobStatus);
-                if (result.success) {
-                  queryClient.invalidateQueries({ queryKey: ["job", jobId] });
-                  toast.success(`Status updated to ${formatStatus(value)}`);
-                } else {
-                  toast.error(result.error || "Failed to update status");
-                }
-              }}
-            >
-              <SelectTrigger className="w-[200px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="blank">—</SelectItem>
-                <SelectItem value="records_requested">Records Requested</SelectItem>
-                <SelectItem value="records_received">Records Received</SelectItem>
-                <SelectItem value="accountant_queries">Accountant Queries</SelectItem>
-                <SelectItem value="client_queries">Client Queries</SelectItem>
-                <SelectItem value="accountant_review">Accountant Review</SelectItem>
-                <SelectItem value="client_review">Client Review</SelectItem>
-                <SelectItem value="ready_to_file">Ready to File</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Move to:</span>
+                <Select
+                  value={job.status}
+                  onValueChange={async (value: string) => {
+                    const result = await updateJobStatus(job.id, value as JobStatus);
+                    if (result.success) {
+                      queryClient.invalidateQueries({ queryKey: ["job", jobId] });
+                      toast.success(`Status updated to ${STAGE_LABEL[value as JobStatus]}`);
+                    } else {
+                      toast.error(result.error || "Failed to update status");
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[220px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={job.status} disabled>
+                      {STAGE_LABEL[job.status as JobStatus]} (current)
+                    </SelectItem>
+                    {allowedNextStatuses.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {STAGE_LABEL[s]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Horizontal stepper */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+              {stepperState(job.status as JobStatus).map((step, i, arr) => (
+                <div key={step.status} className="flex items-center gap-1 flex-shrink-0">
+                  <div
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                      step.state === "done"
+                        ? "bg-emerald-500/10 text-emerald-700"
+                        : step.state === "current"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {step.state === "done" && <CheckCircle2 className="h-3 w-3" />}
+                    {step.label}
+                  </div>
+                  {i < arr.length - 1 && (
+                    <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Job-health strip — compact, horizontal at-a-glance operational status. */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm px-4 py-3 rounded-lg border bg-card">
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Filing:</span>
+            <span className={`font-medium ${filingDeadlineColor}`}>{filingDeadlineText}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Owner:</span>
+            <span className="font-medium">{ownerName}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Open tasks:</span>
+            <span className={`font-medium ${openTasksCount > 0 ? "text-amber-600" : ""}`}>
+              {openTasksCount}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Outstanding requests:</span>
+            <span className={`font-medium ${outstandingRequestsCount > 0 ? "text-amber-600" : ""}`}>
+              {outstandingRequestsCount}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Unread messages:</span>
+            <span className={`font-medium ${unreadMessagesCount > 0 ? "text-amber-600" : ""}`}>
+              {unreadMessagesCount}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Last activity:</span>
+            <span className="font-medium">{formatRelativeDate(job.last_activity_at)}</span>
           </div>
         </div>
 
@@ -410,9 +635,9 @@ export default function JobDetail() {
           <TabsList>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="records">Records</TabsTrigger>
-            <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
-            <TabsTrigger value="workpaper">Workpaper</TabsTrigger>
-            <TabsTrigger value="filing">Filing</TabsTrigger>
+            {showQuestionnaireTab && <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>}
+            {showWorkpaperTab && <TabsTrigger value="workpaper">Workpaper</TabsTrigger>}
+            {showFilingTab && <TabsTrigger value="filing">Filing</TabsTrigger>}
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="conversation">Conversation</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
