@@ -83,6 +83,7 @@ interface PersonUpsert {
   nationality?: string;
   occupation?: string;
   ch_officer_id?: string;
+  ch_psc_id?: string;
 }
 
 interface OfficerRow {
@@ -92,6 +93,93 @@ interface OfficerRow {
   appointed_at: string;
   resigned_at: string | null;
   ch_appointment_id?: string;
+}
+
+interface PscRow {
+  company_id: string;
+  person_id: string;
+  nature_of_control: string[];
+  notified_at: string;
+  ceased_at: string | null;
+  ch_psc_id?: string;
+}
+
+/**
+ * Normalises a person name for fuzzy matching between CH and internal registers.
+ * Handles both CH officer format ("SURNAME, Forename Middle") and CH PSC format
+ * ("Mr Forename Middle Surname"), plus internal "first last" ordering.
+ * Returns lowercased first/last tokens, ignoring titles and middle names —
+ * this is what stops false discrepancies like "Leon Lim Stevens" vs "Leon Stevens".
+ */
+function normaliseName(raw: string | null | undefined): { first: string; last: string } {
+  if (!raw) return { first: "", last: "" };
+  const trimmed = raw.trim();
+  let first = "";
+  let last = "";
+  if (trimmed.includes(",")) {
+    // "SURNAME, Forename Middle"
+    const [surname, rest = ""] = trimmed.split(",", 2);
+    last = surname.trim();
+    first = rest.trim().split(/\s+/)[0] ?? "";
+  } else {
+    // "Mr Forename Middle Surname" — strip a leading title token then take first & last.
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    if (tokens.length > 0 && /^(mr|mrs|ms|miss|dr|sir|dame|prof|professor|lord|lady)\.?$/i.test(tokens[0])) {
+      tokens.shift();
+    }
+    if (tokens.length === 1) {
+      last = tokens[0];
+    } else if (tokens.length >= 2) {
+      first = tokens[0];
+      last = tokens[tokens.length - 1];
+    }
+  }
+  return { first: first.toLowerCase(), last: last.toLowerCase() };
+}
+
+function namesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normaliseName(a);
+  const nb = normaliseName(b);
+  if (!na.last || !nb.last) return false;
+  return na.first === nb.first && na.last === nb.last;
+}
+
+/**
+ * Parses a CH PSC name ("Mr Leon Lim Stevens") into first/last.
+ * PSCs do not use the officer's "SURNAME, Forename" ordering.
+ */
+function parseChPscName(chName: string): { first_name: string; last_name: string } {
+  const tokens = chName.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length > 0 && /^(mr|mrs|ms|miss|dr|sir|dame|prof|professor|lord|lady)\.?$/i.test(tokens[0])) {
+    tokens.shift();
+  }
+  if (tokens.length === 0) return { first_name: "", last_name: "" };
+  if (tokens.length === 1) return { first_name: "", last_name: tokens[0] };
+  return { first_name: tokens[0], last_name: tokens[tokens.length - 1] };
+}
+
+function mapChPscToPerson(p: CHPSC, orgId: string): PersonUpsert {
+  const { first_name, last_name } = parseChPscName(p.name);
+  const result: PersonUpsert = {
+    organization_id: orgId,
+    first_name,
+    last_name,
+  };
+  if (p.nationality) result.nationality = p.nationality;
+  if (p.links?.self) result.ch_psc_id = p.links.self;
+  return result;
+}
+
+function mapChPscToPscRow(p: CHPSC, companyId: string, personId: string): PscRow {
+  const row: PscRow = {
+    company_id: companyId,
+    person_id: personId,
+    nature_of_control: p.natures_of_control ?? [],
+    notified_at: p.notified_on,
+    ceased_at: p.ceased_on ?? null,
+  };
+  if (p.links?.self) row.ch_psc_id = p.links.self;
+  return row;
 }
 
 // ==================== Pure CH helpers (mirrors src/lib/companies-house-live.ts) ====================
@@ -221,6 +309,7 @@ type SyncOutcome =
       stagedFieldDiffs: number;
       cs01DeadlineCreated: boolean;
       promotedOfficers: number;
+      promotedPscs: number;
       syncedAt: string;
     }
   | { error: string; ch_status?: number };
@@ -352,6 +441,13 @@ async function syncCompanyFromCH(
     console.error("[CH Sync] Officer promotion failed (non-fatal):", promotion.error);
   }
 
+  // Promote CH PSCs into the person spine (company_persons + company_pscs).
+  // Same non-fatal contract as officer promotion.
+  const pscPromotion = await promotePscsToPersonSpine(supabase, organizationId, companyId, chPSCs);
+  if (pscPromotion.error) {
+    console.error("[CH Sync] PSC promotion failed (non-fatal):", pscPromotion.error);
+  }
+
   // Compare with internal registers and identify discrepancies
   const discrepancies = await compareWithInternalRegisters(supabase, companyId, chOfficers, chPSCs);
 
@@ -368,6 +464,7 @@ async function syncCompanyFromCH(
       discrepancies_found: discrepancies.length,
       staged_field_diffs: stagedDiffs,
       promoted_officers: promotion.promoted,
+      promoted_pscs: pscPromotion.promoted,
       discrepancies: discrepancies,
     },
   });
@@ -395,6 +492,7 @@ async function syncCompanyFromCH(
     stagedFieldDiffs: stagedDiffs,
     cs01DeadlineCreated,
     promotedOfficers: promotion.promoted,
+    promotedPscs: pscPromotion.promoted,
     syncedAt: new Date().toISOString(),
   };
 }
@@ -500,6 +598,151 @@ async function promoteOfficersToPersonSpine(
     return { promoted: officerRows.length };
   } catch (err: any) {
     return { promoted: 0, error: err?.message ?? "Officer promotion error" };
+  }
+}
+
+/**
+ * Promotes CH PSCs into the person spine (company_persons + company_pscs).
+ *
+ * Dedupe strategy per PSC (in order):
+ *   1. Person already exists for this org keyed by ch_psc_id — reuse.
+ *   2. Person already exists for this org keyed by ch_officer_id equal to the
+ *      PSC's links.self — reuse (rare; PSC and officer share a CH id when the
+ *      individual endpoints happen to overlap).
+ *   3. Person already linked to this company (as officer or PSC) whose
+ *      normalised first+last name and date-of-birth month/year match the CH
+ *      PSC — reuse (this is how PSC-is-also-a-director is stitched together).
+ *   4. Otherwise insert a fresh company_persons row.
+ *
+ * company_pscs is upserted on `ch_psc_id`. PSCs without a stable CH link are
+ * skipped for promotion — no safe dedupe key — but never cause an error.
+ */
+async function promotePscsToPersonSpine(
+  supabase: any,
+  organizationId: string,
+  companyId: string,
+  chPSCs: CHPSC[],
+): Promise<{ promoted: number; error?: string }> {
+  try {
+    const candidates = chPSCs.filter((p) => !p.ceased_on && !!p.links?.self);
+    if (candidates.length === 0) return { promoted: 0 };
+
+    // Load existing persons already linked to this company (via officer or PSC
+    // rows) so we can stitch a PSC onto a pre-existing person by name+DoB.
+    const { data: existingPersons, error: existingErr } = await supabase
+      .from("company_persons")
+      .select(
+        `
+        id,
+        first_name,
+        last_name,
+        date_of_birth,
+        ch_officer_id,
+        ch_psc_id,
+        company_officers(company_id),
+        company_pscs(company_id)
+      `,
+      )
+      .eq("organization_id", organizationId);
+    if (existingErr) {
+      console.error("[CH Sync] PSC promotion — existing persons query failed:", existingErr.message);
+    }
+
+    // Build a lookup by first+last (normalised) — restricted to persons linked
+    // to *this* company via either officer or PSC rows.
+    const nameKey = (first: string, last: string) => `${first}::${last}`;
+    const byName = new Map<string, any[]>();
+    for (const p of existingPersons ?? []) {
+      const linkedHere =
+        (p.company_officers ?? []).some((o: any) => o.company_id === companyId) ||
+        (p.company_pscs ?? []).some((x: any) => x.company_id === companyId);
+      if (!linkedHere) continue;
+      const n = normaliseName(`${p.first_name} ${p.last_name}`);
+      const key = nameKey(n.first, n.last);
+      const bucket = byName.get(key) ?? [];
+      bucket.push(p);
+      byName.set(key, bucket);
+    }
+
+    const byChPscId = new Map<string, any>();
+    const byChOfficerId = new Map<string, any>();
+    for (const p of existingPersons ?? []) {
+      if (p.ch_psc_id) byChPscId.set(p.ch_psc_id, p);
+      if (p.ch_officer_id) byChOfficerId.set(p.ch_officer_id, p);
+    }
+
+    const pscRows: PscRow[] = [];
+    for (const psc of candidates) {
+      const chId = psc.links!.self as string;
+      let personId: string | null = null;
+
+      // (1) & (2) direct id reuse
+      const direct = byChPscId.get(chId) ?? byChOfficerId.get(chId);
+      if (direct?.id) {
+        personId = direct.id;
+        // Stamp ch_psc_id on the existing person if not already set — cheap
+        // future-proofing so subsequent syncs skip the name matcher.
+        if (!direct.ch_psc_id) {
+          await supabase
+            .from("company_persons")
+            .update({ ch_psc_id: chId })
+            .eq("id", direct.id);
+        }
+      }
+
+      // (3) name + DoB match against persons already linked to this company
+      if (!personId) {
+        const parsed = parseChPscName(psc.name);
+        const n = normaliseName(`${parsed.first_name} ${parsed.last_name}`);
+        const candidatesByName = byName.get(nameKey(n.first, n.last)) ?? [];
+        const match = candidatesByName.find((p: any) => {
+          if (!psc.date_of_birth || !p.date_of_birth) return true;
+          const d = new Date(p.date_of_birth);
+          return (
+            d.getUTCMonth() + 1 === psc.date_of_birth.month &&
+            d.getUTCFullYear() === psc.date_of_birth.year
+          );
+        });
+        if (match?.id) {
+          personId = match.id;
+          await supabase
+            .from("company_persons")
+            .update({ ch_psc_id: chId })
+            .eq("id", match.id);
+        }
+      }
+
+      // (4) fresh insert
+      if (!personId) {
+        const personRow = mapChPscToPerson(psc, organizationId);
+        const { data: inserted, error: insertError } = await supabase
+          .from("company_persons")
+          .upsert(personRow, { onConflict: "organization_id,ch_psc_id" })
+          .select("id")
+          .single();
+        if (insertError || !inserted) {
+          console.error("[CH Sync] PSC person insert failed:", insertError?.message);
+          continue;
+        }
+        personId = inserted.id;
+      }
+
+      pscRows.push(mapChPscToPscRow(psc, companyId, personId!));
+    }
+
+    if (pscRows.length === 0) return { promoted: 0 };
+
+    const { error: pscsError } = await supabase
+      .from("company_pscs")
+      .upsert(pscRows, { onConflict: "company_id,ch_psc_id" });
+
+    if (pscsError) {
+      return { promoted: 0, error: pscsError.message };
+    }
+
+    return { promoted: pscRows.length };
+  } catch (err: any) {
+    return { promoted: 0, error: err?.message ?? "PSC promotion error" };
   }
 }
 
@@ -672,15 +915,9 @@ async function compareWithInternalRegisters(
 
   // Officers in CH but not in internal
   for (const chOfficer of activeChOfficers) {
-    const chName = chOfficer.name.toLowerCase();
-    const matchingInternal = (internalOfficers || []).find((io: any) => {
-      const internalName = `${io.person?.last_name}, ${io.person?.first_name}`.toLowerCase();
-      return (
-        internalName === chName ||
-        `${io.person?.first_name} ${io.person?.last_name}`.toLowerCase() ===
-          chName.split(", ").reverse().join(" ")
-      );
-    });
+    const matchingInternal = (internalOfficers || []).find((io: any) =>
+      namesMatch(chOfficer.name, `${io.person?.first_name} ${io.person?.last_name}`),
+    );
 
     if (!matchingInternal) {
       discrepancies.push({
@@ -693,12 +930,8 @@ async function compareWithInternalRegisters(
 
   // Officers in internal but not in CH
   for (const internalOfficer of internalOfficers || []) {
-    const internalName = `${internalOfficer.person?.last_name}, ${internalOfficer.person?.first_name}`.toUpperCase();
-    const matchingCH = activeChOfficers.find(
-      (cho) =>
-        cho.name.toUpperCase() === internalName ||
-        cho.name.toUpperCase() ===
-          `${internalOfficer.person?.first_name} ${internalOfficer.person?.last_name}`.toUpperCase(),
+    const matchingCH = activeChOfficers.find((cho) =>
+      namesMatch(cho.name, `${internalOfficer.person?.first_name} ${internalOfficer.person?.last_name}`),
     );
 
     if (!matchingCH) {
@@ -714,13 +947,11 @@ async function compareWithInternalRegisters(
   const activeChPSCs = chPSCs.filter((p) => !p.ceased_on);
 
   for (const chPSC of activeChPSCs) {
-    const matchingInternal = (internalPSCs || []).find((ip: any) => {
-      const internalName = `${ip.person?.first_name} ${ip.person?.last_name}`.toLowerCase();
-      return (
-        chPSC.name.toLowerCase().includes(internalName) ||
-        internalName.includes(chPSC.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, ""))
-      );
-    });
+    const matchingInternal = (internalPSCs || []).find(
+      (ip: any) =>
+        (ip.ch_psc_id && chPSC.links?.self && ip.ch_psc_id === chPSC.links.self) ||
+        namesMatch(chPSC.name, `${ip.person?.first_name} ${ip.person?.last_name}`),
+    );
 
     if (!matchingInternal) {
       discrepancies.push({
@@ -751,8 +982,8 @@ async function compareWithInternalRegisters(
     const internalName = `${internalPSC.person?.first_name} ${internalPSC.person?.last_name}`;
     const matchingCH = activeChPSCs.find(
       (chp) =>
-        chp.name.toLowerCase().includes(internalName.toLowerCase()) ||
-        internalName.toLowerCase().includes(chp.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, "")),
+        (internalPSC.ch_psc_id && chp.links?.self && internalPSC.ch_psc_id === chp.links.self) ||
+        namesMatch(chp.name, internalName),
     );
 
     if (!matchingCH) {

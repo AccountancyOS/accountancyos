@@ -1,42 +1,51 @@
-## What you'll see after this change
+## Problem
 
-For each Companies House Sync entry in the Register Events Timeline:
+The CH sync **imports officers** into the internal registers (via `promoteOfficersToPersonSpine`) but **does not import PSCs** — it only *compares* them. So every CH PSC shows up as `psc_missing_internal`. When you add the PSC manually, the name doesn't match CH's version ("Leon Stevens" vs "Leon Lim Stevens"), so it then flags `psc_missing_ch` on top.
 
-- No more `ch_sync` chip on the right.
-- A one-line audit row: **"21 Jul 2026 · 17:53 · by Amy Cronin"** (falls back to *"System"* for older rows where no user was captured — verified: existing rows have `created_by = NULL`).
-- A bullet list of the actual discrepancies from that sync, e.g.
-  - *PSC "Amy‑Lee Bassage" exists in Companies House but not in the internal register.*
-  - *Officer "Jane Doe" has resigned at Companies House but is still active internally.*
+Two independent bugs in `supabase/functions/companies-house-sync/index.ts`.
 
-Summary chip stays: *"1 officers, 1 PSCs synced (1 discrepancies)"*.
+## Fixes
+
+### 1. Auto-promote CH PSCs into internal registers
+
+Mirror the officer promotion pattern for PSCs. On each sync:
+
+- For every active CH PSC (i.e. `ceased_on` is null), find or create the corresponding `company_persons` row for the practice, then upsert a `company_pscs` row keyed on `ch_psc_id`.
+- Person dedupe order:
+  1. If the PSC's CH id matches a `company_persons.ch_officer_id` for the same org (PSC is also a director) — reuse that person.
+  2. Otherwise match by normalised full name + date-of-birth month/year against existing persons on that company — reuse if found.
+  3. Otherwise insert a new `company_persons` row.
+- Requires a new column `company_persons.ch_psc_id` (nullable, unique per org where not null) so PSC-originated persons dedupe cleanly across syncs. Migration will be needed.
+
+`company_pscs` insert uses `ch_psc_id` as the conflict key (column already exists; add a partial unique index on `(company_id, ch_psc_id) where ch_psc_id is not null` in the same migration).
+
+### 2. Robust name matching in discrepancy comparison
+
+`compareWithInternalRegisters` currently does substring matching on the full name, which breaks on middle names. Replace with a normaliser:
+
+- Lowercase, strip titles (mr/mrs/ms/miss/dr), collapse to `{first_token, last_token}` on both sides.
+- Match when first tokens are equal AND last tokens are equal (ignore middles). Apply the same to officers and PSCs.
+
+Once (1) lands, this discrepancy path mainly matters for legacy rows created before promotion existed; the normaliser stops false positives like "Leon Lim Stevens" vs "Leon Stevens" from reappearing.
 
 ## Files to change
 
-1. **`src/components/cosec/RegisterEventsTimeline.tsx`** (UI only)
-   - Remove the `<Badge>{event.source}</Badge>` chip.
-   - Format the header timestamp as `dd MMM yyyy · HH:mm` from `created_at` (drop the separate "N minutes ago" line to declutter, or keep it — see technical notes).
-   - Append `· by {first_name} {last_name}` when `event.created_by_profile` is present; otherwise `· by System`.
-   - For `ch_sync` events, render an unordered list of `event.details.discrepancies[].message` (cap at 5 with a "+N more" line for parity with the Registers-tab panel).
-
-2. **`src/lib/ch-sync-service.ts`** (`getRegisterEvents` select)
-   - Extend the PostgREST select with `created_by_profile:profiles!company_register_events_created_by_fkey(first_name,last_name,email)`. If the FK name differs, fall back to a second query keyed by `created_by`. Confirmed `profiles` has `first_name`, `last_name`, `email`.
-
-3. **`supabase/functions/companies-house-sync/index.ts`** (audit capture, forward-only)
-   - The function already resolves `userId` via `supabase.auth.getUser(token)`. Add `created_by: userId` to the `company_register_events` insert payload so future rows carry the operator. No backfill for the three existing NULL rows — they'll render as "by System".
-   - Deploy via `supabase--deploy_edge_functions(["companies-house-sync"])`. This is a behavioural additive change; the release convention pilot's version probe is unaffected.
-
-## Out of scope
-
-- No resolve/one-click workflow for discrepancies (still surfaces as read-only).
-- No schema change — `created_by` column already exists on `company_register_events`.
-- No change to the amber "N Discrepancies Found" panel on the Registers tab.
+- **New migration**: add `company_persons.ch_psc_id text` + unique partial index; add unique partial index `(company_id, ch_psc_id)` on `company_pscs`.
+- `supabase/functions/companies-house-sync/index.ts`:
+  - New `promotePscsToPersonSpine(supabase, orgId, companyId, chPSCs)` that runs after the officer promotion and before the discrepancy comparison.
+  - New helpers `mapChPscToPerson`, `mapChPscToPscRow`.
+  - Refactor comparison to use a shared `normaliseName(name) → { first, last }` helper.
+  - Include a `promoted_pscs` count in the sync event `details` for the register events timeline.
 
 ## Verification
 
-- Reload `/companies/84bd9448-...` → Registers → Events. The two existing `ch_sync` rows should show the PSC discrepancy message and read *"21 Jul 2026 · 17:53 · by System"*, with no `ch_sync` chip.
-- Click **Sync Now** to run a fresh sync, then confirm the new row shows your name.
+1. Delete the manually added "Leon Stevens" PSC on the Bassage Eyes test company.
+2. Re-run sync → both PSCs appear in the internal register with correct nature-of-control.
+3. Sync event summary reads `2 officers, 2 PSCs synced (0 discrepancies)`.
+4. Re-run sync again → same counts, zero duplicates (dedupe on `ch_psc_id` works).
+5. Manually change nature-of-control on one internal PSC → next sync flags `psc_control_mismatch`.
 
-## Technical notes
+## Not in scope
 
-- Nested-select FK hint: PostgREST needs an explicit constraint name when there could be ambiguity. If the FK is named differently, the fallback is a second `.in("id", userIds)` fetch against `profiles` and a client-side merge — cheap, one round-trip.
-- We're keeping `event.source` in the row (still used for filtering downstream) — only its visual chip is removed.
+- One-click "Accept CH" / "Keep Internal" resolve actions for discrepancies (still deferred).
+- Backfilling `ch_psc_id` onto pre-existing manually-created PSCs — the normalised name matcher handles those.

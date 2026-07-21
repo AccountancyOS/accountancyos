@@ -4933,6 +4933,7 @@ export type Database = {
       company_persons: {
         Row: {
           ch_officer_id: string | null
+          ch_psc_id: string | null
           country_of_residence: string | null
           created_at: string
           date_of_birth: string | null
@@ -4965,6 +4966,7 @@ export type Database = {
         }
         Insert: {
           ch_officer_id?: string | null
+          ch_psc_id?: string | null
           country_of_residence?: string | null
           created_at?: string
           date_of_birth?: string | null
@@ -4997,6 +4999,7 @@ export type Database = {
         }
         Update: {
           ch_officer_id?: string | null
+          ch_psc_id?: string | null
           country_of_residence?: string | null
           created_at?: string
           date_of_birth?: string | null
