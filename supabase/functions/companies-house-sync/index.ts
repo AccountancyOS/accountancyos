@@ -235,12 +235,17 @@ async function syncCompanyFromCH(
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select(
-      "id, company_number, company_name, organization_id, registered_office_address, sic_codes, company_type, confirmation_statement_made_up_to, confirmation_statement_next_due, client_id",
+      "id, company_number, company_name, organization_id, registered_office_address, sic_codes, company_type, confirmation_statement_made_up_to, confirmation_statement_next_due",
     )
     .eq("id", companyId)
     .single();
 
-  if (companyError || !company) {
+  // Distinguish a real query failure (e.g. a bad column) from a genuinely
+  // missing row — otherwise a PostgREST error is misreported as "not found".
+  if (companyError) {
+    return { error: `Failed to load company: ${companyError.message}` };
+  }
+  if (!company) {
     return { error: `Company not found: ${companyId}` };
   }
 
@@ -327,7 +332,7 @@ async function syncCompanyFromCH(
     supabase,
     organizationId,
     companyId,
-    company.client_id ?? null,
+    null, // companies has no client_id column; diff staging accepts null
     companyNumber,
     diffCandidates,
   );
