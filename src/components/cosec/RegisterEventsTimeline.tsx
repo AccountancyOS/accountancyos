@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { History, UserPlus, UserMinus, Shield, TrendingUp, ArrowRight, RefreshCw, Building } from "lucide-react";
+import { History, UserPlus, UserMinus, Shield, TrendingUp, ArrowRight, RefreshCw, Building, AlertTriangle } from "lucide-react";
 import { getRegisterEvents, formatEventType } from "@/lib/ch-sync-service";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 
 interface RegisterEventsTimelineProps {
   companyId: string;
@@ -68,7 +67,16 @@ export function RegisterEventsTimeline({ companyId }: RegisterEventsTimelineProp
               {events.map((event, index) => {
                 const IconComponent = eventIcons[event.event_type] || History;
                 const colorClass = eventColors[event.event_type] || "bg-gray-100 text-gray-700";
-                
+                const profile: any = (event as any).created_by_profile;
+                const actorName = profile
+                  ? [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
+                    profile.email ||
+                    "System"
+                  : "System";
+                const discrepancies: any[] = Array.isArray(event.details?.discrepancies)
+                  ? event.details.discrepancies
+                  : [];
+
                 return (
                   <div key={event.id} className="flex gap-4">
                     {/* Timeline line */}
@@ -95,11 +103,12 @@ export function RegisterEventsTimeline({ companyId }: RegisterEventsTimelineProp
                           )}
                         </div>
                         <div className="text-right">
-                          <Badge variant="outline" className="text-xs">
-                            {event.source}
-                          </Badge>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {event.event_date && format(new Date(event.event_date), "dd MMM yyyy")}
+                          <p className="text-xs text-muted-foreground">
+                            {event.created_at &&
+                              format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            by {actorName}
                           </p>
                         </div>
                       </div>
@@ -129,10 +138,26 @@ export function RegisterEventsTimeline({ companyId }: RegisterEventsTimelineProp
                           )}
                         </div>
                       )}
-                      
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {event.created_at && formatDistanceToNow(new Date(event.created_at), { addSuffix: true })}
-                      </p>
+
+                      {/* Discrepancy detail (ch_sync) */}
+                      {event.event_type === "ch_sync" && discrepancies.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {discrepancies.slice(0, 5).map((d: any, i: number) => (
+                            <li
+                              key={i}
+                              className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2"
+                            >
+                              <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                              <span>{d.message}</span>
+                            </li>
+                          ))}
+                          {discrepancies.length > 5 && (
+                            <li className="text-xs text-muted-foreground pl-5">
+                              +{discrepancies.length - 5} more
+                            </li>
+                          )}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 );
