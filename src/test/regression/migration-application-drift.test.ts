@@ -107,6 +107,15 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // against the live DB and move any genuinely-applied versions out of this list.
   "20260720224300",
   "20260720224405",
+  // 2026-07-21 Lovable batch — person-model re-application ("Applied migrations 1 & 2") plus the
+  // onboarding-documents security lockdown (RPC token enforcement + path-embedded storage token).
+  // Applied by Lovable under its own timestamps; reviewed. This is the last batch of manual
+  // allow-listing this guard should need — it is superseded by
+  // docs/releases/production-release-convention.md (definition-exact post-release verification).
+  "20260721084843",
+  "20260721084915",
+  "20260721090337",
+  "20260721090430",
 ]);
 
 function versionFromFilename(name: string): string | null {
