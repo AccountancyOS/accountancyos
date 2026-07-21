@@ -1,0 +1,4 @@
+{
+  "$schema_note": "Append-only. Bridges git identity to Lovable-reported executor metadata. See docs/releases/production-release-convention.md.",
+  "releases": []
+}

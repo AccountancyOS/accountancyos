@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://accountancyos.com/schemas/pending-release.schema.json",
+  "title": "PendingRelease",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "release_id",
+    "state",
+    "owner",
+    "approver",
+    "source",
+    "artifacts",
+    "deployment_order",
+    "expectations",
+    "verification",
+    "rollback"
+  ],
+  "properties": {
+    "release_id": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+$" },
+    "state": { "type": "string", "enum": ["pending", "approved", "applying", "verifying", "succeeded", "failed", "rolled_back"] },
+    "owner": { "type": "string", "minLength": 1 },
+    "approver": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit_sha", "pr_url", "branch"],
+      "properties": {
+        "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "pr_url": { "type": "string", "format": "uri" },
+        "branch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "path", "artifact_checksum"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "enum": ["migration", "edge_function", "frontend"] },
+          "path": { "type": "string", "minLength": 1 },
+          "artifact_checksum": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "stamped_version_file": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "deployment_order": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "expectations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "kind", "check", "expected"],
+        "properties": {
+          "artifact_id": { "type": "string" },
+          "kind": { "type": "string", "enum": ["column", "index", "function", "policy", "grant", "cron", "endpoint_version", "cold_start_log", "frontend_manifest"] },
+          "check": { "type": "string", "minLength": 1 },
+          "expected": {}
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "targets"],
+      "properties": {
+        "commands": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "app_domain": { "type": "string", "format": "uri" },
+            "portal_domain": { "type": "string", "format": "uri" },
+            "functions_base_url": { "type": "string", "format": "uri" }
+          }
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps"],
+      "properties": {
+        "steps": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      }
+    },
+    "execution": { "$ref": "release-record.schema.json#/$defs/execution" }
+  }
+}

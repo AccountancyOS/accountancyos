@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://accountancyos.com/schemas/release-record.schema.json",
+  "title": "ReleaseRecord",
+  "allOf": [{ "$ref": "pending-release.schema.json" }],
+  "type": "object",
+  "required": ["execution"],
+  "$defs": {
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "verified_at", "verification_output"],
+      "properties": {
+        "lovable_applied_version": { "type": ["string", "null"] },
+        "deployed_at": { "type": ["string", "null"], "format": "date-time" },
+        "verified_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["succeeded", "failed", "rolled_back"] },
+        "verification_output": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "result"],
+            "properties": {
+              "check": { "type": "string" },
+              "result": { "type": "string", "enum": ["pass", "fail", "inconclusive"] },
+              "detail": { "type": "string" }
+            }
+          }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

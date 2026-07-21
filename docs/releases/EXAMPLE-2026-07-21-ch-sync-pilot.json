@@ -1,0 +1,58 @@
+{
+  "release_id": "2026-07-21-ch-sync-pilot",
+  "state": "pending",
+  "owner": "platform-team",
+  "approver": "platform-lead",
+  "source": {
+    "commit_sha": "0000000000000000000000000000000000000000",
+    "pr_url": "https://github.com/example/accountancyos/pull/0",
+    "branch": "main"
+  },
+  "artifacts": [
+    {
+      "id": "companies-house-sync",
+      "kind": "edge_function",
+      "path": "supabase/functions/companies-house-sync",
+      "artifact_checksum": "0000000000000000000000000000000000000000000000000000000000000000",
+      "stamped_version_file": "supabase/functions/companies-house-sync/VERSION.ts",
+      "notes": "Pilot: adds ?action=version identity probe. No behavioural change."
+    }
+  ],
+  "deployment_order": ["companies-house-sync"],
+  "expectations": [
+    {
+      "artifact_id": "companies-house-sync",
+      "kind": "endpoint_version",
+      "check": "GET https://<functions-base>/companies-house-sync?action=version",
+      "expected": {
+        "name": "companies-house-sync",
+        "release_id": "2026-07-21-ch-sync-pilot",
+        "release_sha": "0000000000000000000000000000000000000000",
+        "artifact_checksum": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "artifact_id": "companies-house-sync",
+      "kind": "cold_start_log",
+      "check": "edge_function_logs contains [release] fn=companies-house-sync release_id=2026-07-21-ch-sync-pilot within last 1h",
+      "expected": true
+    }
+  ],
+  "verification": {
+    "commands": [
+      "bun scripts/verify-release.ts docs/releases/EXAMPLE-2026-07-21-ch-sync-pilot.json"
+    ],
+    "targets": {
+      "app_domain": "https://app.accountancyos.com",
+      "portal_domain": "https://client.accountancyos.com",
+      "functions_base_url": "https://app.accountancyos.com/functions/v1"
+    }
+  },
+  "rollback": {
+    "steps": [
+      "Revert the merge commit in git.",
+      "Ask Lovable to redeploy companies-house-sync from the reverted HEAD.",
+      "Re-run verify-release.ts against the previous release record; expect status=succeeded."
+    ]
+  }
+}
