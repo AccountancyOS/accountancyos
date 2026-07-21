@@ -15,6 +15,7 @@ import { ShareClassesSection } from "./ShareClassesSection";
 import { ShareholdersSection } from "./ShareholdersSection";
 import { RegisterEventsTimeline } from "./RegisterEventsTimeline";
 import { RegistersTabSkeleton } from "./RegistersTabSkeleton";
+import { LinkCompaniesHouseDialog } from "@/components/company/LinkCompaniesHouseDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatDistanceToNow } from "date-fns";
 
@@ -147,16 +148,24 @@ export function RegistersTab({ companyId, organizationId }: RegistersTabProps) {
                   Last synced {formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}
                 </div>
               )}
-              <Button
-                onClick={() => syncMutation.mutate()}
-                disabled={syncMutation.isPending || !company?.company_number}
-                variant="outline"
-                size="sm"
-                className="min-w-[120px]"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                {syncMutation.isPending ? "Syncing..." : "Sync with CH"}
-              </Button>
+              {company?.company_number ? (
+                <Button
+                  onClick={() => syncMutation.mutate()}
+                  disabled={syncMutation.isPending}
+                  variant="outline"
+                  size="sm"
+                  className="min-w-[120px]"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                  {syncMutation.isPending ? "Syncing..." : "Sync with CH"}
+                </Button>
+              ) : (
+                <LinkCompaniesHouseDialog
+                  companyId={companyId}
+                  defaultQuery={company?.company_name ?? undefined}
+                  onLinked={() => syncMutation.mutate()}
+                />
+              )}
             </div>
           </div>
         </CardHeader>
