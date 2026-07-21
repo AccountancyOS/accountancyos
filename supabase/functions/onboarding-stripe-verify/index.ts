@@ -25,7 +25,7 @@ serve(async (req: Request) => {
 
     const { data: app, error: appErr } = await supabase
       .from("onboarding_applications")
-      .select("id, organization_id, status, billing_amount")
+      .select("id, organization_id, status, billing_amount, access_token")
       .eq("id", application_id)
       .maybeSingle();
     if (appErr || !app) throw new Error(appErr?.message ?? "Application not found");
@@ -63,6 +63,7 @@ serve(async (req: Request) => {
 
     const { error: rpcErr } = await supabase.rpc("public_complete_billing", {
       p_application_id: application_id,
+      p_access_token: app.access_token,
       p_stripe_session_id: session_id,
       p_amount: amount,
     });
