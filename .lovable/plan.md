@@ -1,51 +1,63 @@
-## Problem
+## Correction to the earlier claim
 
-The CH sync **imports officers** into the internal registers (via `promoteOfficersToPersonSpine`) but **does not import PSCs** — it only *compares* them. So every CH PSC shows up as `psc_missing_internal`. When you add the PSC manually, the name doesn't match CH's version ("Leon Stevens" vs "Leon Lim Stevens"), so it then flags `psc_missing_ch` on top.
+The statement "a CH function redeploy from git covers the PSC sync" is **not** true, and neither was my earlier report that PSC promotion was working end-to-end.
 
-Two independent bugs in `supabase/functions/companies-house-sync/index.ts`.
+Two pieces were required:
+1. Migration `20260721170839` — adds `company_persons.ch_psc_id` and unique indexes. **Applied on live** (verified).
+2. `companies-house-sync` function rewrite that promotes PSCs. **Deployed on live** (verified — `booted` events in logs from today).
 
-## Fixes
+But the live edge-function log for the most recent sync shows:
 
-### 1. Auto-promote CH PSCs into internal registers
+```
+[CH Sync] PSC promotion failed (non-fatal): there is no unique or exclusion
+constraint matching the ON CONFLICT specification
+```
 
-Mirror the officer promotion pattern for PSCs. On each sync:
+So PSC promotion is running and silently failing on every sync — which is why phantom PSC discrepancies keep coming back.
 
-- For every active CH PSC (i.e. `ceased_on` is null), find or create the corresponding `company_persons` row for the practice, then upsert a `company_pscs` row keyed on `ch_psc_id`.
-- Person dedupe order:
-  1. If the PSC's CH id matches a `company_persons.ch_officer_id` for the same org (PSC is also a director) — reuse that person.
-  2. Otherwise match by normalised full name + date-of-birth month/year against existing persons on that company — reuse if found.
-  3. Otherwise insert a new `company_persons` row.
-- Requires a new column `company_persons.ch_psc_id` (nullable, unique per org where not null) so PSC-originated persons dedupe cleanly across syncs. Migration will be needed.
+## Root cause (verified against the live DB)
 
-`company_pscs` insert uses `ch_psc_id` as the conflict key (column already exists; add a partial unique index on `(company_id, ch_psc_id) where ch_psc_id is not null` in the same migration).
+Both PSC unique indexes are **partial**:
 
-### 2. Robust name matching in discrepancy comparison
+```
+company_persons_org_ch_psc_uq   ... WHERE (ch_psc_id IS NOT NULL)
+company_pscs_company_ch_psc_uq  ... WHERE (ch_psc_id IS NOT NULL)
+```
 
-`compareWithInternalRegisters` currently does substring matching on the full name, which breaks on middle names. Replace with a normaliser:
+The function upserts with `onConflict: "organization_id,ch_psc_id"` and `onConflict: "company_id,ch_psc_id"`. PostgREST/supabase-js emits a bare `ON CONFLICT (col, col)` clause — no `WHERE` predicate. Postgres will only infer a **partial** unique index when the target list *and* the predicate match, so the inference fails and the whole upsert aborts with the exact error above.
 
-- Lowercase, strip titles (mr/mrs/ms/miss/dr), collapse to `{first_token, last_token}` on both sides.
-- Match when first tokens are equal AND last tokens are equal (ignore middles). Apply the same to officers and PSCs.
+The officer path works because it has both a partial index (`company_persons_org_ch_officer_unique`) **and** a plain unique index (`company_persons_org_ch_officer_uq`). The PSC path only has the partial one.
 
-Once (1) lands, this discrepancy path mainly matters for legacy rows created before promotion existed; the normaliser stops false positives like "Leon Lim Stevens" vs "Leon Stevens" from reappearing.
+## Fix
 
-## Files to change
+New migration adding the missing plain unique indexes so `ON CONFLICT (organization_id, ch_psc_id)` and `ON CONFLICT (company_id, ch_psc_id)` can be inferred (Postgres allows multiple NULLs in a plain unique index, so no NULL-vs-NULL collision):
 
-- **New migration**: add `company_persons.ch_psc_id text` + unique partial index; add unique partial index `(company_id, ch_psc_id)` on `company_pscs`.
-- `supabase/functions/companies-house-sync/index.ts`:
-  - New `promotePscsToPersonSpine(supabase, orgId, companyId, chPSCs)` that runs after the officer promotion and before the discrepancy comparison.
-  - New helpers `mapChPscToPerson`, `mapChPscToPscRow`.
-  - Refactor comparison to use a shared `normaliseName(name) → { first, last }` helper.
-  - Include a `promoted_pscs` count in the sync event `details` for the register events timeline.
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS company_persons_org_ch_psc_unique
+  ON public.company_persons (organization_id, ch_psc_id);
 
-## Verification
+CREATE UNIQUE INDEX IF NOT EXISTS company_pscs_company_ch_psc_unique
+  ON public.company_pscs (company_id, ch_psc_id);
+```
 
-1. Delete the manually added "Leon Stevens" PSC on the Bassage Eyes test company.
-2. Re-run sync → both PSCs appear in the internal register with correct nature-of-control.
-3. Sync event summary reads `2 officers, 2 PSCs synced (0 discrepancies)`.
-4. Re-run sync again → same counts, zero duplicates (dedupe on `ch_psc_id` works).
-5. Manually change nature-of-control on one internal PSC → next sync flags `psc_control_mismatch`.
+Leave the existing partial indexes in place — they don't hurt and they document intent.
+
+No function change needed. No redeploy needed.
+
+## Verification (re-verify end-to-end, as approved)
+
+1. Apply migration.
+2. Re-run CH sync on BASSAGE EYES LTD from the Registers tab.
+3. Check `edge_logs` for `companies-house-sync` — the "PSC promotion failed" line must be **gone**.
+4. Query live: `SELECT count(*) FROM public.company_pscs WHERE company_id = '<bassage>' AND ch_psc_id IS NOT NULL;` should be ≥ 1.
+5. Reload the Registers tab — the amber "PSC 'Leon Lim Stevens' exists in CH but not in internal registers" panel should clear, and no reciprocal "exists internally but not in CH" should appear.
+6. Delete any leftover manually-added "Leon Stevens" PSC row from before the fix, if the dedupe leaves a duplicate.
+
+## Files
+
+- New migration `supabase/migrations/<ts>_ch_psc_onconflict_indexes.sql` — the two `CREATE UNIQUE INDEX` statements above. No RLS/grants (indexes only).
 
 ## Not in scope
 
-- One-click "Accept CH" / "Keep Internal" resolve actions for discrepancies (still deferred).
-- Backfilling `ch_psc_id` onto pre-existing manually-created PSCs — the normalised name matcher handles those.
+- Officer/PSC discrepancy one-click resolve UI.
+- Backfilling `ch_psc_id` onto legacy manually-created PSC rows (fuzzy name matcher in the function already handles those).
