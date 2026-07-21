@@ -629,7 +629,7 @@ async function promotePscsToPersonSpine(
 
     // Load existing persons already linked to this company (via officer or PSC
     // rows) so we can stitch a PSC onto a pre-existing person by name+DoB.
-    const { data: existingPersons } = await supabase
+    const { data: existingPersons, error: existingErr } = await supabase
       .from("company_persons")
       .select(
         `
@@ -639,11 +639,14 @@ async function promotePscsToPersonSpine(
         date_of_birth,
         ch_officer_id,
         ch_psc_id,
-        company_officers!inner(company_id),
+        company_officers(company_id),
         company_pscs(company_id)
       `,
       )
       .eq("organization_id", organizationId);
+    if (existingErr) {
+      console.error("[CH Sync] PSC promotion — existing persons query failed:", existingErr.message);
+    }
 
     // Build a lookup by first+last (normalised) — restricted to persons linked
     // to *this* company via either officer or PSC rows.
