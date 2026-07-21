@@ -16,11 +16,11 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { 
-  Building2, 
-  ClipboardList, 
-  FileText, 
-  Settings, 
+import {
+  Building2,
+  ClipboardList,
+  FileText,
+  Settings,
   FolderOpen,
   ArrowLeft,
   Mail,
@@ -33,7 +33,10 @@ import {
   Lock,
   Send,
   Pencil,
-  Briefcase
+  Briefcase,
+  MessageSquare,
+  Users,
+  CreditCard
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatStatus } from "@/lib/format-utils";
@@ -56,6 +59,9 @@ import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/client-types";
 import { ServiceStatusDashboard } from "@/components/client-portal/ServiceStatusDashboard";
 import { AddServiceDialog } from "@/components/client-portal/AddServiceDialog";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
+import { ConversationsTab } from "@/components/client-portal/ConversationsTab";
+import { EmailList } from "@/components/email/EmailList";
+import { ContactsList } from "@/components/contacts/ContactsList";
 
 const CompanyDetail = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -157,6 +163,10 @@ const CompanyDetail = () => {
       registers: "Registers",
       "cosec-jobs": "CoSec Jobs",
       documents: "Documents",
+      conversations: "Conversations",
+      emails: "Emails",
+      contacts: "Contacts",
+      billing: "Billing",
       settings: "Settings",
     };
     return labels[tab] || tab;
@@ -273,9 +283,25 @@ const CompanyDetail = () => {
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
             </TabsTrigger>
+            <TabsTrigger value="conversations" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Conversations</span>
+            </TabsTrigger>
+            <TabsTrigger value="emails" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <Mail className="h-4 w-4" />
+              <span className="hidden sm:inline">Emails</span>
+            </TabsTrigger>
+            <TabsTrigger value="contacts" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Contacts</span>
+            </TabsTrigger>
             <TabsTrigger value="services" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">Services</span>
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center gap-2 flex-1 sm:flex-initial">
+              <CreditCard className="h-4 w-4" />
+              <span className="hidden sm:inline">Billing</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2 flex-1 sm:flex-initial">
               <Settings className="h-4 w-4" />
@@ -635,11 +661,42 @@ const CompanyDetail = () => {
             <CompanyDocumentsTab companyId={companyId!} />
           </TabsContent>
 
+          <TabsContent value="conversations" className="mt-6">
+            <ConversationsTab companyId={companyId} />
+          </TabsContent>
+
+          <TabsContent value="emails" className="mt-6">
+            <EmailList
+              companyId={companyId}
+              recipientEmail={company.email ?? undefined}
+              showQueue
+              title="Emails"
+            />
+          </TabsContent>
+
+          <TabsContent value="contacts" className="mt-6">
+            <ContactsList companyId={companyId} />
+          </TabsContent>
+
           <TabsContent value="services" className="mt-6">
             <div className="flex justify-end mb-4">
               <AddServiceDialog companyId={companyId} />
             </div>
             <ServiceStatusDashboard companyId={companyId} />
+          </TabsContent>
+
+          <TabsContent value="billing" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Billing & Invoices</CardTitle>
+                <CardDescription>
+                  View quotes, invoices, and payment history
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">Billing view coming soon...</p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
