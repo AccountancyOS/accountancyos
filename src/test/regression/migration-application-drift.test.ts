@@ -102,6 +102,11 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // them, refresh docs/audits/unapplied-migrations-baseline.json and remove these; otherwise investigate.
   "20260720222022",
   "20260720222127",
+  // More Lovable-pushed migrations arriving via rebase without an allow-list/baseline entry.
+  // Apply status not verifiable from here — owner should run scripts/refresh-migration-baseline.ts
+  // against the live DB and move any genuinely-applied versions out of this list.
+  "20260720224300",
+  "20260720224405",
 ]);
 
 function versionFromFilename(name: string): string | null {
