@@ -391,7 +391,7 @@ function UploadRow({
     }
     const { error: rpcErr } = await supabase.rpc("public_record_aml_upload", {
       p_application_id: bundle.application.id,
-      p_access_token: token,
+      p_access_token: getAccessToken(),
       p_document_type: docType,
       p_file_name: file.name,
       p_file_path: path,
