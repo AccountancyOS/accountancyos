@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  handleVersionProbe,
+  logColdStartIdentity,
+} from "../_shared/release-version.ts";
+import { RELEASE } from "./VERSION.ts";
+
+logColdStartIdentity("companies-house-sync", RELEASE);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -764,6 +771,12 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Release-identity probe. MUST run before any secret read, auth check, or
+  // provider API call so it works in an un-keyed environment and never
+  // touches the Companies House API.
+  const versionResponse = handleVersionProbe(req, "companies-house-sync", RELEASE);
+  if (versionResponse) return versionResponse;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

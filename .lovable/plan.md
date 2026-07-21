@@ -1,107 +1,69 @@
-## Onboarding IDOR closure — diff for review
+# Production Release Control — Convention + Pilot Instrumentation
 
-Investigation confirms your framing. Producing the two migrations + code diffs for review; nothing applied yet.
+Establishes Git as the source of truth for intended production state, with independently verifiable evidence of what is actually live. This is a controls + tooling change only. No production migrations, secrets, deploys, or broad function edits happen in this task.
 
-### Findings from the codebase
+## Capability Answers (Design Constraints)
 
-- **Every anon RPC caller in `PublicOnboarding.tsx` already threads `p_access_token: getAccessToken()`** — all 6 call sites (lines 71, 217, 238, 385, 460, 519). Safe to drop no-token overloads from the frontend's perspective.
-- **One server-side gap**: `supabase/functions/onboarding-stripe-verify/index.ts:64` calls `public_complete_billing` **without** `p_access_token`. Stripe redirect returns to the applicant; verify runs with service role. Must be patched to look up the app's `access_token` and thread it, or the enforcement flip breaks the Stripe return path.
-- **`PublicOnboarding.tsx` never reads back uploaded documents mid-flow** — only tracks via `public_record_aml_upload`. No applicant-side signed-URL RPC needed. One less moving part.
-- **Reviewer + client-portal downloads use `storage.from().download()`** under the `Org members can view onboarding documents` policy (`auth.uid() IS NOT NULL AND user_has_organization_access(...)`). That policy stays. Direct authenticated downloads keep working; no forced signed-URL rewrite for the reviewer UI (though we can add it as a hardening follow-up).
-- **Current anon storage policies** to remove/replace:
-  - `Public can upload onboarding documents` (INSERT, anon) — replace with token-in-path INSERT
-  - `Public can read own onboarding documents` (SELECT, anon) — **drop entirely**, no replacement
+Both need explicit statement in the convention because they shape what the controls can guarantee vs. only record.
 
-### Migration 1 — RPC enforcement flip (lands first, same push)
+1. **Applying from an exact immutable Git SHA/tag.** Lovable Cloud's migration and edge-function deploy tools operate on the workspace's current file tree (the state the agent commits during a turn), not on a caller-supplied Git SHA. There is **no `--rev`/`--sha` parameter**. Deployment identity is therefore *asserted* by the agent ("I am deploying files that match SHA X") and *attested* by a stamped `VERSION.ts`; it is **not cryptographically pinned by the Lovable tool itself**. The convention will state this plainly and require independent verification (§Verification) rather than trusting the tool metadata.
+2. **Injecting `RELEASE_SHA` / `RELEASE_BUILD_AT` at deploy time.** Lovable has no per-release env-var injection API for edge functions distinct from workspace secrets. The workable, in-scope mechanism is a **stamped `VERSION.ts` file committed alongside the function**, produced by `scripts/stamp-release.ts` before the agent is asked to deploy. Values travel in-source, so they are visible at runtime via the version probe and at cold start via logs, and they are covered by the source checksum.
 
-`supabase/migrations/<ts>_onboarding_rpc_token_required.sql`:
+Both facts get a "What is guaranteed vs. recorded" table in the convention.
 
-1. `DROP FUNCTION` the six no-token overloads:
-   - `public_get_onboarding(uuid)`
-   - `public_preview_engagement_letter(uuid)`
-   - `public_sign_engagement_letter(uuid, jsonb)`
-   - `public_record_aml_upload(uuid, text, text, text, integer, text)`
-   - `public_skip_billing(uuid)`
-   - `public_complete_billing(uuid, text, numeric)`
-   - `public_submit_onboarding_for_review(uuid, text)`
-2. In each remaining `(…, p_access_token text)` overload, change the validation block from
-   ```sql
-   IF p_access_token IS NOT NULL AND NOT public.validate_onboarding_access_token(...) THEN ...
-   ```
-   to
-   ```sql
-   IF p_access_token IS NULL OR NOT public.validate_onboarding_access_token(p_application_id, p_access_token) THEN
-     RAISE EXCEPTION 'Invalid or missing onboarding access token' USING ERRCODE='42501';
-   END IF;
-   ```
-   Bodies otherwise reproduced verbatim; diff will show only the validation block changed.
-3. Re-`GRANT EXECUTE ... TO anon, authenticated`.
+## Files To Create / Change
 
-Effect: `public_get_onboarding` stops returning `file_path` to bare-UUID callers → path leak closed at the RPC layer even before storage is touched.
+**Convention & records**
+- `docs/releases/production-release-convention.md` — the single canonical convention (reconciled from Claude's proposal + earlier draft). Includes capability answers, release lifecycle, verification rules, ordering & publish gates, exception register, checksum scope rules.
+- `docs/releases/README.md` — index + how to file a release.
+- `docs/releases/_schema/pending-release.schema.json` — JSON Schema for a pending release declaration.
+- `docs/releases/_schema/release-record.schema.json` — JSON Schema for the appended post-deploy record.
+- `docs/releases/EXAMPLE-2026-07-21-ch-sync-pilot.json` — one concrete example pending+release record for the pilot.
+- `docs/releases/exceptions/README.md` — exception (incident-class) record format + mandatory backfill-PR rule.
+- `infra/release-manifest.json` — machine-readable index of accepted release records (append-only bridge between Git SHA/checksum and Lovable-reported applied version/deploy timestamp).
 
-### Code change bundled with Migration 1
+**Tooling (no runtime side effects)**
+- `scripts/release-checksum.ts` — SHA-256 of a migration file, or deterministic hash over a function's deployable surface (function dir + `supabase/functions/_shared/**` + `supabase/config.toml` function block + `deno.json`/import map when present, excluding `VERSION.ts` which is regenerated).
+- `scripts/stamp-release.ts` — writes `supabase/functions/<name>/VERSION.ts` with `RELEASE_SHA`, `RELEASE_BUILD_AT`, `RELEASE_ID`, `ARTIFACT_CHECKSUM`. Idempotent; used only when a release record exists.
+- `scripts/verify-release.ts` — independent live checker. Reads a release record, runs the declared verification queries against the live DB via the read-only path we already use in smoke tests, hits `?action=version` on the declared function endpoint against the **production custom domain**, diffs identity fields, and exits non-zero on any mismatch/inconclusive result. Migration checks assert exact expected state (column type/default/nullability, index def, function body/signature hash, policy definition, grants, cron schedule) — not merely "object exists".
+- `supabase/functions/_shared/release-version.ts` — shared helper exporting `handleVersionProbe(name)` returning `{ name, release_sha, release_id, artifact_checksum, build_at, deployed_at_first_seen }` and `logColdStartIdentity(name)`.
 
-`supabase/functions/onboarding-stripe-verify/index.ts`: after loading `app`, thread its token:
-```ts
-const { error: rpcErr } = await supabase.rpc("public_complete_billing", {
-  p_application_id: application_id,
-  p_access_token: app.access_token,   // service-role read from onboarding_applications
-  p_stripe_session_id: session_id,
-  p_amount: amount,
-});
-```
-Requires `app.access_token` in the earlier select. Redeploy `onboarding-stripe-verify` with this migration.
+**Pilot: `companies-house-sync` only**
+- `supabase/functions/companies-house-sync/VERSION.ts` — placeholder committed with `RELEASE_SHA = "unstamped"` so the module compiles today; real values written by `stamp-release.ts` at pilot time.
+- `supabase/functions/companies-house-sync/index.ts` — add: (a) early `?action=version` branch that returns the version probe response *before* auth/env checks so it works without secrets and never touches provider APIs; (b) a single `logColdStartIdentity("companies-house-sync")` call at module top level. No behaviour change to `search` / `profile` / `sync` actions.
 
-### Migration 2 — Storage lockdown (lands immediately after)
+**Tests (regression, in-repo, no live calls)**
+- `src/test/regression/release-version-probe.test.ts` — asserts `companies-house-sync/index.ts` imports `handleVersionProbe`, that `?action=version` is dispatched before any secret read or provider call, that the probe response schema contains only the safe fields, and that no secret names appear in the probe branch. Also asserts a `logColdStartIdentity` call exists at top level.
+- `src/test/regression/release-record-schema.test.ts` — validates every file in `docs/releases/*.json` against the JSON Schemas; asserts the example record round-trips.
+- `src/test/regression/release-checksum-determinism.test.ts` — runs `release-checksum.ts` twice on the pilot function and asserts identical output; asserts `VERSION.ts` is excluded from the hash input.
+- Extend `src/test/regression/migration-application-drift.test.ts` — every entry in `infra/release-manifest.json` of type `migration` must map to a file at the declared SHA whose re-computed checksum matches.
 
-`supabase/migrations/<ts>_onboarding_storage_token_gate.sql`:
+**Runbook**
+- `docs/releases/pilot-runbook.md` — one-page "how to run the first controlled release" for `companies-house-sync`: declare → stamp → get approval → apply (order) → run `verify-release.ts` against `app.accountancyos.com` and the CH-sync production endpoint → append record → rollback recipe.
 
-1. `DROP POLICY "Public can read own onboarding documents" ON storage.objects;` — no replacement. Anon SELECT is gone.
-2. `DROP POLICY "Public can upload onboarding documents" ON storage.objects;`
-3. New INSERT policy with token in path segment 4:
-   ```sql
-   CREATE POLICY "Public can upload onboarding documents with token"
-     ON storage.objects FOR INSERT TO anon, authenticated
-     WITH CHECK (
-       bucket_id = 'onboarding-documents'
-       AND public.is_active_onboarding_upload_path(name)
-     );
-   ```
-4. New helper `is_active_onboarding_upload_path(text)`:
-   - Parses `orgId/onboarding/appId/<token>/<filename>` (>= 5 segments).
-   - Loads `onboarding_applications` by `(id, organization_id)`.
-   - Requires `status NOT IN ('approved','rejected','cancelled')`.
-   - Requires `v_parts[4] = access_token` AND `(access_token_expires_at IS NULL OR access_token_expires_at > now())`.
-   - Only used in `WITH CHECK` (write path). Never used for SELECT — so the self-referential-read trap you flagged cannot arise.
-5. Leave `is_active_onboarding_path` in place for now (no callers after policies drop), remove in a follow-up cleanup migration.
+## Pilot Verification (how we prove this works without deploying)
 
-Authenticated reviewer/portal SELECT continues via the untouched `Org members can view onboarding documents` policy. Pre-token legacy objects (`orgId/onboarding/appId/file`) lose anon access for free; org staff still reach them.
+Verification of the *convention & tooling* (in this task):
+- All new tests pass under `bun run test`.
+- `bun scripts/release-checksum.ts supabase/functions/companies-house-sync` prints a stable hash twice.
+- `bun scripts/stamp-release.ts --dry-run --function companies-house-sync --sha <fake> --release-id EXAMPLE-*` prints the `VERSION.ts` it would write without mutating anything.
+- `bun scripts/verify-release.ts docs/releases/EXAMPLE-2026-07-21-ch-sync-pilot.json --offline` performs schema + checksum checks and clearly reports the live checks as "skipped: offline" (not "passed"). This proves inconclusive-≠-green.
 
-### Code change bundled with Migration 2
+Verification of the *actual first release* is deferred to when you approve the pilot runbook; it will hit the production custom domain and the production CH-sync endpoint and require identity match before marking green.
 
-`src/pages/PublicOnboarding.tsx` upload path (line 375):
-```ts
-const token = getAccessToken();
-if (!token) { toast.error("Session expired — please reopen your onboarding link"); return; }
-const path = `${bundle.organization.id}/onboarding/${bundle.application.id}/${token}/${docType}-${Date.now()}.${ext}`;
-```
-No other upload sites; reviewer UI writes go through the auth'd staff policy. `public_record_aml_upload` receives the same new path and stores it in `onboarding_documents.file_path` — reviewer downloads work unchanged because they read that stored path.
+## Explicit Non-Goals For This Task
+- No migration is applied, no function is deployed, no secret is added/rotated, no cron is created, no `preview_ui--publish` call.
+- No changes to the other ~60 edge functions. `_shared/release-version.ts` is added but only wired into `companies-house-sync`.
+- No changes to live schema, RLS, grants, or policies to "make things fit" the convention.
+- No hand-patched code paths — every change is via the committed repo.
 
-### What we're explicitly NOT doing (deferred, per your call)
+## Reconciliation With Claude's Draft
+Since `docs/releases/production-release-convention.md` does not yet exist in the repo, "reconciliation" means: adopt Claude's structure where it goes further than the earlier draft (pending-release-first, exception register, checksum-scope rule, verification must be independent and exact-state), and add the two capability answers plus the explicit "attestation vs. proof" framing that neither draft made unambiguous. Single canonical document; no second copy.
 
-- No object migration for pre-token uploads — they remain org-staff-reachable, anon-unreachable (window closes for free).
-- No edge-function upload proxy (option b's cleaner endgame) — revisit if a further hardening pass is wanted.
-- No forced signed-URL switch for the reviewer UI right now — the authenticated org policy is already tight; can be added later as defence-in-depth.
-
-### Verification I'll run before saying "done"
-
-1. `pg_proc` shows only the `(…, text)` overloads remain after Migration 1.
-2. `pg_policies` on `storage.objects` shows no anon-reachable SELECT for bucket `onboarding-documents` after Migration 2.
-3. Live test: fresh quote → accept → sign EL → upload AML doc (new token-in-path succeeds) → repeat upload attempt with `token` stripped from URL (fails at RPC before storage) → staff reviewer downloads the doc successfully.
-4. Regression: `bunx vitest run src/test/regression/onboarding-token-threading.test.ts`.
-
-### Publish order
-
-Migration 1 → redeploy `onboarding-stripe-verify` → Migration 2 → publish frontend. Rollback per migration is independent (redeploy prior RPC bodies / re-create dropped policies).
-
-Approve and I'll write the two migration files + the two code diffs for your review before applying anything.
+## Technical Notes
+- The version probe must dispatch *before* `Deno.env.get("CH_PROD_API_KEY")` reads and *before* the service-role auth gate, so a probe against an un-keyed environment still returns identity. It must not accept a request body, must reject non-GET, and must set `Cache-Control: no-store`.
+- Cold-start log line format: `[release] fn=companies-house-sync release_sha=<sha> release_id=<id> artifact_checksum=<hex> build_at=<iso>`. No key names, no env values.
+- Checksum scope for functions: sorted list of `(path, sha256)` over the function directory + `_shared/**` + the function's `supabase/config.toml` block + `deno.json`/import map, hashed as a single SHA-256. `VERSION.ts` excluded (else stamping would invalidate its own input).
+- Live migration verification uses the same read path as `scripts/smoke-test.ts` (service-role read against `pg_catalog` / `pg_policies` / `pg_cron.job`), keyed by declared expectations in the release record — never a bare "object exists" check.
+- Applied-version timestamps from Lovable are recorded only as a bridge field on the release record; identity remains `{git_sha, artifact_checksum, release_id}`.
+- Exception records live under `docs/releases/exceptions/` and are blocked-open until a backfill PR SHA is recorded; `release-record-schema.test.ts` fails if an exception is closed without one.
