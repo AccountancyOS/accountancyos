@@ -912,15 +912,9 @@ async function compareWithInternalRegisters(
 
   // Officers in CH but not in internal
   for (const chOfficer of activeChOfficers) {
-    const chName = chOfficer.name.toLowerCase();
-    const matchingInternal = (internalOfficers || []).find((io: any) => {
-      const internalName = `${io.person?.last_name}, ${io.person?.first_name}`.toLowerCase();
-      return (
-        internalName === chName ||
-        `${io.person?.first_name} ${io.person?.last_name}`.toLowerCase() ===
-          chName.split(", ").reverse().join(" ")
-      );
-    });
+    const matchingInternal = (internalOfficers || []).find((io: any) =>
+      namesMatch(chOfficer.name, `${io.person?.first_name} ${io.person?.last_name}`),
+    );
 
     if (!matchingInternal) {
       discrepancies.push({
@@ -933,12 +927,8 @@ async function compareWithInternalRegisters(
 
   // Officers in internal but not in CH
   for (const internalOfficer of internalOfficers || []) {
-    const internalName = `${internalOfficer.person?.last_name}, ${internalOfficer.person?.first_name}`.toUpperCase();
-    const matchingCH = activeChOfficers.find(
-      (cho) =>
-        cho.name.toUpperCase() === internalName ||
-        cho.name.toUpperCase() ===
-          `${internalOfficer.person?.first_name} ${internalOfficer.person?.last_name}`.toUpperCase(),
+    const matchingCH = activeChOfficers.find((cho) =>
+      namesMatch(cho.name, `${internalOfficer.person?.first_name} ${internalOfficer.person?.last_name}`),
     );
 
     if (!matchingCH) {
@@ -954,13 +944,11 @@ async function compareWithInternalRegisters(
   const activeChPSCs = chPSCs.filter((p) => !p.ceased_on);
 
   for (const chPSC of activeChPSCs) {
-    const matchingInternal = (internalPSCs || []).find((ip: any) => {
-      const internalName = `${ip.person?.first_name} ${ip.person?.last_name}`.toLowerCase();
-      return (
-        chPSC.name.toLowerCase().includes(internalName) ||
-        internalName.includes(chPSC.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, ""))
-      );
-    });
+    const matchingInternal = (internalPSCs || []).find(
+      (ip: any) =>
+        (ip.ch_psc_id && chPSC.links?.self && ip.ch_psc_id === chPSC.links.self) ||
+        namesMatch(chPSC.name, `${ip.person?.first_name} ${ip.person?.last_name}`),
+    );
 
     if (!matchingInternal) {
       discrepancies.push({
@@ -991,8 +979,8 @@ async function compareWithInternalRegisters(
     const internalName = `${internalPSC.person?.first_name} ${internalPSC.person?.last_name}`;
     const matchingCH = activeChPSCs.find(
       (chp) =>
-        chp.name.toLowerCase().includes(internalName.toLowerCase()) ||
-        internalName.toLowerCase().includes(chp.name.toLowerCase().replace(/^(mr|mrs|ms|miss|dr)\s+/i, "")),
+        (internalPSC.ch_psc_id && chp.links?.self && internalPSC.ch_psc_id === chp.links.self) ||
+        namesMatch(chp.name, internalName),
     );
 
     if (!matchingCH) {
