@@ -189,9 +189,20 @@ export default function JobDetail() {
       if (job.job_template_code) {
         query = query.eq("job_template_code", job.job_template_code);
       }
-      const { data, error } = await query.limit(1).maybeSingle();
+      const { data, error } = await query;
       if (error) return null;
-      return data;
+      if (!data || data.length === 0) return null;
+      if (data.length === 1) return data[0];
+      // Ambiguous match (multiple active templates for this service code,
+      // no job_template_code to disambiguate): fail open per-flag — a flag
+      // is only "false" if EVERY matching row agrees it's false, otherwise
+      // OR the rows together so a tab is never hidden for a job that might
+      // need it.
+      return {
+        requires_questionnaire: data.some((row) => row.requires_questionnaire),
+        requires_workpaper: data.some((row) => row.requires_workpaper),
+        requires_filing: data.some((row) => row.requires_filing),
+      };
     },
     enabled: !!job?.canonical_service_code,
   });
