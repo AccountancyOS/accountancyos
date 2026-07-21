@@ -223,12 +223,14 @@ export default function JobOverviewTab({
   const hasNewClientUploads = (documents || []).some((d: any) => d.client_visible === true);
 
   const clientApprovalRecorded = !!filing?.approved_at;
+  const hasFiling = !!filing;
 
   const facts: JobOverviewFacts = {
     status: job.status as JobStatus,
     outstandingRequestCount: outstandingRequests.length,
     hasNewClientUploads,
     clientApprovalRecorded,
+    hasFiling,
     workpaperStatus: workpaper?.status ?? null,
   };
 

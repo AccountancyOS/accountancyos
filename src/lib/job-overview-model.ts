@@ -29,6 +29,13 @@ export interface JobOverviewFacts {
   /** whether a client approval has actually been recorded (e.g. filings.approved_at). */
   clientApprovalRecorded: boolean;
   /**
+   * Whether this job actually has a filings row. Non-filing jobs (bookkeeping,
+   * management accounts, ...) never get one, so clientApprovalRecorded is
+   * always false for them — without this flag the filing-approval blocker
+   * would fire permanently on every such job once it reaches ready_to_file.
+   */
+  hasFiling: boolean;
+  /**
    * workpaper_instances.status, when known. NOT a completion percentage or
    * validation count (workpaper_instances exposes no such column) — kept
    * here for context only; deriveBlockers deliberately does not turn a bare
@@ -85,7 +92,7 @@ export function deriveBlockers(facts: JobOverviewFacts): Blocker[] {
   }
 
   const statusIndex = STAGE_SEQUENCE.indexOf(facts.status);
-  if (statusIndex >= READY_TO_FILE_INDEX && !facts.clientApprovalRecorded) {
+  if (statusIndex >= READY_TO_FILE_INDEX && facts.hasFiling && !facts.clientApprovalRecorded) {
     blockers.push({
       message: "Filing is blocked because client approval has not been recorded.",
     });

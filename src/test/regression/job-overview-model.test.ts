@@ -19,6 +19,7 @@ function facts(overrides: Partial<JobOverviewFacts> & { status: JobStatus }): Jo
     outstandingRequestCount: 0,
     hasNewClientUploads: false,
     clientApprovalRecorded: false,
+    hasFiling: false,
     workpaperStatus: null,
     ...overrides,
   };
@@ -93,19 +94,19 @@ describe("deriveBlockers", () => {
     expect(deriveBlockers(facts({ status: "records_requested", outstandingRequestCount: 0 }))).toEqual([]);
   });
 
-  it("flags missing client approval at ready_to_file", () => {
-    const blockers = deriveBlockers(facts({ status: "ready_to_file", clientApprovalRecorded: false }));
+  it("flags missing client approval at ready_to_file when a filing exists", () => {
+    const blockers = deriveBlockers(facts({ status: "ready_to_file", hasFiling: true, clientApprovalRecorded: false }));
     expect(blockers).toEqual([
       { message: "Filing is blocked because client approval has not been recorded." },
     ]);
   });
 
-  it("does not flag ready_to_file once client approval is recorded", () => {
-    expect(deriveBlockers(facts({ status: "ready_to_file", clientApprovalRecorded: true }))).toEqual([]);
+  it("does not flag ready_to_file once client approval is recorded (filing exists)", () => {
+    expect(deriveBlockers(facts({ status: "ready_to_file", hasFiling: true, clientApprovalRecorded: true }))).toEqual([]);
   });
 
-  it("flags missing client approval at completed too (at/after ready_to_file)", () => {
-    const blockers = deriveBlockers(facts({ status: "completed", clientApprovalRecorded: false }));
+  it("flags missing client approval at completed too (at/after ready_to_file), when a filing exists", () => {
+    const blockers = deriveBlockers(facts({ status: "completed", hasFiling: true, clientApprovalRecorded: false }));
     expect(blockers).toEqual([
       { message: "Filing is blocked because client approval has not been recorded." },
     ]);
@@ -113,8 +114,24 @@ describe("deriveBlockers", () => {
 
   it("does not flag the approval rule before ready_to_file even without approval recorded", () => {
     for (const status of ["blank", "records_requested", "records_received", "accountant_queries", "client_queries", "accountant_review", "client_review"] as JobStatus[]) {
-      const blockers = deriveBlockers(facts({ status, clientApprovalRecorded: false, outstandingRequestCount: 0 }));
+      const blockers = deriveBlockers(facts({ status, hasFiling: true, clientApprovalRecorded: false, outstandingRequestCount: 0 }));
       expect(blockers).toEqual([]);
+    }
+  });
+
+  it("never flags the approval rule when there is no filing row, even at/after ready_to_file with no approval", () => {
+    for (const status of ["ready_to_file", "completed"] as JobStatus[]) {
+      const blockers = deriveBlockers(facts({ status, hasFiling: false, clientApprovalRecorded: false }));
+      expect(blockers).toEqual([]);
+    }
+  });
+
+  it("flags the approval rule once a filing exists, is at/after ready_to_file, and isn't approved", () => {
+    for (const status of ["ready_to_file", "completed"] as JobStatus[]) {
+      const blockers = deriveBlockers(facts({ status, hasFiling: true, clientApprovalRecorded: false }));
+      expect(blockers).toEqual([
+        { message: "Filing is blocked because client approval has not been recorded." },
+      ]);
     }
   });
 
@@ -123,7 +140,7 @@ describe("deriveBlockers", () => {
     // but the function is pure per-rule — verify combination logic in isolation instead via
     // two independent facts objects that each trigger their own rule.
     const requestBlockers = deriveBlockers(facts({ status: "records_requested", outstandingRequestCount: 5 }));
-    const approvalBlockers = deriveBlockers(facts({ status: "ready_to_file", clientApprovalRecorded: false }));
+    const approvalBlockers = deriveBlockers(facts({ status: "ready_to_file", hasFiling: true, clientApprovalRecorded: false }));
     expect(requestBlockers).toHaveLength(1);
     expect(approvalBlockers).toHaveLength(1);
   });
