@@ -255,7 +255,10 @@ VALUES
   ('person.home_address', 'person', '{}', NULL, 'sensitive', 'client', true, 'company_persons', 'residential_address_line_1'),
   ('company.utr', 'company', '{}', NULL, 'normal', 'client', false, 'companies', 'utr'),
   ('company.vat_number', 'company', '{}', 'vat', 'normal', 'client', false, 'companies', 'vat_number'),
-  ('company.paye_reference', 'company', '{}', 'payroll', 'normal', 'client', false, 'companies', 'paye_reference'),
+  -- PAYE reference lives on paye_schemes.employer_paye_reference (one-to-many child of
+  -- the company), not a scalar on companies. Anchor points at the real column; G2/G7
+  -- resolve the actual scheme row (a paye_schemes insert also requires `name`).
+  ('company.paye_reference', 'company', '{}', 'payroll', 'normal', 'client', false, 'paye_schemes', 'employer_paye_reference'),
   ('company.registered_office', 'company', '{}', NULL, 'normal', 'companies_house', false, 'companies', 'registered_office_address'),
   ('company.trading_address', 'company', '{}', NULL, 'normal', 'firm', false, 'companies', 'trading_address')
 ON CONFLICT (field_key) DO UPDATE SET

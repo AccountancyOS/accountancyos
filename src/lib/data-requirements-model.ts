@@ -114,8 +114,13 @@ export const DATA_REQUIREMENTS: DataRequirement[] = [
     sensitivity: "normal",
     provider: "client",
     requiresVerification: false,
-    authoritativeTable: "companies",
-    authoritativeColumn: "paye_reference",
+    // PAYE reference lives on paye_schemes (one-to-many: a company can run several
+    // schemes), not as a scalar on companies. employer_paye_reference is the anchor
+    // column; like person.home_address's single-column anchor, the merge/completeness
+    // layers (G2/G7) must resolve the actual scheme row — G2 decides how an onboarding-
+    // captured reference materialises a scheme (a paye_schemes row also requires `name`).
+    authoritativeTable: "paye_schemes",
+    authoritativeColumn: "employer_paye_reference",
   },
   {
     fieldKey: "company.registered_office",

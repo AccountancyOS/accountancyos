@@ -68,6 +68,16 @@ describe("data-requirements-model (G1 catalog)", () => {
       });
     });
 
+    it("anchors company.paye_reference to paye_schemes, not a non-existent companies column", () => {
+      // Regression: the catalog must point at a column that actually exists. PAYE
+      // reference lives on paye_schemes.employer_paye_reference (companies has no
+      // paye_reference column), so the anchor must reference the real child table.
+      expect(authoritativeRef("company.paye_reference")).toEqual({
+        table: "paye_schemes",
+        column: "employer_paye_reference",
+      });
+    });
+
     it("returns undefined for an unknown field key", () => {
       expect(authoritativeRef("company.not_a_real_field")).toBeUndefined();
     });
