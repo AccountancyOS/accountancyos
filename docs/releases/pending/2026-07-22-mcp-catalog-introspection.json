@@ -1,0 +1,121 @@
+{
+  "release_id": "2026-07-22-mcp-catalog-introspection",
+  "title": "MCP catalog introspection (7 RPCs + 7 tools)",
+  "status": "applied-pending-endpoint-verification",
+  "authored_by": "lovable-agent",
+  "convention_version": "docs/releases/production-release-convention.md",
+  "note_on_git_pinning": "Applied via the Lovable executor path, not from a reviewed Git commit. Per §10 of the convention, this is temporary containment: the receipt records file paths + sha256, live-catalog verification, and grant-boundary evidence, but does not prove the applied SQL byte-matches a reviewed main-branch commit.",
+
+  "migration_files": [
+    {
+      "path": "supabase/migrations/20260722181057_0e4a25ff-1f42-4baa-ae56-3c8fa1348720.sql",
+      "sha256": "668f43129f9372970f9b8563b19cf4a8797619ef39eff27b2fa9d5b4a98200da",
+      "purpose": "Create the seven mcp_list_* catalog RPCs (SECURITY DEFINER, pinned search_path).",
+      "applied_version": "20260722181057",
+      "applied_at": "2026-07-22T18:10:57Z"
+    },
+    {
+      "path": "supabase/migrations/20260722181141_c27f8346-6dcd-4397-b603-61339710fe32.sql",
+      "sha256": "53aa1d67115e477917142c99673a5268747970429fcb8b42a3a6b9e2de7781c0",
+      "purpose": "Explicit REVOKE EXECUTE ... FROM anon on all seven catalog RPCs (Supabase default privileges had auto-granted anon EXECUTE despite REVOKE FROM PUBLIC).",
+      "applied_version": "20260722181141",
+      "applied_at": "2026-07-22T18:11:41Z"
+    }
+  ],
+
+  "expected_db_objects": [
+    "public.mcp_list_functions(text, boolean)",
+    "public.mcp_list_triggers(text)",
+    "public.mcp_list_policies(text)",
+    "public.mcp_list_grants(text)",
+    "public.mcp_list_rls_status(text)",
+    "public.mcp_list_indexes(text)",
+    "public.mcp_list_cron_jobs()"
+  ],
+
+  "expected_grant_matrix": {
+    "authenticated": "EXECUTE (granted)",
+    "service_role":  "EXECUTE (granted)",
+    "anon":          "no EXECUTE (explicitly revoked)"
+  },
+
+  "expected_mcp_tools": [
+    "catalog_functions",
+    "catalog_triggers",
+    "catalog_policies",
+    "catalog_grants",
+    "catalog_rls_status",
+    "catalog_indexes",
+    "catalog_cron"
+  ],
+
+  "deployed_functions": ["mcp"],
+
+  "phase_a_catalog_verification": {
+    "tool": "supabase--read_query",
+    "query": "SELECT p.proname, p.prosecdef, p.provolatile, l.lanname, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_exec, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_exec, has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc_exec FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang WHERE n.nspname='public' AND p.proname LIKE 'mcp_list_%' AND p.proname<>'mcp_list_schema' ORDER BY p.proname;",
+    "rows": [
+      { "proname": "mcp_list_cron_jobs",  "prosecdef": true, "provolatile": "s", "lanname": "plpgsql", "auth_exec": true, "anon_exec": false, "svc_exec": true },
+      { "proname": "mcp_list_functions",  "prosecdef": true, "provolatile": "s", "lanname": "sql",     "auth_exec": true, "anon_exec": false, "svc_exec": true },
+      { "proname": "mcp_list_grants",     "prosecdef": true, "provolatile": "s", "lanname": "sql",     "auth_exec": true, "anon_exec": false, "svc_exec": true },
+      { "proname": "mcp_list_indexes",    "prosecdef": true, "provolatile": "s", "lanname": "sql",     "auth_exec": true, "anon_exec": false, "svc_exec": true },
+      { "proname": "mcp_list_policies",   "prosecdef": true, "provolatile": "s", "lanname": "sql",     "auth_exec": true, "anon_exec": false, "svc_exec": true },
+      { "proname": "mcp_list_rls_status", "prosecdef": true, "provolatile": "s", "lanname": "sql",     "auth_exec": true, "anon_exec": false, "svc_exec": true },
+      { "proname": "mcp_list_triggers",   "prosecdef": true, "provolatile": "s", "lanname": "sql",     "auth_exec": true, "anon_exec": false, "svc_exec": true }
+    ],
+    "assertion": "All seven RPCs present with SECURITY DEFINER, STABLE volatility, and the required grant matrix (authenticated + service_role EXECUTE; anon revoked).",
+    "verified_at": "2026-07-22T18:12:00Z"
+  },
+
+  "phase_a_environment_context": {
+    "pg_cron_installed": true,
+    "query": "SELECT extname FROM pg_extension WHERE extname='pg_cron';",
+    "expected_cron_entries_when_running": ["process-email-queue", "chaser-tick-every-15min", "chaser-trigger-scan-every-6h"]
+  },
+
+  "phase_b_endpoint_verification": {
+    "attempted_tool": "supabase--curl_edge_functions",
+    "attempted_endpoints": [
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_functions",
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_triggers",
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_policies",
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_grants",
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_rls_status",
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_indexes",
+      "POST /functions/v1/mcp/.mcp/invoke-tool/catalog_cron"
+    ],
+    "result": "All seven returned HTTP 401 unauthorized.",
+    "root_cause": "mcp-js's OAuth-issuer verifier requires a token carrying an OAuth client_id claim (issued via the Supabase OAuth 2.1 authorization server + dynamic client registration). The sandbox curl tool injects the preview user's plain signInWithPassword session JWT, which by design lacks client_id and is rejected. This is the intended defence documented in the app-mcp-server-authoring knowledge; it does not indicate a defect in the RPCs or the tool wiring.",
+    "outstanding_verification": "Invoke each catalog_* tool once from a real MCP client (Claude Code or ChatGPT Connectors) authenticated via the app's OAuth consent screen, capture the structured response, and paste the seven results into this receipt as phase_b_results before moving to docs/releases/. Expected qualitative results per plan §5 Phase B: catalog_functions includes has_role / enforce_vat_filing_gate / enforce_ct600_filing_gate; catalog_policies non-empty for user_roles; catalog_grants + catalog_rls_status non-empty with rls_enabled=true on tenant-scoped tables; catalog_indexes returns rows for company_persons and company_pscs including the non-partial unique indexes; catalog_cron includes process-email-queue plus the two chaser jobs."
+  },
+
+  "regression_test": {
+    "path": "src/test/regression/mcp-catalog-introspection.test.ts",
+    "asserts": [
+      "Every catalog_* tool declares readOnlyHint:true, openWorldHint:false and forwards to the matching mcp_list_* RPC.",
+      "Every tool passes its documented filter arguments server-side (no .filter() usage in tool code).",
+      "The regenerated manifest exposes all seven catalog_* tools with the required annotations.",
+      "The nine pre-existing MCP tools remain wired in defineMcp."
+    ]
+  },
+
+  "manifest": {
+    "path": ".lovable/mcp/manifest.json",
+    "tool_count": 16,
+    "regenerated_via": "app_mcp_server--extract_mcp_manifest"
+  },
+
+  "rollback": {
+    "plan": "One migration to drop the seven RPCs and one code change to remove the seven tools from defineMcp.",
+    "sql": [
+      "DROP FUNCTION IF EXISTS public.mcp_list_functions(text, boolean);",
+      "DROP FUNCTION IF EXISTS public.mcp_list_triggers(text);",
+      "DROP FUNCTION IF EXISTS public.mcp_list_policies(text);",
+      "DROP FUNCTION IF EXISTS public.mcp_list_grants(text);",
+      "DROP FUNCTION IF EXISTS public.mcp_list_rls_status(text);",
+      "DROP FUNCTION IF EXISTS public.mcp_list_indexes(text);",
+      "DROP FUNCTION IF EXISTS public.mcp_list_cron_jobs();"
+    ],
+    "code": "Revert src/lib/mcp/index.ts tool-array additions and delete src/lib/mcp/tools/catalog-*.ts; re-run app_mcp_server--extract_mcp_manifest."
+  }
+}

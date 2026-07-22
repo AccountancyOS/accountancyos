@@ -28,8 +28,8 @@ var list_clients_default = defineTool({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const sb7 = supabaseForUser(ctx);
-    let query = sb7.from("clients").select("id, first_name, last_name, email, status, client_type").order("updated_at", { ascending: false }).limit(limit);
+    const sb14 = supabaseForUser(ctx);
+    let query = sb14.from("clients").select("id, first_name, last_name, email, status, client_type").order("updated_at", { ascending: false }).limit(limit);
     if (search) {
       const s = `%${search}%`;
       query = query.or(`first_name.ilike.${s},last_name.ilike.${s},email.ilike.${s}`);
@@ -68,8 +68,8 @@ var list_jobs_default = defineTool2({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const sb7 = supabaseForUser2(ctx);
-    let query = sb7.from("jobs").select(
+    const sb14 = supabaseForUser2(ctx);
+    let query = sb14.from("jobs").select(
       "id, job_name, service_type, status, priority, filing_deadline, period_label, client_id, company_id, updated_at"
     ).order("updated_at", { ascending: false }).limit(limit);
     if (status) query = query.eq("status", status);
@@ -107,10 +107,10 @@ var list_deadlines_default = defineTool3({
     if (!ctx.isAuthenticated()) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const sb7 = supabaseForUser3(ctx);
+    const sb14 = supabaseForUser3(ctx);
     const now = /* @__PURE__ */ new Date();
     const until = new Date(now.getTime() + within_days * 864e5);
-    const { data, error } = await sb7.from("deadlines").select(
+    const { data, error } = await sb14.from("deadlines").select(
       "id, name, deadline_type, filing_body, due_date, status, client_id, company_id, service_code"
     ).is("filed_at", null).gte("due_date", now.toISOString().slice(0, 10)).lte("due_date", until.toISOString().slice(0, 10)).order("due_date", { ascending: true }).limit(limit);
     if (error) {
@@ -315,18 +315,239 @@ var db_rpc_default = defineTool9({
   }
 });
 
+// src/lib/mcp/tools/catalog-functions.ts
+import { createClient as createClient10 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z9 } from "npm:zod@^3.25.0";
+function sb7(ctx) {
+  return createClient10(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_functions_default = defineTool10({
+  name: "catalog_functions",
+  title: "List database functions",
+  description: "List public-schema functions from pg_proc with security_definer/volatility/search_path and an md5 hash of the full definition. Set include_source to also return the full CREATE FUNCTION body.",
+  inputSchema: {
+    name_like: z9.string().max(200).optional().describe("Case-insensitive substring filter on function name (applied server-side)."),
+    include_source: z9.boolean().default(false).describe("Include the full pg_get_functiondef body per row.")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ name_like, include_source }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb7(ctx).rpc("mcp_list_functions", {
+      name_like: name_like ?? null,
+      include_source: include_source ?? false
+    });
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { functions: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/catalog-triggers.ts
+import { createClient as createClient11 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z10 } from "npm:zod@^3.25.0";
+function sb8(ctx) {
+  return createClient11(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_triggers_default = defineTool11({
+  name: "catalog_triggers",
+  title: "List triggers",
+  description: "List non-internal triggers on public tables, including timing, events, target function, enabled state, and full definition.",
+  inputSchema: {
+    table: z10.string().max(200).optional().describe("Restrict to triggers on this public table (applied server-side).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ table }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb8(ctx).rpc("mcp_list_triggers", { table_name: table ?? null });
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { triggers: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/catalog-policies.ts
+import { createClient as createClient12 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z11 } from "npm:zod@^3.25.0";
+function sb9(ctx) {
+  return createClient12(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_policies_default = defineTool12({
+  name: "catalog_policies",
+  title: "List RLS policies",
+  description: "List row-level security policies on public tables from pg_policies (permissive, roles, cmd, USING, WITH CHECK).",
+  inputSchema: {
+    table: z11.string().max(200).optional().describe("Restrict to policies on this public table (applied server-side).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ table }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb9(ctx).rpc("mcp_list_policies", { table_name: table ?? null });
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { policies: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/catalog-grants.ts
+import { createClient as createClient13 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z12 } from "npm:zod@^3.25.0";
+function sb10(ctx) {
+  return createClient13(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_grants_default = defineTool13({
+  name: "catalog_grants",
+  title: "List table grants",
+  description: "List privilege grants on public tables for anon/authenticated/service_role/postgres from information_schema.role_table_grants.",
+  inputSchema: {
+    table: z12.string().max(200).optional().describe("Restrict to grants on this public table (applied server-side).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ table }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb10(ctx).rpc("mcp_list_grants", { table_name: table ?? null });
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { grants: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/catalog-rls-status.ts
+import { createClient as createClient14 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z13 } from "npm:zod@^3.25.0";
+function sb11(ctx) {
+  return createClient14(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_rls_status_default = defineTool14({
+  name: "catalog_rls_status",
+  title: "List table RLS status",
+  description: "Report whether row-level security is enabled and/or forced on each public table (pg_class.relrowsecurity/relforcerowsecurity).",
+  inputSchema: {
+    table: z13.string().max(200).optional().describe("Restrict to this public table (applied server-side).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ table }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb11(ctx).rpc("mcp_list_rls_status", { table_name: table ?? null });
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { rls_status: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/catalog-indexes.ts
+import { createClient as createClient15 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool15 } from "npm:@lovable.dev/mcp-js@0.22.2";
+import { z as z14 } from "npm:zod@^3.25.0";
+function sb12(ctx) {
+  return createClient15(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_indexes_default = defineTool15({
+  name: "catalog_indexes",
+  title: "List indexes",
+  description: "List indexes on public tables (unique/primary/partial, predicate, columns, full definition). Use this to verify ON CONFLICT targets and unique constraints.",
+  inputSchema: {
+    table: z14.string().max(200).optional().describe("Restrict to indexes on this public table (applied server-side).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ table }, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb12(ctx).rpc("mcp_list_indexes", { table_name: table ?? null });
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { indexes: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/catalog-cron.ts
+import { createClient as createClient16 } from "npm:@supabase/supabase-js@^2.84.0";
+import { defineTool as defineTool16 } from "npm:@lovable.dev/mcp-js@0.22.2";
+function sb13(ctx) {
+  return createClient16(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+var catalog_cron_default = defineTool16({
+  name: "catalog_cron",
+  title: "List cron jobs",
+  description: "List pg_cron scheduled jobs (schedule, jobname, command, active, database, username). Returns an empty array when pg_cron is not installed.",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (_input, ctx) => {
+    if (!ctx.isAuthenticated()) return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    const { data, error } = await sb13(ctx).rpc("mcp_list_cron_jobs");
+    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    return {
+      content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
+      structuredContent: { cron_jobs: data ?? [] }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "moxpdejnucjjcplleefn";
 var mcp_default = defineMcp({
   name: "accountancyos-mcp",
   title: "AccountancyOS",
   version: "0.1.0",
-  instructions: "Full-access tools for an AccountancyOS practice. list_clients / list_jobs / list_upcoming_deadlines are shortcuts for common reads. For anything else, call db_schema to discover tables, then db_select / db_insert / db_update / db_delete / db_rpc. All calls act as the signed-in user and are subject to that user's RLS permissions.",
+  instructions: "Full-access tools for an AccountancyOS practice. list_clients / list_jobs / list_upcoming_deadlines are shortcuts for common reads. For anything else, call db_schema to discover tables, then db_select / db_insert / db_update / db_delete / db_rpc. For verification of functions, triggers, policies, grants, RLS status, indexes, and cron jobs, call the catalog_* tools \u2014 they read the live Postgres catalog under the signed-in user. All calls act as the signed-in user and are subject to that user's RLS permissions.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
-  tools: [list_clients_default, list_jobs_default, list_deadlines_default, db_schema_default, db_select_default, db_insert_default, db_update_default, db_delete_default, db_rpc_default]
+  tools: [
+    list_clients_default,
+    list_jobs_default,
+    list_deadlines_default,
+    db_schema_default,
+    db_select_default,
+    db_insert_default,
+    db_update_default,
+    db_delete_default,
+    db_rpc_default,
+    catalog_functions_default,
+    catalog_triggers_default,
+    catalog_policies_default,
+    catalog_grants_default,
+    catalog_rls_status_default,
+    catalog_indexes_default,
+    catalog_cron_default
+  ]
 });
 
 // lovable-mcp-supabase-entry.ts
