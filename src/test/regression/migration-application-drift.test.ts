@@ -124,6 +124,8 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // the legacy flat address columns and adds companies.registered_office_dispute_note for the
   // "flag a correction" affordance. Pending Lovable application.
   "20260721180000",
+  // Increment B: per-person nino/utr on company_persons; awaiting Lovable apply.
+  "20260722090000",
 ]);
 
 function versionFromFilename(name: string): string | null {
