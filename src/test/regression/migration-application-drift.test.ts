@@ -87,6 +87,7 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260722100000", // onboarding personal_details + paye_reference
   "20260722120000", // onboarding utr + ch_correction_note
   "20260722130000", // data governance foundation (G1): not yet approved/applied — owner reviews before Lovable apply
+  "20260722150000", // G2 approval-merge RPC — owner applies via Lovable before E2E
 ]);
 
 function versionFromFilename(name: string): string | null {
