@@ -11985,6 +11985,8 @@ export type Database = {
           aml_submitted_at: string | null
           aml_verified_at: string | null
           application_type: string
+          approval_blocked_at: string | null
+          approval_blocked_reason: string | null
           approved_at: string | null
           approved_by: string | null
           billing_amount: number | null
@@ -12050,6 +12052,8 @@ export type Database = {
           aml_submitted_at?: string | null
           aml_verified_at?: string | null
           application_type: string
+          approval_blocked_at?: string | null
+          approval_blocked_reason?: string | null
           approved_at?: string | null
           approved_by?: string | null
           billing_amount?: number | null
@@ -12115,6 +12119,8 @@ export type Database = {
           aml_submitted_at?: string | null
           aml_verified_at?: string | null
           application_type?: string
+          approval_blocked_at?: string | null
+          approval_blocked_reason?: string | null
           approved_at?: string | null
           approved_by?: string | null
           billing_amount?: number | null
@@ -17786,6 +17792,10 @@ export type Database = {
         Args: { p_invoice_id: string; p_user_id?: string }
         Returns: Json
       }
+      approve_onboarding_transactional: {
+        Args: { p_actor?: string; p_application_id: string }
+        Returns: Json
+      }
       approve_vat_return_for_filing: {
         Args: { _vat_return_id: string }
         Returns: Json
@@ -18625,6 +18635,22 @@ export type Database = {
           p_to: string
         }
         Returns: Json
+      }
+      governance_mask_value: {
+        Args: { p_field_key: string; p_val: string }
+        Returns: string
+      }
+      governance_record_merge_field: {
+        Args: {
+          p_actor: string
+          p_field_key: string
+          p_new_value: string
+          p_old_value: string
+          p_organization_id: string
+          p_subject_id: string
+          p_subject_kind: string
+        }
+        Returns: undefined
       }
       grant_person_portal_access: {
         Args: { p_person_id: string; p_user_email: string }
