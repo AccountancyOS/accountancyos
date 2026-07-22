@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, Loader2, FileSignature, ShieldCheck, CreditCard, UserPlus, Upload } from "lucide-react";
+import { CheckCircle2, Loader2, FileSignature, ShieldCheck, CreditCard, UserPlus, Upload, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
+import YourDetailsStep from "@/components/onboarding/YourDetailsStep";
 
-type Step = "engagement" | "aml" | "billing" | "portal" | "done";
+type Step = "engagement" | "aml" | "details" | "billing" | "portal" | "done";
 
 interface AppBundle {
   application: any;
@@ -21,7 +22,24 @@ interface AppBundle {
   engagement_letter: { id: string; signed_at: string | null; document_content?: string | null } | null;
 }
 
-const stepOrder: Step[] = ["engagement", "aml", "billing", "portal"];
+const stepOrder: Step[] = ["engagement", "aml", "details", "billing", "portal"];
+
+// "Your details" (client-data-collection Increment C) has no dedicated
+// onboarding_applications.status value of its own -- it's a client-side sub-step slotted
+// between AML and Billing. deriveStep() below stays purely status-driven (unchanged), and
+// PublicOnboarding decides whether to show "details" instead of "billing" using the flag
+// below, persisted the same way as the access token (sessionStorage, keyed per
+// application) so a refresh doesn't re-show a step the applicant already passed, while a
+// fresh session (e.g. reopening the emailed link later) shows it again -- harmless, since
+// the step pre-fills from whatever was already saved.
+const getDetailsDoneKey = (id: string) => `onboarding_details_done_${id}`;
+const isDetailsMarkedDone = (id?: string): boolean => {
+  if (!id) return false;
+  try { return sessionStorage.getItem(getDetailsDoneKey(id)) === "1"; } catch { return false; }
+};
+const markDetailsDone = (id: string) => {
+  try { sessionStorage.setItem(getDetailsDoneKey(id), "1"); } catch { /* storage unavailable */ }
+};
 
 function deriveStep(app: any): Step {
   if (!app) return "engagement";
@@ -65,6 +83,7 @@ export default function PublicOnboarding() {
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<AppBundle | null>(null);
   const [step, setStep] = useState<Step>("engagement");
+  const [detailsDone, setDetailsDone] = useState(false);
 
   const load = useCallback(async () => {
     if (!applicationId) return;
@@ -77,6 +96,7 @@ export default function PublicOnboarding() {
     const b = data as unknown as AppBundle;
     setBundle(b);
     setStep(deriveStep(b.application));
+    setDetailsDone(isDetailsMarkedDone(applicationId));
     setLoading(false);
   }, [applicationId]);
 
@@ -124,31 +144,45 @@ export default function PublicOnboarding() {
 
   const practiceName = bundle.organization?.name ?? "your accountant";
 
+  // "Your details" sits between AML and Billing (see the stepOrder/getDetailsDoneKey
+  // comment above) -- shown once per session unless already marked complete.
+  const displayStep: Step = step === "billing" && !detailsDone ? "details" : step;
+
   return (
     <div className="min-h-screen bg-muted/30 p-6">
       <div className="max-w-3xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-3xl font-semibold">Welcome to {practiceName}</h1>
           <p className="text-muted-foreground">
-            Complete the four steps below to finish your onboarding.
+            Complete the steps below to finish your onboarding.
           </p>
         </header>
 
-        <Stepper current={step} />
+        <Stepper current={displayStep} />
 
-        {step === "engagement" && (
+        {displayStep === "engagement" && (
           <EngagementStep bundle={bundle} onDone={load} />
         )}
-        {step === "aml" && (
+        {displayStep === "aml" && (
           <AMLStep bundle={bundle} onDone={load} />
         )}
-        {step === "billing" && (
+        {displayStep === "details" && applicationId && (
+          <YourDetailsStep
+            bundle={bundle}
+            getAccessToken={getAccessToken}
+            onContinue={() => {
+              markDetailsDone(applicationId);
+              setDetailsDone(true);
+            }}
+          />
+        )}
+        {displayStep === "billing" && (
           <BillingStep bundle={bundle} onDone={load} />
         )}
-        {step === "portal" && (
+        {displayStep === "portal" && (
           <PortalStep bundle={bundle} onDone={load} />
         )}
-        {step === "done" && (
+        {displayStep === "done" && (
           <DoneCard practiceName={practiceName} />
         )}
       </div>
@@ -160,6 +194,7 @@ function Stepper({ current }: { current: Step }) {
   const items: { key: Step; label: string; icon: any }[] = [
     { key: "engagement", label: "Engagement Letter", icon: FileSignature },
     { key: "aml", label: "AML Documents", icon: ShieldCheck },
+    { key: "details", label: "Your Details", icon: ClipboardList },
     { key: "billing", label: "Billing", icon: CreditCard },
     { key: "portal", label: "Portal Account", icon: UserPlus },
   ];

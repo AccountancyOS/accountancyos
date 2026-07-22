@@ -24,6 +24,7 @@ import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusSte
 import EngagementLetterSection from "@/components/onboarding/EngagementLetterSection";
 import { AMLVerificationPanel } from "@/components/onboarding/AMLVerificationPanel";
 import OnboardingEventTimeline from "@/components/onboarding/OnboardingEventTimeline";
+import CapturedDetailsPanel from "@/components/onboarding/CapturedDetailsPanel";
 import {
   Select,
   SelectContent,
@@ -399,6 +400,9 @@ const OnboardingDetail = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Captured Details (client-data-collection Increment C) */}
+            <CapturedDetailsPanel application={application} />
 
             {/* Billing & Portal status (visible once for review) */}
             <div className="grid gap-6 md:grid-cols-2">
