@@ -65,6 +65,38 @@ export default function PublicQuoteView() {
   const [onboardingToken, setOnboardingToken] = useState<string | null>(null);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [resuming, setResuming] = useState(false);
+
+  // Re-query the public quote endpoint for the onboarding id + its access token.
+  // Both are needed: navigating to /onboard/:id WITHOUT a token hits the strict
+  // token guard and fails with a cryptic "Invalid or missing onboarding access
+  // token", so callers must never resume without a token in hand.
+  const fetchOnboarding = async (): Promise<{ id: string | null; tok: string | null }> => {
+    if (!token) return { id: null, tok: null };
+    const { data } = await supabase.rpc("public_get_quote_by_token", { p_token: token });
+    const qp = data as unknown as QuotePayload | null;
+    return { id: qp?.onboarding_application_id ?? null, tok: qp?.onboarding_access_token ?? null };
+  };
+
+  // Manual resume: fetch the token then navigate. Surfaces a clear message instead
+  // of dumping the client on a tokenless onboarding URL that is guaranteed to fail.
+  const retryResume = async () => {
+    setResuming(true);
+    const { id, tok } = await fetchOnboarding();
+    setResuming(false);
+    const rid = id ?? onboardingId;
+    if (rid && tok) {
+      setOnboardingId(rid);
+      setOnboardingToken(tok);
+      navigate(onboardPath(rid, tok));
+    } else {
+      toast({
+        title: "Still preparing your secure link",
+        description: "Please refresh this page in a moment to continue to onboarding.",
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -108,13 +140,23 @@ export default function PublicQuoteView() {
     };
   }, [token]);
 
-  // If the quote is already accepted and we know the onboarding app, resume automatically.
+  // If the quote is already accepted and we know the onboarding app, resume automatically —
+  // but ONLY once we have the access token. If it is accepted with an id but no token yet,
+  // fetch the token once rather than navigating to a tokenless URL that would fail.
   useEffect(() => {
-    if (!quote) return;
-    if (quote.status === "accepted" && onboardingId) {
+    if (!quote || quote.status !== "accepted" || !onboardingId) return;
+    if (onboardingToken) {
       const t = setTimeout(() => navigate(onboardPath(onboardingId, onboardingToken)), 1200);
       return () => clearTimeout(t);
     }
+    let cancelled = false;
+    (async () => {
+      const { tok } = await fetchOnboarding();
+      if (!cancelled && tok) setOnboardingToken(tok);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [quote, onboardingId, onboardingToken, navigate]);
 
   const accept = async () => {
@@ -130,24 +172,28 @@ export default function PublicQuoteView() {
     setDone("accepted");
     let appId = payload?.onboarding_application_id ?? null;
     let appToken = payload?.onboarding_access_token ?? null;
-    // The accept RPC does not always include the onboarding id; re-query the
-    // public quote endpoint, which self-heals and returns it (and the token).
-    if (!appId) {
-      for (let i = 0; i < 3 && !appId; i++) {
-        const { data: qd } = await supabase.rpc("public_get_quote_by_token", { p_token: token });
-        const qp = qd as unknown as QuotePayload | null;
-        if (qp?.onboarding_application_id) {
-          appId = qp.onboarding_application_id;
-          appToken = qp.onboarding_access_token ?? appToken;
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 600));
-      }
+    // The accept RPC does not always include the onboarding id/token; re-query the
+    // public quote endpoint (self-heals + returns both). Retry until we have BOTH the
+    // id AND its access token — navigating to /onboard/:id without a token hits the
+    // strict token guard and fails with a cryptic error, so we must not do that.
+    for (let i = 0; i < 4 && (!appId || !appToken); i++) {
+      const { id, tok } = await fetchOnboarding();
+      if (id) appId = id;
+      if (tok) appToken = tok;
+      if (appId && appToken) break;
+      await new Promise((r) => setTimeout(r, 600));
     }
-    if (appId) {
-      setOnboardingId(appId);
-      if (appToken) setOnboardingToken(appToken);
+    if (appId) setOnboardingId(appId);
+    if (appToken) setOnboardingToken(appToken);
+    if (appId && appToken) {
       setTimeout(() => navigate(onboardPath(appId, appToken)), 1000);
+    } else {
+      // Accepted, but the secure link is not ready. Do NOT navigate to a tokenless
+      // URL; leave the accepted view showing a "Continue Onboarding" retry instead.
+      toast({
+        title: "Preparing your secure onboarding link",
+        description: "Almost there — use the Continue Onboarding button below, or refresh if it doesn't appear.",
+      });
     }
   };
 
@@ -294,13 +340,22 @@ export default function PublicQuoteView() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 text-emerald-700">
                     <CheckCircle2 className="h-5 w-5" />
-                    <p>Proposal accepted. Continuing to your onboarding…</p>
+                    <p>
+                      Proposal accepted.{" "}
+                      {onboardingId && !onboardingToken
+                        ? "Preparing your secure onboarding link…"
+                        : "Continuing to your onboarding…"}
+                    </p>
                   </div>
-                  {onboardingId && (
+                  {onboardingId && onboardingToken ? (
                     <Button onClick={() => navigate(onboardPath(onboardingId, onboardingToken))}>
                       Continue Onboarding
                     </Button>
-                  )}
+                  ) : onboardingId ? (
+                    <Button variant="outline" onClick={retryResume} disabled={resuming}>
+                      {resuming ? "Preparing secure link…" : "Continue Onboarding"}
+                    </Button>
+                  ) : null}
                   <p className="text-sm text-muted-foreground">
                     Next steps: sign your engagement letter, upload AML documents, set up billing
                     and activate your portal account.
