@@ -130,6 +130,11 @@ const KNOWN_UNAPPLIED = new Set<string>([
   // and the token-gated public_save_onboarding_details RPC for the "Your details" onboarding
   // step; awaiting Lovable apply.
   "20260722100000",
+  // Increment C frontend follow-up: adds onboarding_applications.utr (missing column bugfix --
+  // 20260722100000's RPC referenced it unconditionally, so every call would have failed at
+  // runtime) and .ch_correction_note, and re-creates public_save_onboarding_details with the
+  // extra param; awaiting Lovable apply.
+  "20260722120000",
 ]);
 
 function versionFromFilename(name: string): string | null {
