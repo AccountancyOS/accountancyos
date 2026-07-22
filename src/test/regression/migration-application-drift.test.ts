@@ -126,6 +126,10 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260721180000",
   // Increment B: per-person nino/utr on company_persons; awaiting Lovable apply.
   "20260722090000",
+  // Increment C: onboarding_applications.paye_reference + personal_details (per-person capture)
+  // and the token-gated public_save_onboarding_details RPC for the "Your details" onboarding
+  // step; awaiting Lovable apply.
+  "20260722100000",
 ]);
 
 function versionFromFilename(name: string): string | null {
