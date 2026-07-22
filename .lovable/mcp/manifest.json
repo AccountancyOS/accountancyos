@@ -402,6 +402,165 @@
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
+      },
+      {
+        "name": "catalog_functions",
+        "title": "List database functions",
+        "description": "List public-schema functions from pg_proc with security_definer/volatility/search_path and an md5 hash of the full definition. Set include_source to also return the full CREATE FUNCTION body.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name_like": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Case-insensitive substring filter on function name (applied server-side)."
+            },
+            "include_source": {
+              "type": "boolean",
+              "default": false,
+              "description": "Include the full pg_get_functiondef body per row."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "catalog_triggers",
+        "title": "List triggers",
+        "description": "List non-internal triggers on public tables, including timing, events, target function, enabled state, and full definition.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Restrict to triggers on this public table (applied server-side)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "catalog_policies",
+        "title": "List RLS policies",
+        "description": "List row-level security policies on public tables from pg_policies (permissive, roles, cmd, USING, WITH CHECK).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Restrict to policies on this public table (applied server-side)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "catalog_grants",
+        "title": "List table grants",
+        "description": "List privilege grants on public tables for anon/authenticated/service_role/postgres from information_schema.role_table_grants.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Restrict to grants on this public table (applied server-side)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "catalog_rls_status",
+        "title": "List table RLS status",
+        "description": "Report whether row-level security is enabled and/or forced on each public table (pg_class.relrowsecurity/relforcerowsecurity).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Restrict to this public table (applied server-side)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "catalog_indexes",
+        "title": "List indexes",
+        "description": "List indexes on public tables (unique/primary/partial, predicate, columns, full definition). Use this to verify ON CONFLICT targets and unique constraints.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Restrict to indexes on this public table (applied server-side)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "catalog_cron",
+        "title": "List cron jobs",
+        "description": "List pg_cron scheduled jobs (schedule, jobname, command, active, database, username). Returns an empty array when pg_cron is not installed.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
       }
     ]
   }
