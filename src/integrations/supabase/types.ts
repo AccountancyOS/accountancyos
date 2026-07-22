@@ -18849,7 +18849,17 @@ export type Database = {
         Args: { p_lead_id: string; p_reason?: string }
         Returns: undefined
       }
+      mcp_list_cron_jobs: { Args: never; Returns: Json }
+      mcp_list_functions: {
+        Args: { include_source?: boolean; name_like?: string }
+        Returns: Json
+      }
+      mcp_list_grants: { Args: { table_name?: string }; Returns: Json }
+      mcp_list_indexes: { Args: { table_name?: string }; Returns: Json }
+      mcp_list_policies: { Args: { table_name?: string }; Returns: Json }
+      mcp_list_rls_status: { Args: { table_name?: string }; Returns: Json }
       mcp_list_schema: { Args: never; Returns: Json }
+      mcp_list_triggers: { Args: { table_name?: string }; Returns: Json }
       move_to_dlq: {
         Args: {
           dlq_name: string
