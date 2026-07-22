@@ -11973,7 +11973,7 @@ export type Database = {
       }
       onboarding_applications: {
         Row: {
-          access_token: string | null
+          access_token: string
           access_token_expires_at: string | null
           additional_documents_uploaded: boolean | null
           address_line_1: string | null
@@ -12040,7 +12040,7 @@ export type Database = {
           vat_number: string | null
         }
         Insert: {
-          access_token?: string | null
+          access_token?: string
           access_token_expires_at?: string | null
           additional_documents_uploaded?: boolean | null
           address_line_1?: string | null
@@ -12107,7 +12107,7 @@ export type Database = {
           vat_number?: string | null
         }
         Update: {
-          access_token?: string | null
+          access_token?: string
           access_token_expires_at?: string | null
           additional_documents_uploaded?: boolean | null
           address_line_1?: string | null
