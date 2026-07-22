@@ -1,0 +1,81 @@
+{
+  "release_id": "2026-07-22-governance-g1-g2-token",
+  "release_kind": "migration",
+  "status": "applied-pending-full-reconfirm",
+  "declared_at": "2026-07-22T00:00:00Z",
+  "summary": "Governance schema foundation (G1), transactional approval-merge (G2), and the onboarding access_token invariant fix. These three authored migrations were applied by the Lovable executor as re-timestamped duplicates (recorded in the baseline); this receipt is the authoritative mapping authored-file -> executor-applied-version, with the live verification captured so far.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract",
+  "source_commit_sha_note": "Authored across commits on main (G1 3661f86, G2 223207d, token fix 86d7a48).",
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260722130000_data_governance_foundation.sql",
+      "sha256": "ccf54d3f12fb01a0718f0fcce1d49223f8ff93ed38b1d02e44e2439f6f778638",
+      "executor_applied_version": "20260722162044",
+      "executor_applied_note": "Lovable re-authored this as 20260722162044_3078029e-*.sql (in baseline appliedVersions).",
+      "expected_objects": [
+        {
+          "id": "G1-tables",
+          "object": "tables data_requirements, data_point_state, data_change_requests, data_audit_log, onboarding_approval_snapshots",
+          "verify": "db_schema keys / db_select each",
+          "result": "pass",
+          "evidence": "All present live (db_schema inventory 2026-07-22 lists all five; approval_blocked_* + governance tables confirmed via db_select)."
+        },
+        {
+          "id": "G1-append-only",
+          "object": "data_audit_log append-only: RLS = INSERT+SELECT only AND BEFORE UPDATE/DELETE trigger trg_data_audit_log_append_only",
+          "verify": "mcp_list_policies + mcp_list_triggers on data_audit_log",
+          "result": "pass",
+          "evidence": "mcp_list_policies(data_audit_log) → only data_audit_log_insert (INSERT) + data_audit_log_select (SELECT). mcp_list_triggers(data_audit_log) → trg_data_audit_log_append_only BEFORE DELETE OR UPDATE EXECUTE data_audit_log_prevent_mutation(). Both layers confirmed 2026-07-22."
+        },
+        {
+          "id": "G1-catalog-seed",
+          "object": "data_requirements seeded (9 governed-field rows), sensitivity flags correct",
+          "verify": "db_select data_requirements",
+          "result": "pending-reconfirm",
+          "evidence": "Owner reported 9 catalog rows seeded; independent db_select reconfirm outstanding."
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/20260722150000_approve_onboarding_transactional.sql",
+      "sha256": "a91861152d537a734c76a45701ac1036a4083668bd231807d94985329ffaf4b3",
+      "executor_applied_version": "20260722162158",
+      "executor_applied_note": "Lovable re-authored this as 20260722162158_bfedce0b-*.sql (in baseline appliedVersions).",
+      "expected_objects": [
+        {
+          "id": "G2-fns",
+          "object": "functions approve_onboarding_transactional, governance_mask_value (data_requirements-driven, fail-closed), governance_record_merge_field; verify_aml_and_approve rewired",
+          "verify": "mcp_list_functions name_like each",
+          "result": "pending-reconfirm",
+          "evidence": "Owner confirmed the three governance functions present + verify_aml_and_approve rewired; governance_mask_value body seen in Lovable's committed 20260722162158 matches intent (fail-closed via data_requirements). Independent mcp_list_functions reconfirm outstanding (MCP token expired mid-pass)."
+        },
+        {
+          "id": "G2-cols",
+          "object": "onboarding_applications.approval_blocked_at, .approval_blocked_reason",
+          "verify": "db_select onboarding_applications",
+          "result": "pass",
+          "evidence": "Both columns present live (returned by db_select on 2026-07-22)."
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/20260722160000_fix_onboarding_access_token_default.sql",
+      "sha256": "4ef07d3c202229ba4c9cbcd1c04cba684918eb45bbdc567ef47d256a4aacf1ef",
+      "executor_applied_version": "20260722174336",
+      "executor_applied_note": "Lovable re-authored this as 20260722174336_44bc87e6-*.sql (in baseline appliedVersions). This authored file is now a redundant idempotent duplicate.",
+      "expected_objects": [
+        {
+          "id": "token-invariant",
+          "object": "onboarding_applications.access_token DEFAULT gen_onboarding_access_token() + NOT NULL + BEFORE INSERT trigger trg_ensure_onboarding_access_token + backfill",
+          "verify": "db_select access_token IS NULL count == 0; catalog for the trigger",
+          "result": "pass",
+          "evidence": "db_select onboarding_applications WHERE access_token IS NULL → 0 rows on 2026-07-22 (incl. rows never manually backfilled), proving the executor backfill ran and new rows get tokens. Trigger definition present in Lovable's applied 20260722174336."
+        }
+      ]
+    }
+  ],
+
+  "verification_result": "partial — G1 append-only + token invariant + governance columns independently confirmed live; G1 catalog seed and G2 function set await independent mcp_list_functions/db_select reconfirm (MCP token expired mid-pass). Do not move to docs/releases/ until all results are pass.",
+  "non_table_verification_enabled_by": "mcp_list_functions/triggers/policies (Lovable catalog RPCs, 2026-07-22)"
+}

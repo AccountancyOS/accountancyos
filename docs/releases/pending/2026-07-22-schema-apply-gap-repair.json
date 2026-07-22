@@ -1,0 +1,92 @@
+{
+  "release_id": "2026-07-22-schema-apply-gap-repair",
+  "release_kind": "migration",
+  "status": "applied-pending-full-reconfirm",
+  "declared_at": "2026-07-22T00:00:00Z",
+  "approver": null,
+  "summary": "Forward-only repair migration reconciling live-vs-git apply-gaps found by inventorying the live catalog (MCP db_schema, 225 tables) against all git migrations. Fixes 5 gap groups where additive migrations never took effect live. Historical files were NOT edited or re-run.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md §'Database migration release contract')",
+
+  "source_commit_sha": "33e999a2184694cf147485525850d9079b7458b0",
+  "source_commit_sha_note": "The commit on main that adds 20260722170000_reconcile_live_schema_apply_gaps.sql + this receipt.",
+  "executor_applied_version": "20260722182906",
+  "executor_applied_version_note": "Lovable applied 20260722170000 and recorded it as schema_migrations version 20260722182906 (committed file 20260722182904_1b6d807a-*.sql). Verified per-object below — a schema_migrations row alone is insufficient.",
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260722170000_reconcile_live_schema_apply_gaps.sql",
+      "sha256": "59eaeba84fd232a03f2b3419d85a64dbcb1364792866a5c90f6a076df75edc3b",
+      "expected_objects": [
+        {
+          "id": "C1",
+          "object": "column default onboarding_applications.status = 'in_progress'",
+          "verify": "db_schema: onboarding_applications.status default == 'in_progress'::text",
+          "result": "pending-reconfirm",
+          "evidence": "Awaiting a fresh db_schema pull (MCP token expired mid-verification pass 2026-07-22)."
+        },
+        {
+          "id": "B1-cols",
+          "object": "engagement_letters columns: status, signed_by, signer_name, signer_email, version, client_id, company_id",
+          "verify": "db_select the 7 columns → no 'column does not exist'",
+          "result": "pass",
+          "evidence": "db_select engagement_letters returned all 7 columns; status backfilled to 'signed' on a signed row (2026-07-22)."
+        },
+        {
+          "id": "B1-check",
+          "object": "CHECK constraint engagement_letters_status_check (status IN draft|sent|signed)",
+          "verify": "catalog constraint list or behavioural (bad status rejected)",
+          "result": "pending-reconfirm",
+          "evidence": "No catalog RPC for CHECK constraints yet; behavioural probe outstanding."
+        },
+        {
+          "id": "B1-indexes",
+          "object": "indexes idx_engagement_letters_status, idx_engagement_letters_client_company",
+          "verify": "mcp_list_indexes { table_name: 'engagement_letters' }",
+          "result": "pass",
+          "evidence": "mcp_list_indexes(engagement_letters) returned both idx_engagement_letters_status (organization_id,status) and idx_engagement_letters_client_company (client_id,company_id) on 2026-07-22."
+        },
+        {
+          "id": "B1-trigger-fn",
+          "object": "function protect_engagement_letter_signatures() re-keyed off signed_at (not OLD.status)",
+          "verify": "mcp_list_functions { name_like: 'protect_engagement_letter_signatures' } → record post-repair definition_hash",
+          "result": "pending-reconfirm",
+          "evidence": "Pre-repair definition_hash 15acc3aeb249a07654e622438d63f053. Post-repair hash reconfirm outstanding (MCP token expired). Migration CREATE OR REPLACEs it to the corrected body and is applied (182906)."
+        },
+        {
+          "id": "B2",
+          "object": "invoices columns: paid_at, stripe_checkout_session_id",
+          "verify": "db_select invoices columns",
+          "result": "pass",
+          "evidence": "db_select invoices returned paid_at + stripe_checkout_session_id (2026-07-22)."
+        },
+        {
+          "id": "B3",
+          "object": "templates columns: category, is_active (default true)",
+          "verify": "db_select templates columns",
+          "result": "pass",
+          "evidence": "db_select templates returned category + is_active; is_active default true confirmed (row value true) 2026-07-22."
+        },
+        {
+          "id": "D1",
+          "object": "bank_transactions.updated_at SET NOT NULL",
+          "verify": "db_schema: bank_transactions.updated_at nullable == false",
+          "result": "pending-reconfirm",
+          "evidence": "Awaiting a fresh db_schema pull (MCP token expired). Pre-apply: 0 NULL rows confirmed, so enforcement is safe."
+        }
+      ]
+    }
+  ],
+
+  "preflight": {
+    "live_inventory": "MCP db_schema pulled 2026-07-22 (225 tables / 3748 cols)",
+    "reconciliation_report": "docs/audits/2026-07-22-live-reconciliation-report.md",
+    "gaps_confirmed_live_preapply": "engagement_letters.status / invoices.paid_at / templates.category all errored as absent on db_select; bank_transactions had 0 NULL updated_at rows",
+    "false_positives_discarded": 19
+  },
+
+  "superseded_note": "20260722160000_fix_onboarding_access_token_default.sql is a redundant idempotent duplicate of Lovable's applied 20260722174336 — governed by receipt 2026-07-22-governance-g1-g2-token.json.",
+
+  "verification_result": "partial — 4/8 objects (B1-cols, B1-indexes, B2, B3) independently confirmed live; C1, D1, B1-check, B1-trigger-fn await one more MCP pass (token expired). Migration is applied (182906). Move to docs/releases/ only when all 8 are pass.",
+  "non_table_verification_enabled_by": "mcp_list_functions/triggers/policies/grants/rls_status/indexes/cron_jobs (Lovable catalog RPCs, 2026-07-22)"
+}

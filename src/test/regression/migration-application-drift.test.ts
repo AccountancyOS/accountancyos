@@ -38,6 +38,9 @@ const BASELINE_PATH = resolve(
 // Tolerance for the small clock skew Lovable introduces between the filename
 // timestamp and the recorded `schema_migrations.version` (observed: ~2 s).
 const TOLERANCE_SECONDS = 120;
+// Migrations at/after this version are governed by the receipt gate
+// (migration-release-receipt-gate.test.ts), not this timestamp allow-list.
+const RECEIPT_REGIME_START = "20260722130000";
 
 // Files that are intentionally NOT in the live DB (superseded, cosmetic-only,
 // or informational). Reviewed 2026-07-20 in docs/audits/unapplied-migrations.md.
@@ -86,11 +89,10 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260722090000", // per-person nino/utr
   "20260722100000", // onboarding personal_details + paye_reference
   "20260722120000", // onboarding utr + ch_correction_note
-  "20260722130000", // data governance foundation (G1): not yet approved/applied — owner reviews before Lovable apply
-  "20260722150000", // G2 approval-merge RPC — owner applies via Lovable before E2E
-  "20260722160000", // fix: restore onboarding access_token default/backfill/trigger (live rows had NULL token → onboarding blocked)
-  // 20260722170000 applied live as 20260722182906 (receipt: docs/releases/2026-07-22-schema-apply-gap-repair.json). Allow-listed here because Lovable re-timestamps on apply.
-  "20260722170000",
+  // Migrations with version >= RECEIPT_REGIME_START (20260722130000) are NOT allow-listed
+  // here. They are governed by the receipt gate (migration-release-receipt-gate.test.ts)
+  // per the migration release contract, and are skipped in the loop below. Never add a
+  // post-regime version to this set — write a release receipt instead.
 ]);
 
 function versionFromFilename(name: string): string | null {
@@ -133,6 +135,7 @@ describe("Migration application drift", () => {
     for (const f of files) {
       const v = versionFromFilename(f);
       if (!v) continue;
+      if (v >= RECEIPT_REGIME_START) continue; // governed by the receipt gate
       if (KNOWN_UNAPPLIED.has(v)) continue;
       const fileEpoch = toEpochSeconds(v);
       // Nearest applied via linear scan (small N; ~500 rows).
