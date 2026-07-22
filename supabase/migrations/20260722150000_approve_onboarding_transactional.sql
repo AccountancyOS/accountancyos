@@ -41,17 +41,40 @@ COMMENT ON COLUMN public.onboarding_applications.approval_blocked_reason IS
 -- Mirrors src/lib/onboarding-approval-merge-model.ts::maskSensitiveValue EXACTLY.
 -- NULL in -> NULL out; sensitive identifiers reveal the right-2; dob/home-address fully
 -- masked; anything else returned unchanged.
+--
+-- Sensitivity is driven from the SINGLE source of truth, public.data_requirements
+-- (its `sensitivity` column), exactly what the model's isSensitive() mirrors. This
+-- FAILS CLOSED: a field_key that is not in data_requirements (v_sens IS NULL) is masked,
+-- so a future sensitive key never leaks a raw NINO/UTR into the append-only data_audit_log.
+-- STABLE (not IMMUTABLE): it now reads a table.
 CREATE OR REPLACE FUNCTION public.governance_mask_value(p_field_key text, p_val text)
 RETURNS text
-LANGUAGE sql
-IMMUTABLE
+LANGUAGE plpgsql
+STABLE
+SET search_path TO 'public', 'extensions'
 AS $function$
-  SELECT CASE
-    WHEN p_val IS NULL THEN NULL
-    WHEN p_field_key IN ('person.nino', 'person.utr') THEN '••••' || right(p_val, 2)
-    WHEN p_field_key IN ('person.date_of_birth', 'person.home_address') THEN '••••'
-    ELSE p_val
-  END;
+DECLARE
+  v_sens text;
+BEGIN
+  IF p_val IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT sensitivity INTO v_sens
+    FROM public.data_requirements
+    WHERE field_key = p_field_key;
+
+  -- Fail closed: unknown key (v_sens IS NULL) or explicitly sensitive -> mask.
+  IF v_sens IS NULL OR v_sens = 'sensitive' THEN
+    IF p_field_key IN ('person.nino', 'person.utr') THEN
+      RETURN '••••' || right(p_val, 2);
+    END IF;
+    RETURN '••••';
+  END IF;
+
+  -- v_sens = 'normal' -> value returned unchanged.
+  RETURN p_val;
+END;
 $function$;
 
 COMMENT ON FUNCTION public.governance_mask_value(text, text) IS
@@ -115,6 +138,8 @@ AS $function$
 DECLARE
   v_app record;
   v_core jsonb;
+  v_company_id uuid;
+  v_client_id uuid;
   v_snapshot_exists boolean;
   v_company_name text;
   v_existing_utr text;
@@ -133,6 +158,7 @@ DECLARE
   v_idx int := 0;
   v_persons_merged int := 0;
   v_persons_created int := 0;
+  v_persons_skipped int := 0;
   v_fields_recorded int := 0;
   v_resolved jsonb := '[]'::jsonb;
   v_masked_persons jsonb := '[]'::jsonb;
@@ -167,24 +193,31 @@ BEGIN
     -- (a) Core activation/jobs/portal/status via the single canonical function.
     SELECT public.lifecycle_approve_onboarding(p_application_id) INTO v_core;
 
+    -- Resolve the authoritative ids. The core may CREATE the company/client at approval
+    -- (v_app.company_id/client_id were NULL until now), so gap-fill onto the ids the core
+    -- returned. Everything downstream (business block, PAYE, governance subjects, snapshot)
+    -- drives off these resolved ids — never the possibly-NULL v_app.company_id/client_id.
+    v_company_id := coalesce(v_app.company_id, (v_core->>'company_id')::uuid);
+    v_client_id  := coalesce(v_app.client_id,  (v_core->>'client_id')::uuid);
+
     -- (b) Business governance fields -> typed columns (gap-fill only; never clobber).
-    IF v_app.company_id IS NOT NULL THEN
+    IF v_company_id IS NOT NULL THEN
       SELECT company_name, utr, vat_number
         INTO v_company_name, v_existing_utr, v_existing_vat
-        FROM public.companies WHERE id = v_app.company_id;
+        FROM public.companies WHERE id = v_company_id;
 
       IF nullif(v_app.utr, '') IS NOT NULL AND (v_existing_utr IS NULL OR v_existing_utr = '') THEN
-        UPDATE public.companies SET utr = v_app.utr WHERE id = v_app.company_id;
+        UPDATE public.companies SET utr = v_app.utr WHERE id = v_company_id;
         PERFORM public.governance_record_merge_field(
-          v_app.organization_id, 'company', v_app.company_id, 'company.utr',
+          v_app.organization_id, 'company', v_company_id, 'company.utr',
           v_existing_utr, v_app.utr, p_actor);
         v_fields_recorded := v_fields_recorded + 1;
       END IF;
 
       IF nullif(v_app.vat_number, '') IS NOT NULL AND (v_existing_vat IS NULL OR v_existing_vat = '') THEN
-        UPDATE public.companies SET vat_number = v_app.vat_number WHERE id = v_app.company_id;
+        UPDATE public.companies SET vat_number = v_app.vat_number WHERE id = v_company_id;
         PERFORM public.governance_record_merge_field(
-          v_app.organization_id, 'company', v_app.company_id, 'company.vat_number',
+          v_app.organization_id, 'company', v_company_id, 'company.vat_number',
           v_existing_vat, v_app.vat_number, p_actor);
         v_fields_recorded := v_fields_recorded + 1;
       END IF;
@@ -194,17 +227,17 @@ BEGIN
       IF v_paye IS NOT NULL THEN
         IF NOT EXISTS (
           SELECT 1 FROM public.paye_schemes
-          WHERE company_id = v_app.company_id AND employer_paye_reference = v_paye
+          WHERE company_id = v_company_id AND employer_paye_reference = v_paye
         ) THEN
           INSERT INTO public.paye_schemes (
             organization_id, company_id, employer_paye_reference, name
           )
           VALUES (
-            v_app.organization_id, v_app.company_id, v_paye,
+            v_app.organization_id, v_company_id, v_paye,
             coalesce(v_company_name, 'PAYE Scheme')
           );
           PERFORM public.governance_record_merge_field(
-            v_app.organization_id, 'company', v_app.company_id, 'company.paye_reference',
+            v_app.organization_id, 'company', v_company_id, 'company.paye_reference',
             NULL, v_paye, p_actor);
           v_fields_recorded := v_fields_recorded + 1;
         END IF;
@@ -233,7 +266,20 @@ BEGIN
 
       IF v_target_id IS NULL THEN
         -- create-new branch (the interim default until G3 pre-links CH officers).
-        v_name := trim(coalesce(v_person->>'name', ''));
+        -- Collapse internal whitespace runs to a single space so the SQL name split
+        -- matches src/lib/onboarding-approval-merge-model.ts::splitPersonName EXACTLY.
+        v_name := regexp_replace(trim(coalesce(v_person->>'name', '')), '\s+', ' ', 'g');
+
+        -- Skip junk: an entry with no identity anchor (person_id / ch_officer_id) AND no
+        -- name cannot be identified or named — do NOT create a blank first/last row.
+        IF v_name = ''
+           AND nullif(v_person->>'person_id', '') IS NULL
+           AND nullif(v_person->>'ch_officer_id', '') IS NULL THEN
+          v_persons_skipped := v_persons_skipped + 1;
+          v_idx := v_idx + 1;
+          CONTINUE;
+        END IF;
+
         v_first := split_part(v_name, ' ', 1);
         IF position(' ' in v_name) = 0 THEN
           v_last := v_first;
@@ -321,8 +367,8 @@ BEGIN
         'provisional', jsonb_build_object(
           'application_id', p_application_id,
           'organization_id', v_app.organization_id,
-          'client_id', v_app.client_id,
-          'company_id', v_app.company_id,
+          'client_id', v_client_id,
+          'company_id', v_company_id,
           'lead_id', v_app.lead_id,
           'paye_reference', v_app.paye_reference,
           'vat_number', v_app.vat_number,
@@ -346,6 +392,7 @@ BEGIN
       'governance', jsonb_build_object(
         'persons_merged', v_persons_merged,
         'persons_created', v_persons_created,
+        'persons_skipped', v_persons_skipped,
         'fields_recorded', v_fields_recorded
       ),
       'snapshot_written', true
@@ -432,6 +479,19 @@ BEGIN
       'approval_error', v_approval_error
     );
   END;
+
+  -- The merge deliberately does NOT re-raise on a governance failure (re-raising would
+  -- roll back the persisted approval_blocked_* state). It RETURNS {blocked:true, reason}.
+  -- Surface that to staff via the SAME approval_error shape the EXCEPTION path above uses,
+  -- so the UI shows a warning (not a green success toast) for a rolled-back approval.
+  IF (v_approval->>'blocked')::boolean IS TRUE THEN
+    RETURN jsonb_build_object(
+      'aml_status', 'verified',
+      'aml_verified_at', now(),
+      'aml_expiry_date', CURRENT_DATE + INTERVAL '5 years',
+      'approval_error', v_approval->>'reason'
+    );
+  END IF;
 
   RETURN v_approval
     || jsonb_build_object(

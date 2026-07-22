@@ -36,6 +36,13 @@ describe("maskSensitiveValue", () => {
     expect(maskSensitiveValue("company.utr", null)).toBeNull();
   });
 
+  it("fails CLOSED: an unknown / ungoverned key is treated as sensitive and masked", () => {
+    // A field key not in the governed catalog must NOT leak its raw value into the
+    // append-only audit log — it is masked (mirrors the SQL helper's v_sens IS NULL branch).
+    expect(maskSensitiveValue("person.future_secret", "topsecret")).toBe("••••");
+    expect(maskSensitiveValue("totally.unknown", "abc123")).toBe("••••");
+  });
+
   it("SENSITIVE_MERGE_FIELDS are exactly the fields isSensitive() flags", () => {
     for (const key of SENSITIVE_MERGE_FIELDS) {
       expect(isSensitive(key), `${key} should be sensitive`).toBe(true);
@@ -66,6 +73,15 @@ describe("splitPersonName", () => {
     expect(splitPersonName("  John   Smith  ")).toEqual({
       firstName: "John",
       lastName: "Smith",
+    });
+  });
+
+  it("collapses internal double-spaces in a 3-part name's last name (SQL mirror)", () => {
+    // The SQL side normalises whitespace runs to a single space before splitting, so the
+    // last name for a double-spaced 3-part name is single-spaced on both sides.
+    expect(splitPersonName("Mary  Jane   Watson")).toEqual({
+      firstName: "Mary",
+      lastName: "Jane Watson",
     });
   });
 

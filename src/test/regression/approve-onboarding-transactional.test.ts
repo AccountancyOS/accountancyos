@@ -65,6 +65,39 @@ describe("approve_onboarding_transactional migration structure", () => {
     expect(MIGRATION).toMatch(/governance_mask_value\s*\(/g);
   });
 
+  it("governance_mask_value fails CLOSED off data_requirements (masks when sensitivity IS NULL) and sets search_path", () => {
+    const fn = MIGRATION.slice(
+      MIGRATION.indexOf("FUNCTION public.governance_mask_value"),
+      MIGRATION.indexOf("FUNCTION public.governance_record_merge_field"),
+    );
+    // Sensitivity is driven from the single source of truth, the data_requirements table.
+    expect(fn).toMatch(/FROM\s+public\.data_requirements/);
+    expect(fn).toMatch(/sensitivity\s+INTO/);
+    // Fail closed: an unknown key (NULL sensitivity) is masked, not returned raw.
+    expect(fn).toMatch(/v_sens IS NULL\s+OR\s+v_sens\s*=\s*'sensitive'/);
+    // search_path is pinned on the function (Minor 3).
+    expect(fn).toMatch(/SET search_path TO 'public',\s*'extensions'/);
+  });
+
+  it("drives the business/snapshot ids off the core-resolved ids (coalesce with v_core), not solely v_app.company_id", () => {
+    // A company/client CREATED at approval leaves v_app.company_id NULL; the merge must
+    // gap-fill onto the id the core returned so the business block is not skipped.
+    expect(MIGRATION).toMatch(
+      /v_company_id\s*:=\s*coalesce\(\s*v_app\.company_id\s*,\s*\(v_core->>'company_id'\)::uuid/,
+    );
+    expect(MIGRATION).toMatch(
+      /v_client_id\s*:=\s*coalesce\(\s*v_app\.client_id\s*,\s*\(v_core->>'client_id'\)::uuid/,
+    );
+    // The business block gates on the resolved id.
+    expect(MIGRATION).toMatch(/IF v_company_id IS NOT NULL THEN/);
+  });
+
+  it("skips junk persons with no identity anchor and no name (no blank first/last row)", () => {
+    expect(MIGRATION).toMatch(
+      /v_name = ''[\s\S]{0,160}person_id[\s\S]{0,120}ch_officer_id[\s\S]{0,120}CONTINUE/,
+    );
+  });
+
   it("writes PAYE to paye_schemes and NEVER to a companies.paye_reference column", () => {
     expect(MIGRATION).toMatch(/INSERT INTO\s+(public\.)?paye_schemes/);
     expect(MIGRATION).not.toMatch(/companies[\s\S]{0,40}\bpaye_reference\b/);
@@ -99,5 +132,17 @@ describe("verify_aml_and_approve wiring", () => {
       MIGRATION.indexOf("FUNCTION public.verify_aml_and_approve"),
     );
     expect(wrapper).not.toMatch(/:=\s*lifecycle_approve_onboarding\s*\(/);
+  });
+
+  it("maps a BLOCKED (rolled-back) approval to approval_error so staff see a warning, not a success toast", () => {
+    // CRITICAL: approve_onboarding_transactional RETURNS {blocked:true,reason} on a merge
+    // failure (it must not re-raise). verify_aml_and_approve must detect that and surface it
+    // through the same approval_error key the UI already treats as a warning.
+    const wrapper = MIGRATION.slice(
+      MIGRATION.indexOf("FUNCTION public.verify_aml_and_approve"),
+    );
+    expect(wrapper).toMatch(
+      /\(v_approval->>'blocked'\)::boolean IS TRUE[\s\S]{0,300}'approval_error',\s*v_approval->>'reason'/,
+    );
   });
 });
