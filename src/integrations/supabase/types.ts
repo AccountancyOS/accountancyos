@@ -4533,9 +4533,11 @@ export type Database = {
           nino: string | null
           notes: string | null
           organization_id: string
+          partner_in_charge: string | null
           phone: string | null
           postcode: string | null
           preferred_name: string | null
+          staff_in_charge: string | null
           status: string
           tags: Json | null
           updated_at: string
@@ -4566,9 +4568,11 @@ export type Database = {
           nino?: string | null
           notes?: string | null
           organization_id: string
+          partner_in_charge?: string | null
           phone?: string | null
           postcode?: string | null
           preferred_name?: string | null
+          staff_in_charge?: string | null
           status?: string
           tags?: Json | null
           updated_at?: string
@@ -4599,9 +4603,11 @@ export type Database = {
           nino?: string | null
           notes?: string | null
           organization_id?: string
+          partner_in_charge?: string | null
           phone?: string | null
           postcode?: string | null
           preferred_name?: string | null
+          staff_in_charge?: string | null
           status?: string
           tags?: Json | null
           updated_at?: string
@@ -4654,6 +4660,7 @@ export type Database = {
           postcode: string | null
           primary_contact_person_id: string | null
           registered_office_address: Json | null
+          registered_office_dispute_note: string | null
           sic_codes: Json | null
           staff_in_charge: string | null
           status: string
@@ -4706,6 +4713,7 @@ export type Database = {
           postcode?: string | null
           primary_contact_person_id?: string | null
           registered_office_address?: Json | null
+          registered_office_dispute_note?: string | null
           sic_codes?: Json | null
           staff_in_charge?: string | null
           status?: string
@@ -4758,6 +4766,7 @@ export type Database = {
           postcode?: string | null
           primary_contact_person_id?: string | null
           registered_office_address?: Json | null
+          registered_office_dispute_note?: string | null
           sic_codes?: Json | null
           staff_in_charge?: string | null
           status?: string
@@ -4783,24 +4792,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "companies_partner_in_charge_fkey"
-            columns: ["partner_in_charge"]
-            isOneToOne: false
-            referencedRelation: "organization_users"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "companies_primary_contact_person_id_fkey"
             columns: ["primary_contact_person_id"]
             isOneToOne: false
             referencedRelation: "company_persons"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "companies_staff_in_charge_fkey"
-            columns: ["staff_in_charge"]
-            isOneToOne: false
-            referencedRelation: "organization_users"
             referencedColumns: ["id"]
           },
         ]
@@ -4945,6 +4940,7 @@ export type Database = {
           linked_client_id: string | null
           middle_names: string | null
           nationality: string | null
+          nino: string | null
           occupation: string | null
           organization_id: string
           phone: string | null
@@ -4963,6 +4959,7 @@ export type Database = {
           title: string | null
           updated_at: string
           use_registered_office_as_service: boolean | null
+          utr: string | null
         }
         Insert: {
           ch_officer_id?: string | null
@@ -4978,6 +4975,7 @@ export type Database = {
           linked_client_id?: string | null
           middle_names?: string | null
           nationality?: string | null
+          nino?: string | null
           occupation?: string | null
           organization_id: string
           phone?: string | null
@@ -4996,6 +4994,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           use_registered_office_as_service?: boolean | null
+          utr?: string | null
         }
         Update: {
           ch_officer_id?: string | null
@@ -5011,6 +5010,7 @@ export type Database = {
           linked_client_id?: string | null
           middle_names?: string | null
           nationality?: string | null
+          nino?: string | null
           occupation?: string | null
           organization_id?: string
           phone?: string | null
@@ -5029,6 +5029,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           use_registered_office_as_service?: boolean | null
+          utr?: string | null
         }
         Relationships: [
           {
@@ -11769,6 +11770,7 @@ export type Database = {
           billing_amount: number | null
           billing_completed_at: string | null
           billing_status: string
+          ch_correction_note: string | null
           city: string | null
           clearance_notes: string | null
           clearance_received: boolean | null
@@ -11793,6 +11795,8 @@ export type Database = {
           national_insurance_number: string | null
           onboarding_questionnaire_instance_id: string | null
           organization_id: string
+          paye_reference: string | null
+          personal_details: Json | null
           phone: string | null
           portal_email: string | null
           postcode: string | null
@@ -11810,6 +11814,7 @@ export type Database = {
           stripe_checkout_session_id: string | null
           submitted_for_review_at: string | null
           updated_at: string
+          utr: string | null
           vat_number: string | null
         }
         Insert: {
@@ -11830,6 +11835,7 @@ export type Database = {
           billing_amount?: number | null
           billing_completed_at?: string | null
           billing_status?: string
+          ch_correction_note?: string | null
           city?: string | null
           clearance_notes?: string | null
           clearance_received?: boolean | null
@@ -11854,6 +11860,8 @@ export type Database = {
           national_insurance_number?: string | null
           onboarding_questionnaire_instance_id?: string | null
           organization_id: string
+          paye_reference?: string | null
+          personal_details?: Json | null
           phone?: string | null
           portal_email?: string | null
           postcode?: string | null
@@ -11871,6 +11879,7 @@ export type Database = {
           stripe_checkout_session_id?: string | null
           submitted_for_review_at?: string | null
           updated_at?: string
+          utr?: string | null
           vat_number?: string | null
         }
         Update: {
@@ -11891,6 +11900,7 @@ export type Database = {
           billing_amount?: number | null
           billing_completed_at?: string | null
           billing_status?: string
+          ch_correction_note?: string | null
           city?: string | null
           clearance_notes?: string | null
           clearance_received?: boolean | null
@@ -11915,6 +11925,8 @@ export type Database = {
           national_insurance_number?: string | null
           onboarding_questionnaire_instance_id?: string | null
           organization_id?: string
+          paye_reference?: string | null
+          personal_details?: Json | null
           phone?: string | null
           portal_email?: string | null
           postcode?: string | null
@@ -11932,6 +11944,7 @@ export type Database = {
           stripe_checkout_session_id?: string | null
           submitted_for_review_at?: string | null
           updated_at?: string
+          utr?: string | null
           vat_number?: string | null
         }
         Relationships: [
@@ -18730,6 +18743,18 @@ export type Database = {
       public_reject_quote_by_token:
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
         | { Args: { p_reason?: string; p_token: string }; Returns: Json }
+      public_save_onboarding_details: {
+        Args: {
+          p_access_token: string
+          p_application_id: string
+          p_ch_correction_note?: string
+          p_paye_reference?: string
+          p_personal_details?: Json
+          p_utr?: string
+          p_vat_number?: string
+        }
+        Returns: Json
+      }
       public_sign_engagement_letter: {
         Args: {
           p_access_token?: string

@@ -70,71 +70,22 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260709170448","20260709215252","20260713085410","20260716140000",
   "20260717090000","20260717100000","20260717110000","20260720120000",
   "20260720120500","20260720130000",
-  // Pending Lovable application: corrective fix that re-standardises
-  // automation_workflow_instances.status on the UPPERCASE 7-value set (undoes the
-  // incomplete lowercase CHECK from 20260717090000). Remove from this list and refresh the
-  // baseline once applied. See docs/audits/unapplied-migrations.md.
-  "20260720140000",
-  // Pending Lovable application: drops the redundant "account is now active" onboarding email
-  // from notify_onboarding_approved (keeps the internal staff notification).
-  "20260720150000",
-  // Pending Lovable application: add_service_to_client RPC (adds a service to an existing
-  // client/company from the Services tab, delegating to lifecycle_upsert_job_with_deadlines).
-  "20260720160000",
-  // Pending Lovable application: security publish-blockers — restrict user_sessions manage policy
-  // to admin/owner, close anon quote-token enumeration (re-apply of the never-landed 20260703204710),
-  // and restore security_invoker on connected_mailboxes_safe.
-  "20260720170000",
-  // Pending Lovable application: fix partner_in_charge/staff_in_charge (drop mismatched FK, add
-  // the columns to clients).
-  "20260720180000",
-  // Phase 2 person-model schema; awaiting Lovable apply.
-  "20260720190000",
-  // Phase-4 person-model management RPCs; awaiting Lovable apply.
-  "20260720191000",
-  // Pre-existing drift found while verifying this task's gate (not introduced by it):
-  // re-application of the 20260720170000 security publish-blockers (user_sessions
-  // admin-only policy, quote_acceptance_tokens anon lockdown, connected_mailboxes_safe
-  // security_invoker) under a later timestamp. Pending Lovable application.
-  "20260720173536",
-  // Lovable-pushed 2026-07-20 ~22:2x ("Verified migrations and sync") without an allow-list or
-  // baseline entry — arrived via rebase. Apply status not verifiable from here; if Lovable applied
-  // them, refresh docs/audits/unapplied-migrations-baseline.json and remove these; otherwise investigate.
-  "20260720222022",
-  "20260720222127",
-  // More Lovable-pushed migrations arriving via rebase without an allow-list/baseline entry.
-  // Apply status not verifiable from here — owner should run scripts/refresh-migration-baseline.ts
-  // against the live DB and move any genuinely-applied versions out of this list.
-  "20260720224300",
-  "20260720224405",
-  // 2026-07-21 Lovable batch — person-model re-application ("Applied migrations 1 & 2") plus the
-  // onboarding-documents security lockdown (RPC token enforcement + path-embedded storage token).
-  // Applied by Lovable under its own timestamps; reviewed. This is the last batch of manual
-  // allow-listing this guard should need — it is superseded by
-  // docs/releases/production-release-convention.md (definition-exact post-release verification).
-  "20260721084843",
-  "20260721084915",
-  "20260721090337",
-  "20260721090430",
-  // 2026-07-21 Lovable batch (PSC support etc.) — pending baseline reconciliation.
-  "20260721170145",
-  "20260721170839",
-  "20260721174527",
-  // Increment A (client-data-collection design): backfills registered_office_address jsonb from
-  // the legacy flat address columns and adds companies.registered_office_dispute_note for the
-  // "flag a correction" affordance. Pending Lovable application.
-  "20260721180000",
-  // Increment B: per-person nino/utr on company_persons; awaiting Lovable apply.
-  "20260722090000",
-  // Increment C: onboarding_applications.paye_reference + personal_details (per-person capture)
-  // and the token-gated public_save_onboarding_details RPC for the "Your details" onboarding
-  // step; awaiting Lovable apply.
-  "20260722100000",
-  // Increment C frontend follow-up: adds onboarding_applications.utr (missing column bugfix --
-  // 20260722100000's RPC referenced it unconditionally, so every call would have failed at
-  // runtime) and .ch_correction_note, and re-creates public_save_onboarding_details with the
-  // extra param; awaiting Lovable apply.
-  "20260722120000",
+  // 2026-07-22 batch application: 14 previously-pending files were applied via a
+  // single consolidated migration (version 20260722112351 in schema_migrations).
+  // Because Lovable records a single applied version per approval, each file's
+  // own timestamp still has no ±120s match — keep them allow-listed. Their
+  // objects are live and verified.
+  "20260720140000", // automation_workflow_instances.status UPPERCASE
+  "20260720150000", // notify_onboarding_approved: drop redundant email
+  "20260720160000", // add_service_to_client RPC
+  "20260720170000", // security publish-blockers
+  "20260720180000", // partner_in_charge/staff_in_charge on clients
+  "20260720190000", // person-model schema
+  "20260720191000", // person-model management RPCs
+  "20260721180000", // registered_office_address backfill + dispute_note
+  "20260722090000", // per-person nino/utr
+  "20260722100000", // onboarding personal_details + paye_reference
+  "20260722120000", // onboarding utr + ch_correction_note
 ]);
 
 function versionFromFilename(name: string): string | null {
