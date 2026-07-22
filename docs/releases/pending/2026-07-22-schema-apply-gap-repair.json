@@ -8,7 +8,7 @@
 
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md §'Database migration release contract')",
 
-  "source_commit_sha": "SET-AFTER-COMMIT",
+  "source_commit_sha": "33e999a2184694cf147485525850d9079b7458b0",
   "source_commit_sha_note": "The commit on main that adds 20260722170000_reconcile_live_schema_apply_gaps.sql + this receipt.",
   "executor_applied_version": null,
   "executor_applied_version_note": "Lovable re-timestamps on apply. Record the schema_migrations version Lovable reports here after apply (do NOT assume a schema_migrations row = per-object success; verify each object below).",
