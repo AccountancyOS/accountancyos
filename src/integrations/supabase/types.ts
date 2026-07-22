@@ -6539,6 +6539,226 @@ export type Database = {
           },
         ]
       }
+      data_audit_log: {
+        Row: {
+          actor: string | null
+          at: string
+          change_request_id: string | null
+          decision: string | null
+          event_type: string
+          field_key: string
+          id: string
+          new_value_masked: string | null
+          old_value_masked: string | null
+          organization_id: string
+          origin: string | null
+          subject_id: string
+          subject_kind: string
+        }
+        Insert: {
+          actor?: string | null
+          at?: string
+          change_request_id?: string | null
+          decision?: string | null
+          event_type: string
+          field_key: string
+          id?: string
+          new_value_masked?: string | null
+          old_value_masked?: string | null
+          organization_id: string
+          origin?: string | null
+          subject_id: string
+          subject_kind: string
+        }
+        Update: {
+          actor?: string | null
+          at?: string
+          change_request_id?: string | null
+          decision?: string | null
+          event_type?: string
+          field_key?: string
+          id?: string
+          new_value_masked?: string | null
+          old_value_masked?: string | null
+          organization_id?: string
+          origin?: string | null
+          subject_id?: string
+          subject_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_audit_log_change_request_id_fkey"
+            columns: ["change_request_id"]
+            isOneToOne: false
+            referencedRelation: "data_change_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_change_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          evidence_ref: string | null
+          field_key: string
+          id: string
+          organization_id: string
+          origin: string
+          proposed_value_masked: string | null
+          reason: string | null
+          requested_by: string | null
+          status: string
+          subject_id: string
+          subject_kind: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          evidence_ref?: string | null
+          field_key: string
+          id?: string
+          organization_id: string
+          origin: string
+          proposed_value_masked?: string | null
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+          subject_id: string
+          subject_kind: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          evidence_ref?: string | null
+          field_key?: string
+          id?: string
+          organization_id?: string
+          origin?: string
+          proposed_value_masked?: string | null
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+          subject_id?: string
+          subject_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_change_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_point_state: {
+        Row: {
+          field_key: string
+          id: string
+          organization_id: string
+          source: string | null
+          status: string
+          subject_id: string
+          subject_kind: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          field_key: string
+          id?: string
+          organization_id: string
+          source?: string | null
+          status?: string
+          subject_id: string
+          subject_kind: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          field_key?: string
+          id?: string
+          organization_id?: string
+          source?: string | null
+          status?: string
+          subject_id?: string
+          subject_kind?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_point_state_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_requirements: {
+        Row: {
+          applies_entity_types: string[]
+          applies_service_condition: string | null
+          authoritative_column: string
+          authoritative_table: string
+          created_at: string
+          field_key: string
+          id: string
+          provider: string
+          requires_verification: boolean
+          sensitivity: string
+          subject_kind: string
+          updated_at: string
+        }
+        Insert: {
+          applies_entity_types?: string[]
+          applies_service_condition?: string | null
+          authoritative_column: string
+          authoritative_table: string
+          created_at?: string
+          field_key: string
+          id?: string
+          provider: string
+          requires_verification?: boolean
+          sensitivity?: string
+          subject_kind: string
+          updated_at?: string
+        }
+        Update: {
+          applies_entity_types?: string[]
+          applies_service_condition?: string | null
+          authoritative_column?: string
+          authoritative_table?: string
+          created_at?: string
+          field_key?: string
+          id?: string
+          provider?: string
+          requires_verification?: boolean
+          sensitivity?: string
+          subject_kind?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       deadlines: {
         Row: {
           active_window_start: string | null
@@ -11765,6 +11985,8 @@ export type Database = {
           aml_submitted_at: string | null
           aml_verified_at: string | null
           application_type: string
+          approval_blocked_at: string | null
+          approval_blocked_reason: string | null
           approved_at: string | null
           approved_by: string | null
           billing_amount: number | null
@@ -11830,6 +12052,8 @@ export type Database = {
           aml_submitted_at?: string | null
           aml_verified_at?: string | null
           application_type: string
+          approval_blocked_at?: string | null
+          approval_blocked_reason?: string | null
           approved_at?: string | null
           approved_by?: string | null
           billing_amount?: number | null
@@ -11895,6 +12119,8 @@ export type Database = {
           aml_submitted_at?: string | null
           aml_verified_at?: string | null
           application_type?: string
+          approval_blocked_at?: string | null
+          approval_blocked_reason?: string | null
           approved_at?: string | null
           approved_by?: string | null
           billing_amount?: number | null
@@ -11988,6 +12214,41 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_approval_snapshots: {
+        Row: {
+          application_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string
+          snapshot: Json
+        }
+        Insert: {
+          application_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id: string
+          snapshot: Json
+        }
+        Update: {
+          application_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_approval_snapshots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -17531,6 +17792,10 @@ export type Database = {
         Args: { p_invoice_id: string; p_user_id?: string }
         Returns: Json
       }
+      approve_onboarding_transactional: {
+        Args: { p_actor?: string; p_application_id: string }
+        Returns: Json
+      }
       approve_vat_return_for_filing: {
         Args: { _vat_return_id: string }
         Returns: Json
@@ -18370,6 +18635,22 @@ export type Database = {
           p_to: string
         }
         Returns: Json
+      }
+      governance_mask_value: {
+        Args: { p_field_key: string; p_val: string }
+        Returns: string
+      }
+      governance_record_merge_field: {
+        Args: {
+          p_actor: string
+          p_field_key: string
+          p_new_value: string
+          p_old_value: string
+          p_organization_id: string
+          p_subject_id: string
+          p_subject_kind: string
+        }
+        Returns: undefined
       }
       grant_person_portal_access: {
         Args: { p_person_id: string; p_user_email: string }
