@@ -86,6 +86,7 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260722090000", // per-person nino/utr
   "20260722100000", // onboarding personal_details + paye_reference
   "20260722120000", // onboarding utr + ch_correction_note
+  "20260722130000", // data governance foundation (G1): not yet approved/applied — owner reviews before Lovable apply
 ]);
 
 function versionFromFilename(name: string): string | null {
