@@ -6539,6 +6539,226 @@ export type Database = {
           },
         ]
       }
+      data_audit_log: {
+        Row: {
+          actor: string | null
+          at: string
+          change_request_id: string | null
+          decision: string | null
+          event_type: string
+          field_key: string
+          id: string
+          new_value_masked: string | null
+          old_value_masked: string | null
+          organization_id: string
+          origin: string | null
+          subject_id: string
+          subject_kind: string
+        }
+        Insert: {
+          actor?: string | null
+          at?: string
+          change_request_id?: string | null
+          decision?: string | null
+          event_type: string
+          field_key: string
+          id?: string
+          new_value_masked?: string | null
+          old_value_masked?: string | null
+          organization_id: string
+          origin?: string | null
+          subject_id: string
+          subject_kind: string
+        }
+        Update: {
+          actor?: string | null
+          at?: string
+          change_request_id?: string | null
+          decision?: string | null
+          event_type?: string
+          field_key?: string
+          id?: string
+          new_value_masked?: string | null
+          old_value_masked?: string | null
+          organization_id?: string
+          origin?: string | null
+          subject_id?: string
+          subject_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_audit_log_change_request_id_fkey"
+            columns: ["change_request_id"]
+            isOneToOne: false
+            referencedRelation: "data_change_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_change_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          evidence_ref: string | null
+          field_key: string
+          id: string
+          organization_id: string
+          origin: string
+          proposed_value_masked: string | null
+          reason: string | null
+          requested_by: string | null
+          status: string
+          subject_id: string
+          subject_kind: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          evidence_ref?: string | null
+          field_key: string
+          id?: string
+          organization_id: string
+          origin: string
+          proposed_value_masked?: string | null
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+          subject_id: string
+          subject_kind: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          evidence_ref?: string | null
+          field_key?: string
+          id?: string
+          organization_id?: string
+          origin?: string
+          proposed_value_masked?: string | null
+          reason?: string | null
+          requested_by?: string | null
+          status?: string
+          subject_id?: string
+          subject_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_change_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_point_state: {
+        Row: {
+          field_key: string
+          id: string
+          organization_id: string
+          source: string | null
+          status: string
+          subject_id: string
+          subject_kind: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          field_key: string
+          id?: string
+          organization_id: string
+          source?: string | null
+          status?: string
+          subject_id: string
+          subject_kind: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          field_key?: string
+          id?: string
+          organization_id?: string
+          source?: string | null
+          status?: string
+          subject_id?: string
+          subject_kind?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_point_state_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_requirements: {
+        Row: {
+          applies_entity_types: string[]
+          applies_service_condition: string | null
+          authoritative_column: string
+          authoritative_table: string
+          created_at: string
+          field_key: string
+          id: string
+          provider: string
+          requires_verification: boolean
+          sensitivity: string
+          subject_kind: string
+          updated_at: string
+        }
+        Insert: {
+          applies_entity_types?: string[]
+          applies_service_condition?: string | null
+          authoritative_column: string
+          authoritative_table: string
+          created_at?: string
+          field_key: string
+          id?: string
+          provider: string
+          requires_verification?: boolean
+          sensitivity?: string
+          subject_kind: string
+          updated_at?: string
+        }
+        Update: {
+          applies_entity_types?: string[]
+          applies_service_condition?: string | null
+          authoritative_column?: string
+          authoritative_table?: string
+          created_at?: string
+          field_key?: string
+          id?: string
+          provider?: string
+          requires_verification?: boolean
+          sensitivity?: string
+          subject_kind?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       deadlines: {
         Row: {
           active_window_start: string | null
@@ -11988,6 +12208,41 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      onboarding_approval_snapshots: {
+        Row: {
+          application_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string
+          snapshot: Json
+        }
+        Insert: {
+          application_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id: string
+          snapshot: Json
+        }
+        Update: {
+          application_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_approval_snapshots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
