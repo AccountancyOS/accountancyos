@@ -2175,7 +2175,7 @@ export type Database = {
           status: string
           transaction_date: string
           truelayer_transaction_id: string | null
-          updated_at: string | null
+          updated_at: string
           updated_by_portal: boolean
         }
         Insert: {
@@ -2212,7 +2212,7 @@ export type Database = {
           status?: string
           transaction_date: string
           truelayer_transaction_id?: string | null
-          updated_at?: string | null
+          updated_at?: string
           updated_by_portal?: boolean
         }
         Update: {
@@ -2249,7 +2249,7 @@ export type Database = {
           status?: string
           transaction_date?: string
           truelayer_transaction_id?: string | null
-          updated_at?: string | null
+          updated_at?: string
           updated_by_portal?: boolean
         }
         Relationships: [
@@ -8135,6 +8135,8 @@ export type Database = {
       }
       engagement_letters: {
         Row: {
+          client_id: string | null
+          company_id: string | null
           created_at: string
           document_content: string | null
           id: string
@@ -8146,12 +8148,19 @@ export type Database = {
           signature_token: string | null
           signature_user_agent: string | null
           signed_at: string | null
+          signed_by: string | null
+          signer_email: string | null
+          signer_name: string | null
+          status: string
           template_id: string | null
           token_expires_at: string | null
           updated_at: string
+          version: number
           viewed_at: string | null
         }
         Insert: {
+          client_id?: string | null
+          company_id?: string | null
           created_at?: string
           document_content?: string | null
           id?: string
@@ -8163,12 +8172,19 @@ export type Database = {
           signature_token?: string | null
           signature_user_agent?: string | null
           signed_at?: string | null
+          signed_by?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          status?: string
           template_id?: string | null
           token_expires_at?: string | null
           updated_at?: string
+          version?: number
           viewed_at?: string | null
         }
         Update: {
+          client_id?: string | null
+          company_id?: string | null
           created_at?: string
           document_content?: string | null
           id?: string
@@ -8180,12 +8196,31 @@ export type Database = {
           signature_token?: string | null
           signature_user_agent?: string | null
           signed_at?: string | null
+          signed_by?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          status?: string
           template_id?: string | null
           token_expires_at?: string | null
           updated_at?: string
+          version?: number
           viewed_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "engagement_letters_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_letters_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "engagement_letters_onboarding_application_id_fkey"
             columns: ["onboarding_application_id"]
@@ -10025,6 +10060,7 @@ export type Database = {
           organization_id: string
           override_history: Json | null
           override_metadata: Json | null
+          paid_at: string | null
           pdf_path: string | null
           posted_at: string | null
           posted_by: string | null
@@ -10039,6 +10075,7 @@ export type Database = {
           sent_at: string | null
           source: string | null
           status: string
+          stripe_checkout_session_id: string | null
           supplier_id: string | null
           total_gross: number
           total_net: number
@@ -10075,6 +10112,7 @@ export type Database = {
           organization_id: string
           override_history?: Json | null
           override_metadata?: Json | null
+          paid_at?: string | null
           pdf_path?: string | null
           posted_at?: string | null
           posted_by?: string | null
@@ -10089,6 +10127,7 @@ export type Database = {
           sent_at?: string | null
           source?: string | null
           status?: string
+          stripe_checkout_session_id?: string | null
           supplier_id?: string | null
           total_gross?: number
           total_net?: number
@@ -10125,6 +10164,7 @@ export type Database = {
           organization_id?: string
           override_history?: Json | null
           override_metadata?: Json | null
+          paid_at?: string | null
           pdf_path?: string | null
           posted_at?: string | null
           posted_by?: string | null
@@ -10139,6 +10179,7 @@ export type Database = {
           sent_at?: string | null
           source?: string | null
           status?: string
+          stripe_checkout_session_id?: string | null
           supplier_id?: string | null
           total_gross?: number
           total_net?: number
@@ -15961,11 +16002,13 @@ export type Database = {
       }
       templates: {
         Row: {
+          category: string | null
           content: Json
           created_at: string
           created_by: string | null
           description: string | null
           id: string
+          is_active: boolean | null
           last_validated_at: string | null
           name: string
           organization_id: string | null
@@ -15982,11 +16025,13 @@ export type Database = {
           version_number: number
         }
         Insert: {
+          category?: string | null
           content?: Json
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
+          is_active?: boolean | null
           last_validated_at?: string | null
           name: string
           organization_id?: string | null
@@ -16003,11 +16048,13 @@ export type Database = {
           version_number?: number
         }
         Update: {
+          category?: string | null
           content?: Json
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
+          is_active?: boolean | null
           last_validated_at?: string | null
           name?: string
           organization_id?: string | null
