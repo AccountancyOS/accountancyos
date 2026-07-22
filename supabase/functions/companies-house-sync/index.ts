@@ -684,6 +684,12 @@ async function promotePscsToPersonSpine(
       .eq("company_id", companyId);
     if (existingPscsErr) {
       console.error("[CH Sync] PSC promotion — existing company_pscs query failed:", existingPscsErr.message);
+      // Fail safe: without the existing company_pscs rows we can't tell which
+      // candidates are already linked, so pscsByChId/unlinkedPscs would both
+      // be empty and every candidate — including already-linked PSCs — would
+      // fall through to the insert/upsert path below, overwriting linked
+      // rows. Bail out instead of proceeding on an incomplete guard.
+      return { promoted: 0, error: existingPscsErr.message };
     }
 
     const pscsByChId = new Map<string, any>();

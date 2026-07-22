@@ -42,8 +42,10 @@ function chNameMatches(chName: string, internalName: string): boolean {
 function findChMatch(psc: any, chPSCs?: CHPSC[]): CHPSC | undefined {
   if (!chPSCs || chPSCs.length === 0) return undefined;
   if (psc.ch_psc_id) {
-    const byId = chPSCs.find((c) => c.links?.self === psc.ch_psc_id);
-    if (byId) return byId;
+    // Once linked, match by id only — falling back to a name match here
+    // could stitch this row's "Update from CH" onto a different individual
+    // if the linked id has dropped out of the current CH snapshot.
+    return chPSCs.find((c) => c.links?.self === psc.ch_psc_id);
   }
   const name = `${psc.person?.first_name ?? ""} ${psc.person?.last_name ?? ""}`.trim();
   if (!name) return undefined;
@@ -69,7 +71,7 @@ function diffAgainstCh(psc: any, chPSCs?: CHPSC[]): { match?: CHPSC; differs: bo
 
   const internalNotified = psc.notified_at ? String(psc.notified_at).slice(0, 10) : null;
   const chNotified = match.notified_on ? String(match.notified_on).slice(0, 10) : null;
-  if (chNotified && internalNotified && chNotified !== internalNotified) {
+  if (chNotified !== internalNotified) {
     details.push("notified date");
   }
 
