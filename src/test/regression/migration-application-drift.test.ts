@@ -89,6 +89,7 @@ const KNOWN_UNAPPLIED = new Set<string>([
   "20260722130000", // data governance foundation (G1): not yet approved/applied — owner reviews before Lovable apply
   "20260722150000", // G2 approval-merge RPC — owner applies via Lovable before E2E
   "20260722160000", // fix: restore onboarding access_token default/backfill/trigger (live rows had NULL token → onboarding blocked)
+  "20260722170000", // repair: reconcile live-vs-git apply-gaps (see receipt docs/releases/pending/2026-07-22-schema-apply-gap-repair.json). Transitional allow-list entry — being superseded by the receipt-verified release gate per the migration release contract.
 ]);
 
 function versionFromFilename(name: string): string | null {

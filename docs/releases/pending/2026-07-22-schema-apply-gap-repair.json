@@ -1,0 +1,87 @@
+{
+  "release_id": "2026-07-22-schema-apply-gap-repair",
+  "release_kind": "migration",
+  "status": "pending-apply",
+  "declared_at": "2026-07-22T00:00:00Z",
+  "approver": null,
+  "summary": "Forward-only repair migration reconciling live-vs-git apply-gaps found by inventorying the live catalog (MCP db_schema, 225 tables) against all git migrations. Fixes 5 gap groups where additive migrations never took effect live. Historical files were NOT edited or re-run.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md §'Database migration release contract')",
+
+  "source_commit_sha": "SET-AFTER-COMMIT",
+  "source_commit_sha_note": "The commit on main that adds 20260722170000_reconcile_live_schema_apply_gaps.sql + this receipt.",
+  "executor_applied_version": null,
+  "executor_applied_version_note": "Lovable re-timestamps on apply. Record the schema_migrations version Lovable reports here after apply (do NOT assume a schema_migrations row = per-object success; verify each object below).",
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260722170000_reconcile_live_schema_apply_gaps.sql",
+      "sha256": "59eaeba84fd232a03f2b3419d85a64dbcb1364792866a5c90f6a076df75edc3b",
+      "expected_objects": [
+        {
+          "id": "C1",
+          "object": "column default onboarding_applications.status = 'in_progress'",
+          "why": "Live default was 'pending' (removed from the status CHECK by 20260603105927), so status-omitting INSERTs were rejected.",
+          "verify": "mcp_list_functions is N/A; check via db_schema: onboarding_applications.status default == 'in_progress'::text",
+          "result": "pending"
+        },
+        {
+          "id": "B1-cols",
+          "object": "engagement_letters columns: status, signed_by, signer_name, signer_email, version, client_id, company_id",
+          "verify": "db_select engagement_letters columns 'status,signed_by,signer_name,signer_email,version,client_id,company_id' limit 1 → no 'column does not exist' error",
+          "result": "pending"
+        },
+        {
+          "id": "B1-check",
+          "object": "CHECK constraint engagement_letters_status_check (status IN draft|sent|signed)",
+          "verify": "mcp_list_policies N/A for CHECK; confirm via catalog: constraint present (or behavioural: insert with bad status rejected)",
+          "result": "pending"
+        },
+        {
+          "id": "B1-indexes",
+          "object": "indexes idx_engagement_letters_status, idx_engagement_letters_client_company",
+          "verify": "mcp_list_indexes { table_name: 'engagement_letters' } → both names present",
+          "result": "pending"
+        },
+        {
+          "id": "B1-trigger-fn",
+          "object": "function protect_engagement_letter_signatures() re-keyed off signed_at (not OLD.status)",
+          "why": "Live function body is redacted (SECURITY DEFINER) — pre-repair definition_hash 15acc3aeb249a07654e622438d63f053. If it was the pre-fix version referencing OLD.status, engagement_letters UPDATEs were broken because status was absent. The repair CREATE OR REPLACEs it to the corrected body.",
+          "verify": "mcp_list_functions { name_like: 'protect_engagement_letter_signatures' } → record post-repair definition_hash; behavioural: a no-op UPDATE on an engagement_letters row succeeds (no 'record old has no field status').",
+          "result": "pending"
+        },
+        {
+          "id": "B2",
+          "object": "invoices columns: paid_at, stripe_checkout_session_id",
+          "verify": "db_select invoices columns 'paid_at,stripe_checkout_session_id' limit 1 → no error",
+          "result": "pending"
+        },
+        {
+          "id": "B3",
+          "object": "templates columns: category, is_active (default true)",
+          "verify": "db_select templates columns 'category,is_active' limit 1 → no error; is_active default true",
+          "result": "pending"
+        },
+        {
+          "id": "D1",
+          "object": "bank_transactions.updated_at SET NOT NULL",
+          "why": "Column pre-existed nullable so ADD COLUMN IF NOT EXISTS no-op'd; verified 0 NULL rows live before enforcing.",
+          "verify": "db_schema: bank_transactions.updated_at nullable == false",
+          "result": "pending"
+        }
+      ]
+    }
+  ],
+
+  "preflight": {
+    "live_inventory": "MCP db_schema pulled 2026-07-22 (225 tables / 3748 cols) → tool-results snapshot",
+    "reconciliation_report": ".superpowers/sdd/live-reconciliation-report.md",
+    "gaps_confirmed_live": "engagement_letters.status / invoices.paid_at / templates.category all errored as absent on db_select; bank_transactions has 0 NULL updated_at rows",
+    "false_positives_discarded": 19
+  },
+
+  "superseded_note": "20260722160000_fix_onboarding_access_token_default.sql (my token fix) is now a redundant idempotent duplicate of Lovable's applied 20260722174336 — the access_token DEFAULT + ensure_onboarding_access_token trigger + backfill are LIVE (verified: 0 onboarding rows with NULL access_token, incl. rows I did not backfill). 160000 remains in git as an idempotent no-op; no action needed.",
+
+  "verification_result": "pending — run each expected_objects.verify after Lovable applies; a schema_migrations row alone is insufficient. Move this receipt to docs/releases/ only when every object passes.",
+  "non_table_verification_enabled_by": "mcp_list_functions/triggers/policies/grants/rls_status/indexes/cron_jobs (Lovable, 2026-07-22) — the catalog RPCs that make non-table objects verifiable by definition rather than by side-effect."
+}
