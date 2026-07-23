@@ -7,7 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Plus, Trash2, User } from "lucide-react";
+import { Plus, Trash2, User, Building2, RefreshCw, Loader2 } from "lucide-react";
 import { type PersonDetail, isPersonComplete } from "./types";
 
 interface PeopleSectionProps {
@@ -15,6 +15,10 @@ interface PeopleSectionProps {
   onChange: (people: PersonDetail[]) => void;
   allowAddRemove: boolean;
   addLabel?: string;
+  /** True while directors are being fetched from Companies House. */
+  chLoading?: boolean;
+  /** Re-fetch directors from Companies House (company applications only). */
+  onRefreshFromCH?: () => void;
 }
 
 function updatePerson(
@@ -27,7 +31,14 @@ function updatePerson(
   );
 }
 
-export default function PeopleSection({ people, onChange, allowAddRemove, addLabel }: PeopleSectionProps) {
+export default function PeopleSection({
+  people,
+  onChange,
+  allowAddRemove,
+  addLabel,
+  chLoading,
+  onRefreshFromCH,
+}: PeopleSectionProps) {
   const addPerson = () => {
     onChange([
       ...people,
@@ -39,6 +50,8 @@ export default function PeopleSection({ people, onChange, allowAddRemove, addLab
         nino: "",
         utr: "",
         home_address: { line1: "", line2: "", city: "", county: "", postcode: "", country: "United Kingdom" },
+        person_id: null,
+        ch_officer_id: null,
       },
     ]);
   };
@@ -47,15 +60,43 @@ export default function PeopleSection({ people, onChange, allowAddRemove, addLab
     onChange(people.filter((p) => p._key !== key));
   };
 
+  const refreshButton =
+    onRefreshFromCH != null ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onRefreshFromCH}
+        disabled={chLoading}
+      >
+        {chLoading ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <RefreshCw className="h-4 w-4 mr-2" />
+        )}
+        Refresh from Companies House
+      </Button>
+    ) : null;
+
   if (people.length === 0) {
     return (
       <div className="border border-dashed rounded-md p-4 text-center space-y-2">
-        <p className="text-sm text-muted-foreground">No individuals added yet.</p>
-        {allowAddRemove && (
-          <Button type="button" variant="outline" size="sm" onClick={addPerson}>
-            <Plus className="h-4 w-4 mr-2" />
-            {addLabel ?? "Add a director or shareholder"}
-          </Button>
+        {chLoading ? (
+          <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Looking up directors at Companies House…
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">No individuals added yet.</p>
+        )}
+        {allowAddRemove && !chLoading && (
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={addPerson}>
+              <Plus className="h-4 w-4 mr-2" />
+              {addLabel ?? "Add a director or shareholder"}
+            </Button>
+            {refreshButton}
+          </div>
         )}
       </div>
     );
@@ -73,6 +114,12 @@ export default function PeopleSection({ people, onChange, allowAddRemove, addLab
                   {person.name?.trim() || `Person ${idx + 1}`}
                 </span>
                 {person.role && <span className="text-muted-foreground">— {person.role}</span>}
+                {person.ch_officer_id && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground font-normal">
+                    <Building2 className="h-3 w-3" />
+                    from Companies House
+                  </span>
+                )}
                 {isPersonComplete(person) && (
                   <span className="text-[10px] text-emerald-700 font-normal">complete</span>
                 )}
@@ -231,10 +278,13 @@ export default function PeopleSection({ people, onChange, allowAddRemove, addLab
         ))}
       </Accordion>
       {allowAddRemove && (
-        <Button type="button" variant="outline" size="sm" onClick={addPerson}>
-          <Plus className="h-4 w-4 mr-2" />
-          {addLabel ?? "Add another person"}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={addPerson}>
+            <Plus className="h-4 w-4 mr-2" />
+            {addLabel ?? "Add another person"}
+          </Button>
+          {refreshButton}
+        </div>
       )}
     </div>
   );

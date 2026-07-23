@@ -21,6 +21,13 @@ export interface PersonDetail {
   nino: string;
   utr: string;
   home_address: HomeAddress;
+  // Pre-link keys (G3). Present on people sourced from Companies House so G2's
+  // approval-merge can MERGE into the existing CH person rather than creating a
+  // duplicate. Manually-added people leave these null (G2 creates them fresh).
+  // `toPersistedPerson` strips only `_key`, so these flow through to the saved
+  // personal_details jsonb that G2 reads.
+  person_id?: string | null;
+  ch_officer_id?: string | null;
 }
 
 export const emptyAddress = (): HomeAddress => ({

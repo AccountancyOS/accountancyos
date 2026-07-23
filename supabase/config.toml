@@ -94,6 +94,8 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = false
   [functions.onboarding-stripe-verify]
     verify_jwt = false
+  [functions.onboarding-fetch-ch-officers]
+    verify_jwt = false
   [functions.truelayer-auth]
     verify_jwt = true
   [functions.truelayer-callback]

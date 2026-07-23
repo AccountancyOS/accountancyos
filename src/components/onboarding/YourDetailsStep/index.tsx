@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import BusinessSection from "./BusinessSection";
 import PeopleSection from "./PeopleSection";
 import OutstandingItems from "./OutstandingItems";
 import { type PersonDetail, emptyPerson, toPersistedPerson, deriveServiceFlags } from "./types";
+import { chOfficerToPersonDetail, mergeChPeople } from "@/lib/onboarding-ch-officers-model";
 
 interface YourDetailsStepProps {
   // AppBundle from PublicOnboarding.tsx (application/organization/quote/documents/engagement_letter)
@@ -31,6 +32,57 @@ export default function YourDetailsStep({ bundle, getAccessToken, onContinue }: 
   const [chCorrectionNote, setChCorrectionNote] = useState<string>(app.ch_correction_note ?? "");
   const [people, setPeople] = useState<PersonDetail[]>(() => seedPeople(app, isCompany));
   const [saving, setSaving] = useState(false);
+  const [chLoading, setChLoading] = useState(false);
+  const chAutoTried = useRef(false);
+
+  const companyNumber: string = isCompany ? (app.company_number ?? "").toString().trim() : "";
+
+  // Fetch the company's directors from Companies House (server-side, token-gated)
+  // and pre-populate the people list. On {people:[]} / a warning, silently fall
+  // back to manual entry. Dedupe by ch_officer_id so re-fetch never duplicates.
+  const fetchFromCompaniesHouse = async (manual: boolean) => {
+    const token = getAccessToken();
+    if (!token) {
+      if (manual) {
+        toast.error("Session expired — please reopen your onboarding link from the original email.");
+      }
+      return;
+    }
+    setChLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("onboarding-fetch-ch-officers", {
+        body: { application_id: app.id, access_token: token },
+      });
+      if (error) {
+        if (manual) toast.error("Couldn't reach Companies House — please add people manually.");
+        return;
+      }
+      const returned: any[] = Array.isArray(data?.people) ? data.people : [];
+      const mapped = returned
+        .map((o) => chOfficerToPersonDetail(o))
+        .filter((p): p is PersonDetail => p !== null);
+      if (mapped.length === 0) {
+        if (manual) toast.info("No active directors found at Companies House.");
+        return;
+      }
+      setPeople((current) => mergeChPeople(current, mapped));
+      if (manual) toast.success("Refreshed directors from Companies House.");
+    } catch {
+      if (manual) toast.error("Couldn't reach Companies House — please add people manually.");
+    } finally {
+      setChLoading(false);
+    }
+  };
+
+  // Auto-fetch ONCE on first load of a company application that has a company
+  // number and no people yet. Manually-refreshed after that.
+  useEffect(() => {
+    if (chAutoTried.current) return;
+    if (!isCompany || !companyNumber || people.length > 0) return;
+    chAutoTried.current = true;
+    void fetchFromCompaniesHouse(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCompany, companyNumber]);
 
   const save = async (advance: boolean) => {
     const token = getAccessToken();
@@ -96,6 +148,10 @@ export default function YourDetailsStep({ bundle, getAccessToken, onContinue }: 
             onChange={setPeople}
             allowAddRemove={isCompany}
             addLabel={isCompany ? "Add a director or shareholder" : undefined}
+            chLoading={chLoading}
+            onRefreshFromCH={
+              isCompany && companyNumber ? () => fetchFromCompaniesHouse(true) : undefined
+            }
           />
         </section>
 
@@ -147,6 +203,10 @@ function seedPeople(app: any, isCompany: boolean): PersonDetail[] {
         postcode: p?.home_address?.postcode ?? "",
         country: p?.home_address?.country ?? "United Kingdom",
       },
+      // Pre-link keys (G3) must survive a reload/resume — else the CH person
+      // identity is lost and G2's approval-merge duplicates the director.
+      person_id: p?.person_id ?? null,
+      ch_officer_id: p?.ch_officer_id ?? null,
     }));
   }
   if (isCompany) {
