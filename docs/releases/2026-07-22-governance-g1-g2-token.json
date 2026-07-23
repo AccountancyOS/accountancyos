@@ -1,7 +1,8 @@
 {
   "release_id": "2026-07-22-governance-g1-g2-token",
   "release_kind": "migration",
-  "status": "applied-pending-full-reconfirm",
+  "status": "applied-verified",
+  "approver": "user (chat approval 2026-07-22)",
   "declared_at": "2026-07-22T00:00:00Z",
   "summary": "Governance schema foundation (G1), transactional approval-merge (G2), and the onboarding access_token invariant fix. These three authored migrations were applied by the Lovable executor as re-timestamped duplicates (recorded in the baseline); this receipt is the authoritative mapping authored-file -> executor-applied-version, with the live verification captured so far.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract",
@@ -32,8 +33,8 @@
           "id": "G1-catalog-seed",
           "object": "data_requirements seeded (9 governed-field rows), sensitivity flags correct",
           "verify": "db_select data_requirements",
-          "result": "pending-reconfirm",
-          "evidence": "Owner reported 9 catalog rows seeded; independent db_select reconfirm outstanding."
+          "result": "pass",
+          "evidence": "db_select data_requirements 2026-07-23: exactly 9 rows. person.nino/utr/date_of_birth/home_address = sensitive; company.* = normal; company.paye_reference → paye_schemes.employer_paye_reference (the G1 anchor fix). All correct."
         }
       ]
     },
@@ -47,8 +48,8 @@
           "id": "G2-fns",
           "object": "functions approve_onboarding_transactional, governance_mask_value (data_requirements-driven, fail-closed), governance_record_merge_field; verify_aml_and_approve rewired",
           "verify": "mcp_list_functions name_like each",
-          "result": "pending-reconfirm",
-          "evidence": "Owner confirmed the three governance functions present + verify_aml_and_approve rewired; governance_mask_value body seen in Lovable's committed 20260722162158 matches intent (fail-closed via data_requirements). Independent mcp_list_functions reconfirm outstanding (MCP token expired mid-pass)."
+          "result": "pass",
+          "evidence": "mcp_list_functions 2026-07-23: approve_onboarding_transactional(p_application_id uuid, p_actor uuid)→jsonb SECDEF; governance_mask_value(p_field_key text, p_val text)→text STABLE; governance_record_merge_field(7 args)→void SECDEF; verify_aml_and_approve(p_onboarding_id uuid)→jsonb SECDEF. All present with correct signatures/search_path. Rewire body redacted (SECDEF) but confirmed in applied 20260722162158 + behaviourally (owner-verified verify_aml_and_approve routes through the merge)."
         },
         {
           "id": "G2-cols",
@@ -76,6 +77,7 @@
     }
   ],
 
-  "verification_result": "partial — G1 append-only + token invariant + governance columns independently confirmed live; G1 catalog seed and G2 function set await independent mcp_list_functions/db_select reconfirm (MCP token expired mid-pass). Do not move to docs/releases/ until all results are pass.",
+  "verification_result": "COMPLETE 2026-07-23: all expected objects pass. Verified independently via catalog RPCs + db_select (G1 tables/append-only/catalog-seed; G2 functions/columns; token invariant). Applied by Lovable as 162044/162158/174336.",
+  "verification_protocol": "A receipt may only leave pending/ in the SAME turn its expected_objects[*].result fields are written to pass/failed with evidence AND approver populated.",
   "non_table_verification_enabled_by": "mcp_list_functions/triggers/policies (Lovable catalog RPCs, 2026-07-22)"
 }
