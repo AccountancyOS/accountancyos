@@ -140,7 +140,7 @@
   },
   "post_publish_verification_evidence": {
     "runner": "scripts/verify-post-publish.ts",
-    "verified_at": "2026-07-24T18:40:59.967Z",
+    "verified_at": "2026-07-24T18:41:21.967Z",
     "environment": "LIVE (production) database via managed psql (PG* env vars)",
     "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
     "results": [
@@ -148,97 +148,85 @@
         "id": "leads-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...CT count(*) FROM public.leads WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 9,
+        "pass": false
       },
       {
         "id": "clients-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ... count(*) FROM public.clients WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 4,
+        "pass": false
       },
       {
         "id": "companies-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ount(*) FROM public.companies WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 6,
+        "pass": false
       },
       {
         "id": "jobs-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ECT count(*) FROM public.jobs WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 35,
+        "pass": false
       },
       {
         "id": "quotes-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...T count(*) FROM public.quotes WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 16,
+        "pass": false
       },
       {
         "id": "onboarding-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ublic.onboarding_applications WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 9,
+        "pass": false
       },
       {
         "id": "engagements-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...nt(*) FROM public.engagements WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 26,
+        "pass": false
       },
       {
         "id": "deadlines-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ount(*) FROM public.deadlines WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 17,
+        "pass": false
       },
       {
         "id": "services-catalog-preserved",
         "kind": "count_at_least",
         "expected": 1,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ... FROM public.services_catalog WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 18,
+        "pass": true
       },
       {
         "id": "automation-rules-preserved",
         "kind": "count_at_least",
         "expected": 1,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ... FROM public.automation_rules WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 0,
+        "pass": false
       },
       {
         "id": "organization-users-preserved",
         "kind": "count_at_least",
         "expected": 1,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ROM public.organization_users WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 1,
+        "pass": true
       },
       {
         "id": "audit-log-preserved",
         "kind": "count_at_least",
         "expected": 1,
-        "actual": null,
-        "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ount(*) FROM public.audit_log WHERE organization_id = :'org'\n                                                                 ^"
+        "actual": 67,
+        "pass": true
       },
       {
         "id": "schema-migrations-recorded",
@@ -246,7 +234,7 @@
         "expected": 1,
         "actual": null,
         "pass": false,
-        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...a_migrations WHERE version = '20260724183022' AND :'org' IS ...\n                                                             ^"
+        "error": "Error: psql exit 1: ERROR:  permission denied for schema supabase_migrations\nLINE 1: SELECT count(*) FROM supabase_migrations.schema_migrations W...\n                             ^"
       }
     ],
     "overall": "fail"
