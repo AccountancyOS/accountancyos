@@ -83,6 +83,15 @@ Every artifact in a release must have:
 5. a **post-release verification** (§6) run independently against live, with **evidence** recorded
    in the receipt — not a bare "pass".
 
+For data-migration releases (destructive resets, backfills, tenant wipes), the receipt MUST
+additionally carry a `post_publish_verification` block enumerating the exact live-database
+checks that prove the intended state landed. The block is executed by
+`scripts/verify-post-publish.ts` against LIVE. **A release is not permitted to move from
+`docs/releases/pending/` to `docs/releases/`, and status MUST NOT be set to
+`applied-verified`, unless every check returns pass.** On failure the runner rewrites the
+receipt with `status = "post-publish-verification-failed"` and per-check evidence, and the
+release stays pending pending incident handling.
+
 ## 4. Release receipt (the durable mapping)
 
 Each release appends one machine-readable record to `docs/releases/release-log.jsonl`
