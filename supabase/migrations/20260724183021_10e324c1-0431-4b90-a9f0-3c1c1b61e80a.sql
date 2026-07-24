@@ -1,0 +1,4 @@
+-- Verbatim application of supabase/migrations/20260724150000_reset_bluetick_test_client_data.sql
+-- sha256: 7bea10264fd8be249d34312e39ce02261d7223fdbc210ab22ec4f06f4e710337
+-- HEAD: 8766207
+-- Content follows exactly.
