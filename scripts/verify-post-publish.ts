@@ -73,10 +73,15 @@ if (!v || !Array.isArray(v.checks) || v.checks.length === 0) {
 }
 
 async function psqlScalar(sql: string, param: string): Promise<number> {
-  // Parameterised via psql -v; SQL uses $1 which we rewrite to :'org' to keep injection surface minimal.
-  const bound = sql.replace(/\$1/g, `:'org'`);
+  // Guard: org id must be a strict UUID before we splice it into SQL. This is
+  // the only interpolation the runner performs; SQL bodies are author-supplied
+  // in the receipt and reviewed in git.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)) {
+    throw new Error(`org_id is not a valid UUID: ${param}`);
+  }
+  const bound = sql.replace(/\$1/g, `'${param}'::uuid`);
   const cmd = new Deno.Command("psql", {
-    args: ["-A", "-t", "-v", "ON_ERROR_STOP=1", "-v", `org=${param}`, "-c", bound],
+    args: ["-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", bound],
     stdout: "piped",
     stderr: "piped",
   });
