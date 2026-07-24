@@ -1,25 +1,25 @@
 {
   "release_id": "2026-07-24-reset-bluetick-test-client-data",
   "release_kind": "data-migration",
-  "status": "pending",
+  "status": "post-publish-verification-failed",
   "declared_at": "2026-07-24T00:00:00Z",
   "approver": null,
   "summary": "ONE-OFF pilot reset. Transactionally wipes ALL client/prospect data for the single Blue Tick tenant (9 leads, 4 clients, 6 companies + their full graph across ~150 tables) so the practice starts the pilot from zero. Practice CONFIG is preserved (org/settings/users, services_catalog, templates, automations, rate tables, master COA). audit_log KEPT. Every DELETE is org-scoped; no unscoped delete.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
   "destructive": true,
   "irreversible": true,
-  "pre_apply_requirement": "Take a database backup/snapshot before applying \u2014 this is IRREVERSIBLE.",
+  "pre_apply_requirement": "Take a database backup/snapshot before applying — this is IRREVERSIBLE.",
   "safety_review": {
     "reviewed_by": "claude (full line-by-line read 2026-07-24)",
-    "unscoped_delete_check": "PASS \u2014 every DELETE carries organization_id / org_id, a subquery into an org-scoped parent, or the _subjects id set. No unscoped DELETE.",
-    "transaction_fix": "Removed explicit BEGIN/COMMIT (0 of 466 repo migrations use them \u2192 runner wraps each file in its own transaction; explicit block risked mis-nest / premature COMMIT / partial delete). _subjects temp table changed to session-scoped (no ON COMMIT DROP) + explicit DROP, so it is robust whether or not a surrounding transaction exists. All statements idempotent \u2192 safe to re-run.",
-    "fk_order": "10-tier leaf\u2192root order derived from grepping all REFERENCES; circular NO-ACTION pairs (filings\u2194snapshots, jobs\u2194workpaper_instances) pre-NULLed at the top.",
+    "unscoped_delete_check": "PASS — every DELETE carries organization_id / org_id, a subquery into an org-scoped parent, or the _subjects id set. No unscoped DELETE.",
+    "transaction_fix": "Removed explicit BEGIN/COMMIT (0 of 466 repo migrations use them → runner wraps each file in its own transaction; explicit block risked mis-nest / premature COMMIT / partial delete). _subjects temp table changed to session-scoped (no ON COMMIT DROP) + explicit DROP, so it is robust whether or not a surrounding transaction exists. All statements idempotent → safe to re-run.",
+    "fk_order": "10-tier leaf→root order derived from grepping all REFERENCES; circular NO-ACTION pairs (filings↔snapshots, jobs↔workpaper_instances) pre-NULLed at the top.",
     "config_preserved": "organizations, org_settings, organization_users/profiles, services_catalog, canonical_* templates/rules, templates, automation_* config, rate tables, master/org-level COA rows (per-company COA deleted with companies). See migration header."
   },
   "flags_requiring_owner_confirmation": [
     "bookkeeping_accounts (per-company Chart of Accounts): DELETED, scoped by client/company membership. Any org-level/master COA rows (client_id/company_id NULL) are PRESERVED. Confirm you consider the per-company chart of accounts to be client data (it is removed with the company).",
     "approval_revocation_log: an audit-family table but with a HARD FK to filings, so its rows for this org ARE deleted (forced by removing the test filings). This erases the filing-approval-revocation trail for the TEST data only. audit_log itself is fully preserved.",
-    "period_locks (accounting period locks): DELETED \u2014 treated as client-scoped. Confirm.",
+    "period_locks (accounting period locks): DELETED — treated as client-scoped. Confirm.",
     "Subject-scoped runtime rows (email_queue, notifications, sla_instances, automation_events/executions) are deleted only where tied to a deleted subject id; org/system-level rows are preserved."
   ],
   "migrations": [
@@ -31,13 +31,13 @@
           "id": "entities-zeroed",
           "object": "0 rows remain for org a857a12c-... in leads, clients, companies, jobs, quotes, onboarding_applications, engagements, deadlines",
           "result": "pending",
-          "verify_via": "db_select each table filtered organization_id eq a857a12c-a125-41de-bb45-9eb556d5b467 \u2192 expect 0 rows."
+          "verify_via": "db_select each table filtered organization_id eq a857a12c-a125-41de-bb45-9eb556d5b467 → expect 0 rows."
         },
         {
           "id": "config-survives",
           "object": "Practice config still present: services_catalog, automation_rules, organization_users rows remain for the org",
           "result": "pending",
-          "verify_via": "db_select services_catalog / automation_rules / organization_users filtered to the org \u2192 expect rows still present."
+          "verify_via": "db_select services_catalog / automation_rules / organization_users filtered to the org → expect rows still present."
         }
       ]
     }
@@ -58,19 +58,197 @@
     "gate_policy": "This release MUST NOT be moved from docs/releases/pending/ to docs/releases/ and MUST NOT be marked status=applied-verified unless every check below returns result=pass against LIVE. Any mismatch blocks finalization; the release stays pending and an incident record is required.",
     "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
     "checks": [
-      { "id": "leads-zero",                    "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.leads WHERE organization_id = $1" },
-      { "id": "clients-zero",                  "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.clients WHERE organization_id = $1" },
-      { "id": "companies-zero",                "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.companies WHERE organization_id = $1" },
-      { "id": "jobs-zero",                     "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.jobs WHERE organization_id = $1" },
-      { "id": "quotes-zero",                   "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.quotes WHERE organization_id = $1" },
-      { "id": "onboarding-zero",               "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.onboarding_applications WHERE organization_id = $1" },
-      { "id": "engagements-zero",              "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.engagements WHERE organization_id = $1" },
-      { "id": "deadlines-zero",                "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.deadlines WHERE organization_id = $1" },
-      { "id": "services-catalog-preserved",   "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.services_catalog WHERE organization_id = $1" },
-      { "id": "automation-rules-preserved",   "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.automation_rules WHERE organization_id = $1" },
-      { "id": "organization-users-preserved", "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.organization_users WHERE organization_id = $1" },
-      { "id": "audit-log-preserved",          "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.audit_log WHERE organization_id = $1" },
-      { "id": "schema-migrations-recorded",   "kind": "count_equals",   "expected": 1, "sql": "SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20260724183022' AND $1 IS NOT NULL" }
+      {
+        "id": "leads-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.leads WHERE organization_id = $1"
+      },
+      {
+        "id": "clients-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.clients WHERE organization_id = $1"
+      },
+      {
+        "id": "companies-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.companies WHERE organization_id = $1"
+      },
+      {
+        "id": "jobs-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.jobs WHERE organization_id = $1"
+      },
+      {
+        "id": "quotes-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.quotes WHERE organization_id = $1"
+      },
+      {
+        "id": "onboarding-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.onboarding_applications WHERE organization_id = $1"
+      },
+      {
+        "id": "engagements-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.engagements WHERE organization_id = $1"
+      },
+      {
+        "id": "deadlines-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.deadlines WHERE organization_id = $1"
+      },
+      {
+        "id": "services-catalog-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM public.services_catalog WHERE organization_id = $1"
+      },
+      {
+        "id": "automation-rules-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM public.automation_rules WHERE organization_id = $1"
+      },
+      {
+        "id": "organization-users-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM public.organization_users WHERE organization_id = $1"
+      },
+      {
+        "id": "audit-log-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM public.audit_log WHERE organization_id = $1"
+      },
+      {
+        "id": "schema-migrations-recorded",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20260724183022' AND $1 IS NOT NULL"
+      }
     ]
+  },
+  "post_publish_verification_evidence": {
+    "runner": "scripts/verify-post-publish.ts",
+    "verified_at": "2026-07-24T18:40:59.967Z",
+    "environment": "LIVE (production) database via managed psql (PG* env vars)",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "results": [
+      {
+        "id": "leads-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...CT count(*) FROM public.leads WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "clients-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ... count(*) FROM public.clients WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "companies-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ount(*) FROM public.companies WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "jobs-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ECT count(*) FROM public.jobs WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "quotes-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...T count(*) FROM public.quotes WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "onboarding-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ublic.onboarding_applications WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "engagements-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...nt(*) FROM public.engagements WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "deadlines-zero",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ount(*) FROM public.deadlines WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "services-catalog-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ... FROM public.services_catalog WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "automation-rules-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ... FROM public.automation_rules WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "organization-users-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ROM public.organization_users WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "audit-log-preserved",
+        "kind": "count_at_least",
+        "expected": 1,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...ount(*) FROM public.audit_log WHERE organization_id = :'org'\n                                                                 ^"
+      },
+      {
+        "id": "schema-migrations-recorded",
+        "kind": "count_equals",
+        "expected": 1,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  syntax error at or near \":\"\nLINE 1: ...a_migrations WHERE version = '20260724183022' AND :'org' IS ...\n                                                             ^"
+      }
+    ],
+    "overall": "fail"
   }
 }
