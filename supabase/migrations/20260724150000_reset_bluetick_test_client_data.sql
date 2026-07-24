@@ -76,7 +76,31 @@
 --   The _subjects temp table is created WITHOUT ON COMMIT DROP and dropped explicitly at
 --   the end, so it survives across statements whether or not a surrounding transaction
 --   exists. Every statement is idempotent, so the migration is safe to re-run.
+--
+-- BUSINESS-RULE GUARD TRIGGERS:
+--   Several tables carry BEFORE triggers that (correctly) forbid ordinary edits —
+--   accepted-quote lines, immutable filing/ledger snapshots, append-only audit
+--   snapshots, protected chart-of-accounts, period-lock enforcement, signed-document
+--   protection. They also refuse this authorised one-off wipe. We disable only the
+--   *USER* triggers on the affected tables (FK cascade/restrict enforcement stays ON,
+--   so the delete order is still integrity-checked) and re-enable them at the end.
+--   Enumerated authoritatively from the live pg_trigger catalog (2026-07-24).
 -- =====================================================================================
+
+-- Disable business-rule guard triggers for the wipe (FK enforcement stays on).
+ALTER TABLE public.quote_lines                  DISABLE TRIGGER USER;
+ALTER TABLE public.bookkeeping_accounts         DISABLE TRIGGER USER;
+ALTER TABLE public.filing_model_snapshots       DISABLE TRIGGER USER;
+ALTER TABLE public.job_documents                DISABLE TRIGGER USER;
+ALTER TABLE public.journal_lines                DISABLE TRIGGER USER;
+ALTER TABLE public.journals                     DISABLE TRIGGER USER;
+ALTER TABLE public.ledger_entries               DISABLE TRIGGER USER;
+ALTER TABLE public.onboarding_approval_snapshots DISABLE TRIGGER USER;
+ALTER TABLE public.period_locks                 DISABLE TRIGGER USER;
+ALTER TABLE public.revenue_events               DISABLE TRIGGER USER;
+ALTER TABLE public.vat_codes                    DISABLE TRIGGER USER;
+ALTER TABLE public.filings                      DISABLE TRIGGER USER;
+ALTER TABLE public.onboarding_applications      DISABLE TRIGGER USER;
 
 -- ---------------------------------------------------------------------------------------
 -- 0. Break circular / NO-ACTION cross-table FKs before deleting (all scoped to the org).
@@ -572,6 +596,21 @@ DELETE FROM public.clients
   WHERE organization_id = 'a857a12c-a125-41de-bb45-9eb556d5b467';
 DELETE FROM public.leads
   WHERE organization_id = 'a857a12c-a125-41de-bb45-9eb556d5b467';
+
+-- Re-enable the business-rule guard triggers disabled at the top.
+ALTER TABLE public.quote_lines                  ENABLE TRIGGER USER;
+ALTER TABLE public.bookkeeping_accounts         ENABLE TRIGGER USER;
+ALTER TABLE public.filing_model_snapshots       ENABLE TRIGGER USER;
+ALTER TABLE public.job_documents                ENABLE TRIGGER USER;
+ALTER TABLE public.journal_lines                ENABLE TRIGGER USER;
+ALTER TABLE public.journals                     ENABLE TRIGGER USER;
+ALTER TABLE public.ledger_entries               ENABLE TRIGGER USER;
+ALTER TABLE public.onboarding_approval_snapshots ENABLE TRIGGER USER;
+ALTER TABLE public.period_locks                 ENABLE TRIGGER USER;
+ALTER TABLE public.revenue_events               ENABLE TRIGGER USER;
+ALTER TABLE public.vat_codes                    ENABLE TRIGGER USER;
+ALTER TABLE public.filings                      ENABLE TRIGGER USER;
+ALTER TABLE public.onboarding_applications      ENABLE TRIGGER USER;
 
 DROP TABLE IF EXISTS _subjects;
 
