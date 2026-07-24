@@ -51,5 +51,26 @@
       "Refresh docs/audits/unapplied-migrations-baseline.json with the applied version.",
       "Notify Claude to run the entities-zeroed + config-survives verifications and complete this receipt."
     ]
+  },
+  "post_publish_verification": {
+    "runner": "scripts/verify-post-publish.ts",
+    "environment": "LIVE (production) database via managed psql (PG* env vars)",
+    "gate_policy": "This release MUST NOT be moved from docs/releases/pending/ to docs/releases/ and MUST NOT be marked status=applied-verified unless every check below returns result=pass against LIVE. Any mismatch blocks finalization; the release stays pending and an incident record is required.",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "checks": [
+      { "id": "leads-zero",                    "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.leads WHERE organization_id = $1" },
+      { "id": "clients-zero",                  "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.clients WHERE organization_id = $1" },
+      { "id": "companies-zero",                "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.companies WHERE organization_id = $1" },
+      { "id": "jobs-zero",                     "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.jobs WHERE organization_id = $1" },
+      { "id": "quotes-zero",                   "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.quotes WHERE organization_id = $1" },
+      { "id": "onboarding-zero",               "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.onboarding_applications WHERE organization_id = $1" },
+      { "id": "engagements-zero",              "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.engagements WHERE organization_id = $1" },
+      { "id": "deadlines-zero",                "kind": "count_equals", "expected": 0, "sql": "SELECT count(*) FROM public.deadlines WHERE organization_id = $1" },
+      { "id": "services-catalog-preserved",   "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.services_catalog WHERE organization_id = $1" },
+      { "id": "automation-rules-preserved",   "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.automation_rules WHERE organization_id = $1" },
+      { "id": "organization-users-preserved", "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.organization_users WHERE organization_id = $1" },
+      { "id": "audit-log-preserved",          "kind": "count_at_least", "expected": 1, "sql": "SELECT count(*) FROM public.audit_log WHERE organization_id = $1" },
+      { "id": "schema-migrations-recorded",   "kind": "count_equals",   "expected": 1, "sql": "SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20260724183022' AND $1 IS NOT NULL" }
+    ]
   }
 }
