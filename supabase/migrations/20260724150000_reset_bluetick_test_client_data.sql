@@ -208,8 +208,9 @@ DELETE FROM public.filing_queue
 -- --- Email message children (before email_messages / client_messages) ----------------
 DELETE FROM public.email_attachments
   WHERE email_message_id IN (SELECT id FROM public.email_messages WHERE organization_id = 'a857a12c-a125-41de-bb45-9eb556d5b467');
+-- email_send_log.message_id is TEXT (not uuid); email_messages.id is uuid → cast the subquery to text.
 DELETE FROM public.email_send_log
-  WHERE message_id IN (SELECT id FROM public.email_messages WHERE organization_id = 'a857a12c-a125-41de-bb45-9eb556d5b467');
+  WHERE message_id IN (SELECT id::text FROM public.email_messages WHERE organization_id = 'a857a12c-a125-41de-bb45-9eb556d5b467');
 DELETE FROM public.message_entity_links
   WHERE organization_id = 'a857a12c-a125-41de-bb45-9eb556d5b467'
     AND ( entity_id IN (SELECT id FROM _subjects)

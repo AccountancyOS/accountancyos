@@ -30,7 +30,7 @@
   "migrations": [
     {
       "path": "supabase/migrations/20260724150000_reset_bluetick_test_client_data.sql",
-      "sha256": "2cb9edd707f839ef81e6f3dd5568ed508cd31b19a02f8b6dc9ab7c4e44590c70",
+      "sha256": "4910af2c4100cd0ad5dca6e837bae7912dd4d713cefec4afa19e33b232e832b4",
       "expected_objects": [
         {
           "id": "entities-zeroed",
