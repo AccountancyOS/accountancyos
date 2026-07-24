@@ -22,8 +22,10 @@
         {
           "id": "approve-routes-through-materialize",
           "object": "function public.lifecycle_approve_onboarding body PERFORMs public.lifecycle_materialize_jobs and contains NO 'INSERT INTO jobs'",
-          "result": "pending",
-          "verify_via": "catalog_functions name_like 'lifecycle_approve_onboarding' include_source: assert definition contains 'lifecycle_materialize_jobs(' and does NOT contain 'INSERT INTO jobs'. Record the new definition_hash (expect != 5a7c9aa0c10beddb9a80394a2590e2a5)."
+          "result": "pass",
+          "verified_by": "claude (independent) + owner",
+          "verified_at": "2026-07-24",
+          "evidence": "catalog_functions include_source: live body PERFORMs public.lifecycle_materialize_jobs(...) and contains NO 'INSERT INTO jobs'. New definition_hash 237ff25e91bc06c368195f983a2c355e (was 5a7c9aa0c10beddb9a80394a2590e2a5). Corroborated by owner's live verification."
         },
         {
           "id": "onboarding-jobs-get-deadlines",
