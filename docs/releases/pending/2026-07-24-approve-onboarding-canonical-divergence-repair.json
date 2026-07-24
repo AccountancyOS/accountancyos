@@ -1,0 +1,52 @@
+{
+  "release_id": "2026-07-24-approve-onboarding-canonical-divergence-repair",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-24T00:00:00Z",
+  "approver": null,
+  "summary": "Increment 1 (Seam 2). Forward-only divergence repair: re-issue lifecycle_approve_onboarding so onboarding-approved jobs are created through the canonical single-source engine (lifecycle_materialize_jobs), which produces statutory deadlines. The live function had drifted back to a pre-consolidation inline body that created jobs with automation_source='template', no periods, and NO deadlines. git-HEAD 20260629091343 already contained this fix but it never took effect live.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "live_symptom": "Onboarding-approved jobs land with filing_deadline NULL and no rows in public.deadlines. Verified live 2026-07-24: 6 onboarding applications' jobs all have automation_source='template', period_label='2026', filing_deadline NULL.",
+    "root_cause": "live-vs-git divergence — the live lifecycle_approve_onboarding (def hash 5a7c9aa0c10beddb9a80394a2590e2a5) runs an inline INSERT INTO jobs (...) instead of calling the canonical engine. Confirmed byte-diff vs git-HEAD 20260629091343: identical everywhere except the IF v_onboarding.quote_id block.",
+    "engine_decision": "lifecycle_materialize_jobs -> lifecycle_upsert_job_with_deadlines -> calculate_deadline is the confirmed single source of truth (all other live paths use it; src/test/regression/job-creation-single-source.test.ts enforces it). The canonical_spine_v1 trigger engine is intentionally inert (nothing creates canonical_spine_v1 jobs)."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260724113000_repair_approve_onboarding_canonical_engine_divergence.sql",
+      "sha256": "86b4eb6a2f3735d450a31344b859817f2566bb8a5913e77b6edf3dc3f36e1f91",
+      "expected_objects": [
+        {
+          "id": "approve-routes-through-materialize",
+          "object": "function public.lifecycle_approve_onboarding body PERFORMs public.lifecycle_materialize_jobs and contains NO 'INSERT INTO jobs'",
+          "result": "pending",
+          "verify_via": "catalog_functions name_like 'lifecycle_approve_onboarding' include_source: assert definition contains 'lifecycle_materialize_jobs(' and does NOT contain 'INSERT INTO jobs'. Record the new definition_hash (expect != 5a7c9aa0c10beddb9a80394a2590e2a5)."
+        },
+        {
+          "id": "onboarding-jobs-get-deadlines",
+          "object": "A newly approved onboarding produces public.deadlines rows with non-null due_date for its jobs",
+          "result": "pending",
+          "verify_via": "Behavioural: approve a real onboarding (company with year_end_month/day, or an SA individual) via approve_onboarding_transactional, then db_select public.deadlines filtered to the created job_ids — expect statutory rows with due_date set (company_accounts, corporation_tax(+payment), confirmation_statement, vat_return, self_assessment, payroll per the quote lines)."
+        }
+      ]
+    }
+  ],
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260724113000_repair_approve_onboarding_canonical_engine_divergence.sql via the Lovable migration flow.",
+      "Confirm the approval card returns green AND a row exists in supabase_migrations.schema_migrations (publish is a second gate — verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the two expected-object verifications and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Legacy/test data: pre-existing onboarding jobs (6 applications) have automation_source='template' + filing_deadline NULL. Decide with owner: clear as pre-pilot test data, OR backfill deadlines by re-materializing for the still-active clients. Not part of this migration.",
+    "Period-date quality: lifecycle_materialize_jobs derives company periods from companies.year_end_month/day and uses calculate_deadline's +9m/+12m approximation (ignores the CH first-accounts 21-month rule and real accounts_next_due). Consistent with quote-acceptance today; true-accurate CH dates are a later increment."
+  ]
+}

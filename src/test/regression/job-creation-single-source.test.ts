@@ -35,4 +35,31 @@ describe("job/deadline creation single source", () => {
     // rollover must call the shared core, not re-implement job creation
     expect(migAll).toMatch(/tg_job_completed_rollover[\s\S]*?lifecycle_upsert_job_with_deadlines/);
   });
+
+  it("the LATEST lifecycle_approve_onboarding routes through the canonical engine, never a raw jobs INSERT", () => {
+    // Guards against the live-vs-git divergence repaired in
+    // 20260724113000_repair_approve_onboarding_canonical_engine_divergence.sql:
+    // onboarding approval must materialize jobs+deadlines via lifecycle_materialize_jobs,
+    // not hand-roll an inline `INSERT INTO jobs (...) 'template'` (which produced
+    // deadline-less jobs). We check the NEWEST migration that (re)defines the function,
+    // since older migrations legitimately still contain the retired inline body.
+    const approveFiles = readdirSync(migDir)
+      .filter((f) => f.endsWith(".sql"))
+      .filter((f) =>
+        /FUNCTION public\.lifecycle_approve_onboarding/.test(
+          readFileSync(resolve(migDir, f), "utf8"),
+        ),
+      )
+      .sort(); // filenames are timestamp-prefixed → lexical sort == chronological
+    expect(approveFiles.length).toBeGreaterThan(0);
+
+    const latest = readFileSync(
+      resolve(migDir, approveFiles[approveFiles.length - 1]),
+      "utf8",
+    );
+    // Must delegate to the single-source engine…
+    expect(latest).toMatch(/lifecycle_materialize_jobs/);
+    // …and must NOT re-introduce an inline jobs INSERT inside approve.
+    expect(latest).not.toMatch(/INSERT INTO jobs/i);
+  });
 });
