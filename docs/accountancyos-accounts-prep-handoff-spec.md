@@ -1,6 +1,6 @@
 # Accounts-Preparation Handoff — Specification (Increments 2 & 3)
 
-**Status:** Draft for owner sign-off (2026-07-24). No code until approved.
+**Status:** LOCKED 2026-07-24 (all decisions D1–D4 resolved by owner). Ready for implementation planning.
 **Owner brief:** Bookkeeping/TB → Accounts Prep → Filing, with a strict draft-vs-final discipline.
 **Governing architecture (non-negotiable, CLAUDE.md):** Ledger → Adjustments → Normalised Model → Workpapers → Review → Approval → **Approved Model Version** → Filing Projection → HMRC. The HMRC layer never owns figures of record.
 
@@ -117,6 +117,17 @@ New first-class model — **the default adjustment mechanism for every client ty
 6. Switch the workpaper finalise to the transactional `finalize_workpaper_safe` RPC (exists, unused) so lock + snapshot + filing creation are atomic and server-enforced.
 7. **Build the accounts (CH) lane** to match: `enforce_accounts_filing_gate` + an accounts submit path.
 
+### 4e. Permissions, approval mode & segregation of duties
+Finalisation and approval are **grantable permissions**, not hard-coded to owner/admin. Generalise the existing `can_finalize_workpapers` (owner/admin-only today) into two permission-checked capabilities a practice can grant to **roles or specific individuals** (following the established role-tier pattern, e.g. `org_settings.automation_rule_management_mode`):
+- **`can_finalise_accounts`** — prepare, compute, adjust, and finalise/lock the authoritative snapshot.
+- **`can_approve_filing`** — approve a finalised snapshot for filing.
+
+New practice-level setting **`require_independent_approval_before_filing`** on `org_settings`, **default OFF**:
+- **OFF (default):** a user with `can_finalise_accounts` may finalise **and** approve **and** proceed to filing in one flow — self-approval permitted. No owner/admin gate.
+- **ON:** finalisation and approval are separate acts. The approver must hold `can_approve_filing` **and must be a different user** than the preparer/finaliser — `approved_by ∉ {prepared_by, finalised_by}`. Enforced both in the approval RPC and by a DB check on the filing-approval gate (a self-approval is rejected). Filing stays blocked until a valid independent approval exists.
+
+In **all** cases: filing consumes **only** the frozen final snapshot, and the full audit trail records **who prepared, finalised, approved and filed, with timestamps** (`prepared_by`/`finalised_by` on the workpaper, `approved_by`/`approved_at` on `filing_approvals`, filer + time on `filing_submissions`).
+
 ---
 
 ## 5. Data-model changes (additive)
@@ -124,16 +135,18 @@ New first-class model — **the default adjustment mechanism for every client ty
 - New: `accounts_prep_journals`, `accounts_prep_journal_lines` (+ RLS + audit).
 - `filing_model_snapshots`: immutability trigger.
 - New `source_type` value `ACCOUNTS_PREP_ADJUSTMENT` (excluded from the post-back dedup allow-list).
+- `org_settings`: `require_independent_approval_before_filing boolean NOT NULL DEFAULT false`.
+- Permissions: capabilities `can_finalise_accounts` + `can_approve_filing`, grantable to roles **or** individuals (generalise `can_finalize_workpapers`); segregation check `approved_by ∉ {prepared_by, finalised_by}` enforced in the approval RPC + filing-approval gate when the setting is ON.
 - New RPCs: `create_tb_snapshot`, `finalise_tb_snapshot`, `regenerate_tb_snapshot`; adjustment approve/post/reverse RPCs; production `set_filing_snapshot` wiring.
 All shipped as small additive migrations per the release contract, each verified live.
 
 ---
 
-## 6. Decisions needed from the owner
-- **D1 — Adjustment approval authority:** who can approve an accounts-prep journal (owner/admin only, or any preparer with a separate reviewer)? Recommend: preparer creates, owner/admin approves (mirrors workpaper finalise).
-- **D2 — Post-back scope:** confirm post-back is offered **only** for native-bookkeeping clients (external-books clients keep adjustments in the accounts-prep layer only). Recommended.
-- **D3 — Snapshot ↔ period-lock coupling:** should "Finalise accounts" also set the period lock at the year-end date (preventing further back-posting into a filed period)? Recommend **yes** — finalising authoritative accounts locks the period; reopening requires owner + reason + audit.
-- **D4 — Approval-system convergence:** converge CT/accounts + VAT onto one approval model (`filing_approvals`) now, or leave VAT's column-based approval and just document the SoT? Recommend: leave VAT working, document, converge post-launch (avoid destabilising the one working lane).
+## 6. Decisions — RESOLVED (spec locked 2026-07-24)
+- **D1 — Approval authority & segregation:** NOT hard-coded to owner/admin. Finalisation and approval are **grantable permissions** (`can_finalise_accounts`, `can_approve_filing`) assignable to roles or individuals. Practice setting **`require_independent_approval_before_filing`** (default **OFF**): off → a permitted preparer may finalise, approve and file; on → a separately authorised person must approve and **cannot approve their own work** (`approved_by ∉ {prepared_by, finalised_by}`). Full prepared/finalised/approved/filed audit trail in all cases. Filing consumes only the frozen final snapshot. (See §4e.)
+- **D2 — Post-back scope:** post-back to the ledger is available **only for native-bookkeeping clients**; external-books clients keep adjustments in the accounts-prep layer. **Locked.**
+- **D3 — Finalisation locks the period:** finalising accounts sets the year-end period lock; reopening requires the appropriate permission, a reason, and a complete audit trail. **Locked.**
+- **D4 — Approval-system drift:** leave the working VAT approval lane unchanged for launch; converge CT/accounts on `filing_approvals` now; document VAT convergence as a post-launch item. **Locked.**
 
 ---
 
