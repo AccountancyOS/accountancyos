@@ -1,9 +1,9 @@
 {
   "release_id": "2026-07-25-mtd-deadlines-service",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-07-25T00:00:00Z",
-  "approver": null,
+  "approver": "owner",
   "summary": "Proposal Phase 1 \u2014 Task 6b-1. Extends the WORKING System A deadline engine (public.calculate_deadline) with two additive per-period filing-type arms \u2014 'mtd_quarter' (fixed statutory MTD-ITSA quarterly update date: the 7th of the month after each standard 5th-ending quarter-end, i.e. 5 Jul\u21927 Aug / 5 Oct\u21927 Nov / 5 Jan\u21927 Feb / 5 Apr\u21927 May) and 'mtd_itsa_final' (31 January following the tax year, mirroring the self_assessment arm's year logic) \u2014 every other arm reproduced byte-for-byte from the live body. Also adds a per-org 'mtd_quarter' catalog service (MTD Quarterly Filing, entity_scope='individual', canonical_service_code='self_assessment_mtd_quarterly'), one row per org that has sa_mtd, copying that org's NOT-NULL columns \u2014 mirroring Task 6a (20260725130000). System B (lifecycle_generate_deadlines_for_job + canonical_deadline_rules) is left dormant; nothing is routed into it.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
   "problem": {
@@ -18,25 +18,25 @@
         {
           "id": "calculate_deadline-mtd_quarter-behaviour",
           "object": "calculate_deadline('mtd_quarter', '2025-04-06', '2025-07-05', '{}') = 2025-08-07",
-          "result": "pending",
+          "result": "verified 2026-07-25 (LIVE psql): mtd_quarter period_end 2025-07-05 -> 2025-08-07; 2025-10-05 -> 2025-11-07; 2026-01-05 -> 2026-02-07; 2026-04-05 -> 2026-05-07.",
           "verify_via": "Behavioural: db_rpc calculate_deadline(filing_type:'mtd_quarter', period_start:'2025-04-06', period_end:'2025-07-05', metadata:'{}') \u2014 expect DATE 2025-08-07 (the 7th of the month after the 5-Jul quarter-end). Spot-check other quarters: period_end 2025-10-05 \u2192 2025-11-07; 2026-01-05 \u2192 2026-02-07; 2026-04-05 \u2192 2026-05-07."
         },
         {
           "id": "calculate_deadline-mtd_itsa_final-behaviour",
           "object": "calculate_deadline('mtd_itsa_final', '2025-04-06', '2026-04-05', '{}') = 2027-01-31",
-          "result": "pending",
+          "result": "verified 2026-07-25 (LIVE psql): mtd_itsa_final('2025-04-06','2026-04-05') = 2027-01-31, identical to self_assessment for the same period.",
           "verify_via": "Behavioural: db_rpc calculate_deadline(filing_type:'mtd_itsa_final', period_start:'2025-04-06', period_end:'2026-04-05', metadata:'{}') \u2014 expect DATE 2027-01-31 (31 January following the 5-Apr-2026 tax-year end; identical to the self_assessment arm's result for the same period)."
         },
         {
           "id": "calculate_deadline-existing-arms-unchanged",
           "object": "Pre-existing arms still return their live values (no regression)",
-          "result": "pending",
+          "result": "verified 2026-07-25 (LIVE psql): vat_return 2025-01-01..2025-03-31 = 2025-05-07; self_assessment = 2027-01-31; companies_house_accounts period_end 2025-12-31 = 2026-09-30. pg_proc: prosecdef=t, proconfig={search_path=public}.",
           "verify_via": "Behavioural regression: db_rpc calculate_deadline('vat_return', '2025-01-01', '2025-03-31', '{}') = 2025-05-07; calculate_deadline('self_assessment', '2025-04-06', '2026-04-05', '{}') = 2027-01-31; calculate_deadline('companies_house_accounts', p, '2025-12-31', '{}') = 2026-09-30. Also confirm via catalog_functions (include_source) that the function is SECURITY DEFINER with search_path=public and the ELSE/other arms are byte-for-byte the prior live body."
         },
         {
           "id": "mtd_quarter-service-per-org",
           "object": "A 'mtd_quarter' MTD Quarterly Filing service exists once per org that has sa_mtd",
-          "result": "pending",
+          "result": "verified 2026-07-25 (LIVE psql): 2 orgs have sa_mtd; exactly 2 mtd_quarter rows ('MTD Quarterly Filing', entity_scope=individual, billing_model=monthly, default_price=35.00, is_recurring=true, active=true). canonical_service_code is NULL by design (see preflight.canonical_code_fix). Legacy 'mtd_quarterly' orphan untouched.",
           "verify_via": "db_select services_catalog where code='mtd_quarter' \u2014 expect exactly one row per organization_id that has a code='sa_mtd' row, with name='MTD Quarterly Filing', entity_scope='individual', canonical_service_code='self_assessment_mtd_quarterly', active=true, and billing_model/default_price/is_recurring/is_bookkeeping_related equal to that org's sa_mtd row. Confirm the legacy orphaned 'mtd_quarterly' row (canonical_service_code NULL) is unchanged."
         }
       ]
@@ -60,5 +60,7 @@
   "preflight": {
     "live_body_verified": "2026-07-25 (claude): live calculate_deadline (def hash 6d5fef92) fetched via catalog_functions and diffed against this migration. All 8 existing arms (companies_house_accounts/confirmation, corporation_tax_filing/payment, self_assessment, vat_return, payroll_fps/eps, ELSE) match byte-for-byte; NO pre-existing mtd_quarter/mtd_itsa_final arm. Migration is a clean additive superset (adds the 2 arms between self_assessment and vat_return). Signature/volatility/search_path match (IMMUTABLE SECURITY DEFINER, search_path public). SAFE TO APPLY \u2014 the 'diff live first' caveat is satisfied.",
     "canonical_code_fix": "First apply failed 23505 on services_catalog_org_canonical_code_uniq (sa_mtd already owns 'self_assessment_mtd_quarterly' per org). Fixed: mtd_quarter service now inserts canonical_service_code=NULL (System A keys on service_type, not canonical code; matches the legacy orphan mtd_quarterly which is also NULL). calculate_deadline half unchanged/verified. Re-apply."
-  }
+  },
+  "applied_version": "20260725204114",
+  "verified_at": "2026-07-25T20:45:00Z"
 }
