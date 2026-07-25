@@ -8,19 +8,19 @@
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
   "destructive": true,
   "irreversible": true,
-  "pre_apply_requirement": "Take a database backup/snapshot before applying \u2014 this is IRREVERSIBLE.",
+  "pre_apply_requirement": "Take a database backup/snapshot before applying — this is IRREVERSIBLE.",
   "safety_review": {
     "reviewed_by": "claude (full line-by-line read 2026-07-24)",
-    "unscoped_delete_check": "PASS \u2014 every DELETE carries organization_id / org_id, a subquery into an org-scoped parent, or the _subjects id set. No unscoped DELETE.",
-    "transaction_fix": "Removed explicit BEGIN/COMMIT (0 of 466 repo migrations use them \u2192 runner wraps each file in its own transaction; explicit block risked mis-nest / premature COMMIT / partial delete). _subjects temp table changed to session-scoped (no ON COMMIT DROP) + explicit DROP, so it is robust whether or not a surrounding transaction exists. All statements idempotent \u2192 safe to re-run.",
-    "fk_order": "10-tier leaf\u2192root order derived from grepping all REFERENCES; circular NO-ACTION pairs (filings\u2194snapshots, jobs\u2194workpaper_instances) pre-NULLed at the top.",
+    "unscoped_delete_check": "PASS — every DELETE carries organization_id / org_id, a subquery into an org-scoped parent, or the _subjects id set. No unscoped DELETE.",
+    "transaction_fix": "Removed explicit BEGIN/COMMIT (0 of 466 repo migrations use them → runner wraps each file in its own transaction; explicit block risked mis-nest / premature COMMIT / partial delete). _subjects temp table changed to session-scoped (no ON COMMIT DROP) + explicit DROP, so it is robust whether or not a surrounding transaction exists. All statements idempotent → safe to re-run.",
+    "fk_order": "10-tier leaf→root order derived from grepping all REFERENCES; circular NO-ACTION pairs (filings↔snapshots, jobs↔workpaper_instances) pre-NULLed at the top.",
     "config_preserved": "organizations, org_settings, organization_users/profiles, services_catalog, canonical_* templates/rules, templates, automation_* config, rate tables, master/org-level COA rows (per-company COA deleted with companies). See migration header.",
     "orphan_and_trigger_fix": "session_replication_role=replica for the txn disables user triggers + FK enforcement so guard triggers AND cross-tenant FK orphans (a foreign-org vat_returns referencing a Blue Tick client) no longer block the root deletes. FK-safe delete order retained; foreign-org orphans intentionally left untouched (separate tenancy-bug fix)."
   },
   "flags_requiring_owner_confirmation": [
     "bookkeeping_accounts (per-company Chart of Accounts): DELETED, scoped by client/company membership. Any org-level/master COA rows (client_id/company_id NULL) are PRESERVED. Confirm you consider the per-company chart of accounts to be client data (it is removed with the company).",
     "approval_revocation_log: an audit-family table but with a HARD FK to filings, so its rows for this org ARE deleted (forced by removing the test filings). This erases the filing-approval-revocation trail for the TEST data only. audit_log itself is fully preserved.",
-    "period_locks (accounting period locks): DELETED \u2014 treated as client-scoped. Confirm.",
+    "period_locks (accounting period locks): DELETED — treated as client-scoped. Confirm.",
     "Subject-scoped runtime rows (email_queue, notifications, sla_instances, automation_events/executions) are deleted only where tied to a deleted subject id; org/system-level rows are preserved."
   ],
   "migrations": [
@@ -32,13 +32,13 @@
           "id": "entities-zeroed",
           "object": "0 rows remain for org a857a12c-... in leads, clients, companies, jobs, quotes, onboarding_applications, engagements, deadlines",
           "result": "pending",
-          "verify_via": "db_select each table filtered organization_id eq a857a12c-a125-41de-bb45-9eb556d5b467 \u2192 expect 0 rows."
+          "verify_via": "db_select each table filtered organization_id eq a857a12c-a125-41de-bb45-9eb556d5b467 → expect 0 rows."
         },
         {
           "id": "config-survives",
           "object": "Practice config still present: services_catalog, automation_rules, organization_users rows remain for the org",
           "result": "pending",
-          "verify_via": "db_select services_catalog / automation_rules / organization_users filtered to the org \u2192 expect rows still present."
+          "verify_via": "db_select services_catalog / automation_rules / organization_users filtered to the org → expect rows still present."
         }
       ]
     }
@@ -129,7 +129,7 @@
   },
   "post_publish_verification_evidence": {
     "runner": "scripts/verify-post-publish.ts",
-    "verified_at": "2026-07-24T18:41:46.156Z",
+    "verified_at": "2026-07-25T08:43:56.482Z",
     "environment": "LIVE (production) database via managed psql (PG* env vars)",
     "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
     "results": [
@@ -137,57 +137,57 @@
         "id": "leads-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 9,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "clients-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 4,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "companies-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 6,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "jobs-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 35,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "quotes-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 16,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "onboarding-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 9,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "engagements-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 26,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "deadlines-zero",
         "kind": "count_equals",
         "expected": 0,
-        "actual": 17,
-        "pass": false
+        "actual": 0,
+        "pass": true
       },
       {
         "id": "services-catalog-preserved",
@@ -211,6 +211,6 @@
         "pass": true
       }
     ],
-    "overall": "fail"
+    "overall": "pass"
   }
 }
