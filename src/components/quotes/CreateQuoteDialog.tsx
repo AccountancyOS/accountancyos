@@ -38,7 +38,112 @@ import {
   previousAccountsPeriod,
   type AccountsPeriod,
 } from "@/lib/proposal/accounts-periods";
+import {
+  isVatServiceCode,
+  buildVatLines,
+  vatGeneratorArgs,
+  defaultVatWindow,
+  isVatConfigComplete,
+  isVatGroupValid,
+  vatConfigFromCompany,
+  type VatPeriod,
+  type VatConfig,
+  type VatFrequency,
+} from "@/lib/proposal/vat-periods";
 import { Badge } from "@/components/ui/badge";
+
+/**
+ * Proposal Phase 1 T5b — per-VAT-service group state. The frequency/stagger and
+ * ongoing-work choices are group-level (not per line): the generator is called
+ * once per group and each SELECTED period becomes its own vat_return line.
+ */
+interface VatGroup extends VatConfig {
+  /** Whether ongoing VAT work (not just historic catch-up) is being proposed. */
+  ongoing: boolean;
+  /** The label of the period marked as the FIRST ongoing VAT period. */
+  ongoingStartLabel: string | null;
+}
+
+const EMPTY_VAT_GROUP: VatGroup = {
+  frequency: null,
+  staggerGroup: null,
+  annualEndMonth: null,
+  ongoing: true,
+  ongoingStartLabel: null,
+};
+
+const VAT_MONTHS: { value: number; label: string }[] = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
+/**
+ * Reconcile the VAT lines for one service to exactly `selectedPeriods`, one
+ * period-carrying line per period (deduped/sorted by `buildVatLines`). Existing
+ * price/billing for a surviving period is preserved. When the selection is
+ * empty a single bare "anchor" line is kept so the group's config UI stays
+ * visible. The rebuilt group is kept where the first existing line for that
+ * service sat.
+ */
+function reconcileVatLines(
+  prev: QuoteLine[],
+  serviceId: string,
+  defaultPrice: number,
+  selectedPeriods: VatPeriod[]
+): QuoteLine[] {
+  const priceByLabel = new Map<string, { unit_price: number; billing_frequency: "now" | "monthly" }>();
+  prev.forEach((l) => {
+    if (l.service_id === serviceId && l.period_label) {
+      priceByLabel.set(l.period_label, {
+        unit_price: l.unit_price,
+        billing_frequency: l.billing_frequency,
+      });
+    }
+  });
+
+  const built: QuoteLine[] = buildVatLines(
+    { service_id: serviceId, default_price: defaultPrice },
+    selectedPeriods
+  ).map((b) => {
+    const existing = priceByLabel.get(b.period_label);
+    return existing
+      ? { ...b, unit_price: existing.unit_price, billing_frequency: existing.billing_frequency }
+      : b;
+  });
+
+  const group: QuoteLine[] =
+    built.length > 0
+      ? built
+      : [
+          {
+            service_id: serviceId,
+            quantity: 1,
+            unit_price: defaultPrice,
+            billing_frequency: "monthly",
+            period_start: null,
+            period_end: null,
+            period_label: null,
+          },
+        ];
+
+  const others = prev.filter((l) => l.service_id !== serviceId);
+  const firstIdx = prev.findIndex((l) => l.service_id === serviceId);
+  if (firstIdx === -1) return [...others, ...group];
+  const precedingOthers = prev.slice(0, firstIdx).filter((l) => l.service_id !== serviceId).length;
+  const result = [...others];
+  result.splice(precedingOthers, 0, ...group);
+  return result;
+}
 
 interface CreateQuoteDialogProps {
   open: boolean;
@@ -117,6 +222,15 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   ]);
   const autoPopulatedRef = useRef(false);
 
+  // Proposal Phase 1 T5b — VAT frequency/stagger + generated-period selection.
+  // Group-level config keyed by service_id; generated candidates cached per group.
+  const [vatGroups, setVatGroups] = useState<Record<string, VatGroup>>({});
+  const [vatCandidates, setVatCandidates] = useState<Record<string, VatPeriod[]>>({});
+  const [vatLoading, setVatLoading] = useState<Record<string, boolean>>({});
+  const vatFetchKeyRef = useRef<Record<string, string>>({});
+  // A stable ~2yr-back → ~1yr-forward candidate window for this dialog session.
+  const vatWindow = useRef(defaultVatWindow()).current;
+
   const { data: leads } = useQuery({
     queryKey: ["leads", organization?.id],
     queryFn: async () => {
@@ -188,6 +302,35 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     if (newLines.length > 0) setLines(newLines);
     autoPopulatedRef.current = true;
   }, [open, initialLeadId, leads, services, lines]);
+
+  // Proposal Phase 1 T5b — generate candidate VAT periods whenever a group's
+  // config becomes complete (or its args change). The DB function
+  // `generate_vat_periods` is the SOLE source of the stagger math + labels;
+  // we never re-implement it here. The name is not yet in the generated
+  // Supabase types, so the call is cast (repo pattern: `(supabase as any).rpc`).
+  useEffect(() => {
+    Object.entries(vatGroups).forEach(([serviceId, group]) => {
+      const args = vatGeneratorArgs(group, vatWindow.from, vatWindow.to);
+      if (!args) return;
+      const key = JSON.stringify(args);
+      if (vatFetchKeyRef.current[serviceId] === key) return;
+      vatFetchKeyRef.current[serviceId] = key;
+      void (async () => {
+        setVatLoading((s) => ({ ...s, [serviceId]: true }));
+        const { data, error } = await (supabase as any).rpc("generate_vat_periods", args);
+        setVatLoading((s) => ({ ...s, [serviceId]: false }));
+        if (error) {
+          toast({
+            title: "Could not generate VAT periods",
+            description: error.message,
+            variant: "destructive",
+          });
+          return;
+        }
+        setVatCandidates((s) => ({ ...s, [serviceId]: (data ?? []) as VatPeriod[] }));
+      })();
+    });
+  }, [vatGroups, vatWindow, toast]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -378,6 +521,93 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     });
   };
 
+  // ── Proposal Phase 1 T5b — VAT period selection helpers ──────────────────
+  const vatDefaultPrice = (serviceId: string): number =>
+    services?.find((s) => s.id === serviceId)?.default_price ?? 0;
+
+  /** The periods currently selected for a VAT service, reconstructed from lines. */
+  const selectedVatPeriods = (serviceId: string): VatPeriod[] =>
+    lines
+      .filter((l) => l.service_id === serviceId && l.period_label && l.period_start && l.period_end)
+      .map((l) => ({
+        period_start: l.period_start as string,
+        period_end: l.period_end as string,
+        period_label: l.period_label as string,
+      }));
+
+  const selectedVatLabels = (serviceId: string): string[] =>
+    selectedVatPeriods(serviceId).map((p) => p.period_label);
+
+  /** Add/remove one generated candidate period from a VAT service group. */
+  const toggleVatPeriod = (serviceId: string, period: VatPeriod) => {
+    const current = selectedVatPeriods(serviceId);
+    const has = current.some((p) => p.period_label === period.period_label);
+    const next = has
+      ? current.filter((p) => p.period_label !== period.period_label)
+      : [...current, period];
+    setLines((prev) => reconcileVatLines(prev, serviceId, vatDefaultPrice(serviceId), next));
+    // If the removed period was the designated first ongoing period, clear it.
+    if (has) {
+      setVatGroups((g) => {
+        const group = g[serviceId];
+        if (group && group.ongoingStartLabel === period.period_label) {
+          return { ...g, [serviceId]: { ...group, ongoingStartLabel: null } };
+        }
+        return g;
+      });
+    }
+  };
+
+  /** Change frequency: reset stagger/month + selected periods + candidates. */
+  const setVatFrequency = (serviceId: string, frequency: VatFrequency) => {
+    setVatGroups((g) => ({
+      ...g,
+      [serviceId]: {
+        ...(g[serviceId] ?? EMPTY_VAT_GROUP),
+        frequency,
+        staggerGroup: null,
+        annualEndMonth: null,
+        ongoingStartLabel: null,
+      },
+    }));
+    setVatCandidates((s) => ({ ...s, [serviceId]: [] }));
+    setLines((prev) => reconcileVatLines(prev, serviceId, vatDefaultPrice(serviceId), []));
+  };
+
+  const setVatStagger = (serviceId: string, staggerGroup: 1 | 2 | 3) => {
+    setVatGroups((g) => ({
+      ...g,
+      [serviceId]: { ...(g[serviceId] ?? EMPTY_VAT_GROUP), staggerGroup, ongoingStartLabel: null },
+    }));
+    setLines((prev) => reconcileVatLines(prev, serviceId, vatDefaultPrice(serviceId), []));
+  };
+
+  const setVatAnnualMonth = (serviceId: string, annualEndMonth: number) => {
+    setVatGroups((g) => ({
+      ...g,
+      [serviceId]: { ...(g[serviceId] ?? EMPTY_VAT_GROUP), annualEndMonth, ongoingStartLabel: null },
+    }));
+    setLines((prev) => reconcileVatLines(prev, serviceId, vatDefaultPrice(serviceId), []));
+  };
+
+  const setVatOngoing = (serviceId: string, ongoing: boolean) => {
+    setVatGroups((g) => ({
+      ...g,
+      [serviceId]: {
+        ...(g[serviceId] ?? EMPTY_VAT_GROUP),
+        ongoing,
+        ongoingStartLabel: ongoing ? g[serviceId]?.ongoingStartLabel ?? null : null,
+      },
+    }));
+  };
+
+  const setVatOngoingStart = (serviceId: string, ongoingStartLabel: string) => {
+    setVatGroups((g) => ({
+      ...g,
+      [serviceId]: { ...(g[serviceId] ?? EMPTY_VAT_GROUP), ongoingStartLabel },
+    }));
+  };
+
   const updateLine = (index: number, field: keyof QuoteLine, value: any) => {
     // Selecting an SA service turns the line into a per-tax-year group: default to
     // the current tax year (one line/one job) and reveal the tax-year multiselect.
@@ -402,6 +632,36 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
             period_confirmed: false,
           };
           return next;
+        });
+        return;
+      }
+      // VAT Return: turn the line into a frequency/stagger-driven period group.
+      // Prefill the config best-effort from a linked company's VAT settings, but
+      // require the accountant to confirm/complete it and select every period.
+      if (service && isVatServiceCode((service as any).code)) {
+        const seed = vatConfigFromCompany(selectedLead as any);
+        setVatGroups((g) => ({
+          ...g,
+          [service.id]: {
+            ...EMPTY_VAT_GROUP,
+            frequency: seed.frequency,
+            staggerGroup: seed.staggerGroup,
+            annualEndMonth: seed.annualEndMonth,
+          },
+        }));
+        setVatCandidates((s) => ({ ...s, [service.id]: [] }));
+        setLines((prev) => {
+          const seeded = [...prev];
+          seeded[index] = {
+            ...seeded[index],
+            service_id: service.id,
+            unit_price: service.default_price,
+            period_start: null,
+            period_end: null,
+            period_label: null,
+            period_confirmed: undefined,
+          };
+          return reconcileVatLines(seeded, service.id, service.default_price, []);
         });
         return;
       }
@@ -458,8 +718,23 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     );
   });
 
+  // Proposal Phase 1 T5b — block submit if a VAT service is added but its
+  // frequency/stagger is unset, no period is selected, or ongoing VAT work is
+  // proposed without an identified first ongoing period.
+  const vatGroupInvalid = Object.entries(vatGroups).some(([serviceId, group]) => {
+    if (!lines.some((l) => l.service_id === serviceId)) return false;
+    return !isVatGroupValid({
+      config: group,
+      selectedLabels: selectedVatLabels(serviceId),
+      ongoing: group.ongoing,
+      ongoingStartLabel: group.ongoingStartLabel,
+    });
+  });
+
   const canSubmit =
-    lines.every((l) => l.service_id && l.quantity > 0) && !unconfirmedAccountsLine;
+    lines.every((l) => l.service_id && l.quantity > 0) &&
+    !unconfirmedAccountsLine &&
+    !vatGroupInvalid;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -533,6 +808,12 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
               const isAccountsGroupHead =
                 isAccounts &&
                 lines.findIndex((l) => l.service_id === line.service_id) === index;
+              const isVat = !!service && isVatServiceCode((service as any).code);
+              // The head line of each VAT group owns the frequency/stagger + period picker.
+              const isVatGroupHead =
+                isVat &&
+                lines.findIndex((l) => l.service_id === line.service_id) === index;
+              const vatGroup = isVat ? vatGroups[line.service_id] ?? EMPTY_VAT_GROUP : null;
               const monthlyPrice = line.billing_frequency === "monthly"
                 ? line.unit_price / 12
                 : line.unit_price;
@@ -650,6 +931,173 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                     )}
                   </div>
                 )}
+                {isVatGroupHead && service && vatGroup && (
+                  <div className="rounded-md border bg-muted/40 p-3 space-y-3">
+                    <div>
+                      <div className="text-sm font-medium">VAT periods ({service.name})</div>
+                      <p className="text-xs text-muted-foreground">
+                        Choose the VAT frequency and stagger, then select every exact period —
+                        including catch-up returns. Each selected period becomes its own VAT line
+                        and job, priced independently.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Frequency</Label>
+                        <Select
+                          value={vatGroup.frequency ?? ""}
+                          onValueChange={(v) => setVatFrequency(service.id, v as VatFrequency)}
+                        >
+                          <SelectTrigger className="w-48" aria-label="VAT frequency">
+                            <SelectValue placeholder="Select frequency..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="quarterly">Quarterly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="annual_accounting">Annual accounting</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {vatGroup.frequency === "quarterly" && (
+                        <div className="space-y-1">
+                          <Label className="text-xs">Stagger group</Label>
+                          <Select
+                            value={vatGroup.staggerGroup ? String(vatGroup.staggerGroup) : ""}
+                            onValueChange={(v) =>
+                              setVatStagger(service.id, Number(v) as 1 | 2 | 3)
+                            }
+                          >
+                            <SelectTrigger className="w-56" aria-label="VAT stagger group">
+                              <SelectValue placeholder="Select stagger..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">Group 1 — Mar/Jun/Sep/Dec</SelectItem>
+                              <SelectItem value="2">Group 2 — Apr/Jul/Oct/Jan</SelectItem>
+                              <SelectItem value="3">Group 3 — May/Aug/Nov/Feb</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {vatGroup.frequency === "annual_accounting" && (
+                        <div className="space-y-1">
+                          <Label className="text-xs">Annual period-end month</Label>
+                          <Select
+                            value={vatGroup.annualEndMonth ? String(vatGroup.annualEndMonth) : ""}
+                            onValueChange={(v) => setVatAnnualMonth(service.id, Number(v))}
+                          >
+                            <SelectTrigger className="w-44" aria-label="VAT annual period-end month">
+                              <SelectValue placeholder="Select month..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {VAT_MONTHS.map((m) => (
+                                <SelectItem key={m.value} value={String(m.value)}>
+                                  {m.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+
+                    {!isVatConfigComplete(vatGroup) && (
+                      <p className="text-xs text-amber-600">
+                        Set the VAT frequency
+                        {vatGroup.frequency === "quarterly"
+                          ? " and stagger group"
+                          : vatGroup.frequency === "annual_accounting"
+                          ? " and period-end month"
+                          : ""}{" "}
+                        to list selectable periods.
+                      </p>
+                    )}
+
+                    {isVatConfigComplete(vatGroup) && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium">
+                          Select every VAT period to file{" "}
+                          {vatLoading[service.id] ? "(loading…)" : ""}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(vatCandidates[service.id] ?? []).map((p) => {
+                            const active = selectedVatLabels(service.id).includes(p.period_label);
+                            return (
+                              <Button
+                                key={p.period_label}
+                                type="button"
+                                size="sm"
+                                variant={active ? "default" : "outline"}
+                                onClick={() => toggleVatPeriod(service.id, p)}
+                              >
+                                {p.period_label}
+                              </Button>
+                            );
+                          })}
+                          {!vatLoading[service.id] &&
+                            (vatCandidates[service.id] ?? []).length === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                No periods generated for this window.
+                              </span>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 pt-1">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              id={`vat-ongoing-${index}`}
+                              checked={vatGroup.ongoing}
+                              onCheckedChange={(v) => setVatOngoing(service.id, v)}
+                            />
+                            <Label
+                              htmlFor={`vat-ongoing-${index}`}
+                              className="text-xs cursor-pointer"
+                            >
+                              Proposing ongoing VAT work
+                            </Label>
+                          </div>
+
+                          {vatGroup.ongoing && (
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs">First ongoing period</Label>
+                              <Select
+                                value={vatGroup.ongoingStartLabel ?? ""}
+                                onValueChange={(v) => setVatOngoingStart(service.id, v)}
+                              >
+                                <SelectTrigger
+                                  className="w-56"
+                                  aria-label="First ongoing VAT period"
+                                >
+                                  <SelectValue placeholder="Identify first ongoing period..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {selectedVatPeriods(service.id).map((p) => (
+                                    <SelectItem key={p.period_label} value={p.period_label}>
+                                      {p.period_label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+
+                        {vatGroup.ongoing && !vatGroup.ongoingStartLabel && (
+                          <p className="text-xs text-amber-600">
+                            Identify the first ongoing VAT period to continue.
+                          </p>
+                        )}
+                        {selectedVatLabels(service.id).length === 0 && (
+                          <p className="text-xs text-amber-600">
+                            Select at least one VAT period.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2 items-end">
                   <div className="flex-1 space-y-2">
                     <Label>Service</Label>
@@ -657,7 +1105,7 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                       value={line.service_id}
                       onValueChange={(value) => updateLine(index, "service_id", value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-label={`Service for line ${index + 1}`}>
                         <SelectValue placeholder="Select service..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -700,6 +1148,13 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                       ) : isAccounts ? (
                         <div className="w-28 space-y-2">
                           <Label>Period</Label>
+                          <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium text-sm">
+                            {line.period_label ?? "—"}
+                          </div>
+                        </div>
+                      ) : isVat ? (
+                        <div className="w-44 space-y-2">
+                          <Label>VAT period</Label>
                           <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium text-sm">
                             {line.period_label ?? "—"}
                           </div>
