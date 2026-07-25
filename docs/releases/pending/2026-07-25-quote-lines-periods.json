@@ -1,0 +1,58 @@
+{
+  "release_id": "2026-07-25-quote-lines-periods",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "approver": null,
+  "summary": "Proposal Phase 1 — Task 1 (FOUNDATION). Additive: three nullable period columns on quote_lines (period_start / period_end / period_label) so a proposal line can pin an EXACT compliance period, and a re-issue of the single-source job engine lifecycle_materialize_jobs so it consumes the line's explicit period when present. Backward-compatible: NULL line periods (every pre-existing line) fall through to the historical computed period unchanged. Function re-issued from the LIVE body (catalog_functions include_source, def hash bb4b609f86e88ec7606363147483065f), preserving all other logic byte-for-byte; the only change is a COALESCE override after the existing period-computation block.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "motivation": "Every other Phase 1 task writes per-period quote_lines (SA per tax year, Accounts per CH period, VAT per stagger period, MTD quarterly/annual/SA as separate jobs). The engine must consume the line's period instead of computing a single one from CURRENT_DATE.",
+    "engine_decision": "lifecycle_materialize_jobs -> lifecycle_upsert_job_with_deadlines is the confirmed single source of truth for job+deadline creation (src/test/regression/job-creation-single-source.test.ts enforces it). This change is additive to that engine only; no second engine introduced.",
+    "based_on": "LIVE body fetched via claude.ai AccountancyOS Lovable MCP catalog_functions(include_source), not the git file, to respect known live-vs-git divergence."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725110000_quote_lines_periods_and_materialize.sql",
+      "sha256": "693845e888e1f654cd5235f1aabc88f3071c234d97a83f150ed4aaeb73589360",
+      "expected_objects": [
+        {
+          "id": "quote-lines-period-columns-exist",
+          "object": "public.quote_lines has columns period_start date, period_end date, period_label text (all nullable)",
+          "result": "pending",
+          "verify_via": "catalog / db_schema on public.quote_lines: confirm the three columns exist with types date/date/text and are nullable. Additive ALTER ... ADD COLUMN IF NOT EXISTS — pre-existing rows keep NULL."
+        },
+        {
+          "id": "materialize-honours-line-period",
+          "object": "function public.lifecycle_materialize_jobs body reads v_line.period_start / v_line.period_end / v_line.period_label and prefers them via COALESCE over the computed fallback",
+          "result": "pending",
+          "verify_via": "catalog_functions include_source on lifecycle_materialize_jobs: confirm the COALESCE(v_line.period_start, ...) / COALESCE(NULLIF(v_line.period_label,''), ...) block is present and the rest of the body matches the prior LIVE body."
+        },
+        {
+          "id": "behavioural-explicit-period-materializes-matching-job",
+          "object": "A quote_line carrying an explicit period materializes a job whose period_label equals the line's period_label (not the computed one)",
+          "result": "pending",
+          "verify_via": "Behavioural: create a quote with one quote_line whose period_start/period_end/period_label are set to an explicit period distinct from today's computed period (e.g. an SA line labelled '2023/24' when the current tax year computes '2025/26'); run lifecycle_materialize_jobs for that quote; db_select public.jobs for the created job and confirm its period_label = '2023/24'. Then create a control line with NULL period columns and confirm it still materializes the computed period_label (backward-compat)."
+        }
+      ]
+    }
+  ],
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260725110000_quote_lines_periods_and_materialize.sql via the Lovable migration flow.",
+      "Confirm the approval card returns green AND a row exists in supabase_migrations.schema_migrations (publish is a second gate — verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the three expected-object verifications and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "risks": [
+    "period_label participates in the job dedup key (org, service_code, entity, period_label). Explicit labels chosen by later Phase 1 tasks (e.g. 'YYYY/YY' for SA, CH year-end labels) intentionally differ from the engine's computed labels, so they will NOT collide with computed jobs — a distinct label is a distinct job, which is the desired per-period behaviour. Care is only needed if a future caller supplies a label byte-identical to what the engine would have computed for the SAME period — that is a de-dup (same job), which is correct.",
+    "This migration only makes the engine CAPABLE of honouring line periods; no caller yet writes non-NULL period columns, so live behaviour is unchanged until later Phase 1 tasks populate them."
+  ]
+}
