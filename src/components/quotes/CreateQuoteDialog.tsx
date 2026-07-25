@@ -25,6 +25,12 @@ import { Plus, X, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { getDefaultServiceCodesForLeadType, isIncludedLine } from "@/lib/quote-defaults";
+import {
+  isSaServiceCode,
+  buildSaLines,
+  saStartYearFromLabel,
+  recentTaxYearStartYears,
+} from "@/lib/proposal/sa-periods";
 
 interface CreateQuoteDialogProps {
   open: boolean;
@@ -37,6 +43,51 @@ interface QuoteLine {
   quantity: number;
   unit_price: number;
   billing_frequency: "now" | "monthly";
+  // Proposal Phase 1 T3: exact compliance period carried per line (SA tax year, etc.).
+  // The materialize engine COALESCEs these over its computed fallback → one job per period.
+  period_start?: string | null;
+  period_end?: string | null;
+  period_label?: string | null;
+}
+
+/**
+ * Reconcile the SA lines for one service to exactly `selectedStartYears`, one
+ * period-carrying line per year. Prices/billing already set for a year that
+ * survives the change are preserved; new years default to the service price.
+ * The rebuilt group is kept where the first existing line for that service sat.
+ */
+function reconcileSaLines(
+  prev: QuoteLine[],
+  serviceId: string,
+  defaultPrice: number,
+  selectedStartYears: number[]
+): QuoteLine[] {
+  const priceByYear = new Map<number, { unit_price: number; billing_frequency: "now" | "monthly" }>();
+  prev.forEach((l) => {
+    if (l.service_id === serviceId && l.period_label) {
+      priceByYear.set(saStartYearFromLabel(l.period_label), {
+        unit_price: l.unit_price,
+        billing_frequency: l.billing_frequency,
+      });
+    }
+  });
+
+  const built: QuoteLine[] = buildSaLines({ service_id: serviceId, default_price: defaultPrice }, selectedStartYears).map(
+    (b) => {
+      const existing = priceByYear.get(saStartYearFromLabel(b.period_label));
+      return existing ? { ...b, unit_price: existing.unit_price, billing_frequency: existing.billing_frequency } : b;
+    }
+  );
+
+  const others = prev.filter((l) => l.service_id !== serviceId);
+  if (built.length === 0) return others;
+
+  const firstIdx = prev.findIndex((l) => l.service_id === serviceId);
+  if (firstIdx === -1) return [...others, ...built];
+  const precedingOthers = prev.slice(0, firstIdx).filter((l) => l.service_id !== serviceId).length;
+  const result = [...others];
+  result.splice(precedingOthers, 0, ...built);
+  return result;
 }
 
 const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDialogProps) => {
@@ -173,6 +224,11 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
           subtotal: line.quantity * line.unit_price,
           billing_frequency: line.billing_frequency,
           line_order: index,
+          // Proposal Phase 1 T3: per-line exact period (SA tax year). Null for
+          // non-period lines — the engine falls back to its computed period.
+          period_start: line.period_start ?? null,
+          period_end: line.period_end ?? null,
+          period_label: line.period_label ?? null,
         };
       });
 
@@ -207,11 +263,42 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     setLines(lines.filter((_, i) => i !== index));
   };
 
+  // Recent tax years to offer for SA selection: current tax year + previous 6.
+  const saYearOptions = recentTaxYearStartYears(7);
+
+  const selectedSaYears = (serviceId: string): number[] =>
+    lines
+      .filter((l) => l.service_id === serviceId && l.period_label)
+      .map((l) => saStartYearFromLabel(l.period_label as string));
+
+  const toggleSaYear = (serviceId: string, defaultPrice: number, year: number) => {
+    const current = selectedSaYears(serviceId);
+    const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year];
+    setLines((prev) => reconcileSaLines(prev, serviceId, defaultPrice, next));
+  };
+
   const updateLine = (index: number, field: keyof QuoteLine, value: any) => {
+    // Selecting an SA service turns the line into a per-tax-year group: default to
+    // the current tax year (one line/one job) and reveal the tax-year multiselect.
+    if (field === "service_id") {
+      const service = services?.find((s) => s.id === value);
+      if (service && isSaServiceCode((service as any).code)) {
+        const existing = selectedSaYears(service.id);
+        const years = existing.length > 0 ? existing : [recentTaxYearStartYears(1)[0]];
+        setLines((prev) => {
+          // Point the just-edited line at the SA service, then reconcile the group.
+          const seeded = [...prev];
+          seeded[index] = { ...seeded[index], service_id: service.id, unit_price: service.default_price };
+          return reconcileSaLines(seeded, service.id, service.default_price, years);
+        });
+        return;
+      }
+    }
+
     const newLines = [...lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
-    // Auto-populate unit price when service is selected
+    // Auto-populate unit price when a (non-SA) service is selected
     if (field === "service_id") {
       const service = services?.find((s) => s.id === value);
       if (service) {
@@ -296,6 +383,11 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
             {lines.map((line, index) => {
               const service = services?.find((s) => s.id === line.service_id);
               const included = isIncludedLine(line);
+              const isSa = !!service && isSaServiceCode((service as any).code);
+              // Render the tax-year multiselect once, on the first line of each SA group.
+              const isSaGroupHead =
+                isSa &&
+                lines.findIndex((l) => l.service_id === line.service_id) === index;
               const monthlyPrice = line.billing_frequency === "monthly"
                 ? line.unit_price / 12
                 : line.unit_price;
@@ -304,7 +396,37 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                 : (line.quantity * line.unit_price);
 
               return (
-                <div key={index} className="flex gap-2 items-end">
+                <div key={index} className="space-y-2">
+                {isSaGroupHead && service && (
+                  <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                    <div className="text-sm font-medium">
+                      Which tax years? ({service.name})
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Each selected year becomes its own return, line and job — priced independently.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(new Set([...saYearOptions, ...selectedSaYears(service.id)]))
+                        .sort((a, b) => b - a)
+                        .map((year) => {
+                          const active = selectedSaYears(service.id).includes(year);
+                          const label = `${year}/${String(year + 1).slice(-2).padStart(2, "0")}`;
+                          return (
+                            <Button
+                              key={year}
+                              type="button"
+                              size="sm"
+                              variant={active ? "default" : "outline"}
+                              onClick={() => toggleSaYear(service.id, service.default_price, year)}
+                            >
+                              {label}
+                            </Button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2 items-end">
                   <div className="flex-1 space-y-2">
                     <Label>Service</Label>
                     <Select
@@ -344,18 +466,27 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
 
                   {showPricing && (
                     <>
-                      <div className="w-24 space-y-2">
-                        <Label>Qty</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          step="0.1"
-                          value={line.quantity}
-                          onChange={(e) =>
-                            updateLine(index, "quantity", parseFloat(e.target.value))
-                          }
-                        />
-                      </div>
+                      {isSa ? (
+                        <div className="w-24 space-y-2">
+                          <Label>Tax Year</Label>
+                          <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium text-sm">
+                            {line.period_label ?? "—"}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-24 space-y-2">
+                          <Label>Qty</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            step="0.1"
+                            value={line.quantity}
+                            onChange={(e) =>
+                              updateLine(index, "quantity", parseFloat(e.target.value))
+                            }
+                          />
+                        </div>
+                      )}
 
                       <div className="w-32 space-y-2">
                         <Label>Annual Price</Label>
@@ -401,6 +532,7 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                       <X className="h-4 w-4" />
                     </Button>
                   )}
+                </div>
                 </div>
               );
             })}
