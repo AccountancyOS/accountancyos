@@ -1,0 +1,51 @@
+{
+  "release_id": "2026-07-25-ct600-prerequisite",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "approver": null,
+  "summary": "Proposal Phase 1 — Task 6b-2. Wires a corporation_tax (CT600) job to depend on the SAME company's company_accounts job for the SAME accounts year-end, via jobs.prerequisite_job_id (the additive column added by Task 6a, 20260725130000). Implemented as an idempotent linking UPDATE added to public.lifecycle_materialize_jobs immediately before its final RETURN, guarded by p_company_id IS NOT NULL and by ct.period_end IS NOT NULL so a NULL period_end can never cross-link years. The rest of the materialize body — including the Task-1 per-line-period COALESCE lines — is reproduced byte-for-byte from the LIVE definition (md5 7765d483eb09fde669d762246a9f01e9). Additive only: no existing arm, period math, function signature, table, or row is altered. calculate_deadline, the UI, and System B (lifecycle_generate_deadlines_for_job + canonical_deadline_rules) are untouched.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "context": "The proposal now creates one CT600 job and one Accounts job per compliance period for a company. A CT600 cannot be finalised until the Accounts for the same accounts year are finalised, so the CT600 job must carry a prerequisite reference to the Accounts job. Task 6a added the jobs.prerequisite_job_id column; this task establishes the link at materialize time inside the single-source engine, rather than in the UI, so every proposal-materialized CT600 is wired consistently.",
+    "scope": "Additive only. CREATE OR REPLACE of lifecycle_materialize_jobs = the live body verbatim PLUS one idempotent linking UPDATE before RETURN. No other function, table, column, or row is touched. The UPDATE only runs when materializing for a company (p_company_id IS NOT NULL) and only writes when the link differs (prerequisite_job_id IS DISTINCT FROM acc.id)."
+  },
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725150000_ct600_accounts_prerequisite.sql",
+      "sha256": "7ca24f1991ab5961f00d2566f1424eb28dc6dd1a382062f9ed79e397131b0827",
+      "expected_objects": [
+        {
+          "id": "materialize-links-ct600-to-accounts",
+          "object": "lifecycle_materialize_jobs body links CT600 → Accounts: sets jobs.prerequisite_job_id on a corporation_tax job to the id of the company_accounts job with the same company_id and same period_end",
+          "result": "pending",
+          "verify_via": "Static/source: catalog_functions(name_like:'lifecycle_materialize_jobs', include_source:true) — confirm the body contains the idempotent UPDATE public.jobs ct SET prerequisite_job_id = acc.id ... service_type='corporation_tax' / 'company_accounts' / acc.period_end = ct.period_end, guarded by p_company_id IS NOT NULL and ct.period_end IS NOT NULL, and that all other arms (incl. the Task-1 COALESCE lines) are byte-for-byte the prior live body (md5 was 7765d483eb09fde669d762246a9f01e9). Function stays SECURITY DEFINER, search_path=public."
+        },
+        {
+          "id": "ct600-prerequisite-behavioural",
+          "object": "After apply, a company with both an Accounts job and a CT600 job for the same period_end has the CT600 job's prerequisite_job_id = the Accounts job's id",
+          "result": "pending",
+          "verify_via": "POST-APPLY behavioural check (needs live proposal data — the jobs table was reset empty at authoring time, so this cannot be verified pre-apply). After applying and materializing a quote for a company that has both company_accounts and corporation_tax lines: db_select jobs where service_type='corporation_tax' — expect its prerequisite_job_id to equal the id of the company_accounts job with the same company_id and the same period_end. Re-running materialize must NOT change the link (idempotent). A CT600 whose period_end has no matching Accounts period_end must have prerequisite_job_id left NULL (no cross-year mislink)."
+        }
+      ]
+    }
+  ],
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "BEFORE APPLY (RPC-replacement discipline): fetch the LIVE body of public.lifecycle_materialize_jobs via catalog_functions(name_like:'lifecycle_materialize_jobs', include_source:true) and diff it against the CREATE OR REPLACE in this migration. The migration was authored against the live body whose md5 was 7765d483eb09fde669d762246a9f01e9 (already carrying the Task-1 COALESCE per-line-period change). If the live body has diverged, reconcile so nothing live is clobbered — the ONLY intended change is the linking UPDATE before RETURN.",
+      "Confirm jobs.prerequisite_job_id exists live (added by 20260725130000, applied) before applying.",
+      "Apply migration 20260725150000_ct600_accounts_prerequisite.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the POST-APPLY behavioural verification (ct600-prerequisite-behavioural) once live proposal data exists, then complete this receipt (move out of pending/)."
+    ]
+  },
+  "post_apply_followups": [
+    "Behavioural verify_via for ct600-prerequisite-behavioural is a POST-APPLY check: the live jobs table was empty at authoring (reset by 20260724150000), so no live proposal data existed to prove the link end-to-end pre-apply. Materialize a real proposal for a company carrying both company_accounts and corporation_tax lines, then confirm the CT600 job's prerequisite_job_id = the same-period_end Accounts job id.",
+    "Multiple accounts periods for one company: the link is on acc.period_end = ct.period_end, i.e. same accounts year-end. If a company has >1 Accounts period (e.g. a long/short first period plus a normal year), each CT600 links only to the Accounts job whose period_end matches its own — no cross-year mislink. If two Accounts jobs somehow shared an identical period_end (data anomaly), the UPDATE could match either; that is not expected under normal per-period materialize and would indicate duplicate Accounts jobs to investigate separately."
+  ],
+  "preflight": {
+    "live_body_verified": "2026-07-25 (claude): live lifecycle_materialize_jobs fetched via Lovable MCP catalog_functions (pg_get_functiondef md5 7765d483eb09fde669d762246a9f01e9). The Task-1 per-line-period COALESCE lines (v_period_start/v_period_end/v_period_label := COALESCE(v_line.period_*, ...)) are present and reproduced verbatim. jobs.prerequisite_job_id / company_id / period_end / service_type / organization_id all confirmed live via db_schema; jobs.service_type = p_service_code and the codes 'corporation_tax' and 'company_accounts' confirmed via the live lifecycle_upsert_job_with_deadlines body. The migration is a clean additive superset: only the guarded idempotent linking UPDATE is added, immediately before the final RETURN jsonb_build_object(...). SAFE TO APPLY — the 'diff live first' caveat is satisfied."
+  }
+}
