@@ -14384,6 +14384,9 @@ export type Database = {
           id: string
           line_order: number
           organization_id: string
+          period_end: string | null
+          period_label: string | null
+          period_start: string | null
           quantity: number
           quote_id: string
           service_id: string
@@ -14398,6 +14401,9 @@ export type Database = {
           id?: string
           line_order?: number
           organization_id: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
           quantity?: number
           quote_id: string
           service_id: string
@@ -14412,6 +14418,9 @@ export type Database = {
           id?: string
           line_order?: number
           organization_id?: string
+          period_end?: string | null
+          period_label?: string | null
+          period_start?: string | null
           quantity?: number
           quote_id?: string
           service_id?: string
