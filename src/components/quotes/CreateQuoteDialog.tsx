@@ -32,6 +32,13 @@ import {
   recentTaxYearStartYears,
 } from "@/lib/proposal/sa-periods";
 import {
+  isMtdServiceCode,
+  isMtdQuarterServiceCode,
+  buildMtdQuarterLines,
+  buildMtdFinalLines,
+  mtdStartYearFromLabel,
+} from "@/lib/proposal/mtd-periods";
+import {
   isAccountsServiceCode,
   nextAccountsPeriodFromCH,
   accountsPeriodFromEnd,
@@ -195,6 +202,50 @@ function reconcileSaLines(
       return existing ? { ...b, unit_price: existing.unit_price, billing_frequency: existing.billing_frequency } : b;
     }
   );
+
+  const others = prev.filter((l) => l.service_id !== serviceId);
+  if (built.length === 0) return others;
+
+  const firstIdx = prev.findIndex((l) => l.service_id === serviceId);
+  if (firstIdx === -1) return [...others, ...built];
+  const precedingOthers = prev.slice(0, firstIdx).filter((l) => l.service_id !== serviceId).length;
+  const result = [...others];
+  result.splice(precedingOthers, 0, ...built);
+  return result;
+}
+
+/**
+ * Reconcile the MTD lines for one service to exactly `selectedStartYears`. A
+ * quarterly (`mtd_quarter`) service expands to FOUR period-carrying lines per
+ * year; a final-declaration (`mtd_itsa_final`) service to ONE per year. Existing
+ * price/billing for a surviving period (keyed by `period_label`) is preserved.
+ * The rebuilt group is kept where the first existing line for that service sat.
+ */
+function reconcileMtdLines(
+  prev: QuoteLine[],
+  serviceId: string,
+  defaultPrice: number,
+  isQuarter: boolean,
+  selectedStartYears: number[]
+): QuoteLine[] {
+  const priceByLabel = new Map<string, { unit_price: number; billing_frequency: "now" | "monthly" }>();
+  prev.forEach((l) => {
+    if (l.service_id === serviceId && l.period_label) {
+      priceByLabel.set(l.period_label, {
+        unit_price: l.unit_price,
+        billing_frequency: l.billing_frequency,
+      });
+    }
+  });
+
+  const drafts = isQuarter
+    ? buildMtdQuarterLines({ service_id: serviceId, default_price: defaultPrice }, selectedStartYears)
+    : buildMtdFinalLines({ service_id: serviceId, default_price: defaultPrice }, selectedStartYears);
+
+  const built: QuoteLine[] = drafts.map((b) => {
+    const existing = priceByLabel.get(b.period_label);
+    return existing ? { ...b, unit_price: existing.unit_price, billing_frequency: existing.billing_frequency } : b;
+  });
 
   const others = prev.filter((l) => l.service_id !== serviceId);
   if (built.length === 0) return others;
@@ -430,6 +481,24 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     const current = selectedSaYears(serviceId);
     const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year];
     setLines((prev) => reconcileSaLines(prev, serviceId, defaultPrice, next));
+  };
+
+  // Proposal Phase 1 T6b-3 — MTD ITSA tax-year selection (mirrors SA). The same
+  // chip multiselect drives both `mtd_quarter` (4 lines/year) and
+  // `mtd_itsa_final` (1 line/year); the selected years are reconstructed from
+  // each MTD line's `period_label` (`MTD … YYYY/YY`).
+  const selectedMtdYears = (serviceId: string): number[] => {
+    const years = lines
+      .filter((l) => l.service_id === serviceId && l.period_label)
+      .map((l) => mtdStartYearFromLabel(l.period_label as string))
+      .filter((y) => !Number.isNaN(y));
+    return Array.from(new Set(years));
+  };
+
+  const toggleMtdYear = (serviceId: string, defaultPrice: number, isQuarter: boolean, year: number) => {
+    const current = selectedMtdYears(serviceId);
+    const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year];
+    setLines((prev) => reconcileMtdLines(prev, serviceId, defaultPrice, isQuarter, next));
   };
 
   // The selected lead carries the raw Companies House profile (limited_company /
@@ -676,6 +745,20 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
         });
         return;
       }
+      // MTD ITSA (quarterly or final): same tax-year chip multiselect as SA;
+      // default to the current tax year, then expand to 4 (quarter) or 1 (final)
+      // period-carrying lines per selected year.
+      if (service && isMtdServiceCode((service as any).code)) {
+        const isQuarter = isMtdQuarterServiceCode((service as any).code);
+        const existing = selectedMtdYears(service.id);
+        const years = existing.length > 0 ? existing : [recentTaxYearStartYears(1)[0]];
+        setLines((prev) => {
+          const seeded = [...prev];
+          seeded[index] = { ...seeded[index], service_id: service.id, unit_price: service.default_price };
+          return reconcileMtdLines(seeded, service.id, service.default_price, isQuarter, years);
+        });
+        return;
+      }
     }
 
     const newLines = [...lines];
@@ -813,6 +896,12 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
               const isVatGroupHead =
                 isVat &&
                 lines.findIndex((l) => l.service_id === line.service_id) === index;
+              const isMtd = !!service && isMtdServiceCode((service as any).code);
+              const isMtdQuarter = !!service && isMtdQuarterServiceCode((service as any).code);
+              // The head line of each MTD group owns the tax-year chip multiselect.
+              const isMtdGroupHead =
+                isMtd &&
+                lines.findIndex((l) => l.service_id === line.service_id) === index;
               const vatGroup = isVat ? vatGroups[line.service_id] ?? EMPTY_VAT_GROUP : null;
               const monthlyPrice = line.billing_frequency === "monthly"
                 ? line.unit_price / 12
@@ -844,6 +933,39 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                               size="sm"
                               variant={active ? "default" : "outline"}
                               onClick={() => toggleSaYear(service.id, service.default_price, year)}
+                            >
+                              {label}
+                            </Button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+                {isMtdGroupHead && service && (
+                  <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                    <div className="text-sm font-medium">
+                      Which tax years? ({service.name})
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isMtdQuarter
+                        ? "Each selected tax year expands to its four MTD quarters — each its own line and job, priced independently."
+                        : "Each selected tax year becomes its own final declaration, line and job."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(new Set([...saYearOptions, ...selectedMtdYears(service.id)]))
+                        .sort((a, b) => b - a)
+                        .map((year) => {
+                          const active = selectedMtdYears(service.id).includes(year);
+                          const label = `${year}/${String(year + 1).slice(-2).padStart(2, "0")}`;
+                          return (
+                            <Button
+                              key={year}
+                              type="button"
+                              size="sm"
+                              variant={active ? "default" : "outline"}
+                              onClick={() =>
+                                toggleMtdYear(service.id, service.default_price, isMtdQuarter, year)
+                              }
                             >
                               {label}
                             </Button>
@@ -1155,6 +1277,13 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                       ) : isVat ? (
                         <div className="w-44 space-y-2">
                           <Label>VAT period</Label>
+                          <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium text-sm">
+                            {line.period_label ?? "—"}
+                          </div>
+                        </div>
+                      ) : isMtd ? (
+                        <div className="w-44 space-y-2">
+                          <Label>MTD period</Label>
                           <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium text-sm">
                             {line.period_label ?? "—"}
                           </div>
