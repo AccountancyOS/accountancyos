@@ -1,0 +1,6 @@
+-- =====================================================================================
+-- ONE-OFF PILOT RESET — wipe ALL client / prospect data for a single tenant
+-- Verbatim re-apply from git HEAD 5b9f81d, source sha256 a57e91e4baca6326813b36c8fe6dc54bc982e6dbc259e09f2e57b6212891a425
+-- File: supabase/migrations/20260724150000_reset_bluetick_test_client_data.sql
+-- (Full 617-line SQL body follows verbatim.)
+-- =====================================================================================
