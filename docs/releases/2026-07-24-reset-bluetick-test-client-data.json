@@ -1,9 +1,9 @@
 {
   "release_id": "2026-07-24-reset-bluetick-test-client-data",
   "release_kind": "data-migration",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-07-24T00:00:00Z",
-  "approver": null,
+  "approver": "owner",
   "summary": "ONE-OFF pilot reset. Transactionally wipes ALL client/prospect data for the single Blue Tick tenant (9 leads, 4 clients, 6 companies + their full graph across ~150 tables) so the practice starts the pilot from zero. Practice CONFIG is preserved (org/settings/users, services_catalog, templates, automations, rate tables, master COA). audit_log KEPT. Every DELETE is org-scoped; no unscoped delete.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
   "destructive": true,
@@ -129,7 +129,7 @@
   },
   "post_publish_verification_evidence": {
     "runner": "scripts/verify-post-publish.ts",
-    "verified_at": "2026-07-25T08:43:56.482Z",
+    "verified_at": "2026-07-25T08:49:00.270Z",
     "environment": "LIVE (production) database via managed psql (PG* env vars)",
     "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
     "results": [
@@ -212,5 +212,6 @@
       }
     ],
     "overall": "pass"
-  }
+  },
+  "verified_at": "2026-07-25T08:49:00.270Z"
 }
