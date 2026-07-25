@@ -1,0 +1,63 @@
+{
+  "release_id": "2026-07-25-vat-period-generator",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "approver": null,
+  "summary": "Proposal Phase 1 — Task 5a (MIGRATION half only; the CreateQuoteDialog VAT UI is a separate later task). Adds the canonical pure calculator public.generate_vat_periods(p_frequency text, p_stagger integer, p_from date, p_to date) RETURNS TABLE(period_start date, period_end date, period_label text). It turns a company's VAT profile (companies.vat_frequency + companies.vat_stagger_group) into the exact set of UK VAT return periods over a window, so acceptance can materialize one job per period. Reads NO tables and writes NO rows (never touches public.vat_periods) — STABLE, SET search_path TO 'public'.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "context": "Proposal Phase 1 needs per-period VAT lines/jobs. The UK VAT stagger arithmetic must live in one authoritative DB function rather than being re-derived per caller. This receipt covers the generator function ONLY; wiring it into the VAT proposal UI and creating vat_return lines is Task 5's UI half (later).",
+    "uk_vat_rules": "quarterly stagger 1 → ends Mar/Jun/Sep/Dec; stagger 2 → Apr/Jul/Oct/Jan; stagger 3 → May/Aug/Nov/Feb (a quarter ending month M starts on the 1st of month M-2). monthly → 12 calendar-month periods/yr. annual/annual_accounting → one period per year ending at the chosen annual period-end MONTH passed in p_stagger (1..12); period runs the 12 months up to and including that month-end."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725120000_vat_period_generator.sql",
+      "sha256": "bc1a10754d8f900e1e2d89fb6a65aa0f377b921f61d849ebaa99b1b9da0d9c18",
+      "expected_objects": [
+        {
+          "id": "generate-vat-periods-exists",
+          "object": "function public.generate_vat_periods(text, integer, date, date) exists as a STABLE pure calculator returning TABLE(period_start date, period_end date, period_label text)",
+          "result": "pending",
+          "verify_via": "catalog_functions: public.generate_vat_periods is present, provolatile='s' (STABLE), search_path='public', and its body contains NO 'INSERT INTO' / no write to vat_periods."
+        },
+        {
+          "id": "quarterly-stagger1-four-periods",
+          "object": "quarterly stagger 1 over a full calendar year yields 4 periods ending Mar/Jun/Sep/Dec",
+          "result": "pending",
+          "verify_via": "Behavioural: db_rpc generate_vat_periods('quarterly', 1, '2025-01-01', '2025-12-31') returns exactly 4 rows with period_end 2025-03-31, 2025-06-30, 2025-09-30, 2025-12-31 and labels 'VAT Q/E 31 Mar 2025' … 'VAT Q/E 31 Dec 2025'. period_start of the first row = 2025-01-01."
+        },
+        {
+          "id": "monthly-twelve-periods",
+          "object": "monthly over a full calendar year yields 12 periods",
+          "result": "pending",
+          "verify_via": "Behavioural: db_rpc generate_vat_periods('monthly', 1, '2025-01-01', '2025-12-31') returns exactly 12 rows, period_end = last day of each month Jan..Dec 2025, labels 'VAT M/E DD Mon 2025'."
+        },
+        {
+          "id": "annual-one-period",
+          "object": "annual over a full calendar year yields exactly 1 period ending at the p_stagger month-end",
+          "result": "pending",
+          "verify_via": "Behavioural: db_rpc generate_vat_periods('annual', 3, '2025-01-01', '2025-12-31') returns exactly 1 row with period_end 2025-03-31, period_start 2024-04-01, label 'VAT Y/E 31 Mar 2025'. Also confirm the alias: generate_vat_periods('annual_accounting', 3, '2025-01-01', '2025-12-31') === the same 1 row."
+        }
+      ]
+    }
+  ],
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260725120000_vat_period_generator.sql via the Lovable migration flow.",
+      "Confirm the approval card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the four expected-object verifications (1 introspection + 3 behavioural db_rpc calls) and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "UI half (Task 5b): CreateQuoteDialog VAT step consumes generate_vat_periods to list valid catch-up + first-ongoing periods; each selected period → one vat_return quote_line carrying (period_start, period_end, period_label). NOT part of this migration.",
+    "Confirm the annual convention with the owner: p_stagger for annual is overloaded as the annual period-END month (1..12), whereas for quarterly it is the 1..3 stagger group. The UI must pass the chosen annual-end month here."
+  ]
+}
