@@ -1,0 +1,50 @@
+{
+  "release_id": "2026-07-25-vat-period-generator",
+  "release_kind": "migration",
+  "status": "applied-verified",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "verified_at": "2026-07-25T11:29:00Z",
+  "approver": "owner",
+  "summary": "Proposal Phase 1 — Task 5a (MIGRATION half). Adds the canonical pure calculator public.generate_vat_periods(text, integer, date, date) RETURNS TABLE(period_start date, period_end date, period_label text). STABLE, SET search_path='public', reads no tables and writes no rows.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "context": "Proposal Phase 1 needs per-period VAT lines/jobs. UK VAT stagger arithmetic must live in one authoritative DB function.",
+    "uk_vat_rules": "quarterly stagger 1 → Mar/Jun/Sep/Dec; stagger 2 → Apr/Jul/Oct/Jan; stagger 3 → May/Aug/Nov/Feb. monthly → 12/yr. annual/annual_accounting → one period ending at p_stagger month-end (1..12)."
+  },
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725120000_vat_period_generator.sql",
+      "sha256": "bc1a10754d8f900e1e2d89fb6a65aa0f377b921f61d849ebaa99b1b9da0d9c18",
+      "applied_version": "20260725112852",
+      "expected_objects": [
+        {
+          "id": "generate-vat-periods-exists",
+          "object": "function public.generate_vat_periods(text, integer, date, date) exists as STABLE pure calculator",
+          "result": "pass",
+          "evidence": "pg_proc: provolatile='s' (STABLE), proconfig={search_path=public}. Body contains no INSERT/UPDATE/DELETE."
+        },
+        {
+          "id": "quarterly-stagger1-four-periods",
+          "object": "quarterly stagger 1 over full CY yields 4 periods ending Mar/Jun/Sep/Dec",
+          "result": "pass",
+          "evidence": "SELECT * FROM generate_vat_periods('quarterly',1,'2025-01-01','2025-12-31') → 4 rows: (2025-01-01,2025-03-31,'VAT Q/E 31 Mar 2025'), (2025-04-01,2025-06-30,'VAT Q/E 30 Jun 2025'), (2025-07-01,2025-09-30,'VAT Q/E 30 Sep 2025'), (2025-10-01,2025-12-31,'VAT Q/E 31 Dec 2025')."
+        },
+        {
+          "id": "monthly-twelve-periods",
+          "object": "monthly over full CY yields 12 periods",
+          "result": "pass",
+          "evidence": "SELECT count(*) FROM generate_vat_periods('monthly',1,'2025-01-01','2025-12-31') = 12."
+        },
+        {
+          "id": "annual-one-period",
+          "object": "annual and annual_accounting over full CY yield exactly 1 period ending at p_stagger month-end",
+          "result": "pass",
+          "evidence": "generate_vat_periods('annual',3,'2025-01-01','2025-12-31') = (2024-04-01,2025-03-31,'VAT Y/E 31 Mar 2025'); alias 'annual_accounting' returns the identical row."
+        }
+      ]
+    }
+  ],
+  "post_apply_followups": [
+    "Task 5b (UI): CreateQuoteDialog VAT step calls generate_vat_periods to list catch-up + first-ongoing periods; each selected period → one vat_return quote_line carrying (period_start, period_end, period_label)."
+  ]
+}
