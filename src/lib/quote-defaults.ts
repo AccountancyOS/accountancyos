@@ -38,3 +38,27 @@ export function getDefaultServiceCodesForLeadType(
       return [];
   }
 }
+
+/** A quote/proposal line for the purpose of the "Included" (zero-fee) test. */
+export interface IncludableLine {
+  unit_price?: number | string | null;
+  subtotal?: number | string | null;
+}
+
+/**
+ * A "zero-fee / Included" line is DERIVED purely from money === 0 — there is NO
+ * `is_chargeable` column/flag. `unit_price` is the source of truth; when it is
+ * absent we fall back to `subtotal` (which is 0 whenever unit_price is 0).
+ *
+ * Included lines are rendered as "Included", excluded from the one-off and
+ * monthly totals, and excluded from the Stripe checkout line-item builders.
+ * Single-source — reused across the UI and the checkout builder.
+ */
+export function isIncludedLine(line: IncludableLine | null | undefined): boolean {
+  if (!line) return false;
+  const unit = line.unit_price;
+  if (unit !== null && unit !== undefined && unit !== "") return Number(unit) === 0;
+  const sub = line.subtotal;
+  if (sub !== null && sub !== undefined && sub !== "") return Number(sub) === 0;
+  return false;
+}

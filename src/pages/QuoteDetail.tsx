@@ -22,6 +22,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import OnboardingStatusStepper from "@/components/onboarding/OnboardingStatusStepper";
+import { isIncludedLine } from "@/lib/quote-defaults";
 
 const QuoteDetail = () => {
   const { id } = useParams();
@@ -292,8 +293,9 @@ const QuoteDetail = () => {
             <div className="space-y-4">
               {lines?.map((line: any) => {
                 const isMonthly = line.billing_frequency === "monthly";
+                const included = isIncludedLine(line);
                 const displayPrice = isMonthly ? line.unit_price / 12 : line.unit_price;
-                const displaySubtotal = isMonthly 
+                const displaySubtotal = isMonthly
                   ? (line.quantity * displayPrice)
                   : line.subtotal;
 
@@ -302,40 +304,54 @@ const QuoteDetail = () => {
                     <div className="flex-1">
                       <div className="font-medium">{line.service.name}</div>
                       <div className="text-sm text-muted-foreground">
-                        {line.quantity} × £{displayPrice.toFixed(2)}
-                        {isMonthly && "/month"}
+                        {included ? (
+                          <span>Included</span>
+                        ) : (
+                          <>
+                            {line.quantity} × £{Number(displayPrice).toFixed(2)}
+                            {isMonthly && "/month"}
+                          </>
+                        )}
                         <Badge variant="outline" className="ml-2">
-                          {isMonthly ? "Monthly" : "Bill Now"}
+                          {included ? "Included" : isMonthly ? "Monthly" : "Bill Now"}
                         </Badge>
                       </div>
                     </div>
                     <div className="font-medium">
-                      £{displaySubtotal.toFixed(2)}
-                      {isMonthly && <span className="text-sm text-muted-foreground">/mo</span>}
+                      {included ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          Included
+                        </span>
+                      ) : (
+                        <>
+                          £{Number(displaySubtotal).toFixed(2)}
+                          {isMonthly && <span className="text-sm text-muted-foreground">/mo</span>}
+                        </>
+                      )}
                     </div>
                   </div>
                 );
               })}
               <Separator />
               
-              {lines && lines.some((l: any) => l.billing_frequency === "now") && (
+              {lines && lines.some((l: any) => l.billing_frequency === "now" && !isIncludedLine(l)) && (
                 <div className="flex justify-between items-center">
                   <div className="font-medium">Payable Now</div>
                   <div className="font-semibold">
                     £{lines
-                      .filter((l: any) => l.billing_frequency === "now")
+                      .filter((l: any) => l.billing_frequency === "now" && !isIncludedLine(l))
                       .reduce((sum: number, l: any) => sum + parseFloat(l.subtotal), 0)
                       .toFixed(2)}
                   </div>
                 </div>
               )}
 
-              {lines && lines.some((l: any) => l.billing_frequency === "monthly") && (
+              {lines && lines.some((l: any) => l.billing_frequency === "monthly" && !isIncludedLine(l)) && (
                 <div className="flex justify-between items-center">
                   <div className="font-medium">Payable Monthly</div>
                   <div className="font-semibold">
                     £{lines
-                      .filter((l: any) => l.billing_frequency === "monthly")
+                      .filter((l: any) => l.billing_frequency === "monthly" && !isIncludedLine(l))
                       .reduce((sum: number, l: any) => sum + (parseFloat(l.unit_price) / 12 * l.quantity), 0)
                       .toFixed(2)}
                     <span className="text-sm text-muted-foreground">/mo</span>

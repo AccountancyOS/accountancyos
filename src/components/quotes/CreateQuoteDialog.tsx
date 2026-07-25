@@ -24,7 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, X, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
-import { getDefaultServiceCodesForLeadType } from "@/lib/quote-defaults";
+import { getDefaultServiceCodesForLeadType, isIncludedLine } from "@/lib/quote-defaults";
 
 interface CreateQuoteDialogProps {
   open: boolean;
@@ -223,11 +223,11 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   };
 
   const payableNow = lines
-    .filter((line) => line.billing_frequency === "now")
+    .filter((line) => line.billing_frequency === "now" && !isIncludedLine(line))
     .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
 
   const payableMonthly = lines
-    .filter((line) => line.billing_frequency === "monthly")
+    .filter((line) => line.billing_frequency === "monthly" && !isIncludedLine(line))
     .reduce((sum, line) => sum + line.quantity * (line.unit_price / 12), 0);
 
   const totalAmount = payableNow + payableMonthly;
@@ -295,8 +295,9 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
 
             {lines.map((line, index) => {
               const service = services?.find((s) => s.id === line.service_id);
-              const monthlyPrice = line.billing_frequency === "monthly" 
-                ? line.unit_price / 12 
+              const included = isIncludedLine(line);
+              const monthlyPrice = line.billing_frequency === "monthly"
+                ? line.unit_price / 12
                 : line.unit_price;
               const displaySubtotal = line.billing_frequency === "monthly"
                 ? (line.quantity * monthlyPrice)
@@ -371,10 +372,14 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
 
                       <div className="w-32 space-y-2">
                         <Label>
-                          {line.billing_frequency === "monthly" ? "Monthly" : "Now"}
+                          {included ? "Included" : line.billing_frequency === "monthly" ? "Monthly" : "Now"}
                         </Label>
                         <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium">
-                          £{displaySubtotal.toFixed(2)}
+                          {included ? (
+                            <span className="text-emerald-700 text-sm">Included</span>
+                          ) : (
+                            <>£{displaySubtotal.toFixed(2)}</>
+                          )}
                         </div>
                       </div>
                     </>

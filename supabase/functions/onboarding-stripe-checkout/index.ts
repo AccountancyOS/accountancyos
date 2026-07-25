@@ -7,6 +7,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Zero-fee "Included" lines are DERIVED from money === 0 (NO is_chargeable flag).
+// Kept in sync with src/lib/quote-defaults.ts::isIncludedLine — the app/edge module
+// boundary prevents a shared import; a regression test asserts they stay aligned.
+function isIncludedLine(l: any): boolean {
+  if (!l) return false;
+  const unit = l.unit_price;
+  if (unit !== null && unit !== undefined && unit !== "") return Number(unit) === 0;
+  const sub = l.subtotal;
+  if (sub !== null && sub !== undefined && sub !== "") return Number(sub) === 0;
+  return false;
+}
+
 function resolveAppBaseUrl(req: Request): string {
   const origin = req.headers.get("origin") || "";
   try {
@@ -75,8 +87,21 @@ serve(async (req: Request) => {
     const lines = (snapshot.lines ?? []) as any[];
     const currency = (quote?.currency ?? "GBP").toLowerCase();
 
-    const oneOff = lines.filter((l) => (l.billing_frequency ?? "annual") !== "monthly");
-    const monthly = lines.filter((l) => (l.billing_frequency ?? "annual") === "monthly");
+    // Exclude zero-fee "Included" lines from Stripe entirely (Phase 1 · Task 2).
+    const chargeable = lines.filter((l) => !isIncludedLine(l));
+    const oneOff = chargeable.filter((l) => (l.billing_frequency ?? "annual") !== "monthly");
+    const monthly = chargeable.filter((l) => (l.billing_frequency ?? "annual") === "monthly");
+
+    // If nothing is chargeable, do NOT create a Stripe session. The client reuses
+    // the existing public_skip_billing RPC to advance the onboarding step. We do
+    // not write a billing status here (that RPC owns the status transition) — see
+    // the note returned to the caller.
+    if (oneOff.length === 0 && monthly.length === 0) {
+      return new Response(
+        JSON.stringify({ skipped: true, reason: "no_chargeable_lines" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",

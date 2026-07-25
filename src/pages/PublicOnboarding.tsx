@@ -489,6 +489,21 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
     const { data, error } = await supabase.functions.invoke("onboarding-stripe-checkout", {
       body: { application_id: bundle.application.id },
     });
+    // Zero-fee proposal (all "Included" lines): the checkout function skips Stripe
+    // and returns { skipped, reason }. There is nothing to pay — advance the
+    // onboarding step via the existing public_skip_billing RPC (which owns the
+    // status transition) rather than sending the client to a Stripe session.
+    if (data?.skipped) {
+      const { error: skipErr } = await supabase.rpc("public_skip_billing", {
+        p_application_id: bundle.application.id,
+        p_access_token: getAccessToken(),
+      });
+      setSubmitting(false);
+      if (skipErr) { toast.error(skipErr.message); return; }
+      toast.success("No payment required — your proposal has no chargeable fees.");
+      onDone();
+      return;
+    }
     if (error || !data?.url) {
       setSubmitting(false);
       toast.error(error?.message ?? data?.error ?? "Could not start checkout");

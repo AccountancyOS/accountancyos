@@ -14,6 +14,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { isIncludedLine } from "@/lib/quote-defaults";
 
 interface QuoteLine {
   service_name: string;
@@ -282,12 +283,16 @@ export default function PublicQuoteView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((l, i) => (
+                  {lines.map((l, i) => {
+                    const included = isIncludedLine(l);
+                    return (
                     <tr key={i} className="border-b last:border-0">
                       <td className="py-3 pr-2">{l.service_name}</td>
                       <td className="py-3 px-2 text-right">{Number(l.quantity)}</td>
                       <td className="py-3 px-2 text-right">
-                        {l.billing_frequency === "monthly" ? (
+                        {included ? (
+                          <span className="text-muted-foreground">Included</span>
+                        ) : l.billing_frequency === "monthly" ? (
                           <>{fmt(currency, Number(l.unit_price || 0) / 12)}<span className="text-muted-foreground">/month</span></>
                         ) : (
                           fmt(currency, l.unit_price)
@@ -295,22 +300,27 @@ export default function PublicQuoteView() {
                       </td>
                       <td className="py-3 px-2 text-right capitalize">{l.billing_frequency === "monthly" ? "Monthly" : "One-off"}</td>
                       <td className="py-3 pl-2 text-right">
-                        {l.billing_frequency === "monthly" ? (
+                        {included ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            Included
+                          </span>
+                        ) : l.billing_frequency === "monthly" ? (
                           <>{fmt(currency, Number(l.subtotal || 0) / 12)}<span className="text-muted-foreground">/month</span></>
                         ) : (
                           fmt(currency, l.subtotal)
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   {(() => {
                     const monthly = lines
-                      .filter((l) => l.billing_frequency === "monthly")
+                      .filter((l) => l.billing_frequency === "monthly" && !isIncludedLine(l))
                       .reduce((s, l) => s + Number(l.subtotal || 0) / 12, 0);
                     const oneOff = lines
-                      .filter((l) => l.billing_frequency !== "monthly")
+                      .filter((l) => l.billing_frequency !== "monthly" && !isIncludedLine(l))
                       .reduce((s, l) => s + Number(l.subtotal || 0), 0);
                     return (
                       <>
