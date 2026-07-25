@@ -18356,6 +18356,19 @@ export type Database = {
         Args: { p_schedule_id: string; p_user_id?: string }
         Returns: Json
       }
+      generate_vat_periods: {
+        Args: {
+          p_frequency: string
+          p_from: string
+          p_stagger: number
+          p_to: string
+        }
+        Returns: {
+          period_end: string
+          period_label: string
+          period_start: string
+        }[]
+      }
       get_active_vat_registration: {
         Args: {
           p_as_of_date?: string
