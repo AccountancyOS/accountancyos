@@ -105,7 +105,8 @@ The spec is ~70% already-present. The work is: **(A)** a handful of targeted *ex
 ## 5. Data migrations / backfills genuinely required (no speculation)
 
 Additive only, one small migration per increment, receipt-verified:
-1. `quote_lines`: `is_chargeable boolean default true` (or `billing_frequency` 'included'); `billing_start_date date null`, `coverage_period_start/end date null`. (R2/R9)
+1. `quote_lines`: `billing_start_date date null`, `coverage_period_start/end date null`. **"Included" is derived from `unit_price = 0` — no `is_chargeable` column** (resolved decision #2). Keep `numeric` money (decision #7). (R2/R9)
+   - Proposal/client **billing method** (decision #8): reuse the existing billing vocabulary if a method concept exists; else add a minimal `billing_method` (org default + per-proposal override) stored in `accepted_snapshot` + audit. Verify exact existing enum before adding.
 2. `engagement_letters`: `signing_rule text default 'all'`; new `engagement_letter_signatories` table (+RLS, +immutability trigger, +signatory snapshot). (R13/R14)
 3. `quotes`: `client_decline_reason_code text`, `internal_outcome_reason_code text`, `declined_by/at`; stop the `rejection_reason` default + add a freeze trigger. (R17)
 4. `decline_reasons` config table (org-scoped, seeded with the spec's 7 values + Other) OR a CHECK-constrained enum in `db-constants`; referenced by both `mark_lead_lost` and quote decline. (R17)
@@ -154,14 +155,23 @@ Each task = smallest additive change, TDD, one migration where needed (owner app
 - **Existing jobs:** spec R "flag equivalent live job for review, don't duplicate" — reuse the materialize dedup key + surface a warning.
 - **Backward compatibility:** additive migrations only; `partially_signed`/new statuses must be added to `db-constants` + all CHECKs together (vocabulary-drift risk — [[accountancyos-vocabulary-drift]]).
 
-## 9. Decisions requiring product confirmation
-1. **Commit to the canonical activation path** (neutralise legacy accept-time job creation) — required to satisfy "no jobs before signatures" + idempotency. Confirm we flip all target orgs to canonical and retire the legacy job path. *(Load-bearing.)*
-2. **Zero-fee representation:** `billing_frequency='included'` vs a `is_chargeable` boolean — recommend the boolean (clearer, orthogonal to frequency).
-3. **MTD quarterly = separate jobs per quarter** (spec R8 says separate jobs) — confirm this replaces today's one-job-four-deadlines shape (a decomposition change).
-4. **Decline vocabulary home:** one shared `decline_reasons` config table used by both leads (`mark_lead_lost`) and quotes — confirm shared (recommended) vs quote-only.
-5. **CT600 multiple submissions:** represent beneath one CT600 job via `filing_submissions` — confirm that's the "existing filing/submission concept" intended (vs child jobs).
-6. **Onboarding Connect webhook:** add a real Stripe Connect webhook for durable payment completion (recommended) vs keep polling — affects idempotency guarantees.
-7. **Money units:** normalise to integer minor units on new fields vs keep `numeric` — recommend keep `numeric` (reuse) unless the spec's "integer minor units" is a hard requirement.
+## 9. Decisions — RESOLVED (owner-confirmed in spec §"Resolved discovery decisions", 2026-07-25)
+1. **Canonical activation path** — retire/neutralise legacy accept-time job creation. **Confirmed.**
+2. **Included = derived from a zero fee** — do NOT add an `is_chargeable` flag (avoids drift from price). Overrides the earlier recommendation. **Confirmed.**
+3. **MTD quarterly / annual / SA = separate jobs** each. **Confirmed** (replaces today's one-job/four-deadlines shape).
+4. **One shared structured decline/loss vocabulary** used by leads + quotes; expiry/no-response kept separate from active client reasons. **Confirmed.**
+5. **One top-level CT600 job per accounts year**; filing-software splits via the existing filing/submission architecture (`filing_submissions`), not child jobs. **Confirmed.**
+6. **No new Stripe Connect webhook as a prerequisite** — first determine whether existing verified polling/payment-status can give durable idempotent completion; add/amend a webhook only if necessary; no general Stripe rewrite. **Confirmed.**
+7. **Keep the existing `numeric` money representation**; validate precision + convert at ONE centralised Stripe-boundary function; no second money representation. **Confirmed.**
+8. **Billing method per client/proposal with an org-level practice default** (reuse existing enum values/vocabulary; not a generic Stripe boolean); method stored in the accepted snapshot + audit; Stripe selectable only if Connect setup complete. **Confirmed.**
+9. **SPLIT the onboarding gate** (NEW, load-bearing): signature-rule completion controls activation/jobs/deadlines/automations; `billing_settled` is decoupled into a separate, non-blocking onboarding step. Extend/split the existing `lifecycle_onboarding_gates`; do NOT fork a parallel activation system. Externally-managed billing immediately satisfies billing-completion; Stripe failure leaves live work intact.
+
+### Δ applied to earlier sections from the resolved decisions
+- **§2 R2 / §5 mig#1:** drop `is_chargeable`; "Included" = `unit_price = 0` derived (item stays in scope + activates jobs; excluded from Stripe/invoice objects).
+- **§2 R9 / §5:** keep `numeric` money; add a single Stripe-boundary conversion function; add `billing_start_date`/`coverage_period` to lines. Add a **billing method** stored on the proposal/client (reuse existing `billing_status`/method vocabulary — verify exact enum during Phase 1; org-default + per-proposal override) + an audited billing-method-change action (Stripe→external), cancelling pending Stripe safely without touching scope/jobs.
+- **§2 R15 / §4.1 / §6 Phase 2:** activation gates on **signature-rule completion only**; `billing_settled` removed from the activation gate and tracked as a separate onboarding step. This SPLITS (not forks) `lifecycle_onboarding_gates`.
+- **§6 Phase 2:** add billing-method selection (org default + override) + the split gate; reuse `not_required`/`skipped` for external billing.
+- **§8 Risk (Stripe callbacks):** per decision #6, do NOT add a webhook unless polling/verification proves insufficient — scope the fix narrowly.
 
 ---
-*No code was written in this pass. Awaiting confirmation on §9 before Phase 1.*
+*No code written this pass. All §9 decisions resolved by the owner. Ready to begin Phase 1 on approval.*

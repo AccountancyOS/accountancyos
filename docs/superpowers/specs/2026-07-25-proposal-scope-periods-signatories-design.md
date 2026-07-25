@@ -30,6 +30,8 @@ Do not create parallel proposal models, duplicated services, competing status en
 5. Exact compliance periods are required where they materially define scope and downstream jobs.
 6. Client-facing simplicity takes priority over exposing filing-software mechanics.
 7. Accepted proposal versions are immutable and auditable.
+8. Required signatures control scope activation; billing completion is a separate onboarding concern.
+9. Billing method is selected per client or proposal, using a practice default where available.
 
 ## Proposal journey
 
@@ -130,11 +132,15 @@ Use any existing AoS or HMRC obligation model to determine applicable obligation
 
 Each chargeable item records, using existing AoS concepts where available:
 
-- Fee in integer minor currency units.
+- Fee using the existing AoS money representation.
 - One-off or recurring treatment.
 - Service coverage period.
 - Billing start date or due date.
-- Collection through AoS/Stripe or externally.
+- Billing method: AoS billing through Stripe or billing managed externally.
+
+Preserve the existing AoS `numeric` money representation if code inspection confirms that it is used consistently and safely. Validate supported precision and convert amounts through one existing or centralised Stripe-boundary function. Do not introduce a second competing money representation through a partial migration to integer minor units.
+
+`Included` is derived from a zero fee. Do not add a separate `is_chargeable` flag unless code inspection establishes a compelling technical requirement and the implementation enforces an invariant that prevents it drifting from the price.
 
 Version one deliberately avoids automatic proration and complex instalment calculations.
 
@@ -142,20 +148,48 @@ Version one deliberately avoids automatic proration and complex instalment calcu
 - Ongoing services use a monthly fee and explicit billing start date.
 - If a practice needs to recover fees between service commencement and monthly billing commencement, it adds a separate one-off `Ongoing service catch-up` item.
 
-For Stripe-enabled billing:
+#### Billing-method selection
+
+The practice may define an organisation-level default billing method. The accountant can select or override the method for each client or proposal.
+
+Initial methods are:
+
+- AoS billing through Stripe.
+- Billing managed externally.
+
+Reuse existing AoS enum values and vocabulary where suitable. Do not introduce these exact labels as new canonical terms if equivalent concepts already exist.
+
+The selected billing method is stored in the accepted proposal snapshot and audit trail. Stripe may only be selected if the accountant's practice has completed the required Stripe Connect setup.
+
+#### AoS billing through Stripe
 
 - Only positive-value billing instructions are sent to Stripe.
 - Process one-off and recurring charges independently.
-- Payment failure creates a visible, retryable billing issue.
-- Payment failure does not block or reverse acceptance, services, jobs, deadlines or automations.
+- The accountant's client completes the applicable payment or payment-method setup.
+- Mark the billing step complete only after Stripe confirms completion.
+- Reuse existing awaiting, processing, completed and failed statuses where available.
+- A failure creates a visible, retryable billing issue.
+- A failure does not block or reverse acceptance, services, jobs, deadlines or automations.
 
-For external billing:
+#### Billing managed externally
 
 - Record the agreed fee and schedule for reporting.
 - Perform no Stripe collection.
+- Treat the billing step as settled outside AoS, reusing the existing `not_required`, `skipped` or closest canonical state.
 - Preserve identical proposal, scope and job behaviour.
 
 If the existing acceptance flow collects payment details, reuse it. Do not introduce a second payment-setup journey.
+
+#### Changing the billing method
+
+An accountant may switch an accepted client from Stripe to externally managed billing through an explicit audited action.
+
+- Safely cancel any pending Stripe checkout or future collection schedule where appropriate.
+- Do not alter the signed service scope.
+- Do not delete or roll back services, jobs, deadlines or automations.
+- Preserve the previous and new billing methods in the audit trail.
+
+Do not make a new Stripe Connect webhook a prerequisite for this proposal upgrade. First determine whether the existing verified polling and payment-status mechanisms can support durable, idempotent completion. Add or amend a webhook only if necessary and consistent with the existing integration architecture. Do not broaden this work into a general Stripe rewrite.
 
 ### 5. Contacts and signatories
 
@@ -206,6 +240,15 @@ Once the selected signature rule is satisfied:
 7. Queue Stripe processing independently where applicable.
 
 Activation must be idempotent. Retries, duplicate signature callbacks or billing retries must not create duplicate services, jobs, invoices or subscriptions.
+
+The signed-engagement activation gate and billing-completion gate are distinct:
+
+- Signature-rule completion controls proposal acceptance, service activation, job creation, deadline creation and automation attachment.
+- Billing status controls only whether the billing portion of onboarding is complete.
+- Stripe failure leaves the accepted engagement and live work intact while billing remains incomplete or requires attention.
+- Externally managed billing may immediately satisfy the billing-completion step as settled outside AoS.
+
+If the existing canonical onboarding gate requires `billing_settled` before service or job activation, extend or split that gate. Do not create a parallel activation system.
 
 ## Proposal statuses and sales events
 
@@ -265,6 +308,7 @@ Block sending when:
 - No signatory is selected.
 - A signatory has no email address.
 - A limited company has no primary contact.
+- Stripe billing is selected but the practice has not completed the required Stripe Connect setup.
 
 Warn without necessarily blocking when:
 
@@ -284,6 +328,9 @@ Use existing validation and notification patterns.
 - Accepted versions cannot be silently edited.
 - Duplicate callbacks do not repeat activation.
 - A Stripe failure does not roll back the accepted engagement.
+- A Stripe failure does not delay service or job activation after the signature rule is satisfied.
+- Externally managed billing creates no Stripe objects and satisfies only the billing-completion step.
+- Switching billing method after acceptance is explicit and audited.
 - Refunds or subscription cancellation do not delete the signed scope or jobs.
 - Fee or service changes after acceptance use the existing variation, renewal or re-engagement process.
 - If an equivalent job already exists, flag it for review rather than silently duplicating it.
@@ -301,6 +348,7 @@ Record:
 - Companies House data and retrieval time used for the proposal.
 - Activated services, jobs, deadlines and automations.
 - Billing instructions, attempts, identifiers and failures.
+- Billing-method selection and any later audited change.
 
 ## Reuse of existing completed capabilities
 
@@ -344,6 +392,9 @@ The implementation plan must identify actual gaps against this specification. It
 - Add `all` versus `any one` signature rules.
 - Ensure acceptance creates live jobs only after required signatures.
 - Make activation idempotent and independent from Stripe success.
+- Separate signed-scope activation from billing completion using existing gate architecture.
+- Add per-client/proposal billing-method selection with a practice default.
+- Reuse existing external/not-required billing states.
 
 ### Phase 3: Decline reasons and reporting
 
@@ -367,20 +418,37 @@ The implementation plan must identify actual gaps against this specification. It
 6. MTD quarterly filings, MTD annual submission and SA return create separate deadline-bearing jobs.
 7. Historic work is billed through separate one-off items; monthly billing has an explicit start date.
 8. Stripe-enabled and externally billed proposals share the same commercial and job behaviour.
-9. Stripe failure does not block or reverse acceptance or job creation.
-10. Limited-company directors can be imported as contacts and selected as signatories.
-11. `All must sign` is the default; `any one may sign` is selectable.
-12. No live job is created before the required signature rule is satisfied.
-13. Repeated acceptance or callback processing creates no duplicates.
-14. Declining captures the actor, time, structured reason and optional free text without activating downstream work.
-15. Existing AoS architecture and vocabulary are reused, with no duplicate models or terminology drift.
+9. The accountant can select Stripe or externally managed billing per client/proposal, subject to the practice Stripe setup.
+10. Externally managed billing creates no Stripe objects and is treated as settled outside AoS.
+11. Stripe billing is complete only after Stripe confirmation.
+12. Stripe failure does not block or reverse acceptance or job creation.
+13. Limited-company directors can be imported as contacts and selected as signatories.
+14. `All must sign` is the default; `any one may sign` is selectable.
+15. No live job is created before the required signature rule is satisfied.
+16. Repeated acceptance or callback processing creates no duplicates.
+17. Declining captures the actor, time, structured reason and optional free text without activating downstream work.
+18. Existing AoS architecture and vocabulary are reused, with no duplicate models or terminology drift.
+
+## Resolved discovery decisions
+
+The Phase 0 code discovery produced the following implementation decisions:
+
+1. Use the canonical activation path and retire or neutralise legacy accept-time job creation.
+2. Derive Included from a zero fee; do not add an independent chargeability flag without a demonstrated technical need.
+3. Represent each applicable MTD quarterly filing, the MTD annual submission and the SA return as separate jobs.
+4. Use one shared structured vocabulary for proposal declines and CRM loss outcomes, while keeping expiry/no-response separate from active client reasons.
+5. Keep one top-level CT600 job per accounts year and represent filing-software splits through the existing filing/submission architecture.
+6. Do not make a new Stripe Connect webhook a prerequisite; add one only if existing payment verification cannot provide durable idempotent completion.
+7. Retain the existing consistent AoS money representation and perform validated Stripe conversion at the integration boundary.
+8. Use a client/proposal-level billing method with a practice default, not a generic Stripe boolean.
+9. Separate signature-controlled scope activation from billing-controlled onboarding completion.
 
 ## Out of scope for this release
-
 - Client-selectable three-tier packages.
 - Client-selected add-ons.
 - AI or market-derived price recommendations.
 - Automatic proration.
 - Complex instalment schedules.
 - CT600 period configuration in the proposal.
+- A general Stripe integration rewrite.
 - Rebuilding proposal features already implemented.
