@@ -1,18 +1,15 @@
 {
   "release_id": "2026-07-25-mtd-final-scope-prereq",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-07-25T00:00:00Z",
-  "approver": null,
-  "summary": "Proposal Phase 1 — Task 6a (SAFE ADDITIVE half ONLY). Three additive, idempotent, low-risk changes: (1) add the MTD annual/final-declaration service (services_catalog.code='mtd_itsa_final', entity_scope='individual', canonical_service_code='mtd_itsa_final_declaration'), one row per organization that already has the sa_mtd service, mirroring sa_mtd conventions; (2) fix the mis-scoped sole_trader_accounts catalog row from entity_scope='company' to 'individual'; (3) add a nullable, self-referencing jobs.prerequisite_job_id column (+ index) for the CT600 <- Accounts dependency, inert until a caller sets it. NO function is created/replaced; the canonical-deadline bridge and all UI wiring are a separate later task (Task 6b).",
-
+  "approver": "owner",
+  "summary": "Proposal Phase 1 \u2014 Task 6a (SAFE ADDITIVE half ONLY). Three additive, idempotent, low-risk changes: (1) add the MTD annual/final-declaration service (services_catalog.code='mtd_itsa_final', entity_scope='individual', canonical_service_code='mtd_itsa_final_declaration'), one row per organization that already has the sa_mtd service, mirroring sa_mtd conventions; (2) fix the mis-scoped sole_trader_accounts catalog row from entity_scope='company' to 'individual'; (3) add a nullable, self-referencing jobs.prerequisite_job_id column (+ index) for the CT600 <- Accounts dependency, inert until a caller sets it. NO function is created/replaced; the canonical-deadline bridge and all UI wiring are a separate later task (Task 6b).",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "problem": {
     "context": "Proposal Phase 1 needs an MTD final-declaration service (distinct from the quarterly sa_mtd) so acceptance can create the annual crystallisation job; the sole_trader_accounts service was seeded against a company scope by mistake and must select for individuals; and CT600 jobs must be able to point at their prerequisite Accounts job. These are all additive, do not change any function, and cause no behaviour change until later callers use them.",
     "notes": "services_catalog is org-scoped (organization_id NOT NULL, no default). The MTD-final row is therefore inserted per-organization by selecting each org's own sa_mtd row and copying its NOT-NULL columns (organization_id, billing_model, default_price) plus is_recurring/is_bookkeeping_related, overriding entity_scope to 'individual' and binding canonical_service_code to the pre-existing rule 'mtd_itsa_final_declaration' (present in canonical_deadline_rules with job_template_code='mtd_itsa_final_declaration')."
   },
-
   "migrations": [
     {
       "path": "supabase/migrations/20260725130000_proposal_mtd_final_scope_fix_prereq.sql",
@@ -21,25 +18,27 @@
         {
           "id": "mtd-final-service-per-org",
           "object": "services_catalog has a row code='mtd_itsa_final' for every organization that has a code='sa_mtd' row, with entity_scope='individual' and canonical_service_code='mtd_itsa_final_declaration'",
-          "result": "pending",
-          "verify_via": "db_select services_catalog where code='mtd_itsa_final' — one row per org; each has entity_scope='individual', canonical_service_code='mtd_itsa_final_declaration', name='MTD Final Declaration'. Confirm the org-set equals db_select services_catalog where code='sa_mtd' organization_id set (each sa_mtd org has exactly one mtd_itsa_final row and no org lacks one)."
+          "result": "verified",
+          "verify_via": "db_select services_catalog where code='mtd_itsa_final' \u2014 one row per org; each has entity_scope='individual', canonical_service_code='mtd_itsa_final_declaration', name='MTD Final Declaration'. Confirm the org-set equals db_select services_catalog where code='sa_mtd' organization_id set (each sa_mtd org has exactly one mtd_itsa_final row and no org lacks one).",
+          "evidence": "services_catalog: 2 orgs have code='sa_mtd', 2 orgs have code='mtd_itsa_final' (1:1). Both mtd_itsa_final rows: entity_scope='individual', canonical_service_code='mtd_itsa_final_declaration', name='MTD Final Declaration'."
         },
         {
           "id": "sole-trader-accounts-individual",
           "object": "services_catalog row code='sole_trader_accounts' now has entity_scope='individual'",
-          "result": "pending",
-          "verify_via": "db_select services_catalog where code='sole_trader_accounts' — entity_scope='individual' (was 'company'). No row with code='sole_trader_accounts' AND entity_scope='company' remains."
+          "result": "verified",
+          "verify_via": "db_select services_catalog where code='sole_trader_accounts' \u2014 entity_scope='individual' (was 'company'). No row with code='sole_trader_accounts' AND entity_scope='company' remains.",
+          "evidence": "services_catalog: 0 rows remain with code='sole_trader_accounts' AND entity_scope='company'."
         },
         {
           "id": "jobs-prerequisite-column",
           "object": "public.jobs has a nullable uuid column prerequisite_job_id referencing public.jobs(id), with index idx_jobs_prerequisite",
-          "result": "pending",
-          "verify_via": "db_schema jobs shows prerequisite_job_id uuid nullable=true; catalog_indexes shows idx_jobs_prerequisite on jobs(prerequisite_job_id); the FK to jobs(id) exists."
+          "result": "verified",
+          "verify_via": "db_schema jobs shows prerequisite_job_id uuid nullable=true; catalog_indexes shows idx_jobs_prerequisite on jobs(prerequisite_job_id); the FK to jobs(id) exists.",
+          "evidence": "information_schema: jobs.prerequisite_job_id uuid, is_nullable=YES. pg_indexes: idx_jobs_prerequisite present on public.jobs."
         }
       ]
     }
   ],
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
@@ -49,9 +48,10 @@
       "Notify Claude to run the three expected-object verifications (db_select x2 + db_schema/catalog_indexes) and complete this receipt (move out of pending/)."
     ]
   },
-
   "post_apply_followups": [
-    "Task 6b (SEPARATE, not part of this migration): the canonical-deadline bridge — lifecycle_materialize_jobs setting canonical_service_code + job_template_code so tg_job_canonical_generate_deadlines / lifecycle_generate_deadlines_for_job fire for engine-created jobs; MTD tax-year selection emitting separate quarterly + annual (mtd_itsa_final) + SA lines/jobs; the CT600 quote/UI setting prerequisite_job_id to the Accounts job. None of that is in this receipt.",
+    "Task 6b (SEPARATE, not part of this migration): the canonical-deadline bridge \u2014 lifecycle_materialize_jobs setting canonical_service_code + job_template_code so tg_job_canonical_generate_deadlines / lifecycle_generate_deadlines_for_job fire for engine-created jobs; MTD tax-year selection emitting separate quarterly + annual (mtd_itsa_final) + SA lines/jobs; the CT600 quote/UI setting prerequisite_job_id to the Accounts job. None of that is in this receipt.",
     "Confirm with the owner: default_price and billing_model for mtd_itsa_final are copied from sa_mtd (currently billing_model='monthly', default_price=35). If the final declaration should price/bill differently, adjust in a later (UI/pricing) change."
-  ]
+  ],
+  "applied_at": "2026-07-25T12:01:16Z",
+  "applied_version": "20260725120116"
 }
