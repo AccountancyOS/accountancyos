@@ -10934,6 +10934,7 @@ export type Database = {
           period_end: string | null
           period_label: string | null
           period_start: string | null
+          prerequisite_job_id: string | null
           priority: string
           progress: number | null
           recurrence_rule: Json | null
@@ -10973,6 +10974,7 @@ export type Database = {
           period_end?: string | null
           period_label?: string | null
           period_start?: string | null
+          prerequisite_job_id?: string | null
           priority?: string
           progress?: number | null
           recurrence_rule?: Json | null
@@ -11012,6 +11014,7 @@ export type Database = {
           period_end?: string | null
           period_label?: string | null
           period_start?: string | null
+          prerequisite_job_id?: string | null
           priority?: string
           progress?: number | null
           recurrence_rule?: Json | null
@@ -11073,6 +11076,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_prerequisite_job_id_fkey"
+            columns: ["prerequisite_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
