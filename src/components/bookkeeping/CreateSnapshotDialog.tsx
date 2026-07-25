@@ -15,15 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Camera, Check, AlertCircle, FileSpreadsheet } from "lucide-react";
+import { Camera, Check, AlertCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/bookkeeping-utils";
 
 interface CreateSnapshotDialogProps {
@@ -38,13 +31,6 @@ interface CreateSnapshotDialogProps {
   } | null;
 }
 
-const WORKPAPER_TYPES = [
-  { value: "company_accounts", label: "Company Accounts", forCompany: true },
-  { value: "ct600", label: "CT600 Tax Computation", forCompany: true },
-  { value: "self_assessment", label: "Self Assessment", forCompany: false },
-  { value: "vat_return", label: "VAT Return", forCompany: true },
-];
-
 export function CreateSnapshotDialog({
   open,
   onOpenChange,
@@ -56,18 +42,11 @@ export function CreateSnapshotDialog({
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState("");
-  const [createWorkpaper, setCreateWorkpaper] = useState(false);
-  const [workpaperType, setWorkpaperType] = useState<string>("");
   const [finaliseImmediately, setFinaliseImmediately] = useState(false);
 
-  const isBalanced = trialBalanceData 
+  const isBalanced = trialBalanceData
     ? Math.abs(trialBalanceData.totals.periodDebit - trialBalanceData.totals.periodCredit) < 0.01
     : false;
-
-  const filteredWorkpaperTypes = WORKPAPER_TYPES.filter(type => {
-    if (entity.type === "company") return type.forCompany;
-    return !type.forCompany || type.value === "vat_return";
-  });
 
   const createSnapshotMutation = useMutation({
     mutationFn: async () => {
@@ -115,38 +94,21 @@ export function CreateSnapshotDialog({
 
       if (error) throw error;
 
-      // Optionally create workpaper.
-      // TODO(Increment 2/Task 3): accounts-prep workpapers must now be bound to a job
-      // (createWorkpaperFromSnapshot requires a jobId). This bookkeeping-side snapshot
-      // dialog has no job context, so it can no longer create the workpaper inline —
-      // creation moves to the job's "Prepare accounts" action. Until this checkbox is
-      // removed/re-homed by Task 3, surface a clear message instead of orphaning one.
-      if (createWorkpaper && workpaperType) {
-        throw new Error(
-          'Creating a workpaper from Bookkeeping is no longer supported — use "Prepare accounts" from the job instead.'
-        );
-      }
-
-      return { snapshot: data, workpaperCreated: false };
+      // Accounts-prep workpapers are always bound to a job (Increment 2), so they
+      // are created from the job's "Prepare accounts" action — not here. This
+      // Bookkeeping-side dialog only freezes the trial balance into a snapshot.
+      return { snapshot: data };
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trial-balance-snapshots"] });
       queryClient.invalidateQueries({ queryKey: ["workpapers"] });
-      
-      if (result.workpaperCreated) {
-        toast.success("Snapshot & Workpaper created", {
-          description: "TB data has been mapped to workpaper categories",
-        });
-      } else {
-        toast.success("TB Snapshot created", {
-          description: "You can now create workpapers from this snapshot",
-        });
-      }
-      
+
+      toast.success("TB Snapshot created", {
+        description: 'Use "Prepare accounts" from the job to build a workpaper',
+      });
+
       onOpenChange(false);
       setNotes("");
-      setCreateWorkpaper(false);
-      setWorkpaperType("");
     },
     onError: (error: any) => {
       toast.error("Failed to create snapshot", { description: error.message });
@@ -232,39 +194,6 @@ export function CreateSnapshotDialog({
             />
           </div>
 
-          {/* Create workpaper option */}
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="create-workpaper"
-                checked={createWorkpaper}
-                onCheckedChange={(checked) => setCreateWorkpaper(checked as boolean)}
-              />
-              <Label htmlFor="create-workpaper" className="flex items-center gap-2 cursor-pointer">
-                <FileSpreadsheet className="h-4 w-4" />
-                Also create workpaper from this snapshot
-              </Label>
-            </div>
-
-            {createWorkpaper && (
-              <div className="space-y-2 pl-6">
-                <Label htmlFor="workpaper-type">Workpaper Type</Label>
-                <Select value={workpaperType} onValueChange={setWorkpaperType}>
-                  <SelectTrigger id="workpaper-type">
-                    <SelectValue placeholder="Select workpaper type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredWorkpaperTypes.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-
           {/* Finalise option */}
           <div className="border rounded-lg p-4">
             <div className="flex items-center space-x-2">
@@ -292,15 +221,10 @@ export function CreateSnapshotDialog({
           </Button>
           <Button
             onClick={() => createSnapshotMutation.mutate()}
-            disabled={createSnapshotMutation.isPending || (createWorkpaper && !workpaperType)}
+            disabled={createSnapshotMutation.isPending}
           >
             <Camera className="h-4 w-4 mr-2" />
-            {createSnapshotMutation.isPending 
-              ? "Creating..." 
-              : createWorkpaper 
-                ? "Create Snapshot & Workpaper"
-                : "Create Snapshot"
-            }
+            {createSnapshotMutation.isPending ? "Creating..." : "Create Snapshot"}
           </Button>
         </DialogFooter>
       </DialogContent>

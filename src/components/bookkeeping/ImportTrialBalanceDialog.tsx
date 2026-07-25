@@ -42,6 +42,12 @@ interface ImportTrialBalanceDialogProps {
   entity: BookkeepingEntity;
   periodStart: Date;
   periodEnd: Date;
+  /**
+   * Optional: fired with the freshly-created draft snapshot id after a
+   * successful import. Used by the job-side "Prepare accounts" flow to build a
+   * job-bound workpaper from the snapshot. Existing callers can ignore it.
+   */
+  onSnapshotCreated?: (snapshotId: string) => void;
 }
 
 interface ParsedRow {
@@ -80,6 +86,7 @@ export function ImportTrialBalanceDialog({
   entity,
   periodStart,
   periodEnd,
+  onSnapshotCreated,
 }: ImportTrialBalanceDialogProps) {
   const { organization } = useOrganization();
   const queryClient = useQueryClient();
@@ -336,11 +343,12 @@ export function ImportTrialBalanceDialog({
       
       return snapshot;
     },
-    onSuccess: () => {
+    onSuccess: (snapshot) => {
       queryClient.invalidateQueries({ queryKey: ["trial-balance-snapshots"] });
       toast.success(finaliseImmediately ? "Trial Balance imported and finalised" : "Trial Balance imported as draft");
       resetDialog();
       onOpenChange(false);
+      if (snapshot?.id) onSnapshotCreated?.(snapshot.id);
     },
     onError: (error: any) => {
       toast.error("Failed to import", { description: error.message });

@@ -13,6 +13,7 @@ import { WorkpaperStatusActions } from "@/components/workpaper/WorkpaperStatusAc
 import { AddAdjustmentDialog } from "@/components/workpaper/AddAdjustmentDialog";
 import { WorkpaperDiffView } from "@/components/workpaper/WorkpaperDiffView";
 import { JobWorkpaperFilePanel } from "@/components/workpaper/JobWorkpaperFilePanel";
+import { PrepareAccountsDialog } from "@/components/jobs/PrepareAccountsDialog";
 
 interface JobWorkpaperTabProps {
   jobId: string;
@@ -27,6 +28,24 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState<string | undefined>();
   const [showAddAdjustment, setShowAddAdjustment] = useState(false);
   const [showDiffView, setShowDiffView] = useState(false);
+  const [showPrepareAccounts, setShowPrepareAccounts] = useState(false);
+
+  // Job fields needed to seed the "Prepare accounts" flow (org / entity / period).
+  const { data: job } = useQuery({
+    queryKey: ["job-prepare-accounts", jobId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select(
+          "id, organization_id, client_id, company_id, period_start, period_end, service_type"
+        )
+        .eq("id", jobId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: workpaper, isLoading } = useQuery({
     queryKey: ["job-workpaper", jobId],
@@ -210,7 +229,37 @@ export function JobWorkpaperTab({ jobId }: JobWorkpaperTabProps) {
 
   if (!workpaper) {
     return (
-      <JobWorkpaperFilePanel jobId={jobId} />
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Prepare accounts</CardTitle>
+            <CardDescription>
+              No accounts workpaper exists for this job yet. Build a draft,
+              ledger-backed accounts workpaper from a trial-balance source.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setShowPrepareAccounts(true)} disabled={!job}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Prepare accounts
+            </Button>
+          </CardContent>
+        </Card>
+
+        <JobWorkpaperFilePanel jobId={jobId} />
+
+        {job && (
+          <PrepareAccountsDialog
+            open={showPrepareAccounts}
+            onOpenChange={setShowPrepareAccounts}
+            job={job}
+            onCreated={() => {
+              setShowPrepareAccounts(false);
+              queryClient.invalidateQueries({ queryKey: ["job-workpaper", jobId] });
+            }}
+          />
+        )}
+      </div>
     );
   }
 
