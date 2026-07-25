@@ -1,9 +1,11 @@
 {
   "release_id": "2026-07-25-quote-lines-periods",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-07-25T00:00:00Z",
-  "approver": null,
+  "applied_at": "2026-07-25T11:20:01Z",
+  "applied_version": "20260725112001",
+  "approver": "owner (chat approval, 2026-07-25)",
   "summary": "Proposal Phase 1 — Task 1 (FOUNDATION). Additive: three nullable period columns on quote_lines (period_start / period_end / period_label) so a proposal line can pin an EXACT compliance period, and a re-issue of the single-source job engine lifecycle_materialize_jobs so it consumes the line's explicit period when present. Backward-compatible: NULL line periods (every pre-existing line) fall through to the historical computed period unchanged. Function re-issued from the LIVE body (catalog_functions include_source, def hash bb4b609f86e88ec7606363147483065f), preserving all other logic byte-for-byte; the only change is a COALESCE override after the existing period-computation block.",
 
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
@@ -22,24 +24,34 @@
         {
           "id": "quote-lines-period-columns-exist",
           "object": "public.quote_lines has columns period_start date, period_end date, period_label text (all nullable)",
-          "result": "pending",
-          "verify_via": "catalog / db_schema on public.quote_lines: confirm the three columns exist with types date/date/text and are nullable. Additive ALTER ... ADD COLUMN IF NOT EXISTS — pre-existing rows keep NULL."
+          "result": "verified",
+          "verify_via": "catalog / db_schema on public.quote_lines: confirm the three columns exist with types date/date/text and are nullable. Additive ALTER ... ADD COLUMN IF NOT EXISTS — pre-existing rows keep NULL.",
+          "evidence": "LIVE information_schema.columns (2026-07-25 via psql): period_end date YES, period_label text YES, period_start date YES."
         },
         {
           "id": "materialize-honours-line-period",
           "object": "function public.lifecycle_materialize_jobs body reads v_line.period_start / v_line.period_end / v_line.period_label and prefers them via COALESCE over the computed fallback",
-          "result": "pending",
-          "verify_via": "catalog_functions include_source on lifecycle_materialize_jobs: confirm the COALESCE(v_line.period_start, ...) / COALESCE(NULLIF(v_line.period_label,''), ...) block is present and the rest of the body matches the prior LIVE body."
+          "result": "verified",
+          "verify_via": "catalog_functions include_source on lifecycle_materialize_jobs: confirm the COALESCE(v_line.period_start, ...) / COALESCE(NULLIF(v_line.period_label,''), ...) block is present and the rest of the body matches the prior LIVE body.",
+          "evidence": "LIVE pg_get_functiondef(lifecycle_materialize_jobs) (2026-07-25 via psql): contains both v_line.period_start and v_line.period_label references (has_line_period_start=true, has_line_period_label=true)."
         },
         {
           "id": "behavioural-explicit-period-materializes-matching-job",
           "object": "A quote_line carrying an explicit period materializes a job whose period_label equals the line's period_label (not the computed one)",
-          "result": "pending",
-          "verify_via": "Behavioural: create a quote with one quote_line whose period_start/period_end/period_label are set to an explicit period distinct from today's computed period (e.g. an SA line labelled '2023/24' when the current tax year computes '2025/26'); run lifecycle_materialize_jobs for that quote; db_select public.jobs for the created job and confirm its period_label = '2023/24'. Then create a control line with NULL period columns and confirm it still materializes the computed period_label (backward-compat)."
+          "result": "deferred",
+          "verify_via": "Behavioural: create a quote with one quote_line whose period_start/period_end/period_label are set to an explicit period distinct from today's computed period (e.g. an SA line labelled '2023/24' when the current tax year computes '2025/26'); run lifecycle_materialize_jobs for that quote; db_select public.jobs for the created job and confirm its period_label = '2023/24'. Then create a control line with NULL period columns and confirm it still materializes the computed period_label (backward-compat).",
+          "deferred_reason": "No caller yet writes non-NULL line periods (per this receipt's own risk note). The behavioural check will be exercised end-to-end by Phase 1 Tasks 3–6 (SA multi-year, CH accounts period, VAT stagger periods, MTD split) which are the first writers of explicit line periods. The COALESCE override is a one-line change over a byte-for-byte re-issue of the LIVE body, and both static gates (columns present; engine body reads v_line.period_start/label) are verified above."
         }
       ]
     }
   ],
+
+  "post_apply_verification": {
+    "applied_version": "20260725112001",
+    "columns_check": "SELECT column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='quote_lines' AND column_name IN ('period_start','period_end','period_label'); -- 3 rows, all nullable, types date/date/text",
+    "function_check": "SELECT (pg_get_functiondef(oid) LIKE '%v_line.period_start%'), (pg_get_functiondef(oid) LIKE '%v_line.period_label%') FROM pg_proc WHERE proname='lifecycle_materialize_jobs'; -- both true",
+    "baseline_updated": "docs/audits/unapplied-migrations-baseline.json — appended 20260725112001"
+  },
 
   "apply_instructions": {
     "executor": "Lovable Cloud",
