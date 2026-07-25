@@ -107,8 +107,9 @@ $$;
 -- 2. MTD Quarterly Filing service — org-scoped, one row per practice that has sa_mtd.
 --    Mirrors Task 6a (20260725130000): per-org INSERT ... SELECT from that org's own sa_mtd,
 --    copying its NOT-NULL columns (billing_model, default_price, is_bookkeeping_related,
---    is_recurring) and overriding entity_scope to 'individual'. Binds to the reused canonical
---    concept 'self_assessment_mtd_quarterly'. Idempotent via NOT EXISTS on (organization_id, code).
+--    is_recurring) and overriding entity_scope to 'individual'. canonical_service_code is NULL
+--    (sa_mtd already owns 'self_assessment_mtd_quarterly' and it is per-org-unique; System A
+--    doesn't use canonical_service_code). Idempotent via NOT EXISTS on (organization_id, code).
 --    The orphaned legacy 'mtd_quarterly' row (canonical_service_code NULL) is left untouched.
 INSERT INTO public.services_catalog (
   organization_id,
@@ -134,7 +135,12 @@ SELECT
   true,
   sc.is_recurring,
   'individual',
-  'self_assessment_mtd_quarterly'
+  NULL   -- canonical_service_code: intentionally NULL. sa_mtd already holds
+         -- 'self_assessment_mtd_quarterly' and services_catalog_org_canonical_code_uniq
+         -- makes it per-org-unique (reusing it → 23505). System A (calculate_deadline)
+         -- keys on service_type, not canonical_service_code, so this is unused this
+         -- release; matches the legacy orphan 'mtd_quarterly' (also NULL). A proper
+         -- distinct canonical concept is assigned in the future System-B consolidation.
 FROM public.services_catalog sc
 WHERE sc.code = 'sa_mtd'
   AND NOT EXISTS (

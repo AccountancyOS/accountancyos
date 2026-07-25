@@ -13,7 +13,7 @@
   "migrations": [
     {
       "path": "supabase/migrations/20260725140000_mtd_deadlines_and_service.sql",
-      "sha256": "f577f49d996cc948b77caab1cec23a5876b2f1d373232fcfcbc159e5656fe3c8",
+      "sha256": "dc03445edf2e5f7f821b5eecafe937718d40ee9af8f7c309150f048d3786530e",
       "expected_objects": [
         {
           "id": "calculate_deadline-mtd_quarter-behaviour",
@@ -58,6 +58,7 @@
     "Canonical binding: mtd_quarter reuses the canonical concept 'self_assessment_mtd_quarterly' per the T6b design note; the legacy orphaned services_catalog 'mtd_quarterly' row is intentionally left untouched (not renamed/deleted)."
   ],
   "preflight": {
-    "live_body_verified": "2026-07-25 (claude): live calculate_deadline (def hash 6d5fef92) fetched via catalog_functions and diffed against this migration. All 8 existing arms (companies_house_accounts/confirmation, corporation_tax_filing/payment, self_assessment, vat_return, payroll_fps/eps, ELSE) match byte-for-byte; NO pre-existing mtd_quarter/mtd_itsa_final arm. Migration is a clean additive superset (adds the 2 arms between self_assessment and vat_return). Signature/volatility/search_path match (IMMUTABLE SECURITY DEFINER, search_path public). SAFE TO APPLY \u2014 the 'diff live first' caveat is satisfied."
+    "live_body_verified": "2026-07-25 (claude): live calculate_deadline (def hash 6d5fef92) fetched via catalog_functions and diffed against this migration. All 8 existing arms (companies_house_accounts/confirmation, corporation_tax_filing/payment, self_assessment, vat_return, payroll_fps/eps, ELSE) match byte-for-byte; NO pre-existing mtd_quarter/mtd_itsa_final arm. Migration is a clean additive superset (adds the 2 arms between self_assessment and vat_return). Signature/volatility/search_path match (IMMUTABLE SECURITY DEFINER, search_path public). SAFE TO APPLY \u2014 the 'diff live first' caveat is satisfied.",
+    "canonical_code_fix": "First apply failed 23505 on services_catalog_org_canonical_code_uniq (sa_mtd already owns 'self_assessment_mtd_quarterly' per org). Fixed: mtd_quarter service now inserts canonical_service_code=NULL (System A keys on service_type, not canonical code; matches the legacy orphan mtd_quarterly which is also NULL). calculate_deadline half unchanged/verified. Re-apply."
   }
 }
