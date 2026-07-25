@@ -1,0 +1,69 @@
+{
+  "release_id": "2026-07-25-tb-snapshot-draft-lifecycle",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "approver": null,
+  "summary": "Accounts-prep Increment 2, Task 1. Additive draft TB-snapshot lifecycle: adds SECURITY DEFINER RPCs public.create_tb_snapshot (native path aggregates the single-source public.get_trial_balance_from_ledger into the stored balances jsonb shape, applying the app's natural-sign convention to openingBalance/closingBalance — credit-normal types LIABILITY/EQUITY/INCOME negated, mirroring naturalBalance at src/lib/trial-balance-service.ts:18; supersedes any existing live draft for the same org/entity/period; role-gated via user_has_organization_access; writes audit_log) and public.regenerate_tb_snapshot (draft-only rebuild-from-ledger, rejects finalised/locked). Also adds the status CHECK IN ('draft','finalised','superseded','used_in_workpaper') and a partial unique index enforcing at most one live draft per (org, entity, period). Preview NEVER locks: every row is status='draft', locked=false. Finalise/lock is Increment 3.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "context": "Increment 2 lets a job produce a draft, ledger-backed, job-bound accounts-prep workpaper with no Bookkeeping detour. This migration is the DB half: the draft-snapshot engine the 'Prepare accounts' action calls. The native TB math must NOT be re-implemented — it aggregates the existing single source of truth public.get_trial_balance_from_ledger (migration 20260608141410).",
+    "scope": "Additive only — new functions (CREATE OR REPLACE), one guarded CHECK constraint (add-if-absent), one partial unique index (IF NOT EXISTS). No existing object is altered or dropped."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725100000_tb_snapshot_draft_lifecycle.sql",
+      "sha256": "6a73b699672e3e82dac8df562fe5d1fa9567d0f59324fd2a5c05c50e5be15064",
+      "expected_objects": [
+        {
+          "id": "create_tb_snapshot-exists",
+          "object": "function public.create_tb_snapshot(uuid,uuid,uuid,uuid,date,date,text,jsonb) RETURNS uuid, SECURITY DEFINER, and its body references public.get_trial_balance_from_ledger",
+          "result": "pending",
+          "verify_via": "catalog_functions (include_source) filtered to public.create_tb_snapshot — expect it to exist, be SECURITY DEFINER with search_path=public, and the source to PERFORM/SELECT FROM public.get_trial_balance_from_ledger. Confirm EXECUTE granted to authenticated + service_role and revoked from PUBLIC."
+        },
+        {
+          "id": "regenerate_tb_snapshot-exists",
+          "object": "function public.regenerate_tb_snapshot(uuid) RETURNS uuid, SECURITY DEFINER, draft-only guard",
+          "result": "pending",
+          "verify_via": "catalog_functions (include_source) filtered to public.regenerate_tb_snapshot — expect it to exist and RAISE when the target snapshot status<>'draft' OR locked, and to delegate to public.create_tb_snapshot for the native rebuild."
+        },
+        {
+          "id": "status-check-exists",
+          "object": "CHECK constraint trial_balance_snapshots_status_check restricting status to ('draft','finalised','superseded','used_in_workpaper')",
+          "result": "pending",
+          "verify_via": "catalog / pg_constraint: SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='public.trial_balance_snapshots'::regclass AND contype='c' — expect trial_balance_snapshots_status_check with the four allowed values."
+        },
+        {
+          "id": "live-draft-uniqueness",
+          "object": "partial unique index uq_tb_snapshot_live_draft on (organization_id, coalesce(client_id,sentinel), coalesce(company_id,sentinel), period_start, period_end) WHERE status='draft'",
+          "result": "pending",
+          "verify_via": "catalog_indexes on public.trial_balance_snapshots — expect uq_tb_snapshot_live_draft as a UNIQUE partial index WHERE status='draft'."
+        },
+        {
+          "id": "native-create-matches-ledger",
+          "object": "A native create_tb_snapshot on a real job yields a draft snapshot whose balances derive from get_trial_balance_from_ledger for the same org/entity/period, with app-natural signs on opening/closing",
+          "result": "pending",
+          "verify_via": "Behavioural: pick a real job with ledger entries (org, client_id/company_id, period_start/end). db_rpc create_tb_snapshot(p_org, p_client_id, p_company_id, p_job_id, p_period_start, p_period_end, 'native', NULL) -> returns a uuid. db_select the row: expect status='draft', locked=false. Then db_rpc get_trial_balance_from_ledger(same args) and confirm, per account (keyed by accountId/account_id): the snapshot debit/credit equal period_debit/period_credit (raw, never flipped); and openingBalance/closingBalance equal the ledger opening_balance/closing_balance for debit-normal types but the NEGATED ledger value for credit-normal types (upper(account_type) IN ('LIABILITY','EQUITY','INCOME')) — matching naturalBalance at src/lib/trial-balance-service.ts:18. Also confirm total_debit=SUM(period_debit), total_credit=SUM(period_credit), is_balanced=abs(diff)<0.01. Finally re-run create_tb_snapshot for the same org/entity/period and confirm the prior draft flipped to status='superseded' (uniqueness holds)."
+        }
+      ]
+    }
+  ],
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260725100000_tb_snapshot_draft_lifecycle.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verifications and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Sign convention: RECONCILED. create_tb_snapshot's native path now applies the app's natural-sign convention to openingBalance/closingBalance — credit-normal types (LIABILITY/EQUITY/INCOME, case-insensitive) are negated to credit-debit, everything else stays debit-credit — mirroring naturalBalance at src/lib/trial-balance-service.ts:18. The underlying figures still come from the single-source get_trial_balance_from_ledger; only the presentation sign is normalised so RPC-created draft snapshots match existing app-created snapshots. Per-account debit/credit movement fields keep the raw period figures (not flipped).",
+    "Column coverage: get_trial_balance_from_ledger does not return account_subtype or is_bank_account, so the native snapshot omits the optional accountSubtype/isBankAccount keys the app's TBSnapshotBalance can carry. Confirm no downstream consumer hard-requires them; if needed, extend the SoT function rather than re-deriving client-side."
+  ]
+}
