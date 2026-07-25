@@ -349,11 +349,16 @@ export async function createWorkpaperFromSnapshot(
   snapshotId: string,
   workpaperType: "company_accounts" | "ct600" | "self_assessment" | "vat_return",
   options: {
-    jobId?: string;
+    jobId: string;
     name?: string;
     forceRecreate?: boolean;
-  } = {}
+  }
 ): Promise<{ success: boolean; workpaperId?: string; error?: string; wasUpdated?: boolean }> {
+  // An accounts-prep workpaper is always bound to a job (Increment 2). Reject
+  // callers that omit it rather than silently writing a null job_id.
+  if (!options?.jobId) {
+    throw new Error("jobId is required to create an accounts-prep workpaper");
+  }
   try {
     // Determine service type for the workpaper
     const serviceTypeMap: Record<string, string> = {
@@ -438,7 +443,7 @@ export async function createWorkpaperFromSnapshot(
         organization_id: snapshot.organization_id,
         client_id: snapshot.client_id,
         company_id: snapshot.company_id,
-        job_id: options.jobId || null,
+        job_id: options.jobId,
         trial_balance_snapshot_id: snapshotId,
         source_type: snapshot.source_type as any,
         name: workpaperName,
@@ -582,6 +587,12 @@ export async function refreshWorkpaperFromTB(
 
     if (!workpaper.trial_balance_snapshot_id) {
       return { success: false, error: "Workpaper has no linked TB snapshot" };
+    }
+
+    // An accounts-prep workpaper is always job-bound (Increment 2). Without a
+    // job_id it can't be refreshed via the job-bound create path.
+    if (!workpaper.job_id) {
+      return { success: false, error: "Workpaper has no linked job" };
     }
 
     // Re-create from snapshot

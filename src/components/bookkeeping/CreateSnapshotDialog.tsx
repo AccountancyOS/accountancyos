@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/lib/organization-context";
 import type { BookkeepingEntity } from "./EntitySelector";
-import { createWorkpaperFromSnapshot, UK_WORKPAPER_CATEGORIES } from "@/lib/workpaper-from-tb";
 import {
   Dialog,
   DialogContent,
@@ -116,16 +115,16 @@ export function CreateSnapshotDialog({
 
       if (error) throw error;
 
-      // Optionally create workpaper
+      // Optionally create workpaper.
+      // TODO(Increment 2/Task 3): accounts-prep workpapers must now be bound to a job
+      // (createWorkpaperFromSnapshot requires a jobId). This bookkeeping-side snapshot
+      // dialog has no job context, so it can no longer create the workpaper inline —
+      // creation moves to the job's "Prepare accounts" action. Until this checkbox is
+      // removed/re-homed by Task 3, surface a clear message instead of orphaning one.
       if (createWorkpaper && workpaperType) {
-        const result = await createWorkpaperFromSnapshot(
-          data.id,
-          workpaperType as keyof typeof UK_WORKPAPER_CATEGORIES
+        throw new Error(
+          'Creating a workpaper from Bookkeeping is no longer supported — use "Prepare accounts" from the job instead.'
         );
-        if (!result.success) {
-          throw new Error(result.error || "Failed to create workpaper");
-        }
-        return { snapshot: data, workpaperCreated: true };
       }
 
       return { snapshot: data, workpaperCreated: false };
