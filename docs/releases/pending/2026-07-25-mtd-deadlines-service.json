@@ -1,0 +1,65 @@
+{
+  "release_id": "2026-07-25-mtd-deadlines-service",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "approver": null,
+  "summary": "Proposal Phase 1 — Task 6b-1. Extends the WORKING System A deadline engine (public.calculate_deadline) with two additive per-period filing-type arms — 'mtd_quarter' (fixed statutory MTD-ITSA quarterly update date: the 7th of the month after each standard 5th-ending quarter-end, i.e. 5 Jul→7 Aug / 5 Oct→7 Nov / 5 Jan→7 Feb / 5 Apr→7 May) and 'mtd_itsa_final' (31 January following the tax year, mirroring the self_assessment arm's year logic) — every other arm reproduced byte-for-byte from the live body. Also adds a per-org 'mtd_quarter' catalog service (MTD Quarterly Filing, entity_scope='individual', canonical_service_code='self_assessment_mtd_quarterly'), one row per org that has sa_mtd, copying that org's NOT-NULL columns — mirroring Task 6a (20260725130000). System B (lifecycle_generate_deadlines_for_job + canonical_deadline_rules) is left dormant; nothing is routed into it.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "context": "The proposal now creates one job per compliance period (per SA year, per accounts period, per VAT period, and — for MTD — per quarter + annual + SA). Once a job carries its own exact period its deadline is simple date-math on that one period, so System A only needs two tiny additive arms to cover the new MTD-quarter and MTD-final job types (design note docs/superpowers/plans/2026-07-25-proposal-t6b-deadline-engine-note.md, Option A). Activating System B was rejected as disproportionate/regression-prone for this release.",
+    "scope": "Additive only. CREATE OR REPLACE of calculate_deadline (live body verbatim + two new CASE arms + a header comment marking System A as the active engine); one guarded per-org services_catalog INSERT (NOT EXISTS on (organization_id, code)). No existing arm, function signature, table, or row is altered or dropped. lifecycle_materialize_jobs, UI, and System B are untouched."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725140000_mtd_deadlines_and_service.sql",
+      "sha256": "f577f49d996cc948b77caab1cec23a5876b2f1d373232fcfcbc159e5656fe3c8",
+      "expected_objects": [
+        {
+          "id": "calculate_deadline-mtd_quarter-behaviour",
+          "object": "calculate_deadline('mtd_quarter', '2025-04-06', '2025-07-05', '{}') = 2025-08-07",
+          "result": "pending",
+          "verify_via": "Behavioural: db_rpc calculate_deadline(filing_type:'mtd_quarter', period_start:'2025-04-06', period_end:'2025-07-05', metadata:'{}') — expect DATE 2025-08-07 (the 7th of the month after the 5-Jul quarter-end). Spot-check other quarters: period_end 2025-10-05 → 2025-11-07; 2026-01-05 → 2026-02-07; 2026-04-05 → 2026-05-07."
+        },
+        {
+          "id": "calculate_deadline-mtd_itsa_final-behaviour",
+          "object": "calculate_deadline('mtd_itsa_final', '2025-04-06', '2026-04-05', '{}') = 2027-01-31",
+          "result": "pending",
+          "verify_via": "Behavioural: db_rpc calculate_deadline(filing_type:'mtd_itsa_final', period_start:'2025-04-06', period_end:'2026-04-05', metadata:'{}') — expect DATE 2027-01-31 (31 January following the 5-Apr-2026 tax-year end; identical to the self_assessment arm's result for the same period)."
+        },
+        {
+          "id": "calculate_deadline-existing-arms-unchanged",
+          "object": "Pre-existing arms still return their live values (no regression)",
+          "result": "pending",
+          "verify_via": "Behavioural regression: db_rpc calculate_deadline('vat_return', '2025-01-01', '2025-03-31', '{}') = 2025-05-07; calculate_deadline('self_assessment', '2025-04-06', '2026-04-05', '{}') = 2027-01-31; calculate_deadline('companies_house_accounts', p, '2025-12-31', '{}') = 2026-09-30. Also confirm via catalog_functions (include_source) that the function is SECURITY DEFINER with search_path=public and the ELSE/other arms are byte-for-byte the prior live body."
+        },
+        {
+          "id": "mtd_quarter-service-per-org",
+          "object": "A 'mtd_quarter' MTD Quarterly Filing service exists once per org that has sa_mtd",
+          "result": "pending",
+          "verify_via": "db_select services_catalog where code='mtd_quarter' — expect exactly one row per organization_id that has a code='sa_mtd' row, with name='MTD Quarterly Filing', entity_scope='individual', canonical_service_code='self_assessment_mtd_quarterly', active=true, and billing_model/default_price/is_recurring/is_bookkeeping_related equal to that org's sa_mtd row. Confirm the legacy orphaned 'mtd_quarterly' row (canonical_service_code NULL) is unchanged."
+        }
+      ]
+    }
+  ],
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "BEFORE APPLY (RPC-replacement discipline): fetch the LIVE body of public.calculate_deadline via catalog_functions(name_like:'calculate_deadline', include_source:true) and diff it against the CREATE OR REPLACE in this migration. This migration was authored against the latest git definition (20251125193826) because the Lovable MCP token was expired at authoring time and the live body could not be fetched. Confirm the live body matches (unprefixed params filing_type/period_start/period_end/metadata; SECURITY DEFINER; search_path=public; the eight existing arms). If the live body has diverged (extra arms, different math, or an already-present mtd_quarter/mtd_itsa_final arm), reconcile before applying so nothing live is clobbered.",
+      "Apply migration 20260725140000_mtd_deadlines_and_service.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verifications and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Signature note: the live/git calculate_deadline uses UNPREFIXED parameter names (filing_type, period_start, period_end, metadata JSONB DEFAULT '{}') — NOT the p_-prefixed names assumed in the task brief. The new arms therefore reference period_end (not p_period_end). When verifying via db_rpc, pass args keyed as filing_type/period_start/period_end/metadata.",
+    "mtd_itsa_final year logic: uses make_date(EXTRACT(YEAR FROM period_end)::int + 1, 1, 31), which yields 31 Jan (year+1) for the canonical 5-April tax-year end — identical to the self_assessment arm's DATE_TRUNC('year', period_end)+1yr+1mo-1day result (whose <4-month guard never fires for a 5-Apr period_end). Confirmed equal for the receipted input.",
+    "Canonical binding: mtd_quarter reuses the canonical concept 'self_assessment_mtd_quarterly' per the T6b design note; the legacy orphaned services_catalog 'mtd_quarterly' row is intentionally left untouched (not renamed/deleted)."
+  ]
+}
