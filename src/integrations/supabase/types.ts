@@ -8065,6 +8065,68 @@ export type Database = {
           },
         ]
       }
+      engagement_letter_signatories: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          engagement_letter_id: string | null
+          id: string
+          onboarding_application_id: string | null
+          organization_id: string
+          person_id: string | null
+          required: boolean
+          sign_order: number | null
+          signature_ip: string | null
+          signature_token: string | null
+          signature_user_agent: string | null
+          signed_at: string | null
+          signer_email: string
+          signer_name: string | null
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          engagement_letter_id?: string | null
+          id?: string
+          onboarding_application_id?: string | null
+          organization_id: string
+          person_id?: string | null
+          required?: boolean
+          sign_order?: number | null
+          signature_ip?: string | null
+          signature_token?: string | null
+          signature_user_agent?: string | null
+          signed_at?: string | null
+          signer_email: string
+          signer_name?: string | null
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          engagement_letter_id?: string | null
+          id?: string
+          onboarding_application_id?: string | null
+          organization_id?: string
+          person_id?: string | null
+          required?: boolean
+          sign_order?: number | null
+          signature_ip?: string | null
+          signature_token?: string | null
+          signature_user_agent?: string | null
+          signed_at?: string | null
+          signer_email?: string
+          signer_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagement_letter_signatories_engagement_letter_id_fkey"
+            columns: ["engagement_letter_id"]
+            isOneToOne: false
+            referencedRelation: "engagement_letters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       engagement_letter_template_variants: {
         Row: {
           body: string
@@ -8151,6 +8213,7 @@ export type Database = {
           signed_by: string | null
           signer_email: string | null
           signer_name: string | null
+          signing_rule: string
           status: string
           template_id: string | null
           token_expires_at: string | null
@@ -8175,6 +8238,7 @@ export type Database = {
           signed_by?: string | null
           signer_email?: string | null
           signer_name?: string | null
+          signing_rule?: string
           status?: string
           template_id?: string | null
           token_expires_at?: string | null
@@ -8199,6 +8263,7 @@ export type Database = {
           signed_by?: string | null
           signer_email?: string | null
           signer_name?: string | null
+          signing_rule?: string
           status?: string
           template_id?: string | null
           token_expires_at?: string | null

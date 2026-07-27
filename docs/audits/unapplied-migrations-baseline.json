@@ -1,5 +1,5 @@
 {
-  "snapshotDate": "2026-07-25",
+  "snapshotDate": "2026-07-27",
   "note": "Regenerate after every migration approval. See docs/audits/unapplied-migrations.md.",
   "appliedVersions": [
     "20251125162929",
@@ -386,6 +386,7 @@
     "20260725112852",
     "20260725120116",
     "20260725204114",
-    "20260725204336"
+    "20260725204336",
+    "20260727072814"
   ]
 }
