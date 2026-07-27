@@ -215,6 +215,22 @@ Service`). A user cannot tell which to quote. Product decision required.
 
 ---
 
+### DEF-011 — P3 — Accountant-side org lookup runs inside the client portal
+
+**Phase:** 3 (Portal) · **Gate impact:** 6 · **Status:** OPEN
+
+Every authenticated `/portal/*` page fires
+`GET /rest/v1/organization_users?select=organization_id&user_id=eq.<portal user>`
+**four times**, each returning `406 PGRST116` because a portal user has no
+`organization_users` row and the call uses `.single()`. Reproduced on all seven
+portal routes (dashboard, tasks, documents, questionnaires, messages, payments,
+settings). Functionally harmless — every page renders correctly — but it means
+the accountant-side org context is being resolved inside the portal shell, which
+is both wasted round-trips and console/telemetry noise. Fix: skip the lookup for
+portal sessions, and use `maybeSingle()`.
+
+---
+
 ## Phase 3 — Core commercial journey (PASS with blockers)
 
 Executed against LIVE as `leon@bluetickaccountants.com`, then anonymously as the client.
@@ -232,7 +248,17 @@ Executed against LIVE as `leon@bluetickaccountants.com`, then anonymously as the
 | Upload 2 AML documents | **PASS** | 2 rows in `onboarding_documents` |
 | Client details (DOB/NINO/UTR/address) | **PASS** | Advances to Billing |
 | Billing acknowledgement (no Stripe connected) | **PASS** | Correct fallback copy |
-| Portal account submission | **UNVERIFIED** | Application reached `status='portal_pending'`; the submit click was not confirmed before the run ended |
+| Portal account submission | **PASS** | Application reached `status='for_review'` |
+| Accountant review screen | **PASS** | Captured details + commercial snapshot render correctly |
+| AML verification | **PASS** | Checklist enabled once both documents present; verified in one action |
+| Approval side effects | **PASS** | `clients` row `f1565f89-…` created (`status=active`); job `67ead073-…` materialised (`generation_reason=onboarding_approval:6bb5670c-…`); `portal_access` invite issued |
+| Portal invite acceptance | **PASS** | Name/email/password accepted, landed on `/portal/dashboard` authenticated |
+| Portal route sweep (7 routes) | **PASS with DEF-011** | All render; AML uploads visible under Documents |
+| AML/portal-invite email delivery | **FAIL — DEF-003** | Both queued `pending` with `scheduled_at = created_at + 15m`; never drained |
+
+The AML "Verify" action was initially read as blocked; it is not a defect —
+the button is correctly gated behind a three-item verification checklist which
+enables once both an ID document and a proof of address are present.
 
 Notably, the previously reported "Database error checking email" did **not**
 reproduce on this run.
@@ -246,7 +272,7 @@ reproduce on this run.
 | 0 | Requirements freeze | BLOCKED — awaiting owner rulings |
 | 1 | Environment preflight | PARTIAL — DEF-001..005 raised |
 | 2 | Catastrophic-risk tests | NOT STARTED |
-| 3 | Core commercial journey | MOSTLY PASS — blocked at delivery by DEF-003 |
+| 3 | Core commercial journey | COMPLETE — end-to-end lead → quote → acceptance → onboarding → AML → approval → client → portal login all PASS; only email delivery (DEF-003) fails |
 | 4 | Module coverage | PARTIAL — DEF-006/007 raised; bills/invoices/automations blocked by DEF-001/002 |
 | 5 | Non-functional readiness | NOT STARTED |
 | 6 | Operational readiness | NOT STARTED |
