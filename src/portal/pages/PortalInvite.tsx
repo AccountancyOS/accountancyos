@@ -54,6 +54,18 @@ export default function PortalInvite() {
             : "This invitation link is no longer valid. Please ask your accountant to resend it.",
         );
       }
+      // An orphaned auth identity (a leftover row whose user was deleted) makes GoTrue
+      // fail the duplicate scan with a 500, which used to reach the client as a raw
+      // "Database error checking email". We do not claim the account already exists —
+      // the orphan does not prove a usable account — so this offers the likely fix and
+      // names the practice as the fallback.
+      if (status === "account_conflict") {
+        throw new Error(
+          "We couldn't finish creating your account because of a conflict with a previous " +
+            "account for this email address. Try signing in, or use Forgot password. If " +
+            "neither works, please contact your accountant.",
+        );
+      }
       // The signup function returns "created" (new user) or "already_exists" (re-used token /
       // existing account) on success — both were previously treated as errors (FUN-1).
       const ok = status === "created" || status === "already_exists" || status === "ok" || status === "success";

@@ -31,6 +31,28 @@ function json(req: Request, body: unknown, status = 200): Response {
   });
 }
 
+/**
+ * GoTrue's duplicate scan can fail on an ORPHANED identity — a row in auth.identities
+ * whose user no longer exists. It then returns a 500 "unable to find user from email
+ * identity for duplicates: User not found" instead of a clean "already registered", which
+ * the portal surfaced to the client as a raw "Database error checking email".
+ *
+ * This is NOT treated as a duplicate. The orphan proves an identity row exists for the
+ * address; it does NOT prove a usable account does. Where the orphan is the ONLY identity
+ * for that email there is no account to sign in to, so answering "already registered —
+ * please sign in" would send the client to a login and a password reset that both fail,
+ * with no way forward. It gets its own status so the client can offer sign-in as the
+ * likely fix while still naming the practice as the fallback, and so the practice sees a
+ * distinct signal to repair the orphan.
+ */
+function isOrphanedIdentityError(err: { message?: string; code?: string }): boolean {
+  const msg = (err.message ?? "").toLowerCase();
+  return (
+    msg.includes("find user from email identity for duplicates") ||
+    (msg.includes("email identity") && msg.includes("user not found"))
+  );
+}
+
 function isDuplicateEmailError(err: { message?: string; code?: string; status?: number }): boolean {
   const code = (err.code ?? "").toLowerCase();
   if (code === "email_exists" || code === "user_already_exists") return true;
@@ -124,6 +146,16 @@ Deno.serve(async (req) => {
 
   if (isDuplicateEmailError(createErr as { message?: string; code?: string })) {
     return json(req, { status: "already_exists", email });
+  }
+
+  if (isOrphanedIdentityError(createErr as { message?: string; code?: string })) {
+    // Logged loudly: this needs an operator to delete the orphaned auth.identities row.
+    console.error(
+      "[accept-portal-invite-signup] orphaned auth identity blocks signup for",
+      email,
+      createErr,
+    );
+    return json(req, { status: "account_conflict", email });
   }
 
   console.warn("[accept-portal-invite-signup] createUser failed", createErr);
