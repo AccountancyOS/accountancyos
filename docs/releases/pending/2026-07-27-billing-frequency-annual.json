@@ -1,0 +1,69 @@
+{
+  "release_id": "2026-07-27-billing-frequency-annual",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-27T00:00:00Z",
+  "approver": null,
+  "summary": "A quote line may now be ONE-OFF, MONTHLY or ANNUAL. Widens quote_lines_billing_frequency_check to include 'annual', and re-issues public_get_quote_by_token so accepted_snapshot totals each billing period separately (new total_annual; total_now stops absorbing everything that is not monthly). Establishes the rule that a stored unit price is exactly what the accountant quoted for that period, with nothing downstream dividing or annualising it.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "apply_order": "APPLY AFTER 2026-07-27-quote-token-returns-onboarding-token (migration 20260727160000). Both re-issue public_get_quote_by_token and this one is based on that migration's body, so applying this first would silently drop the onboarding-token repair.",
+
+  "problem": {
+    "symptom": "An engagement letter promised GBP 2,520 PER MONTH for a proposal the accountant priced at GBP 2,520 per YEAR — twelve times the fee, in the document that is the contract.",
+    "root_cause": "quote_lines.billing_frequency allowed only 'now' or 'monthly' (quote_lines_billing_frequency_check, from 20251125203624), while the proposal dialog labels the price box 'Annual Price'. An annual fee therefore had to be stored as 'monthly', and the dialog divided by 12 for display only — so the figure SAVED was the annual one while its frequency claimed monthly. Every consumer reads subtotal on a monthly line as the monthly amount, so accepted_snapshot reported total_monthly = 2520 and the letter repeated it. Confirmed on live quote Q-26-0002 (753529f8): all five lines billing_frequency 'monthly', unit prices 960/0/0/960/600, snapshot total_monthly 2520 and total_now 0.",
+    "rule_established": "The stored unit price is exactly what the accountant quoted, the frequency states what period it covers, and the engagement letter states what the quote states."
+  },
+
+  "live_bodies_used": [
+    {
+      "function": "public.public_get_quote_by_token(uuid)",
+      "basis": "Based on supabase/migrations/20260727160000_quote_token_returns_onboarding_token.sql, which was itself reproduced from the live body 4e250dfdaccaa30a12e33f5b52cbd6cc. Changed only in the snapshot-totals block. The onboarding-token repair (onboarding_access_token in the payload, withheld until the quote is accepted) is preserved verbatim and is pinned by src/test/regression/billing-frequency-annual.test.ts."
+    }
+  ],
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260727170000_billing_frequency_annual.sql",
+      "sha256": "5a0758e8dee62376312e40756039e288657d681efd81f44d19bcde954ba8d127",
+      "expected_objects": [
+        {
+          "id": "billing-frequency-check-widened",
+          "object": "CHECK quote_lines_billing_frequency_check allows now, monthly, annual — and is the ONLY check constraint on quote_lines.billing_frequency",
+          "result": "pending",
+          "verify_via": "Confirm the migration's NOTICE named the replaced constraint, then verify the live definition lists all three values and no second check constraint on that column remains. An INSERT of a line with billing_frequency 'annual' must succeed."
+        },
+        {
+          "id": "snapshot-totals-per-period",
+          "object": "public.public_get_quote_by_token(uuid) writes accepted_snapshot with total_now, total_monthly and total_annual, each a plain sum of its own period",
+          "result": "pending",
+          "verify_via": "catalog_functions(name_like: 'public_get_quote_by_token', include_source: true) -> body contains 'total_annual' and the three-way CASE; still contains onboarding_access_token and the accepted-only gate. Then accept a proposal containing one annual line and confirm the snapshot reports it under total_annual, not total_now."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "assessment": "Forward-only. Narrowing the CHECK again is only safe while no line stores 'annual'. The function can be restored from 20260727160000, at the cost of reinstating the mis-stated totals.",
+    "data_risk": "None on apply — the CHECK is widened, so no existing row can be invalidated, and no snapshot is rewritten. Snapshots are written once at acceptance, so proposals accepted BEFORE this migration keep the totals they were accepted with (see followups)."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260727160000_quote_token_returns_onboarding_token.sql FIRST if it is not already applied.",
+      "Then apply 20260727170000_billing_frequency_annual.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "The proposal UI still offers only Bill Now / Bill Monthly and still divides by 12 for display, so an annual fee cannot yet be entered as one. Next increment: a three-way selector, a price label that follows the chosen frequency, removal of the /12 display transform, and three totals.",
+    "The engagement letter still describes everything non-monthly as 'one-off fees due now' and renders a raw frequency token per line. render_engagement_letter_body's signature carries only total_now and total_monthly, so adding the annual bucket to the wording is its own increment across public_preview_engagement_letter and public_sign_engagement_letter.",
+    "Already-accepted proposals keep the snapshot they were accepted with — deliberately, since an accepted snapshot is the client's immutable commercial record. Quote Q-26-0002 (753529f8) carries total_monthly 2520 for fees that were intended as annual. If that proposal is to be used rather than re-issued, it needs a deliberate, audited correction, not a silent rewrite.",
+    "Stripe checkout and invoicing read the same figures and were not examined in this increment. They must be checked against the three-period rule before any real money moves."
+  ]
+}

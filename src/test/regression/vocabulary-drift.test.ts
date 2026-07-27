@@ -45,6 +45,9 @@ const EXPECTED_CONSTRAINT_VALUES: Record<string, string[]> = {
   onboarding_applications_aml_status_check: ["pending", "verified", "failed", "manual_review"],
   onboarding_applications_billing_status_check: ["pending", "skipped", "completed", "not_required"],
   quotes_status_check: ["draft", "sent", "accepted", "rejected", "expired", "superseded"],
+  // 'annual' added by 20260727170000_billing_frequency_annual.sql — an accountant must be
+  // able to quote a yearly fee as a yearly fee.
+  quote_lines_billing_frequency_check: ["now", "monthly", "annual"],
   deadlines_status_check: ["pending", "in_progress", "completed", "filed", "overdue", "cancelled"],
   leads_pipeline_stage_check: ["new", "qualified", "proposal_sent", "chasing", "won", "lost"],
   email_queue_context_check: ["quote", "onboarding", "engagement", "job", "invoice", "system", "general"],

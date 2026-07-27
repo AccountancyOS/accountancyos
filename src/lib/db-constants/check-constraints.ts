@@ -89,6 +89,16 @@ export const ONBOARDING_AML_STATUSES = ["pending", "verified", "failed", "manual
 /** onboarding_applications.billing_status — billing_status_check */
 export const ONBOARDING_BILLING_STATUSES = ["pending", "skipped", "completed", "not_required"] as const;
 
+/**
+ * quote_lines.billing_frequency — quote_lines_billing_frequency_check
+ *
+ * What period a line's `unit_price` covers: `now` = one-off charge at acceptance,
+ * `monthly` = per month, `annual` = per year. The stored price is ALWAYS the amount the
+ * accountant quoted for that period — nothing downstream divides or annualises it, and
+ * the engagement letter states what the quote states.
+ */
+export const QUOTE_LINE_BILLING_FREQUENCIES = ["now", "monthly", "annual"] as const;
+
 /** quotes.status — quotes_status_check */
 export const QUOTE_STATUSES = ["draft", "sent", "accepted", "rejected", "expired", "superseded"] as const;
 
@@ -153,6 +163,7 @@ export const CHECK_CONSTRAINT_REGISTRY: readonly CheckConstraintVocab[] = [
   { table: "onboarding_applications", column: "aml_status", constraint: "onboarding_applications_aml_status_check", values: ONBOARDING_AML_STATUSES },
   { table: "onboarding_applications", column: "billing_status", constraint: "onboarding_applications_billing_status_check", values: ONBOARDING_BILLING_STATUSES },
   { table: "quotes", column: "status", constraint: "quotes_status_check", values: QUOTE_STATUSES },
+  { table: "quote_lines", column: "billing_frequency", constraint: "quote_lines_billing_frequency_check", values: QUOTE_LINE_BILLING_FREQUENCIES },
   { table: "deadlines", column: "status", constraint: "deadlines_status_check", values: DEADLINE_STATUSES },
   { table: "leads", column: "pipeline_stage", constraint: "leads_pipeline_stage_check", values: LEAD_PIPELINE_STAGES },
   { table: "email_queue", column: "context", constraint: "email_queue_context_check", values: EMAIL_QUEUE_CONTEXTS },
