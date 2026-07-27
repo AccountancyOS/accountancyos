@@ -38,7 +38,8 @@
         {
           "id": "get-quote-by-token-returns-access-token",
           "object": "public.public_get_quote_by_token(uuid) returns a payload containing onboarding_access_token",
-          "result": "pending",
+          "result": "pass",
+          "evidence": "Applied in order and verified by the executor 2026-07-27: the function returns onboarding_access_token, and its def-hash moved from 4e250dfdaccaa30a12e33f5b52cbd6cc to aef93b68… (which also carries the annual-bucket change from 20260727170000, applied immediately after). NOT independently re-checked by Claude — the connector token had expired at the time of reporting; to be reconfirmed on the next connected session.",
           "verify_via": "catalog_functions(name_like: 'public_get_quote_by_token', include_source: true) -> def-hash CHANGED from 4e250dfdaccaa30a12e33f5b52cbd6cc; body contains \"'onboarding_access_token', v_access_token\" and RETURNING id, access_token. Then db_rpc public_get_quote_by_token with the live acceptance token for quote 753529f8-a903-4c84-b397-0a5ed0f3e82d and confirm the payload now carries a non-null onboarding_access_token alongside the existing onboarding_application_id."
         },
         {

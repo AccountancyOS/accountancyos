@@ -99,6 +99,16 @@ export const ONBOARDING_BILLING_STATUSES = ["pending", "skipped", "completed", "
  */
 export const QUOTE_LINE_BILLING_FREQUENCIES = ["now", "monthly", "annual"] as const;
 
+/** The billing period of a quote line. Derived from the constraint, so they cannot drift. */
+export type BillingFrequency = (typeof QUOTE_LINE_BILLING_FREQUENCIES)[number];
+
+/** How each billing period is described to an accountant, and to a client in a letter. */
+export const BILLING_FREQUENCY_LABELS: Record<BillingFrequency, { picker: string; price: string; per: string }> = {
+  now: { picker: "Bill Now", price: "One-off price", per: "one-off" },
+  monthly: { picker: "Bill Monthly", price: "Monthly price", per: "per month" },
+  annual: { picker: "Bill Annually", price: "Annual price", per: "per year" },
+};
+
 /** quotes.status — quotes_status_check */
 export const QUOTE_STATUSES = ["draft", "sent", "accepted", "rejected", "expired", "superseded"] as const;
 

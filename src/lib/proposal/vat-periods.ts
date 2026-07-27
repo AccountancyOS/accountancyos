@@ -27,7 +27,8 @@
 export const VAT_SERVICE_CODE = "vat_return" as const;
 export type VatServiceCode = typeof VAT_SERVICE_CODE;
 
-export type BillingFrequency = "now" | "monthly";
+import type { BillingFrequency } from "@/lib/db-constants/check-constraints";
+export type { BillingFrequency };
 
 /** The three VAT return frequencies the generator supports. */
 export const VAT_FREQUENCIES = ["monthly", "quarterly", "annual_accounting"] as const;

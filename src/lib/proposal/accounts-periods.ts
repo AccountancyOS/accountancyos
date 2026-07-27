@@ -26,7 +26,8 @@
 export const ACCOUNTS_SERVICE_CODE = "company_accounts" as const;
 export type AccountsServiceCode = typeof ACCOUNTS_SERVICE_CODE;
 
-export type BillingFrequency = "now" | "monthly";
+import type { BillingFrequency } from "@/lib/db-constants/check-constraints";
+export type { BillingFrequency };
 
 /** True only for the catalog code the accounts materialize branch keys on. */
 export function isAccountsServiceCode(code: string | null | undefined): code is AccountsServiceCode {

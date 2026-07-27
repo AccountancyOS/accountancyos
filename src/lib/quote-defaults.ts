@@ -1,8 +1,9 @@
 import type { ClientType } from "./client-types";
+import type { BillingFrequency } from "@/lib/db-constants/check-constraints";
 
 export interface DefaultQuoteLine {
   code: string;
-  billing_frequency: "now" | "monthly";
+  billing_frequency: BillingFrequency;
 }
 
 /**

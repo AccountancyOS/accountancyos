@@ -66,6 +66,11 @@ import {
 } from "@/lib/proposal/signatories";
 import { isCompanyBasedType, type ClientType } from "@/lib/client-types";
 import { getCompanyOfficers } from "@/lib/companies-house-lookup";
+import {
+  QUOTE_LINE_BILLING_FREQUENCIES,
+  BILLING_FREQUENCY_LABELS,
+  type BillingFrequency,
+} from "@/lib/db-constants/check-constraints";
 
 /**
  * Proposal Phase 1 T5b — per-VAT-service group state. The frequency/stagger and
@@ -116,7 +121,7 @@ function reconcileVatLines(
   defaultPrice: number,
   selectedPeriods: VatPeriod[]
 ): QuoteLine[] {
-  const priceByLabel = new Map<string, { unit_price: number; billing_frequency: "now" | "monthly" }>();
+  const priceByLabel = new Map<string, { unit_price: number; billing_frequency: BillingFrequency }>();
   prev.forEach((l) => {
     if (l.service_id === serviceId && l.period_label) {
       priceByLabel.set(l.period_label, {
@@ -170,7 +175,7 @@ interface QuoteLine {
   service_id: string;
   quantity: number;
   unit_price: number;
-  billing_frequency: "now" | "monthly";
+  billing_frequency: BillingFrequency;
   // Proposal Phase 1 T3: exact compliance period carried per line (SA tax year, etc.).
   // The materialize engine COALESCEs these over its computed fallback → one job per period.
   period_start?: string | null;
@@ -194,7 +199,7 @@ function reconcileSaLines(
   defaultPrice: number,
   selectedStartYears: number[]
 ): QuoteLine[] {
-  const priceByYear = new Map<number, { unit_price: number; billing_frequency: "now" | "monthly" }>();
+  const priceByYear = new Map<number, { unit_price: number; billing_frequency: BillingFrequency }>();
   prev.forEach((l) => {
     if (l.service_id === serviceId && l.period_label) {
       priceByYear.set(saStartYearFromLabel(l.period_label), {
@@ -236,7 +241,7 @@ function reconcileMtdLines(
   isQuarter: boolean,
   selectedStartYears: number[]
 ): QuoteLine[] {
-  const priceByLabel = new Map<string, { unit_price: number; billing_frequency: "now" | "monthly" }>();
+  const priceByLabel = new Map<string, { unit_price: number; billing_frequency: BillingFrequency }>();
   prev.forEach((l) => {
     if (l.service_id === serviceId && l.period_label) {
       priceByLabel.set(l.period_label, {
@@ -460,11 +465,9 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
       );
       if (fnError) throw fnError;
 
-      // Calculate total
-      const total = lines.reduce(
-        (sum, line) => sum + line.quantity * line.unit_price,
-        0
-      );
+      // quotes.total_amount is the same plain sum the dialog shows — one definition, so
+      // the stored figure and the displayed one cannot diverge.
+      const total = totalAmount;
 
       // Create quote. signatory_snapshot is a Phase 2 T2e additive jsonb column
       // not yet in the generated Supabase types — attach it via a cast payload.
@@ -901,15 +904,21 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     setLines(newLines);
   };
 
-  const payableNow = lines
-    .filter((line) => line.billing_frequency === "now" && !isIncludedLine(line))
-    .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+  // Each total is a plain sum of what was quoted for that period. This used to divide
+  // monthly lines by 12 for display while saving the undivided figure, so the dialog
+  // showed one fee and the engagement letter promised twelve times it.
+  const sumFor = (frequency: BillingFrequency) =>
+    lines
+      .filter((line) => line.billing_frequency === frequency && !isIncludedLine(line))
+      .reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
 
-  const payableMonthly = lines
-    .filter((line) => line.billing_frequency === "monthly" && !isIncludedLine(line))
-    .reduce((sum, line) => sum + line.quantity * (line.unit_price / 12), 0);
+  const payableNow = sumFor("now");
+  const payableMonthly = sumFor("monthly");
+  const payableAnnually = sumFor("annual");
 
-  const totalAmount = payableNow + payableMonthly;
+  // Periods are not commensurable, so this is a plain sum for the stored
+  // quotes.total_amount column, not a headline the client is shown.
+  const totalAmount = payableNow + payableMonthly + payableAnnually;
 
   // Every CH-prefilled/edited company_accounts line must have a confirmed,
   // labelled period before the quote can be created.
@@ -1040,12 +1049,8 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                 isMtd &&
                 lines.findIndex((l) => l.service_id === line.service_id) === index;
               const vatGroup = isVat ? vatGroups[line.service_id] ?? EMPTY_VAT_GROUP : null;
-              const monthlyPrice = line.billing_frequency === "monthly"
-                ? line.unit_price / 12
-                : line.unit_price;
-              const displaySubtotal = line.billing_frequency === "monthly"
-                ? (line.quantity * monthlyPrice)
-                : (line.quantity * line.unit_price);
+              // The quoted amount, shown as quoted — no annualising, no dividing.
+              const displaySubtotal = line.quantity * line.unit_price;
 
               return (
                 <div key={index} className="space-y-2">
@@ -1381,7 +1386,7 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                     <Label>Billing</Label>
                     <Select
                       value={line.billing_frequency}
-                      onValueChange={(value: "now" | "monthly") =>
+                      onValueChange={(value: BillingFrequency) =>
                         updateLine(index, "billing_frequency", value)
                       }
                     >
@@ -1389,8 +1394,11 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="now">Bill Now</SelectItem>
-                        <SelectItem value="monthly">Bill Monthly</SelectItem>
+                        {QUOTE_LINE_BILLING_FREQUENCIES.map((frequency) => (
+                          <SelectItem key={frequency} value={frequency}>
+                            {BILLING_FREQUENCY_LABELS[frequency].picker}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1441,7 +1449,10 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                       )}
 
                       <div className="w-32 space-y-2">
-                        <Label>Annual Price</Label>
+                        {/* The label follows the chosen period. It always read "Annual
+                            Price" regardless of billing, which is how an annual fee came
+                            to be stored as a monthly one. */}
+                        <Label>{BILLING_FREQUENCY_LABELS[line.billing_frequency].price}</Label>
                         <Input
                           type="number"
                           min="0"
@@ -1455,7 +1466,9 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
 
                       <div className="w-32 space-y-2">
                         <Label>
-                          {included ? "Included" : line.billing_frequency === "monthly" ? "Monthly" : "Now"}
+                          {included
+                            ? "Included"
+                            : BILLING_FREQUENCY_LABELS[line.billing_frequency].per}
                         </Label>
                         <div className="h-10 flex items-center px-3 border rounded-md bg-muted font-medium">
                           {included ? (
@@ -1514,12 +1527,28 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
               <div className="text-sm font-medium">Payable Monthly</div>
               <div className="text-lg font-semibold">
                 £{payableMonthly.toFixed(2)}
+                <span className="text-xs font-normal text-muted-foreground"> /month</span>
               </div>
             </div>
+            <div className="flex justify-between items-center">
+              <div className="text-sm font-medium">Payable Annually</div>
+              <div className="text-lg font-semibold">
+                £{payableAnnually.toFixed(2)}
+                <span className="text-xs font-normal text-muted-foreground"> /year</span>
+              </div>
+            </div>
+            {/* Deliberately no single headline figure: one-off, monthly and annual fees
+                cannot be added into a number that means anything to a client. */}
             <div className="flex justify-between items-center pt-3 border-t">
-              <div className="text-sm text-muted-foreground">Total Amount</div>
-              <div className="text-2xl font-semibold">
-                £{totalAmount.toFixed(2)}
+              <div className="text-sm text-muted-foreground">Total quoted</div>
+              <div className="text-sm text-muted-foreground">
+                {[
+                  payableNow > 0 ? `£${payableNow.toFixed(2)} one-off` : null,
+                  payableMonthly > 0 ? `£${payableMonthly.toFixed(2)}/month` : null,
+                  payableAnnually > 0 ? `£${payableAnnually.toFixed(2)}/year` : null,
+                ]
+                  .filter(Boolean)
+                  .join("  +  ") || "£0.00"}
               </div>
             </div>
           </div>

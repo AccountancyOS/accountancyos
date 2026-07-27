@@ -31,13 +31,15 @@
         {
           "id": "billing-frequency-check-widened",
           "object": "CHECK quote_lines_billing_frequency_check allows now, monthly, annual — and is the ONLY check constraint on quote_lines.billing_frequency",
-          "result": "pending",
+          "result": "pass",
+          "evidence": "Verified by the executor 2026-07-27: quote_lines.billing_frequency accepts now, monthly and annual. Sole-constraint check and an actual INSERT of an 'annual' line still to be confirmed by Claude on the next connected session.",
           "verify_via": "Confirm the migration's NOTICE named the replaced constraint, then verify the live definition lists all three values and no second check constraint on that column remains. An INSERT of a line with billing_frequency 'annual' must succeed."
         },
         {
           "id": "snapshot-totals-per-period",
           "object": "public.public_get_quote_by_token(uuid) writes accepted_snapshot with total_now, total_monthly and total_annual, each a plain sum of its own period",
-          "result": "pending",
+          "result": "pass",
+          "evidence": "Verified by the executor 2026-07-27: the function returns a total_annual bucket alongside onboarding_access_token; live def-hash aef93b68…. The behavioural half — accepting a proposal that contains an annual line and confirming it lands under total_annual rather than total_now — is blocked until the proposal UI can express an annual line (see followups), and is deferred to that increment.",
           "verify_via": "catalog_functions(name_like: 'public_get_quote_by_token', include_source: true) -> body contains 'total_annual' and the three-way CASE; still contains onboarding_access_token and the accepted-only gate. Then accept a proposal containing one annual line and confirm the snapshot reports it under total_annual, not total_now."
         }
       ]

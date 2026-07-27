@@ -19,7 +19,8 @@
 export const SA_SERVICE_CODES = ["sa_non_mtd", "sa_mtd"] as const;
 export type SaServiceCode = (typeof SA_SERVICE_CODES)[number];
 
-export type BillingFrequency = "now" | "monthly";
+import type { BillingFrequency } from "@/lib/db-constants/check-constraints";
+export type { BillingFrequency };
 
 export interface SaPeriod {
   /** ISO date `YYYY-MM-DD`, 6 Apr of the tax-year start year. */
