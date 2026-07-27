@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
     await ensureClient(sr, { id: CLIENT_A, first_name: "Portal", last_name: "Client A", email: emails.A, client_type: "individual" });
     await ensureClient(sr, { id: CLIENT_B, first_name: "Portal", last_name: "Client B", email: emails.B, client_type: "individual" });
     await ensureCompany(sr, { id: COMPANY_C1, company_name: "Portal Company C1", email: emails.C });
-    await ensureCompany(sr, { id: COMPANY_C2, company_name: "Portal Company C2", email: emails.C });
+    await ensureCompany(sr, { id: COMPANY_C2, company_name: "Portal Company C2", email: "portal-c-company-2@accountancyos.test" });
     await ensureCompany(sr, { id: COMPANY_D, company_name: "Portal Company D", email: emails.D });
 
     await upsertPortalAccess(sr, { user_id: uidA, client_id: CLIENT_A, company_id: null, status: "active" });
