@@ -14555,6 +14555,7 @@ export type Database = {
           rejected_at: string | null
           rejection_reason: string | null
           sent_at: string | null
+          signatory_snapshot: Json | null
           status: string
           supersedes_quote_id: string | null
           terms_version: string | null
@@ -14583,6 +14584,7 @@ export type Database = {
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
+          signatory_snapshot?: Json | null
           status?: string
           supersedes_quote_id?: string | null
           terms_version?: string | null
@@ -14611,6 +14613,7 @@ export type Database = {
           rejected_at?: string | null
           rejection_reason?: string | null
           sent_at?: string | null
+          signatory_snapshot?: Json | null
           status?: string
           supersedes_quote_id?: string | null
           terms_version?: string | null
