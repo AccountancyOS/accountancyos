@@ -638,9 +638,16 @@ const CRM = () => {
                 });
                 return;
               }
+              // Officers are added ALONGSIDE the profile's own keys, not nested under a
+              // `profile` wrapper. Downstream SQL reads this jsonb flat —
+              // public_accept_quote_by_token takes ch_company_profile->>'company_number'
+              // and ->>'company_name' from the top level, and resolve_company_director
+              // reads ->'officers' — so a wrapped shape silently produced companies with
+              // a NULL company_number, which in turn left the onboarding unable to
+              // pre-fill directors from Companies House.
               setFormData((prev) => ({
                 ...prev,
-                ch_company_profile: { profile, officers } as any,
+                ch_company_profile: { ...profile, officers } as any,
               }));
             }}
           />

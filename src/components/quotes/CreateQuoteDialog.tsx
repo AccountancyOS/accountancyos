@@ -621,11 +621,11 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     if (!fetched || fetched.length === 0) {
       return selectedLead as { ch_company_profile?: unknown };
     }
+    // Flat profile + an officers key — the one shape every consumer reads. Wrapping it
+    // under `profile` hides company_number/company_name from the SQL that creates the
+    // company at acceptance.
     return {
-      ch_company_profile: {
-        profile: stored?.profile ?? stored ?? null,
-        officers: fetched,
-      },
+      ch_company_profile: { ...(stored?.profile ?? stored ?? {}), officers: fetched },
     };
   }, [selectedLead, leadOfficers]);
 

@@ -77,9 +77,20 @@ describe("CH officers are reachable for a lead (signatory selection)", () => {
 
   it("stores officers alongside the profile when a company is picked in the CRM", () => {
     expect(CRM).toMatch(/getCompanyOfficers\(/);
-    expect(CRM).toMatch(/ch_company_profile: \{ profile, officers \}/);
+    // FLAT profile + an officers key. A wrapped { profile, officers } hides
+    // company_number/company_name from public_accept_quote_by_token, which reads them
+    // off the top level — that produced companies with a NULL company_number and left
+    // onboarding unable to pre-fill directors from Companies House.
+    expect(CRM).toMatch(/ch_company_profile: \{ \.\.\.profile, officers \}/);
+    expect(CRM).not.toMatch(/ch_company_profile: \{ profile, officers \}/);
     // Non-fatal: the lead is still created if CH officers cannot be fetched.
     expect(CRM).toMatch(/Directors not loaded/);
+  });
+
+  it("keeps the same flat shape when the proposal dialog merges fetched officers", () => {
+    expect(DIALOG).toMatch(
+      /ch_company_profile: \{ \.\.\.\(stored\?\.profile \?\? stored \?\? \{\}\), officers: fetched \}/,
+    );
   });
 
   it("fetches officers on demand for leads that have none stored", () => {
