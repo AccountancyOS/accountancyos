@@ -1,0 +1,29 @@
+{
+  "release_id": "2026-07-27-bluetick-client-data-wipe",
+  "type": "data_operation",
+  "environment": "production",
+  "executed_by": "lovable-agent",
+  "executed_at": "2026-07-27T20:15:00Z",
+  "reason": "Owner-requested clean slate for the Blue Tick tenant: leftover clients/leads/quotes and broken auth identities were blocking re-use of test email addresses.",
+  "scope": {
+    "organization_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "source_script": "supabase/migrations/20260724150000_reset_bluetick_test_client_data.sql",
+    "deviation": "Executed as a data operation (no schema change, not recorded in schema_migrations). Phase ordering restructured: parent-scoped child deletes run first, then org-scoped deletes via a DO loop. engagement_letter_signatories added (table created after the source script was written)."
+  },
+  "post_state": {
+    "leads": 0, "clients": 0, "companies": 0, "quotes": 0,
+    "onboarding_applications": 0, "engagements": 0, "jobs": 0,
+    "deadlines": 0, "contacts": 0, "portal_access": 0,
+    "services_catalog": 20, "organization_users": 1
+  },
+  "auth_cleanup": {
+    "orphaned_identities_removed": true,
+    "users_deleted": [
+      "leon5440@hotmail.com","amyleestevens7@gmail.com","leon.lim.stevens@gmail.com",
+      "portal-a@accountancyos.test","portal-b-qa@accountancyos.test",
+      "portal-c@accountancyos.test","portal-d@accountancyos.test"
+    ],
+    "users_retained": ["leon@bluetickaccountants.com","thetaxteam@bluetickaccountants.com"]
+  },
+  "irreversible": true
+}
