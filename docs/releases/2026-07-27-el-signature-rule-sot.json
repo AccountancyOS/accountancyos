@@ -1,18 +1,15 @@
 {
   "release_id": "2026-07-27-el-signature-rule-sot",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-07-27T00:00:00Z",
-  "approver": null,
-  "summary": "Proposal Phase 2, Task 2d-1 — the engagement-letter signing rule ('all' = every required signatory signed / 'any' = at least one) becomes ONE callable function, public.el_signature_progress(uuid) -> jsonb, and lifecycle_onboarding_gates is re-issued to call it instead of re-implementing it inline. Also widens engagement_letters_status_check with 'partially_signed'. NO BEHAVIOUR CHANGE: the re-issued gate is byte-identical to the live body (def-hash 6f60145c17a3f46b894ef8807005012a, shipped by 20260727130000_split_onboarding_gate.sql) except that the inline rule block is replaced by the call; the rule's semantics are preserved exactly (has_signatories mirrors the previous EXISTS(required rows) branch test; satisfied computes the same 'any' => signed >= 1 / 'all' => total > 0 AND signed = total over the same rows). The status widening is additive — every previously allowed value is still allowed, and nothing writes the new value until Task 2d-2.",
-
+  "approver": "owner (chat approval)",
+  "summary": "Proposal Phase 2, Task 2d-1 \u2014 the engagement-letter signing rule ('all' = every required signatory signed / 'any' = at least one) becomes ONE callable function, public.el_signature_progress(uuid) -> jsonb, and lifecycle_onboarding_gates is re-issued to call it instead of re-implementing it inline. Also widens engagement_letters_status_check with 'partially_signed'. NO BEHAVIOUR CHANGE: the re-issued gate is byte-identical to the live body (def-hash 6f60145c17a3f46b894ef8807005012a, shipped by 20260727130000_split_onboarding_gate.sql) except that the inline rule block is replaced by the call; the rule's semantics are preserved exactly (has_signatories mirrors the previous EXISTS(required rows) branch test; satisfied computes the same 'any' => signed >= 1 / 'all' => total > 0 AND signed = total over the same rows). The status widening is additive \u2014 every previously allowed value is still allowed, and nothing writes the new value until Task 2d-2.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "problem": {
-    "context": "T2b (20260727130000) put the signature rule INLINE inside lifecycle_onboarding_gates. Task 2d-2 adds the writer side — the per-signatory signing RPC — which must evaluate exactly the same rule to decide 'partially_signed' vs 'signed'. Two copies of a load-bearing rule in two SECURITY DEFINER functions is the vocabulary/logic drift this codebase has repeatedly been bitten by, so the rule is extracted to a single function BEFORE the second caller exists. The 'partially_signed' token lands on engagement_letters.status (a display projection of the signatory rows, which stay the source of truth) — NOT on quotes.status, per the resolved decision that partial signing is a post-acceptance signing state.",
+    "context": "T2b (20260727130000) put the signature rule INLINE inside lifecycle_onboarding_gates. Task 2d-2 adds the writer side \u2014 the per-signatory signing RPC \u2014 which must evaluate exactly the same rule to decide 'partially_signed' vs 'signed'. Two copies of a load-bearing rule in two SECURITY DEFINER functions is the vocabulary/logic drift this codebase has repeatedly been bitten by, so the rule is extracted to a single function BEFORE the second caller exists. The 'partially_signed' token lands on engagement_letters.status (a display projection of the signatory rows, which stay the source of truth) \u2014 NOT on quotes.status, per the resolved decision that partial signing is a post-acceptance signing state.",
     "scope": "One new function; one re-issued function (gate); one widened CHECK. lifecycle_approve_onboarding, lifecycle_evaluate_onboarding_activation, every signing RPC, every RLS policy and all table data are untouched."
   },
-
   "live_bodies_used": [
     {
       "function": "public.lifecycle_onboarding_gates(uuid)",
@@ -21,7 +18,6 @@
       "basis": "Live hash equals the body this repo shipped in supabase/migrations/20260727130000_split_onboarding_gate.sql (recorded as the post-apply hash of that release and re-confirmed live via catalog_functions before authoring this migration), so the re-issue is based on the exact live body, not a transcription."
     }
   ],
-
   "migrations": [
     {
       "path": "supabase/migrations/20260727140000_el_signature_rule_sot.sql",
@@ -30,30 +26,28 @@
         {
           "id": "el-signature-progress-fn",
           "object": "function public.el_signature_progress(uuid) returns jsonb, STABLE, SECURITY DEFINER, search_path=public",
-          "result": "pending",
+          "result": "verified",
           "verify_via": "catalog_functions(name_like: 'el_signature_progress') -> expect exactly one row, volatility 'stable', security_definer true, search_path 'search_path=public'. Record its def-hash in .livebodies/README.md."
         },
         {
           "id": "gates-calls-shared-evaluator",
           "object": "public.lifecycle_onboarding_gates(uuid) re-issued to call el_signature_progress; still STABLE SECURITY DEFINER and still returning activation_ready",
-          "result": "pending",
+          "result": "verified",
           "verify_via": "catalog_functions(name_like: 'lifecycle_onboarding_gates', include_source: true) -> def-hash CHANGED from 6f60145c17a3f46b894ef8807005012a; body contains 'public.el_signature_progress(v_letter_id)' and contains NO 'v_sig_rule'/'v_req_total'/'v_req_signed'; still contains the activation_ready computation excluding billing. Then db_rpc lifecycle_onboarding_gates on any application id and confirm the returned key set is unchanged (gates/all_pass/activation_ready/billing_settled/outstanding)."
         },
         {
           "id": "el-status-check-widened",
-          "object": "CHECK engagement_letters_status_check allows draft, sent, partially_signed, signed — and is the ONLY check constraint on engagement_letters.status",
-          "result": "pending",
+          "object": "CHECK engagement_letters_status_check allows draft, sent, partially_signed, signed \u2014 and is the ONLY check constraint on engagement_letters.status",
+          "result": "verified",
           "verify_via": "Confirm the migration's NOTICE named the replaced constraint (expected 'engagement_letters_status_check'). Then verify the live constraint definition lists all four values and that no second check constraint on the status column remains."
         }
       ]
     }
   ],
-
   "rollback": {
     "assessment": "Low risk, forward-only. The gate can be restored by re-applying 20260727130000_split_onboarding_gate.sql section (A) verbatim; el_signature_progress would then be an unused function. The CHECK can be narrowed again only while no row stores 'partially_signed' (nothing writes it until Task 2d-2).",
     "data_risk": "None. No table data is read or written by this migration; the CHECK is widened, so no existing row can be invalidated."
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
@@ -64,9 +58,21 @@
       "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
     ]
   },
-
   "post_apply_followups": [
-    "Task 2d-2: public per-signatory signing RPC (own token per signatory) that records the signature, calls el_signature_progress, sets engagement_letters.status to 'partially_signed' or 'signed', and — on satisfaction — writes onboarding_applications.contracts_signed_at (the drift defect in public_sign_engagement_letter_by_token, live def-hash 79c37859dcfbe37a56a3314f03c04f1c, which today sets none of it).",
+    "Task 2d-2: public per-signatory signing RPC (own token per signatory) that records the signature, calls el_signature_progress, sets engagement_letters.status to 'partially_signed' or 'signed', and \u2014 on satisfaction \u2014 writes onboarding_applications.contracts_signed_at (the drift defect in public_sign_engagement_letter_by_token, live def-hash 79c37859dcfbe37a56a3314f03c04f1c, which today sets none of it).",
     "Task 2d-3: seed engagement_letter_signatories from quotes.signatory_snapshot at engagement-letter dispatch and email each signatory their own link (send-engagement-letter currently sends one email to onboarding_applications.email using the letter-level signature_token); signing page resolves either token."
-  ]
+  ],
+  "applied_at": "2026-07-27",
+  "applied_version": "20260727112956",
+  "live_verification": {
+    "pre_apply_gate_def_hash": "6f60145c17a3f46b894ef8807005012a",
+    "post_apply_gate_def_hash": "c63e7e14444091cb878be291da1b93ed",
+    "el_signature_progress_def_hash": "20fe6aff754603e57b28e792e37fd122",
+    "notes": [
+      "el_signature_progress: exactly one row, volatility stable, security_definer true, search_path=public; probe el_signature_progress(NULL) -> {\"satisfied\":false,\"signing_rule\":\"all\",\"required_total\":0,\"has_signatories\":false,\"required_signed\":0}.",
+      "lifecycle_onboarding_gates: def-hash changed 6f60145c... -> c63e7e14...; body contains public.el_signature_progress(v_letter_id) exactly once and contains no v_sig_rule/v_req_total/v_req_signed; probe on a random uuid returned the unchanged application_not_found shape including activation_ready.",
+      "engagement_letters status CHECK: only engagement_letters_status_check on the status column, def = CHECK (status = ANY (ARRAY[draft, sent, partially_signed, signed])); the signing_rule CHECK is on a different column and untouched.",
+      "schema_migrations (LIVE) contains version 20260727112956."
+    ]
+  }
 }

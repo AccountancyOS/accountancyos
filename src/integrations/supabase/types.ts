@@ -18310,6 +18310,10 @@ export type Database = {
         }
         Returns: Json
       }
+      el_signature_progress: {
+        Args: { p_engagement_letter_id: string }
+        Returns: Json
+      }
       email_queue_dispatch: { Args: never; Returns: undefined }
       emit_automation_event: {
         Args: {
