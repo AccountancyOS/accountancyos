@@ -104,6 +104,41 @@ export async function getCompanyProfile(
 }
 
 /**
+ * Get the officer list for a company number.
+ *
+ * A CH company profile carries NO officers, so anything that needs directors — proposal
+ * signatory selection in particular — has to ask for them separately. Returns the raw CH
+ * officer items (role, resignation, `links.self`), which `extractActiveDirectors` filters.
+ */
+export async function getCompanyOfficers(
+  companyNumber: string
+): Promise<{ data: unknown[] | null; error: string | null }> {
+  if (!companyNumber) {
+    return { data: null, error: "Company number is required" };
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke("companies-house-sync", {
+      body: {
+        action: "officers",
+        company_number: companyNumber.trim().toUpperCase(),
+      },
+    });
+
+    if (error) {
+      console.error("CH officers error:", error);
+      return { data: null, error: error.message || "Failed to get company officers" };
+    }
+
+    const officers = (data as { officers?: unknown[] } | null)?.officers;
+    return { data: Array.isArray(officers) ? officers : [], error: null };
+  } catch (err: any) {
+    console.error("CH officers exception:", err);
+    return { data: null, error: err.message || "An unexpected error occurred" };
+  }
+}
+
+/**
  * Map CH profile to lead/company form fields
  */
 export function mapCHProfileToFormData(profile: CHCompanyProfile) {

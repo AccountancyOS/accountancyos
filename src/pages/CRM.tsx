@@ -47,7 +47,11 @@ import {
 } from "@/lib/client-types";
 import { LeadDetailPanel } from "@/components/crm/LeadDetailPanel";
 import { CompaniesHouseLookupDialog } from "@/components/crm/CompaniesHouseLookupDialog";
-import { mapCHProfileToFormData, type CHCompanyProfile } from "@/lib/companies-house-lookup";
+import {
+  mapCHProfileToFormData,
+  getCompanyOfficers,
+  type CHCompanyProfile,
+} from "@/lib/companies-house-lookup";
 
 interface Lead {
   id: string;
@@ -601,7 +605,7 @@ const CRM = () => {
             open={chLookupOpen}
             onOpenChange={setCHLookupOpen}
             initialQuery={formData.company_name}
-            onCompanySelected={(profile: CHCompanyProfile) => {
+            onCompanySelected={async (profile: CHCompanyProfile) => {
               const mappedData = mapCHProfileToFormData(profile);
               setFormData({
                 ...formData,
@@ -614,6 +618,29 @@ const CRM = () => {
                 title: "Company data loaded",
                 description: `${mappedData.company_name} (${mappedData.company_number}) details have been populated.`,
               });
+
+              // A CH company profile contains no officers, so fetch the directors too and
+              // store them alongside it in the sync shape ({ profile, officers }). Without
+              // this, proposal signatory selection has no directors to offer. Non-fatal:
+              // the lead is still usable if the officers call fails, and signatories can
+              // be entered manually.
+              if (!mappedData.company_number) return;
+              const { data: officers, error: officersError } = await getCompanyOfficers(
+                mappedData.company_number,
+              );
+              if (officersError || !officers) {
+                toast({
+                  title: "Directors not loaded",
+                  description:
+                    "Company details were loaded, but the Companies House director list could not be fetched. You can add signatories manually.",
+                  variant: "destructive",
+                });
+                return;
+              }
+              setFormData((prev) => ({
+                ...prev,
+                ch_company_profile: { profile, officers } as any,
+              }));
             }}
           />
         </div>

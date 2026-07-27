@@ -62,9 +62,17 @@ interface ProposalSignatoriesSectionProps {
   onChange: (snap: SignatorySnapshot) => void;
 }
 
-/** A stable identity for a signatory row, used to merge/select without indices. */
-function signatoryKey(s: ProposalSignatory): string {
-  return s.ch_officer_id ?? s.person_id ?? s.contact_id ?? `manual:${s.name}:${s.email}`;
+/**
+ * Identity of a signatory that came from a record (CH appointment, person, contact).
+ * Manual signatories have none — they are addressed by POSITION instead.
+ *
+ * It must never be derived from `name`/`email`: those are the fields being typed, so a
+ * derived key changes on every keystroke, which remounts the row (focus lost after one
+ * character) and — for two blank manual rows, whose derived keys were identical —
+ * corrupts the list. Position is stable while editing; rows only move on add/remove.
+ */
+function sourcedKey(s: ProposalSignatory): string | null {
+  return s.ch_officer_id ?? s.person_id ?? s.contact_id ?? null;
 }
 
 export function ProposalSignatoriesSection({
@@ -92,7 +100,7 @@ export function ProposalSignatoriesSection({
 
   const setRule = (rule: SigningRule) => setSnapshot({ ...snapshot, rule });
 
-  const isSelected = (key: string) => snapshot.signatories.some((s) => signatoryKey(s) === key);
+  const isSelected = (key: string) => snapshot.signatories.some((s) => sourcedKey(s) === key);
 
   /** Toggle a CH director in/out of the signatory list, preserving edited emails. */
   const toggleDirector = (dirKey: string) => {
@@ -106,22 +114,26 @@ export function ProposalSignatoriesSection({
     }
   };
 
-  const updateSignatory = (key: string, patch: Partial<ProposalSignatory>) => {
+  // Row edits address a signatory by POSITION — see sourcedKey().
+  const updateSignatoryAt = (index: number, patch: Partial<ProposalSignatory>) => {
     setSnapshot({
       ...snapshot,
-      signatories: snapshot.signatories.map((s) => (signatoryKey(s) === key ? { ...s, ...patch } : s)),
+      signatories: snapshot.signatories.map((s, i) => (i === index ? { ...s, ...patch } : s)),
     });
   };
 
-  const setPrimary = (key: string) => {
+  const setPrimaryAt = (index: number) => {
     setSnapshot({
       ...snapshot,
-      signatories: snapshot.signatories.map((s) => ({ ...s, is_primary: signatoryKey(s) === key })),
+      signatories: snapshot.signatories.map((s, i) => ({ ...s, is_primary: i === index })),
     });
   };
 
-  const removeSignatory = (key: string) => {
-    setSnapshot({ ...snapshot, signatories: snapshot.signatories.filter((s) => signatoryKey(s) !== key) });
+  const removeSignatoryAt = (index: number) => {
+    setSnapshot({
+      ...snapshot,
+      signatories: snapshot.signatories.filter((_, i) => i !== index),
+    });
   };
 
   const addManualSignatory = () => {
@@ -192,8 +204,8 @@ export function ProposalSignatoriesSection({
 
       {snapshot.signatories.length > 0 && (
         <RadioGroup
-          value={snapshot.signatories.find((s) => s.is_primary) ? primaryKeyOf(snapshot) : undefined}
-          onValueChange={setPrimary}
+          value={primaryIndexOf(snapshot)}
+          onValueChange={(v) => setPrimaryAt(Number(v))}
           className="space-y-2"
         >
           <div className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2 text-[11px] font-medium text-muted-foreground px-1">
@@ -202,29 +214,34 @@ export function ProposalSignatoriesSection({
             <span>Email</span>
             <span />
           </div>
-          {snapshot.signatories.map((s) => {
-            const key = signatoryKey(s);
+          {snapshot.signatories.map((s, index) => {
+            // Keyed by source id when the signatory came from a record, otherwise by
+            // position — never by the name/email being typed.
+            const rowKey = sourcedKey(s) ?? `manual-${index}`;
             return (
-              <div key={key} className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2">
-                <RadioGroupItem value={key} aria-label={`Set ${s.name || "signatory"} as primary contact`} />
+              <div key={rowKey} className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2">
+                <RadioGroupItem
+                  value={String(index)}
+                  aria-label={`Set ${s.name || "signatory"} as primary contact`}
+                />
                 <Input
                   value={s.name}
                   placeholder="Signatory name"
-                  onChange={(e) => updateSignatory(key, { name: e.target.value })}
+                  onChange={(e) => updateSignatoryAt(index, { name: e.target.value })}
                   aria-label="Signatory name"
                 />
                 <Input
                   type="email"
                   value={s.email}
                   placeholder="name@example.com"
-                  onChange={(e) => updateSignatory(key, { email: e.target.value })}
+                  onChange={(e) => updateSignatoryAt(index, { email: e.target.value })}
                   aria-label={`Email for ${s.name || "signatory"}`}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => removeSignatory(key)}
+                  onClick={() => removeSignatoryAt(index)}
                   aria-label={`Remove ${s.name || "signatory"}`}
                 >
                   <X className="h-4 w-4" />
@@ -266,8 +283,8 @@ export function ProposalSignatoriesSection({
   );
 }
 
-/** The stable key of the current primary signatory (for the RadioGroup value). */
-function primaryKeyOf(snap: SignatorySnapshot): string | undefined {
-  const primary = snap.signatories.find((s) => s.is_primary);
-  return primary ? signatoryKey(primary) : undefined;
+/** Position of the current primary signatory, as the RadioGroup's string value. */
+function primaryIndexOf(snap: SignatorySnapshot): string | undefined {
+  const index = snap.signatories.findIndex((s) => s.is_primary);
+  return index >= 0 ? String(index) : undefined;
 }

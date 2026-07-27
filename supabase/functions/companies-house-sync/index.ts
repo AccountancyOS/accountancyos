@@ -1209,6 +1209,32 @@ serve(async (req: Request) => {
       return jsonResponse(result.data, 200);
     }
 
+    // Officers for a bare company number — no persisted company row required.
+    // The full `sync` path below fetches officers too, but only for a company that
+    // already exists in the database. A LEAD has no company row yet, so proposal
+    // signatory selection (which offers the active directors) had no way to obtain
+    // them: leads.ch_company_profile stores the CH COMPANY PROFILE, which contains
+    // no officers. Same auth surface as `profile` — an authenticated user, no org
+    // scoping, since this returns nothing but public Companies House data.
+    if (action === "officers") {
+      const companyNumber: string = (payload.company_number || "").toString().trim().toUpperCase();
+      if (!companyNumber) {
+        return jsonResponse({ error: "company_number is required" }, 400);
+      }
+      const result = await chFetchJson(
+        `/company/${encodeURIComponent(companyNumber)}/officers`,
+        CH_PROD_API_KEY,
+        { items_per_page: "100" },
+      );
+      if (!result.ok) {
+        return jsonResponse(
+          { error: "Companies House officers lookup failed", ch_status: result.status },
+          502,
+        );
+      }
+      return jsonResponse({ officers: result.data?.items ?? [] }, 200);
+    }
+
     const { companyId, organizationId } = payload;
 
     if (!companyId || !organizationId) {

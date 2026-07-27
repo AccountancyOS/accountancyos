@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useOrganization } from "@/lib/organization-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -61,9 +61,11 @@ import { Badge } from "@/components/ui/badge";
 import { ProposalSignatoriesSection } from "@/components/quotes/ProposalSignatoriesSection";
 import {
   validateSignatorySnapshot,
+  extractActiveDirectors,
   type SignatorySnapshot,
 } from "@/lib/proposal/signatories";
-import type { ClientType } from "@/lib/client-types";
+import { isCompanyBasedType, type ClientType } from "@/lib/client-types";
+import { getCompanyOfficers } from "@/lib/companies-house-lookup";
 
 /**
  * Proposal Phase 1 T5b — per-VAT-service group state. The frequency/stagger and
@@ -278,6 +280,9 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   // first edited). Persisted to quotes.signatory_snapshot so later CH/contact
   // changes never silently mutate this in-flight proposal.
   const [signatorySnapshot, setSignatorySnapshot] = useState<SignatorySnapshot | null>(null);
+  // CH officers fetched on demand per lead id (leads store no officer list — see the
+  // effect below). An entry of [] means "asked, none available" and stops re-fetching.
+  const [leadOfficers, setLeadOfficers] = useState<Record<string, unknown[]>>({});
   const [lines, setLines] = useState<QuoteLine[]>([
     { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" },
   ]);
@@ -530,6 +535,55 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   const chAccountsPeriod = selectedLead
     ? nextAccountsPeriodFromCH(selectedLead as any)
     : null;
+
+  // A CH company PROFILE carries no officers, so a lead's stored ch_company_profile has
+  // no directors to offer as signatories (the accounts-period prefill above works from
+  // the same row because periods DO live on the profile). Fetch the officer list on
+  // demand for the selected lead — this also covers leads created before the CRM lookup
+  // started storing officers.
+  useEffect(() => {
+    if (!selectedLead) return;
+    const leadType = (selectedLead as any).lead_type as ClientType | undefined;
+    if (!leadType || !isCompanyBasedType(leadType)) return;
+    if (extractActiveDirectors(selectedLead as any).length > 0) return;
+    // `leads` has no company_number column — the number lives inside the stored CH
+    // profile, either flat or under the wrapped `profile` key.
+    const stored = (selectedLead as any).ch_company_profile;
+    const companyNumber: string | null =
+      stored?.company_number ?? stored?.profile?.company_number ?? null;
+    if (!companyNumber) return;
+    if (leadOfficers[selectedLead.id] !== undefined) return;
+
+    let cancelled = false;
+    (async () => {
+      const { data: officers } = await getCompanyOfficers(companyNumber);
+      if (cancelled) return;
+      // An empty array is a definitive answer (no officers at CH) and stops re-fetching;
+      // a failure records the same so the dialog does not retry on every keystroke. The
+      // section falls back to manual entry either way.
+      setLeadOfficers((prev) => ({ ...prev, [selectedLead.id]: officers ?? [] }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLead?.id]);
+
+  /** The selected lead's CH data with any on-demand officer list merged in. */
+  const signatoryChSource = useMemo(() => {
+    if (!selectedLead) return null;
+    const stored = (selectedLead as any).ch_company_profile;
+    const fetched = leadOfficers[selectedLead.id];
+    if (!fetched || fetched.length === 0) {
+      return selectedLead as { ch_company_profile?: unknown };
+    }
+    return {
+      ch_company_profile: {
+        profile: stored?.profile ?? stored ?? null,
+        officers: fetched,
+      },
+    };
+  }, [selectedLead, leadOfficers]);
 
   /** The oldest confirmed/prefilled accounts period currently on this service. */
   const earliestAccountsPeriod = (serviceId: string): AccountsPeriod | null => {
@@ -1389,7 +1443,7 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
           {selectedLead && (
             <ProposalSignatoriesSection
               leadType={(selectedLead as any).lead_type as ClientType | undefined}
-              chSource={selectedLead as { ch_company_profile?: unknown }}
+              chSource={signatoryChSource}
               individual={{
                 name: [selectedLead.first_name, selectedLead.last_name].filter(Boolean).join(" ").trim(),
                 email: selectedLead.email ?? "",

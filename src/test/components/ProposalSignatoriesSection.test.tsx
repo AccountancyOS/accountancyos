@@ -92,6 +92,51 @@ describe("ProposalSignatoriesSection", () => {
     expect(screen.queryByText("Companies House directors")).not.toBeInTheDocument();
   });
 
+  /**
+   * Regression: a manually added signatory's row identity must NOT be derived from the
+   * fields being edited. It used to be `manual:<name>:<email>`, so every keystroke
+   * changed the React key, unmounted the row and remounted a fresh input — the field
+   * lost focus after one character. Director rows were keyed on their CH id, which is
+   * why the tests above never caught it.
+   */
+  it("keeps focus while typing a manual signatory's name and email", async () => {
+    const user = userEvent.setup();
+    render(<Host leadType="limited_company" chSource={COMPANY_SOURCE} individual={null} />);
+
+    await user.click(screen.getByRole("button", { name: /add signatory/i }));
+
+    const nameInput = screen.getByPlaceholderText("Signatory name") as HTMLInputElement;
+    await user.type(nameInput, "Grace Hopper");
+    expect((screen.getByPlaceholderText("Signatory name") as HTMLInputElement).value).toBe(
+      "Grace Hopper",
+    );
+
+    const emailInput = screen.getByPlaceholderText("name@example.com") as HTMLInputElement;
+    await user.type(emailInput, "grace@navy.mil");
+    expect((screen.getByPlaceholderText("name@example.com") as HTMLInputElement).value).toBe(
+      "grace@navy.mil",
+    );
+  });
+
+  it("keeps two manual signatories independently editable", async () => {
+    const user = userEvent.setup();
+    render(<Host leadType="limited_company" chSource={COMPANY_SOURCE} individual={null} />);
+
+    await user.click(screen.getByRole("button", { name: /add signatory/i }));
+    await user.click(screen.getByRole("button", { name: /add signatory/i }));
+
+    const names = screen.getAllByPlaceholderText("Signatory name") as HTMLInputElement[];
+    expect(names).toHaveLength(2);
+    await user.type(names[0], "Ada");
+    await user.type(
+      (screen.getAllByPlaceholderText("Signatory name") as HTMLInputElement[])[1],
+      "Grace",
+    );
+
+    const after = screen.getAllByPlaceholderText("Signatory name") as HTMLInputElement[];
+    expect(after.map((i) => i.value)).toEqual(["Ada", "Grace"]);
+  });
+
   it("shows the fallback when a company has no active directors loaded", () => {
     render(
       <Host
