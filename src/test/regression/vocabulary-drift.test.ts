@@ -31,7 +31,8 @@ const EXPECTED_CONSTRAINT_VALUES: Record<string, string[]> = {
   clients_status_check: ["pending", "active", "disengaged", "archived"],
   companies_status_check: ["pending", "active", "disengaged", "archived"],
   portal_access_status_check: ["invited", "active", "revoked"],
-  engagement_letters_status_check: ["draft", "sent", "signed"],
+  // 'partially_signed' added by 20260727140000_el_signature_rule_sot.sql (Phase 2 T2d-1).
+  engagement_letters_status_check: ["draft", "sent", "partially_signed", "signed"],
   chk_filing_status: [
     "not_started", "draft", "in_progress", "ready_for_review", "sent_to_client",
     "client_changes_requested", "awaiting_approval", "approved", "ready_to_file",
