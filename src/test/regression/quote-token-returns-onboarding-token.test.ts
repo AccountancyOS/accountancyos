@@ -20,6 +20,9 @@ const MIG_NAME = "20260727160000_quote_token_returns_onboarding_token.sql";
 const MIG = readFileSync(resolve(migDir, MIG_NAME), "utf8");
 const PAGE = readFileSync(resolve(root, "src/pages/PublicQuoteView.tsx"), "utf8");
 
+/** The body Lovable actually executed is re-filed under its own generated name. */
+const bodyOf = (sql: string) => sql.slice(sql.indexOf("CREATE OR REPLACE FUNCTION")).trim();
+
 /** The migration that most recently (re)defines a function owns its live body. */
 const latestDefinerOf = (fnName: string): string | undefined =>
   readdirSync(migDir)
@@ -34,7 +37,12 @@ const latestDefinerOf = (fnName: string): string | undefined =>
 
 describe("public_get_quote_by_token returns the onboarding access token", () => {
   it("owns the live body of the function", () => {
-    expect(latestDefinerOf("public_get_quote_by_token")).toBe(MIG_NAME);
+    const latest = latestDefinerOf("public_get_quote_by_token")!;
+    // Either the reviewed file itself, or the Lovable-applied twin carrying an
+    // identical body — but never some other, later redefinition.
+    if (latest !== MIG_NAME) {
+      expect(bodyOf(readFileSync(resolve(migDir, latest), "utf8"))).toBe(bodyOf(MIG));
+    }
   });
 
   it("returns the token the client has always read", () => {
