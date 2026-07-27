@@ -15,9 +15,16 @@ Gate 6 (no silent failure). All are confirmed against LIVE, not inferred.
 
 The happy path itself is in better shape than the defect count suggests: lead →
 quote → send → public acceptance → engagement letter → AML upload → client details
-→ billing all completed end-to-end with **zero console or network errors**. The
-blockers are in delivery (email never leaves the queue) and in the purchase-ledger
-and automation surfaces.
+→ billing → accountant review → AML verification → client + job creation → portal
+invite → portal login all completed end-to-end with **zero console or network
+errors**. The blockers are in delivery (email never leaves the queue), in the
+purchase-ledger and automation surfaces, and in team/role administration.
+
+The dominant pattern across every P1/P2 found so far is the same: **the UI
+reports success while the underlying operation did nothing, and no error reaches
+the user.** That is five distinct Gate 6 violations (DEF-003, DEF-006, DEF-012,
+DEF-013, and the DEF-001 RPC family). Gate 6 should be treated as the single
+largest launch risk, ahead of any individual defect.
 
 ---
 
