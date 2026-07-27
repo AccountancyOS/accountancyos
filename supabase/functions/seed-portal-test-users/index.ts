@@ -218,6 +218,8 @@ async function seedInvoices(sr: SR, scope: { client_id?: string | null; company_
 }
 
 async function seedJobDocs(sr: SR, jobId: string, label: string) {
+  const { data: job } = await sr.from("jobs").select("id").eq("id", jobId).maybeSingle();
+  if (!job) return;
   await sr.from("job_documents").delete().eq("job_id", jobId).like("file_name", `QA-${label}-%`);
   const rows = [
     { file_name: `QA-${label}-visible.pdf`, file_path: `qa/${label}/visible.pdf`, mime_type: "application/pdf", client_visible: true, archived: false, version: 1 },

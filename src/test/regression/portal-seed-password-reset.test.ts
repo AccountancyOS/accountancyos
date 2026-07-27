@@ -31,4 +31,9 @@ describe("Portal fixture seed contract", () => {
     expect(source).not.toContain('status: "sent"');
     expect(source).not.toContain('status: "paid"');
   });
+
+  it("does not fail the whole portal seed when legacy job-document anchors are missing", () => {
+    expect(source).toMatch(/maybeSingle\(\)/);
+    expect(source).toMatch(/if \(!job\) return/);
+  });
 });
