@@ -80,6 +80,20 @@ export const ONBOARDING_BILLING_STATUSES = ["pending", "skipped", "completed", "
 /** quotes.status — quotes_status_check */
 export const QUOTE_STATUSES = ["draft", "sent", "accepted", "rejected", "expired", "superseded"] as const;
 
+/**
+ * Extended proposal status vocabulary — the quote statuses PLUS the forthcoming
+ * `partially_signed` token (multi-signatory `signing_rule='all'` in-flight: some
+ * but not all required signatories have signed). Added additively (Phase 2 T2a)
+ * so signing code can reference the token without hardcoding it.
+ *
+ * NOTE: `partially_signed` is NOT yet in the live `quotes_status_check` — the
+ * DB CHECK update is a later task (Phase 2 T2d). QUOTE_STATUSES above therefore
+ * stays the untouched SSOT mirror of the live constraint (the vocabulary-drift
+ * guard + live smoke check verify it), and only THIS forward-looking constant
+ * carries the new value until the constraint catches up.
+ */
+export const PROPOSAL_STATUSES = [...QUOTE_STATUSES, "partially_signed"] as const;
+
 /** deadlines.status — deadlines_status_check */
 export const DEADLINE_STATUSES = ["pending", "in_progress", "completed", "filed", "overdue", "cancelled"] as const;
 
