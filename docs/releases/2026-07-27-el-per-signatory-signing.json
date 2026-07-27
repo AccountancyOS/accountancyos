@@ -1,0 +1,105 @@
+{
+  "release_id": "2026-07-27-el-per-signatory-signing",
+  "release_kind": "migration",
+  "status": "applied-verified",
+  "declared_at": "2026-07-27T00:00:00Z",
+  "approver": "owner (chat approval 2026-07-27)",
+  "summary": "Proposal Phase 2, Task 2d-2 \u2014 the per-signatory engagement-letter signing protocol. Adds public.public_get_engagement_letter_for_signing(text) (public read for the signing page, resolving either a per-signatory token or the letter-level token) and public.public_sign_engagement_letter_as_signatory(text, jsonb) (records ONE signatory's signature, then evaluates the signing rule via el_signature_progress: letter status 'partially_signed' until satisfied, then 'signed' plus the onboarding-application write). Re-issues public.public_sign_engagement_letter_by_token(text, jsonb) from its live body to (a) refuse when per-signatory rows exist and (b) perform the application-side write it has always omitted. Also fixes a live client-facing defect: the signing page could never load for an unauthenticated client (see problem.live_defect). No lifecycle function, no RLS policy and no table data is touched; the signing rule is CALLED (T2d-1), never re-implemented.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "context": "Owner-decided design (2026-07-27): multi-signer engagement letters use PER-SIGNATORY LINKS \u2014 each director is a row seeded from quotes.signatory_snapshot with their own token and email (DocuSign/Karbon model). T2a added the signatory table + signing_rule; T2b made the activation gate evaluate the rule; T2d-1 made the rule a single callable function. What was still missing is the WRITER side: nothing could record a per-signatory signature, and the activation gate therefore could never be satisfied for a multi-signatory letter.",
+    "drift_defect_fixed": "public_sign_engagement_letter_by_token (live def-hash 79c37859dcfbe37a56a3314f03c04f1c) set ONLY engagement_letters.signed_at \u2014 no contracts_signed_at, no application status advance \u2014 whereas the in-portal public_sign_engagement_letter (6c803c5dc60f01747d75d9a34ca8c8f1) sets both. A client signing via the emailed link therefore left the activation gate permanently unsatisfied. Recorded in discovery as defect 2d; fixed here.",
+    "live_defect": "src/pages/EngagementLetterPreview.tsx (the page behind the emailed /engagement/:token link) queries public.engagement_letters and public.organizations DIRECTLY with the anon key. Verified live via catalog_rls_status + catalog_policies: engagement_letters has rls_enabled = true and only three policies, all TO authenticated (org-member SELECT, manager INSERT/UPDATE) \u2014 no anon SELECT. For a real unauthenticated client the query returns no row and the page renders 'This engagement letter link is invalid or has expired', so the client can never reach the Sign button. Fixed by reading through a SECURITY DEFINER RPC \u2014 the pattern every other public onboarding read uses (public_get_onboarding) \u2014 rather than opening an anon RLS policy on a table holding signed contracts. The page rewrite that consumes it is Task 2d-3 (app-side, no migration).",
+    "scope": "Two new functions; one function re-issued from its live body; three GRANTs. No table, column, constraint, trigger, RLS policy or row is altered."
+  },
+  "live_bodies_used": [
+    {
+      "function": "public.public_sign_engagement_letter_by_token(text, jsonb)",
+      "live_def_hash_before": "79c37859dcfbe37a56a3314f03c04f1c",
+      "fetched_at": "2026-07-27",
+      "basis": "Full body fetched via MCP catalog_functions(include_source: true) and reproduced verbatim except the two documented changes. The pre-existing UPDATE public.engagement_letters statement is deliberately left byte-identical and the new writes added as separate statements, so a diff against the live body shows only additions."
+    },
+    {
+      "function": "public.el_signature_progress(uuid)",
+      "live_def_hash": "20fe6aff754603e57b28e792e37fd122",
+      "fetched_at": "2026-07-27",
+      "basis": "Called, not modified. Confirmed live before authoring (T2d-1 release 2026-07-27-el-signature-rule-sot, applied-verified)."
+    },
+    {
+      "function": "public.protect_engagement_letter_signatures()",
+      "live_def_hash": "f8389700eea7e2ec93f2dade8a59a53e",
+      "fetched_at": "2026-07-27",
+      "basis": "Not modified. Fetched to confirm which columns the trigger freezes on a signed letter (signed_at, signature_ip, signature_user_agent, signed_by, signer_name, signer_email, document_content) so every write in this migration COALESCEs them and cannot trip it."
+    }
+  ],
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260727150000_el_per_signatory_signing.sql",
+      "sha256": "5c48fc1d3efe6dba100d06ea6c2a087341ef8c828afbafb61ad6261d32697d29",
+      "expected_objects": [
+        {
+          "id": "public-get-el-for-signing-fn",
+          "object": "function public.public_get_engagement_letter_for_signing(text) returns jsonb, STABLE, SECURITY DEFINER, search_path=public, EXECUTE granted to anon + authenticated",
+          "result": "verified",
+          "verify_via": "catalog_functions(name_like: 'public_get_engagement_letter_for_signing') -> exactly one row, volatility 'stable', security_definer true. Then db_rpc it with a junk token and expect {found: false, error: 'This engagement letter link is invalid or has expired.'} rather than an exception. Record the def-hash in .livebodies/README.md.",
+          "verified_note": "catalog: one row, volatility stable, security_definer true, def-hash 025368f99784f805052c6b95b11c6f97; junk-token probe returned {\"found\": false, \"error\": \"This engagement letter link is invalid or has expired.\"}"
+        },
+        {
+          "id": "sign-as-signatory-fn",
+          "object": "function public.public_sign_engagement_letter_as_signatory(text, jsonb) returns jsonb, VOLATILE, SECURITY DEFINER, search_path=public, EXECUTE granted to anon + authenticated",
+          "result": "verified",
+          "verify_via": "catalog_functions(name_like: 'public_sign_engagement_letter_as_signatory') -> exactly one row, security_definer true. Then db_rpc with p_token 'not-a-uuid' and expect {success: false, error: 'This signing link is not valid.'} \u2014 proving the non-uuid path returns cleanly instead of raising invalid_text_representation.",
+          "verified_note": "catalog: one row, volatile, security_definer true, def-hash 4bff131a1e593a0e5ac792807cb4da4e; probe with p_token 'not-a-uuid' returned {\"success\": false, \"error\": \"This signing link is not valid.\"} with no exception."
+        },
+        {
+          "id": "sign-by-token-fn-reissued",
+          "object": "public.public_sign_engagement_letter_by_token(text, jsonb) re-issued: refuses when signatory rows exist, and writes onboarding_applications.contracts_signed_at on success",
+          "result": "verified",
+          "verify_via": "catalog_functions(name_like: 'public_sign_engagement_letter_by_token', include_source: true) -> def-hash CHANGED from 79c37859dcfbe37a56a3314f03c04f1c; body contains el_signature_progress, 'requires_personal_link', and an UPDATE public.onboarding_applications setting contracts_signed_at. Diff against the recorded live body and confirm the only differences are the two documented additions.",
+          "verified_note": "def-hash changed 79c37859dcfbe37a56a3314f03c04f1c -> 8a6b7d2df1f224cc86006483ca66329d; body contains el_signature_progress, requires_personal_link and the UPDATE public.onboarding_applications setting contracts_signed_at. Only the two documented additions differ from the recorded live body."
+        },
+        {
+          "id": "behavioural-per-signatory-probe",
+          "object": "End-to-end: a two-signatory 'all' letter goes partially_signed on the first signature and signed + contracts_signed_at on the second",
+          "result": "deferred",
+          "verify_via": "DEFERRED until an onboarding application with an engagement letter exists (engagement_letters and engagement_letter_signatories are both empty live as of this release). After Task 2d-3 dispatch seeds rows, sign with signatory A's token and assert letter status 'partially_signed' + lifecycle_onboarding_gates engagement_letter_signed = false; then sign with B's token and assert status 'signed', onboarding contracts_signed_at set, and engagement_letter_signed = true. Re-posting A's token must return already_signed with no second signature.",
+          "verified_note": "Still deferred: engagement_letters and engagement_letter_signatories remain empty live. To be run after Task 2d-3 seeds rows."
+        }
+      ]
+    }
+  ],
+  "rollback": {
+    "assessment": "Forward-only. The two new functions are additive and unreferenced by any app code until Task 2d-3, so dropping them is clean. public_sign_engagement_letter_by_token can be restored from the recorded live body 79c37859dcfbe37a56a3314f03c04f1c \u2014 but note that restoring it also restores the missing-contracts_signed_at defect.",
+    "data_risk": "None on apply: no table data is read or written by the migration itself. Behaviour change at runtime is confined to the signing paths, and both are idempotent."
+  },
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260727150000_el_per_signatory_signing.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "Do NOT expect a visible app change yet: the signing page still reads the tables directly until Task 2d-3 lands. Existing single-signer letters keep working (they have no signatory rows).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+  "post_apply_followups": [
+    "Task 2d-3 (app-side, no migration): seed engagement_letter_signatories from quotes.signatory_snapshot at engagement-letter dispatch and send each signatory their own link (supabase/functions/send-engagement-letter/index.ts currently sends ONE email to onboarding_applications.email using the letter-level token); rewrite src/pages/EngagementLetterPreview.tsx to load via public_get_engagement_letter_for_signing and sign via public_sign_engagement_letter_as_signatory, showing signing progress and the requires_personal_link guidance.",
+    "Integrity gap noted while fetching the live trigger: protect_engagement_letter_signatures freezes signer_name but NOT signature_name, the column the emailed-link path actually writes. A signed letter's displayed signatory name is therefore still mutable. Small forward-only fix, deliberately not bundled into this increment."
+  ],
+  "applied_at": "2026-07-27T12:26:14Z",
+  "applied_version": "20260727122614",
+  "verification": {
+    "pre_apply_live_hashes": {
+      "public_sign_engagement_letter_by_token": "79c37859dcfbe37a56a3314f03c04f1c",
+      "el_signature_progress": "20fe6aff754603e57b28e792e37fd122",
+      "protect_engagement_letter_signatures": "f8389700eea7e2ec93f2dade8a59a53e"
+    },
+    "post_apply_live_hashes": {
+      "public_get_engagement_letter_for_signing": "025368f99784f805052c6b95b11c6f97",
+      "public_sign_engagement_letter_as_signatory": "4bff131a1e593a0e5ac792807cb4da4e",
+      "public_sign_engagement_letter_by_token": "8a6b7d2df1f224cc86006483ca66329d",
+      "el_signature_progress": "20fe6aff754603e57b28e792e37fd122 (unchanged)"
+    },
+    "file_sha256_confirmed_pre_apply": "5c48fc1d3efe6dba100d06ea6c2a087341ef8c828afbafb61ad6261d32697d29"
+  }
+}
