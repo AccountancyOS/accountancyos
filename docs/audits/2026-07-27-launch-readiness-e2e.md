@@ -15,9 +15,16 @@ Gate 6 (no silent failure). All are confirmed against LIVE, not inferred.
 
 The happy path itself is in better shape than the defect count suggests: lead →
 quote → send → public acceptance → engagement letter → AML upload → client details
-→ billing all completed end-to-end with **zero console or network errors**. The
-blockers are in delivery (email never leaves the queue) and in the purchase-ledger
-and automation surfaces.
+→ billing → accountant review → AML verification → client + job creation → portal
+invite → portal login all completed end-to-end with **zero console or network
+errors**. The blockers are in delivery (email never leaves the queue), in the
+purchase-ledger and automation surfaces, and in team/role administration.
+
+The dominant pattern across every P1/P2 found so far is the same: **the UI
+reports success while the underlying operation did nothing, and no error reaches
+the user.** That is five distinct Gate 6 violations (DEF-003, DEF-006, DEF-012,
+DEF-013, and the DEF-001 RPC family). Gate 6 should be treated as the single
+largest launch risk, ahead of any individual defect.
 
 ---
 
@@ -190,11 +197,69 @@ Fix: use `maybeSingle()`.
 
 ---
 
-### DEF-008 — P3 — `/documents` renders the client-portal wall to accountants
+### DEF-008 — P3 (revised) — Portal custom-domain aliases are served on the accountant origin
 
-Signed in as the practice owner, `/documents` renders "No portal access — You're
-signed in, but this account doesn't have access to a client portal yet." An
-accountant-side route should never resolve to a portal-only view.
+**Revised after the Phase 4 route sweep.** Seven unqualified paths — `/banking`,
+`/documents`, `/messages`, `/payments`, `/profile`, `/questionnaires`, `/tasks`
+(plus `/dashboard`, `/login`, `/invite`, `/forgot-password`, `/reset-password`) —
+are portal custom-domain aliases (`src/App.tsx` 606-623) intended for
+`client.accountancyos.com`. They are mounted unconditionally, so on the
+accountant origin a signed-in practice owner who reaches any of them gets
+"No portal access".
+
+Downgraded from a functional break to a hygiene/routing issue: a codebase search
+found **no** accountant-side `<Link to>` or `navigate()` to any of these paths,
+so they are not reachable from the accountant UI — only by typed/bookmarked URL.
+**Fix:** gate the alias block on the portal hostname, or redirect non-portal
+sessions to `/overview` instead of rendering the wall.
+
+---
+
+### DEF-012 — P2 — Team Permissions never loads (`PGRST200`)
+
+**Phase:** 4 · **Gate impact:** 1, 4, 6 · **Status:** OPEN
+
+`/settings/permissions` is stuck on "Loading team members…" indefinitely:
+
+```
+GET /rest/v1/organization_users?select=id,user_id,role,created_at,profiles:user_id(...)
+HTTP 400 {"code":"PGRST200","message":"Could not find a relationship between
+ 'organization_users' and 'user_id' in the schema cache"}
+```
+
+There is no foreign key from `organization_users.user_id` to `profiles`, so the
+embed cannot resolve. **Role administration is entirely unavailable** — an owner
+cannot see, invite, or change the role of any team member. Given the three-role
+security model this is a governance gap, not just a broken page. The page shows
+no error; it simply spins (third Gate 6 silent failure).
+
+**Fix options:** add the FK and reload the schema cache, or split into two
+queries (`organization_users`, then `profiles` by `user_id in (...)`).
+
+---
+
+### DEF-013 — P2 — Email signature settings query a non-existent column (`42703`)
+
+**Phase:** 4 · **Gate impact:** 4, 6 · **Status:** OPEN
+
+`/settings/my-profile` fires:
+
+```
+GET /rest/v1/organization_users?select=email_signature&organization_id=eq.…&user_id=eq.…
+HTTP 400 {"code":"42703","message":"column organization_users.email_signature does not exist"}
+```
+
+The signature field renders empty and any saved value cannot be read back. Per
+the page's own copy the signature is "automatically appended to engagement
+letters and outbound system emails", so every outbound letter goes out unsigned.
+Again surfaced with no user-visible error.
+
+---
+
+### DEF-014 — P4 — `validateDOMNesting` warning on Automation Settings Centre
+
+`/settings/automations` logs a nested-`<button>` React warning. Cosmetic; fix by
+swapping the inner control for a non-button element or using `asChild`.
 
 ---
 
@@ -273,7 +338,39 @@ reproduce on this run.
 | 1 | Environment preflight | PARTIAL — DEF-001..005 raised |
 | 2 | Catastrophic-risk tests | NOT STARTED |
 | 3 | Core commercial journey | COMPLETE — end-to-end lead → quote → acceptance → onboarding → AML → approval → client → portal login all PASS; only email delivery (DEF-003) fails |
-| 4 | Module coverage | PARTIAL — DEF-006/007 raised; bills/invoices/automations blocked by DEF-001/002 |
+| 4 | Module coverage | LARGELY COMPLETE — 37-route sweep executed; DEF-006/007/008/012/013/014 raised; bills/invoices/automations still blocked by DEF-001/002 |
+
+---
+
+## Phase 4 — Module coverage route sweep
+
+37 accountant routes were loaded in sequence against LIVE as the practice owner,
+capturing console errors, page errors and every HTTP >= 400.
+
+**Clean (rendered correctly, zero errors):** `/overview`, `/crm`, `/clients`,
+`/emails`, `/services`, `/quotes`, `/onboarding`, `/workpapers`, `/deadlines`,
+`/filings`, `/templates`, `/automations`, `/subscription`, `/settings`,
+`/settings/branding`, `/settings/companies-house`, `/settings/crm-sequences`,
+`/settings/email-preferences`, `/settings/email-templates`,
+`/settings/engagement-letters`, `/settings/hmrc`, `/settings/job-templates`,
+`/ops/health`.
+
+**Errored:** `/bookkeeping`, `/payroll`, `/cis` (all three resolve to the
+bookkeeping shell and all three fire DEF-006); `/jobs` (DEF-007);
+`/settings/permissions` (DEF-012); `/settings/my-profile` (DEF-013);
+`/settings/automations` (DEF-014).
+
+**Not accountant routes:** the seven DEF-008 aliases.
+
+### Mitigation available for DEF-003
+
+`/emails` exposes a **Process Queue** button that invokes `process-email-queue`
+directly (`src/pages/Settings.tsx:233`). It confirms the diagnosis — the function
+is deployed and callable, only the *schedule* is missing — and gives operations a
+manual drain. It was deliberately **not** clicked during this run: two of the
+four queued recipients are `@accountancyos.test` addresses that would hard-bounce
+and write permanent rows into `suppressed_emails`. Draining the queue should
+happen after the test rows are purged in Phase 8.
 | 5 | Non-functional readiness | NOT STARTED |
 | 6 | Operational readiness | NOT STARTED |
 | 7 | Security & deployment integrity | PARTIAL — DEF-004/005 raised |
