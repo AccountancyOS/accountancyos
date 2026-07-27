@@ -2,6 +2,7 @@
 // Uses the companies-house-sync edge function for server-side API calls
 
 import { supabase } from "@/integrations/supabase/client";
+import { describeFunctionError } from "@/lib/edge-function-error";
 
 export interface CHCompanyProfile {
   company_number: string;
@@ -104,33 +105,6 @@ export async function getCompanyProfile(
 }
 
 /**
- * Turn a supabase-js function error into something a human can act on.
- *
- * `functions.invoke` reports any non-2xx as a FunctionsHttpError whose message is the
- * useless "Edge Function returned a non-2xx status code" — the body we deliberately
- * returned (`{ error, ch_status }`) is only reachable through `error.context`. Swallowing
- * it is how a failed deploy looked identical to a Companies House outage.
- */
-async function describeFunctionError(error: unknown): Promise<string> {
-  const fallback =
-    (error as { message?: string })?.message || "Failed to get company officers";
-  const context = (error as { context?: unknown })?.context as
-    | { json?: () => Promise<unknown>; status?: number }
-    | undefined;
-
-  if (!context || typeof context.json !== "function") return fallback;
-
-  try {
-    const body = (await context.json()) as { error?: string; ch_status?: number } | null;
-    if (!body?.error) return context.status ? `${fallback} (HTTP ${context.status})` : fallback;
-    return body.ch_status ? `${body.error} (Companies House ${body.ch_status})` : body.error;
-  } catch {
-    // Body already consumed or not JSON — the generic message is all we have.
-    return context.status ? `${fallback} (HTTP ${context.status})` : fallback;
-  }
-}
-
-/**
  * Get the officer list for a company number.
  *
  * A CH company profile carries NO officers, so anything that needs directors — proposal
@@ -151,7 +125,10 @@ export async function getCompanyOfficers(
 
     if (error) {
       console.error("CH officers error:", error);
-      return { data: null, error: await describeFunctionError(error) };
+      return {
+        data: null,
+        error: await describeFunctionError(error, "Failed to get company officers"),
+      };
     }
 
     const officers = (data as { officers?: unknown[] } | null)?.officers;

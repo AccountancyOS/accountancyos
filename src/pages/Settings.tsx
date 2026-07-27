@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Mail, RefreshCw, CheckCircle2, XCircle, Clock, Plus, Trash2, MailCheck, AlertCircle, Key, Loader2, CreditCard, ExternalLink, FileText, Palette, Building2, ShieldCheck, Users, Shield } from "lucide-react";
 import { GdprCompliancePanel } from "@/components/settings/GdprCompliancePanel";
 import { supabase } from "@/integrations/supabase/client";
+import { describeFunctionError } from "@/lib/edge-function-error";
 import { useOrganization } from "@/lib/organization-context";
 import { isMailboxTokenStale, shouldOfferReconnect } from "@/lib/mailbox-health";
 import { toast } from "sonner";
@@ -135,7 +136,13 @@ export default function Settings() {
         body: { redirect_url: window.location.origin },
       });
 
-      if (error) throw error;
+      // The function reports WHY in its body; supabase-js hides it behind a generic
+      // "non-2xx status code" message.
+      if (error) {
+        throw new Error(
+          await describeFunctionError(error, "Gmail could not start the connection"),
+        );
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -157,7 +164,11 @@ export default function Settings() {
         body: { redirect_url: window.location.origin },
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(
+          await describeFunctionError(error, "Outlook could not start the connection"),
+        );
+      }
       return data;
     },
     onSuccess: (data) => {

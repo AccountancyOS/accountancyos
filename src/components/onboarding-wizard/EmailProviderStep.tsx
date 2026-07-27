@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { describeFunctionError } from "@/lib/edge-function-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -36,7 +37,14 @@ export const EmailProviderStep = ({ organizationId, onComplete, onSkip }: Props)
       const { data, error } = await supabase.functions.invoke(fn, {
         body: { redirect_url: window.location.origin },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(
+          await describeFunctionError(
+            error,
+            `${provider === "gmail" ? "Gmail" : "Outlook"} could not start the connection`,
+          ),
+        );
+      }
       if (data?.authorization_url) {
         window.location.href = data.authorization_url;
         return;

@@ -58,7 +58,21 @@ describe("CH officers are reachable for a lead (signatory selection)", () => {
     // supabase-js hides the function's own { error, ch_status } body behind
     // error.context — swallowing it made a failed deploy look like a CH outage.
     expect(LOOKUP).toMatch(/describeFunctionError/);
-    expect(LOOKUP).toMatch(/context\.json\(\)/);
+  });
+
+  it("reads the real reason out of the response body, in one shared place", () => {
+    const HELPER = read("src/lib/edge-function-error.ts");
+    expect(HELPER).toMatch(/export async function describeFunctionError/);
+    expect(HELPER).toMatch(/context\.json\(\)/);
+    // The generic supabase-js sentence must never be shown as if it were a reason.
+    expect(HELPER).toMatch(/non-2xx status code/i);
+
+    // Every path that starts an OAuth mailbox connection uses it — those were reporting
+    // the same opaque sentence for a missing secret, a bad JWT and a real outage alike.
+    const SETTINGS = read("src/pages/Settings.tsx");
+    const WIZARD = read("src/components/onboarding-wizard/EmailProviderStep.tsx");
+    expect(SETTINGS.match(/describeFunctionError/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(WIZARD).toMatch(/describeFunctionError/);
   });
 
   it("stores officers alongside the profile when a company is picked in the CRM", () => {
