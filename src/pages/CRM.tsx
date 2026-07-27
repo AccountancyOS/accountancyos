@@ -631,8 +631,9 @@ const CRM = () => {
               if (officersError || !officers) {
                 toast({
                   title: "Directors not loaded",
-                  description:
-                    "Company details were loaded, but the Companies House director list could not be fetched. You can add signatories manually.",
+                  description: `Company details were loaded, but the director list could not be fetched: ${
+                    officersError ?? "no response"
+                  }. You can add signatories manually.`,
                   variant: "destructive",
                 });
                 return;

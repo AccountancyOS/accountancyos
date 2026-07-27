@@ -20,29 +20,45 @@ import { resolve } from "node:path";
 const root = resolve(__dirname, "../../../");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 
+const OFFICERS_FN = read("supabase/functions/ch-officers/index.ts");
 const SYNC_FN = read("supabase/functions/companies-house-sync/index.ts");
+const CONFIG = read("supabase/config.toml");
 const LOOKUP = read("src/lib/companies-house-lookup.ts");
 const CRM = read("src/pages/CRM.tsx");
 const DIALOG = read("src/components/quotes/CreateQuoteDialog.tsx");
 
 describe("CH officers are reachable for a lead (signatory selection)", () => {
-  it("exposes an officers action that needs only a company number", () => {
-    expect(SYNC_FN).toMatch(/if \(action === "officers"\)/);
-    expect(SYNC_FN).toMatch(/\/company\/\$\{encodeURIComponent\(companyNumber\)\}\/officers/);
-    // Returns the officer items under a stable key.
-    expect(SYNC_FN).toMatch(/officers: result\.data\?\.items \?\? \[\]/);
-    // It must sit BEFORE the companyId/organizationId requirement, or a lead (which has
-    // no company row) could never call it.
-    expect(SYNC_FN.indexOf('if (action === "officers")')).toBeLessThan(
-      SYNC_FN.indexOf("companyId and organizationId are required"),
-    );
+  it("lives in its own function, needing only a company number", () => {
+    expect(OFFICERS_FN).toMatch(/\/company\/\$\{encodeURIComponent\(companyNumber\)\}\/officers/);
+    // Returns the officer items under a stable key, never undefined.
+    expect(OFFICERS_FN).toMatch(/Array\.isArray\(data\?\.items\) \? data\.items : \[\]/);
+    // Authenticated, but no org scoping — it returns public CH data only.
+    expect(OFFICERS_FN).toMatch(/supabase\.auth\.getUser\(token\)/);
+    expect(OFFICERS_FN).not.toMatch(/organization_id/);
+    // Registered, and JWT-verified like the other CH endpoints.
+    expect(CONFIG).toMatch(/\[functions\.ch-officers\]\s*\n\s*verify_jwt = true/);
   });
 
-  it("gives the client a helper for it", () => {
+  it("stays OUT of the companies-house-sync monolith", () => {
+    // That function failed to deploy with the action inlined, leaving the old copy live.
+    // Keeping this lookup independent is the point — it must not creep back in.
+    expect(SYNC_FN).not.toMatch(/action === "officers"/);
+  });
+
+  it("can answer which commit it was deployed from", () => {
+    expect(OFFICERS_FN).toMatch(/searchParams\.get\("action"\) === "version"/);
+    expect(OFFICERS_FN).toMatch(/source_commit_sha/);
+  });
+
+  it("gives the client a helper that surfaces the real failure", () => {
     expect(LOOKUP).toMatch(/export async function getCompanyOfficers/);
-    expect(LOOKUP).toMatch(/action: "officers"/);
+    expect(LOOKUP).toMatch(/functions\.invoke\("ch-officers"/);
     // A missing/!array payload degrades to an empty list, never undefined.
     expect(LOOKUP).toMatch(/Array\.isArray\(officers\) \? officers : \[\]/);
+    // supabase-js hides the function's own { error, ch_status } body behind
+    // error.context — swallowing it made a failed deploy look like a CH outage.
+    expect(LOOKUP).toMatch(/describeFunctionError/);
+    expect(LOOKUP).toMatch(/context\.json\(\)/);
   });
 
   it("stores officers alongside the profile when a company is picked in the CRM", () => {

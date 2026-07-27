@@ -19,6 +19,8 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = true
   [functions.cis-submit]
     verify_jwt = true
+  [functions.ch-officers]
+    verify_jwt = true
   [functions.companies-house-sync]
     verify_jwt = true
   [functions.customer-portal]
