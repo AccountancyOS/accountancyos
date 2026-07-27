@@ -2,9 +2,10 @@
 //   x-seed-secret: <PORTAL_SEED_SECRET>
 // Idempotent: safe to re-run; users are upserted by email.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 const cors = {
-  "Access-Control-Allow-Origin": "*",
+  ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-seed-secret",
 };
 
@@ -22,10 +23,43 @@ const PW = "PortalQA!2026";
 
 type SR = ReturnType<typeof createClient>;
 
+function constantTimeEqual(a: string, b: string) {
+  const enc = new TextEncoder();
+  const aa = enc.encode(a);
+  const bb = enc.encode(b);
+  if (aa.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aa.length; i += 1) diff |= aa[i] ^ bb[i];
+  return diff === 0;
+}
+
+function hasValidSeedSecret(req: Request) {
+  const expected = Deno.env.get("PORTAL_SEED_SECRET") ?? "";
+  const provided = req.headers.get("x-seed-secret") ?? "";
+  return expected.length > 0 && provided.length > 0 && constantTimeEqual(provided, expected);
+}
+
+async function findUserByEmail(sr: SR, email: string) {
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await sr.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error(`listUsers: ${error.message}`);
+    const found = data?.users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    if (found) return found;
+    if (!data?.users || data.users.length < 1000) return null;
+  }
+  throw new Error(`listUsers: pagination limit reached while looking up ${email}`);
+}
+
 async function upsertUser(sr: SR, email: string) {
-  const { data: list } = await sr.auth.admin.listUsers();
-  const existing = list?.users?.find((u: any) => u.email === email);
-  if (existing) return existing.id;
+  const existing = await findUserByEmail(sr, email);
+  if (existing) {
+    const { error } = await sr.auth.admin.updateUserById(existing.id, {
+      password: PW,
+      email_confirm: true,
+    });
+    if (error) throw new Error(`updateUser ${email}: ${error.message}`);
+    return existing.id;
+  }
   const { data, error } = await sr.auth.admin.createUser({
     email,
     password: PW,
@@ -189,17 +223,19 @@ async function seedQuestionnaire(_sr: SR, _scope: { client_id?: string | null; c
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
-    // Authn: must be a logged-in owner of the target organization.
+    // Authn: either the one-shot seed secret or a logged-in member of the target organization.
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace(/^Bearer\s+/i, "");
-    if (!token) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
     const sr = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: userRes } = await sr.auth.getUser(token);
-    const caller = userRes?.user;
-    if (!caller) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
-    const { data: orgMembership } = await sr.from("organization_users").select("user_id").eq("organization_id", ORG).eq("user_id", caller.id).limit(1);
-    if (!orgMembership || !orgMembership[0]) {
-      return new Response(JSON.stringify({ error: "forbidden: not a member of target org" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
+    if (!hasValidSeedSecret(req)) {
+      if (!token) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+      const { data: userRes } = await sr.auth.getUser(token);
+      const caller = userRes?.user;
+      if (!caller) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+      const { data: orgMembership } = await sr.from("organization_users").select("user_id").eq("organization_id", ORG).eq("user_id", caller.id).limit(1);
+      if (!orgMembership || !orgMembership[0]) {
+        return new Response(JSON.stringify({ error: "forbidden: not a member of target org" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
+      }
     }
 
     // Pick any existing accountant user in org for sender_id of accountant-originated messages.
