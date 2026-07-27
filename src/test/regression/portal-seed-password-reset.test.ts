@@ -18,4 +18,10 @@ describe("Portal fixture seed contract", () => {
     expect(source).toMatch(/PORTAL_SEED_SECRET/);
     expect(source).toMatch(/x-seed-secret/);
   });
+
+  it("restores missing fixture client and company records before linking portal access", () => {
+    expect(source).toMatch(/ensureClient/);
+    expect(source).toMatch(/ensureCompany/);
+    expect(source.indexOf("await ensureClient")).toBeLessThan(source.indexOf("await upsertPortalAccess"));
+  });
 });

@@ -69,6 +69,33 @@ async function upsertUser(sr: SR, email: string) {
   return data.user!.id;
 }
 
+async function ensureClient(sr: SR, params: { id: string; first_name: string; last_name: string; email: string; client_type?: string }) {
+  const { error } = await sr.from("clients").upsert({
+    id: params.id,
+    organization_id: ORG,
+    first_name: params.first_name,
+    last_name: params.last_name,
+    email: params.email,
+    client_type: params.client_type ?? "individual",
+    status: "active",
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) throw new Error(`ensureClient ${params.id}: ${error.message}`);
+}
+
+async function ensureCompany(sr: SR, params: { id: string; company_name: string; email: string; company_number?: string }) {
+  const { error } = await sr.from("companies").upsert({
+    id: params.id,
+    organization_id: ORG,
+    company_name: params.company_name,
+    email: params.email,
+    company_number: params.company_number ?? null,
+    status: "active",
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) throw new Error(`ensureCompany ${params.id}: ${error.message}`);
+}
+
 async function upsertPortalAccess(sr: SR, params: {
   user_id: string;
   client_id: string | null;
@@ -253,6 +280,12 @@ Deno.serve(async (req) => {
     const uidB = await upsertUser(sr, emails.B);
     const uidC = await upsertUser(sr, emails.C);
     const uidD = await upsertUser(sr, emails.D);
+
+    await ensureClient(sr, { id: CLIENT_A, first_name: "Portal", last_name: "Client A", email: emails.A, client_type: "individual" });
+    await ensureClient(sr, { id: CLIENT_B, first_name: "Portal", last_name: "Client B", email: emails.B, client_type: "individual" });
+    await ensureCompany(sr, { id: COMPANY_C1, company_name: "Portal Company C1", email: emails.C });
+    await ensureCompany(sr, { id: COMPANY_C2, company_name: "Portal Company C2", email: emails.C });
+    await ensureCompany(sr, { id: COMPANY_D, company_name: "Portal Company D", email: emails.D });
 
     await upsertPortalAccess(sr, { user_id: uidA, client_id: CLIENT_A, company_id: null, status: "active" });
     await upsertPortalAccess(sr, { user_id: uidB, client_id: CLIENT_B, company_id: null, status: "active" });
