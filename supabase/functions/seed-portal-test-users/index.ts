@@ -201,14 +201,14 @@ async function seedInvoices(sr: SR, scope: { client_id?: string | null; company_
     ...baseInv,
     invoice_number: `${refPrefix}001`,
     reference: `${refPrefix}001`,
-    total_net: 1000, total_vat: 200, total_gross: 1200, amount_paid: 0, status: "sent",
+    total_net: 1000, total_vat: 200, total_gross: 1200, amount_paid: 0, status: "AWAITING_PAYMENT",
   }).select("id").single();
   if (e1) throw new Error(`invoice unpaid ${scope.label}: ${e1.message}`);
   const { data: paid, error: e2 } = await sr.from("invoices").insert({
     ...baseInv,
     invoice_number: `${refPrefix}002`,
     reference: `${refPrefix}002`,
-    total_net: 500, total_vat: 100, total_gross: 600, amount_paid: 600, status: "paid",
+    total_net: 500, total_vat: 100, total_gross: 600, amount_paid: 600, status: "PAID",
   }).select("id").single();
   if (e2) throw new Error(`invoice paid ${scope.label}: ${e2.message}`);
   // NOTE: trigger update_invoice_payment_status writes UPPER-CASE statuses

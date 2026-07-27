@@ -24,4 +24,11 @@ describe("Portal fixture seed contract", () => {
     expect(source).toMatch(/ensureCompany/);
     expect(source.indexOf("await ensureClient")).toBeLessThan(source.indexOf("await upsertPortalAccess"));
   });
+
+  it("uses live uppercase invoice statuses for portal invoice fixtures", () => {
+    expect(source).toContain('status: "AWAITING_PAYMENT"');
+    expect(source).toContain('status: "PAID"');
+    expect(source).not.toContain('status: "sent"');
+    expect(source).not.toContain('status: "paid"');
+  });
 });
