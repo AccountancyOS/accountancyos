@@ -3,12 +3,28 @@
   "baseline_commit": "d7aca9be9c0af1d28b3d67695888d1529dd6afc6",
   "tenant_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
   "cleanup_policy": "All records listed here are deleted in Phase 8 and the deletion is re-verified by count query.",
-  "created_records": [],
-  "auth_identities_created": [],
-  "storage_objects_created": [],
-  "outbound_sends": [],
+  "created_records": [
+    { "table": "leads", "id": "33e42ab2", "label": "E2E Probe" },
+    { "table": "quotes", "ref": "Q-26-0002", "label": "Advisory & Consultancy £150 one-off" },
+    { "table": "onboarding_applications", "id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee", "status": "approved" },
+    { "table": "clients", "id": "f1565f89-e78c-4e19-8fea-66ab9b8ff294", "label": "E2E Probe" },
+    { "table": "jobs", "id": "67ead073-4693-46ec-a56e-a35ac28082e5", "label": "Advisory & Consultancy - Setup Pending" },
+    { "table": "portal_access", "id": "6a439e29-5c20-4404-bcda-4eb28f107705", "status": "invited -> accepted" },
+    { "table": "onboarding_documents", "count": 2, "label": "id.png, addr.png" }
+  ],
+  "auth_identities_created": [
+    { "email": "e2e-lead@accountancyos.test", "user_id": "0436110a-dcd7-406e-8af0-adaa0b956670", "purpose": "portal login" }
+  ],
+  "storage_objects_created": [
+    { "bucket": "onboarding", "objects": ["id.png", "addr.png"], "application_id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee" }
+  ],
+  "outbound_sends": [
+    { "note": "3 emails queued to email_queue, all still status=pending and never dispatched (DEF-003). No mail left the system." }
+  ],
   "notes": [
     "Phase 1 preflight was executed read-only. No records created yet.",
-    "Adversarial RPC probes used non-existent UUIDs (…0000fe) so no live row was reachable; all probes were rejected or returned not-found."
+    "Adversarial RPC probes used non-existent UUIDs (…0000fe) so no live row was reachable; all probes were rejected or returned not-found.",
+    "Phase 3 created the records above end-to-end through the UI. All use the @accountancyos.test domain so no real recipient can be contacted.",
+    "Records are retained deliberately until Phase 8 so DEF-003 and DEF-011 remain reproducible."
   ]
 }
