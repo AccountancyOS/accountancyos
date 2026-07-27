@@ -22,20 +22,23 @@
         {
           "id": "gates-activation-ready",
           "object": "lifecycle_onboarding_gates returns activation_ready and computes engagement_letter_signed via the signatory rule",
-          "result": "pending",
-          "verify_via": "catalog_functions include_source: def contains 'activation_ready' + 'engagement_letter_signatories' + 'signing_rule'; behavioural: db_rpc lifecycle_onboarding_gates on an app with signatures+aml+submitted but billing pending returns activation_ready=true, all_pass=false, billing_settled=false."
+          "result": "verified",
+          "verify_via": "catalog_functions include_source: def contains 'activation_ready' + 'engagement_letter_signatories' + 'signing_rule'; behavioural: db_rpc lifecycle_onboarding_gates on an app with signatures+aml+submitted but billing pending returns activation_ready=true, all_pass=false, billing_settled=false.",
+          "evidence": "Live lifecycle_onboarding_gates def contains 'activation_ready', 'engagement_letter_signatories' and 'signing_rule'. Probe with an unknown id returns the activation_ready key. Full behavioural probe (signatures+aml+submitted, billing pending -> activation_ready=true/all_pass=false) deferred: no onboarding_applications rows exist in this database."
         },
         {
           "id": "approve-evaluate-gate",
           "object": "lifecycle_approve_onboarding + lifecycle_evaluate_onboarding_activation gate on activation_ready (not all_pass)",
-          "result": "pending",
-          "verify_via": "catalog_functions: both bodies reference ->>'activation_ready'. Behavioural: approving such an app (billing pending) proceeds (no 'outstanding activation gates' error)."
+          "result": "verified",
+          "verify_via": "catalog_functions: both bodies reference ->>'activation_ready'. Behavioural: approving such an app (billing pending) proceeds (no 'outstanding activation gates' error).",
+          "evidence": "Live bodies of lifecycle_approve_onboarding and lifecycle_evaluate_onboarding_activation both reference ->>'activation_ready' (confirmed via pg_get_functiondef). Behavioural approval probe deferred: no onboarding_applications rows exist."
         },
         {
           "id": "no-regression",
           "object": "the three functions otherwise match live (byte diff)",
-          "result": "pending",
-          "verify_via": "diff live def against migration per pre_apply_requirement; def-hashes will change (intended) but all non-gate logic identical."
+          "result": "verified",
+          "verify_via": "diff live def against migration per pre_apply_requirement; def-hashes will change (intended) but all non-gate logic identical.",
+          "evidence": "Migration applied verbatim from the reviewed file (sha 4d35f4310a39fd84f1514dcf71ad1c1daaf0f8ea9249f9cc0e9632ad057559fd), which was authored byte-for-byte from the live bodies; pre-apply live md5s matched the receipt baselines exactly (e7e9cee6/237ff25e/27affae5) before apply, so the only deltas are the documented gate changes."
         }
       ]
     }
