@@ -1,9 +1,9 @@
 {
   "release_id": "2026-07-27-split-onboarding-gate",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-07-27T00:00:00Z",
-  "approver": null,
+  "approver": "owner (chat approval)",
   "summary": "Phase 2 T2b: split the onboarding activation gate \u2014 engagement-letter signature-RULE (over engagement_letter_signatories per signing_rule, legacy fallback) drives activation via a new activation_ready key = all_pass MINUS billing_settled; approve + evaluate now gate on activation_ready. billing_settled kept as a separate reported, non-blocking step.",
   "based_on_live": {
     "note": "Re-issued from LIVE bodies fetched via MCP catalog_functions 2026-07-27 (token valid). Reproduced verbatim except the documented changes.",
@@ -39,5 +39,21 @@
         }
       ]
     }
-  ]
+  ],
+  "applied_version": "20260727081322",
+  "applied_at": "2026-07-27T08:14:05Z",
+  "live_verification": {
+    "pre_apply_live_md5": {
+      "lifecycle_onboarding_gates": "e7e9cee6763b68370f095ff985aa6373",
+      "lifecycle_approve_onboarding": "237ff25e91bc06c368195f983a2c355e",
+      "lifecycle_evaluate_onboarding_activation": "27affae53bb0f92cf6ffffd15e21effa"
+    },
+    "post_apply_live_md5": {
+      "lifecycle_onboarding_gates": "6f60145c17a3f46b894ef8807005012a",
+      "lifecycle_approve_onboarding": "1a12e3d38fe5e4f6e7bb5f208a799f4d",
+      "lifecycle_evaluate_onboarding_activation": "48b36afe230d099f4be8a70887e17ae3"
+    },
+    "behavioural_probe": "lifecycle_onboarding_gates(unknown uuid) returns {error: application_not_found, all_pass: false, activation_ready: false, outstanding:[application_not_found]} \u2014 activation_ready key present.",
+    "note": "All three live bodies contain 'activation_ready'. No onboarding_applications rows exist to probe a populated gate set."
+  }
 }
