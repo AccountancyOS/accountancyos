@@ -1,0 +1,14 @@
+{
+  "audit": "2026-07-27-launch-readiness-e2e",
+  "baseline_commit": "d7aca9be9c0af1d28b3d67695888d1529dd6afc6",
+  "tenant_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+  "cleanup_policy": "All records listed here are deleted in Phase 8 and the deletion is re-verified by count query.",
+  "created_records": [],
+  "auth_identities_created": [],
+  "storage_objects_created": [],
+  "outbound_sends": [],
+  "notes": [
+    "Phase 1 preflight was executed read-only. No records created yet.",
+    "Adversarial RPC probes used non-existent UUIDs (…0000fe) so no live row was reachable; all probes were rejected or returned not-found."
+  ]
+}
