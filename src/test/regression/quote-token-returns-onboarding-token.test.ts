@@ -33,8 +33,21 @@ const latestDefinerOf = (fnName: string): string | undefined =>
     .pop();
 
 describe("public_get_quote_by_token returns the onboarding access token", () => {
-  it("owns the live body of the function", () => {
-    expect(latestDefinerOf("public_get_quote_by_token")).toBe(MIG_NAME);
+  /**
+   * Later migrations legitimately re-issue this function (20260727170000 adds the annual
+   * billing bucket). What must never happen is one of them being written from an older
+   * copy and silently dropping this repair — so the guard is on whichever migration
+   * currently owns the body, not on this file being the last one.
+   */
+  it("keeps the repair in whichever migration currently owns the function", () => {
+    const owner = latestDefinerOf("public_get_quote_by_token");
+    expect(owner).toBeDefined();
+    const ownerBody = readFileSync(resolve(migDir, owner as string), "utf8");
+    expect(ownerBody).toMatch(/'onboarding_access_token', v_access_token/);
+    expect(ownerBody).toMatch(
+      /IF v_quote\.status <> 'accepted' THEN\s+v_access_token := NULL;/,
+    );
+    expect(ownerBody).toMatch(/RETURNING id, access_token INTO v_onboarding_id, v_access_token/);
   });
 
   it("returns the token the client has always read", () => {
