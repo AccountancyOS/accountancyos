@@ -149,9 +149,18 @@ BEGIN
     RETURNING id, access_token INTO v_onboarding_id, v_access_token;
   END IF;
 
-  -- REPAIR (4): self-heal a row created before the token DEFAULT/trigger existed.
-  -- Without this such an application can never be opened by its owner again.
-  IF v_onboarding_id IS NOT NULL AND (v_access_token IS NULL OR v_access_token = '') THEN
+  -- REPAIR (4): least privilege. The onboarding token is handed back ONLY once the quote
+  -- is accepted. Holding a proposal link is not consent to onboarding, and an onboarding
+  -- application can exist against a quote that is not currently 'accepted' (staff-created,
+  -- or a quote later superseded), so this is gated on quote status rather than on whether
+  -- a row happens to exist.
+  IF v_quote.status <> 'accepted' THEN
+    v_access_token := NULL;
+
+  -- Self-heal a row created before the token DEFAULT/trigger existed. Without this such
+  -- an application can never be opened by its owner again. Only fires for an accepted
+  -- quote, so it can never mint a secret for a proposal nobody has accepted.
+  ELSIF v_onboarding_id IS NOT NULL AND (v_access_token IS NULL OR v_access_token = '') THEN
     UPDATE onboarding_applications
        SET access_token = public.gen_onboarding_access_token(),
            access_token_expires_at = COALESCE(access_token_expires_at, now() + interval '90 days')

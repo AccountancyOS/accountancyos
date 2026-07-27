@@ -33,13 +33,19 @@
   "migrations": [
     {
       "path": "supabase/migrations/20260727160000_quote_token_returns_onboarding_token.sql",
-      "sha256": "85afd9fa413e5eec6a3e59691cd5dee290f812242434974507af3b62f9ac5c6f",
+      "sha256": "dd8580f262d853bcdd71b75a8f934323afc548521424781c6bc086adc0025226",
       "expected_objects": [
         {
           "id": "get-quote-by-token-returns-access-token",
           "object": "public.public_get_quote_by_token(uuid) returns a payload containing onboarding_access_token",
           "result": "pending",
           "verify_via": "catalog_functions(name_like: 'public_get_quote_by_token', include_source: true) -> def-hash CHANGED from 4e250dfdaccaa30a12e33f5b52cbd6cc; body contains \"'onboarding_access_token', v_access_token\" and RETURNING id, access_token. Then db_rpc public_get_quote_by_token with the live acceptance token for quote 753529f8-a903-4c84-b397-0a5ed0f3e82d and confirm the payload now carries a non-null onboarding_access_token alongside the existing onboarding_application_id."
+        },
+        {
+          "id": "token-withheld-until-accepted",
+          "object": "public_get_quote_by_token returns onboarding_access_token = null for a quote that is not accepted",
+          "result": "pending",
+          "verify_via": "db_rpc public_get_quote_by_token with the acceptance token of a DRAFT or SENT quote and confirm onboarding_access_token is null while the rest of the payload is unchanged. Holding a proposal link must not expose the onboarding secret before acceptance."
         },
         {
           "id": "existing-stuck-onboarding-resolves",
@@ -68,7 +74,8 @@
   },
 
   "post_apply_followups": [
-    "public_accept_quote_by_token still returns neither the onboarding id nor its token, leaving the client dependent on a poll-and-retry loop against the read path. Returning both directly from accept would remove the retry entirely — worth doing, but a separate increment: that function is large, materialises jobs on the legacy path, and must not be re-issued as a side effect of this repair.",
+    "public_accept_quote_by_token still returns neither the onboarding id nor its token, leaving the client dependent on a poll-and-retry loop against the read path — and leaving a gap where a client who accepts and closes the tab has no onboarding application until someone reopens the quote link. Creating the application AT acceptance and returning both keys (including on the 'replay' return) closes both. Worth doing, but as its own increment with its own receipt: that function is ~250 lines, creates clients/companies/partnerships and materialises jobs on the legacy path, so it must not be re-issued as a side effect of a read-path repair.",
+    "NOT adopted, deliberately: rotating an expired access_token on read. It would smooth the returning-client experience, but auto-renewing a secret on demand defeats the point of access_token_expires_at — anyone holding the proposal link could refresh the onboarding token indefinitely. If a returning client should get a fresh link, that is a product decision about re-issuing it through a deliberate, audited action, not a silent side effect of a read.",
     "This drift was invisible until a client hit it. The function-level equivalent of the migration receipt gate — comparing live def-hashes for the public onboarding RPCs against the hashes this repo last shipped — would have caught it. Candidate for the next governance increment."
   ]
 }

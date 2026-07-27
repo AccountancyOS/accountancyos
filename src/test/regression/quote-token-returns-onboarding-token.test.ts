@@ -50,9 +50,20 @@ describe("public_get_quote_by_token returns the onboarding access token", () => 
     expect(MIG).toMatch(/RETURNING id, access_token INTO v_onboarding_id, v_access_token/);
   });
 
+  it("hands the token back only for an ACCEPTED quote", () => {
+    // Holding a proposal link is not consent to onboarding, and an onboarding
+    // application can exist against a quote that is not currently accepted.
+    expect(MIG).toMatch(/IF v_quote\.status <> 'accepted' THEN\s+v_access_token := NULL;/);
+  });
+
   it("self-heals a row created before the token default existed", () => {
     expect(MIG).toMatch(/v_access_token IS NULL OR v_access_token = ''/);
     expect(MIG).toMatch(/SET access_token = public\.gen_onboarding_access_token\(\)/);
+    // ...but only on the accepted branch, so it can never mint a secret for a
+    // proposal nobody has accepted.
+    expect(MIG).toMatch(
+      /IF v_quote\.status <> 'accepted' THEN[\s\S]*?ELSIF v_onboarding_id IS NOT NULL/,
+    );
   });
 
   it("preserves the rest of the live behaviour", () => {
