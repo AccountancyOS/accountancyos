@@ -19161,6 +19161,10 @@ export type Database = {
         }
         Returns: Json
       }
+      public_get_engagement_letter_for_signing: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       public_get_onboarding: {
         Args: { p_access_token?: string; p_application_id: string }
         Returns: Json
@@ -19203,6 +19207,10 @@ export type Database = {
           p_application_id: string
           p_signature_data: Json
         }
+        Returns: Json
+      }
+      public_sign_engagement_letter_as_signatory: {
+        Args: { p_signature_data?: Json; p_token: string }
         Returns: Json
       }
       public_sign_engagement_letter_by_token: {
