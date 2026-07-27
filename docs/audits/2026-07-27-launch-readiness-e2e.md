@@ -4,14 +4,20 @@
 - Latest applied migration: `20260727205037`
 - Tenant under test: Blue Tick Accountants (`a857a12c-a125-41de-bb45-9eb556d5b467`)
 - Identity: live owner `leon@bluetickaccountants.com`
-- Status: **IN PROGRESS** — Phase 1 (Environment Preflight) partially complete
+- Status: **IN PROGRESS** — Phase 1 complete; Phase 3 (core commercial journey) largely complete
 
 ---
 
 ## Verdict so far
 
-**NOT LAUNCH-READY.** Two P1 defects already block Gate 3 (core commercial journey)
-and Gate 6 (no silent failure). Both are confirmed against LIVE, not inferred.
+**NOT LAUNCH-READY.** Three P1 defects block Gate 3 (core commercial journey) and
+Gate 6 (no silent failure). All are confirmed against LIVE, not inferred.
+
+The happy path itself is in better shape than the defect count suggests: lead →
+quote → send → public acceptance → engagement letter → AML upload → client details
+→ billing all completed end-to-end with **zero console or network errors**. The
+blockers are in delivery (email never leaves the queue) and in the purchase-ledger
+and automation surfaces.
 
 ---
 
@@ -94,6 +100,16 @@ client sends, so behaviour is non-deterministic across call sites.
 
 **Phase:** 1 (Preflight) · **Gate impact:** 4, 6, 9 · **Status:** OPEN
 
+**Upgraded to a Gate 3 blocker after Phase 3 testing.** Sending quote Q-26-0002
+through the UI reported "Quote Sent", moved the quote to `SENT`, and rendered a
+"Quote Sent" milestone — but the email row was written to `email_queue` with
+`status='pending'` and `scheduled_at = created_at + 15 minutes`, and there is no
+cron to drain it. A quote sent 50 minutes earlier was still `pending` at the time
+of testing. **No quote email has ever actually been delivered from this instance.**
+
+This is also the cleanest Gate 6 violation found so far: total UI success, zero
+errors surfaced, nothing delivered.
+
 `infra/supabase-manifest.json` declares `process-email-queue` as `critical`, but
 it is not present in `cron.job` on LIVE. `email_send_log` holds 49 rows stuck at
 `pending`, the oldest dating to June. Today's rows show a `pending` row followed
@@ -144,6 +160,85 @@ pinned before launch.
 
 ---
 
+### DEF-006 — P2 — `get_bank_connection_health_for_org` fails with `42702`
+
+**Phase:** 4 (Bookkeeping) · **Gate impact:** 4 · **Status:** OPEN
+
+`/bookkeeping` fires this RPC three times per load and every call fails:
+
+```
+POST /rest/v1/rpc/get_bank_connection_health_for_org
+HTTP 400 {"code":"42702","message":"column reference \"organization_id\" is ambiguous"}
+```
+
+The `RETURNS TABLE(...)` OUT parameter `organization_id` collides with the column
+of the same name inside the function body. Bank connection health is therefore
+never displayed. The page renders regardless and shows no error to the user —
+a second Gate 6 silent failure.
+
+**Recommended fix (git-authored):** add `#variable_conflict use_column`, or
+prefix the OUT parameters (`out_organization_id`, …).
+
+---
+
+### DEF-007 — P3 — `/jobs` issues a `406` on every load
+
+`GET /rest/v1/user_saved_views?...&is_default=eq.true` uses `.single()` where no
+default view exists, returning `PGRST116 "Cannot coerce the result to a single
+JSON object"`. Harmless but pollutes the console and any error telemetry.
+Fix: use `maybeSingle()`.
+
+---
+
+### DEF-008 — P3 — `/documents` renders the client-portal wall to accountants
+
+Signed in as the practice owner, `/documents` renders "No portal access — You're
+signed in, but this account doesn't have access to a client portal yet." An
+accountant-side route should never resolve to a portal-only view.
+
+---
+
+### DEF-009 — P3 — US date format on the quote detail milestone
+
+The quote timeline renders `Sent 7/27/2026` while every adjacent field uses
+`27 July 2026`. Violates the project's UK formatting standard.
+
+---
+
+### DEF-010 — P3 — Overlapping / zero-priced entries in the services catalogue
+
+The quote builder offers `MTD Quarterly Filing — £35.00/year` alongside
+`MTD Quarterly Submission — £75.00/year`, and `Self-Assessment (MTD) — £35.00/year`
+alongside `MTD Final Declaration — £35.00/year`. Three services are priced at
+£0.00 (`LLP accounts production`, `Sole trader accounts`, `Trust Registration
+Service`). A user cannot tell which to quote. Product decision required.
+
+---
+
+## Phase 3 — Core commercial journey (PASS with blockers)
+
+Executed against LIVE as `leon@bluetickaccountants.com`, then anonymously as the client.
+
+| Step | Result | Evidence |
+|---|---|---|
+| Create lead via CRM UI | **PASS** | `leads.id 33e42ab2-…`, stage `new` |
+| Open lead detail, Quotes tab | **PASS** | Tabs: Overview/Activity/Quotes/Messages/Emails/Docs |
+| Build quote from services catalogue | **PASS** | `Q-26-0002`, £150.00 one-off |
+| Send quote | **PARTIAL — DEF-003** | Status→`SENT`, email stuck `pending` |
+| Public quote view (anonymous, no session) | **PASS** | Renders lines, totals, Accept/Decline |
+| Accept proposal | **PASS** | Straight into onboarding — **no stall**; the earlier `onboarding_access_token` fix holds |
+| Re-open used token | **PASS** | Resumes at the correct step; idempotent |
+| Sign engagement letter | **PASS** | Advances to AML |
+| Upload 2 AML documents | **PASS** | 2 rows in `onboarding_documents` |
+| Client details (DOB/NINO/UTR/address) | **PASS** | Advances to Billing |
+| Billing acknowledgement (no Stripe connected) | **PASS** | Correct fallback copy |
+| Portal account submission | **UNVERIFIED** | Application reached `status='portal_pending'`; the submit click was not confirmed before the run ended |
+
+Notably, the previously reported "Database error checking email" did **not**
+reproduce on this run.
+
+---
+
 ## Phase status
 
 | Phase | Scope | Status |
@@ -151,8 +246,8 @@ pinned before launch.
 | 0 | Requirements freeze | BLOCKED — awaiting owner rulings |
 | 1 | Environment preflight | PARTIAL — DEF-001..005 raised |
 | 2 | Catastrophic-risk tests | NOT STARTED |
-| 3 | Core commercial journey | BLOCKED by DEF-001/002 |
-| 4 | Module coverage | BLOCKED by DEF-001/002/003 |
+| 3 | Core commercial journey | MOSTLY PASS — blocked at delivery by DEF-003 |
+| 4 | Module coverage | PARTIAL — DEF-006/007 raised; bills/invoices/automations blocked by DEF-001/002 |
 | 5 | Non-functional readiness | NOT STARTED |
 | 6 | Operational readiness | NOT STARTED |
 | 7 | Security & deployment integrity | PARTIAL — DEF-004/005 raised |
@@ -160,10 +255,14 @@ pinned before launch.
 
 ## Blockers on the owner
 
-UI-driven phases (2, 3, 4, 5) cannot start: the browser test environment reports
-`signed_out`, so no authenticated Playwright session can be established. Sign in
-to the preview once and the session injects on the next turn.
-
 The six environment rulings raised previously (restore rehearsal, monitoring,
 second tenant, staff/admin fixtures, multi-practice identity, performance seeding)
-remain outstanding and gate Phase 0.
+remain outstanding and gate Phase 0, Phase 5 and Phase 6.
+
+DEF-001, DEF-002 and DEF-006 all require git-authored migrations. Per the
+production release convention these are not Lovable hand-patches.
+
+## Cleanup owed (Phase 8)
+
+See `creation-ledger.json`. Nothing has been deleted yet — the records are left
+in place deliberately so the defects above remain reproducible.
