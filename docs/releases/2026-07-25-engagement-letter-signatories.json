@@ -1,0 +1,55 @@
+{
+  "release_id": "2026-07-25-engagement-letter-signatories",
+  "release_kind": "migration",
+  "status": "applied-verified",
+  "declared_at": "2026-07-25T00:00:00Z",
+  "approver": "owner",
+  "summary": "Proposal Phase 2, Task 2a \u2014 additive signatories foundation. Adds public.engagement_letter_signatories (one row per required signer of an engagement letter, carrying per-signatory signature evidence: signer_name, signer_email NOT NULL, signature_token uuid, signed_at, signature_ip, signature_user_agent, required boolean default true, sign_order, FK engagement_letter_id ON DELETE CASCADE, nullable person_id/contact_id/onboarding_application_id). RLS mirrors public.engagement_letters exactly (org-scoped SELECT via user_has_organization_access; manager-gated INSERT/UPDATE via user_has_role_at_least(...,'manager')); the live engagement_letters has NO token/public read policy (its public sign path is SECURITY DEFINER RPCs, not RLS) so none is mirrored. Adds public.protect_signatory_signature() BEFORE UPDATE trigger mirroring protect_engagement_letter_signatures: once signed_at is set, signed_at/signer_name/signer_email/signature_ip/signature_user_agent become immutable. Adds engagement_letters.signing_rule text NOT NULL DEFAULT 'all' with guarded CHECK signing_rule IN ('all','any'). ADDITIVE only: no signing RPC, gate, or UI changed; the table is neither populated nor read yet (Task 2d/2e wire it in). App-side, a forward-looking PROPOSAL_STATUSES constant adds 'partially_signed' in src/lib/db-constants/check-constraints.ts WITHOUT touching the registry-bound QUOTE_STATUSES \u2014 the live quotes_status_check does not yet allow 'partially_signed' (its DB CHECK update is Phase 2 T2d).",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "context": "Phase 2 needs an all-must-sign (default) / any-one-may-sign engagement-letter flow. Task 2a lays the additive foundation: a per-signatory model, a signing_rule on the letter, and the app vocabulary token \u2014 reusing the existing engagement-letters machinery (RLS shape + signature-immutability pattern), not a parallel system. Nothing behaves differently until 2d/2e populate and read it.",
+    "scope": "Additive only \u2014 one new table (CREATE TABLE IF NOT EXISTS) + indexes, RLS enable + three policies (drop-then-create, idempotent), one new SECURITY DEFINER trigger function + BEFORE UPDATE trigger, one ADD COLUMN IF NOT EXISTS + one guarded CHECK. No existing object is altered or dropped; no signing RPC/gate/UI touched."
+  },
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260725210000_engagement_letter_signatories.sql",
+      "sha256": "d0360978128316b32c36b0d396a3ea6af46d1143ae0af0db831bf3d587fa9d02",
+      "expected_objects": [
+        {
+          "id": "signatories-table-with-rls",
+          "object": "table public.engagement_letter_signatories exists with RLS enabled and three org-scoped policies mirroring engagement_letters (SELECT: user_has_organization_access; INSERT/UPDATE: + user_has_role_at_least(...,'manager')); FK engagement_letter_id -> engagement_letters(id) ON DELETE CASCADE; signer_email NOT NULL; signature_token uuid default gen_random_uuid(); required boolean NOT NULL default true",
+          "result": "verified 2026-07-27 (LIVE): public.engagement_letter_signatories exists with 15 columns, relrowsecurity=t, 3 policies (org-scoped SELECT via user_has_organization_access; INSERT/UPDATE additionally gated by user_has_role_at_least(...,'manager')), 3 indexes (pkey + idx_el_signatories_engagement_letter_id + idx_el_signatories_signature_token), FK engagement_letter_id -> engagement_letters(id) with confdeltype='c' (ON DELETE CASCADE). authenticated has SELECT privilege.",
+          "verify_via": "db_schema -> expect public.engagement_letter_signatories with the declared columns/types/defaults. catalog_rls_status(table:'engagement_letter_signatories') -> rls enabled. catalog_policies(table:'engagement_letter_signatories') -> expect the three policies with the USING/WITH CHECK expressions above. catalog_indexes -> expect idx_el_signatories_engagement_letter_id and idx_el_signatories_signature_token. Confirm the FK is ON DELETE CASCADE."
+        },
+        {
+          "id": "signing-rule-column-and-check",
+          "object": "column public.engagement_letters.signing_rule text NOT NULL DEFAULT 'all' with CHECK constraint engagement_letters_signing_rule_check restricting to ('all','any')",
+          "result": "verified 2026-07-27 (LIVE): engagement_letters.signing_rule text NOT NULL DEFAULT 'all'::text; constraint engagement_letters_signing_rule_check = CHECK ((signing_rule = ANY (ARRAY['all'::text,'any'::text]))).",
+          "verify_via": "db_schema -> engagement_letters.signing_rule text NOT NULL default 'all'::text. pg_constraint: SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='public.engagement_letters'::regclass AND conname='engagement_letters_signing_rule_check' -> expect CHECK (signing_rule = ANY (ARRAY['all','any']))."
+        },
+        {
+          "id": "signatory-immutability-trigger",
+          "object": "function public.protect_signatory_signature() (SECURITY DEFINER, search_path=public) + BEFORE UPDATE trigger trg_protect_signatory_signature on public.engagement_letter_signatories that raises once signed_at is set and any signature field changes",
+          "result": "verified 2026-07-27 (LIVE): pg_proc.protect_signatory_signature prosecdef=t; 1 user trigger on engagement_letter_signatories (trg_protect_signatory_signature, BEFORE UPDATE FOR EACH ROW). Behavioural insert/sign/update probe deferred \u2014 no signatory rows exist yet (table inert until Task 2d/2e).",
+          "verify_via": "catalog_functions(name_like:'protect_signatory_signature', include_source:true) -> expect it to exist, be SECURITY DEFINER, and RAISE when OLD.signed_at IS NOT NULL and any of signed_at/signer_name/signer_email/signature_ip/signature_user_agent is DISTINCT. catalog_triggers(table:'engagement_letter_signatories') -> expect trg_protect_signatory_signature as BEFORE UPDATE FOR EACH ROW executing protect_signatory_signature. Behavioural: insert a row, set signed_at, then attempt to UPDATE signer_email -> expect the RAISE."
+        }
+      ]
+    }
+  ],
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260725210000_engagement_letter_signatories.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verifications and complete this receipt (move out of pending/)."
+    ]
+  },
+  "post_apply_followups": [
+    "Vocabulary: 'partially_signed' is currently ONLY an app-side PROPOSAL_STATUSES constant; the live quotes_status_check still does not allow it. When Phase 2 T2d adds it to the DB CHECK, move it into the registry-bound QUOTE_STATUSES and update the frozen EXPECTED_CONSTRAINT_VALUES in vocabulary-drift.test.ts in the same change so the app/live mirror stays exact.",
+    "Signing rule / gate: signing_rule and engagement_letter_signatories are inert until Task 2d consolidates the sign RPCs to record per-signatory signatures and evaluate the rule, and Task 2b splits the onboarding gate. No signing behaviour changed here.",
+    "GRANTs: the migration ships no explicit GRANT block for public.engagement_letter_signatories; live check shows authenticated already holds SELECT. Before Task 2d/2e read/write the table from the app or edge functions, confirm the full grant set (authenticated SELECT/INSERT/UPDATE, service_role ALL) and add an additive GRANT migration if any is missing."
+  ],
+  "applied_at": "2026-07-27T07:28:14Z",
+  "applied_version": "20260727072814"
+}
