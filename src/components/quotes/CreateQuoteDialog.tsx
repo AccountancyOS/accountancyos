@@ -379,16 +379,34 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
       autoPopulatedRef.current = true;
       return;
     }
+    // Company Accounts lines must carry the first outstanding CH period here too.
+    // Picking the service by hand prefills it via updateLine(); without this, the same
+    // lead prefilled or didn't purely depending on whether the accountant started from
+    // the lead page or the Quotes page, and reported "No Companies House accounts date
+    // found" on a company whose year-end is sitting right there in ch_company_profile.
+    const chPeriod = nextAccountsPeriodFromCH(lead as any);
+    const accountsPrefill = chPeriod
+      ? accountsPeriodFromEnd(chPeriod.period_end, chPeriod.period_start)
+      : null;
+
     const newLines: QuoteLine[] = [];
     for (const def of defaults) {
       const svc = services.find((s: any) => s.canonical_service_code === def.code);
       if (!svc) continue;
-      newLines.push({
+      const line: QuoteLine = {
         service_id: svc.id,
         quantity: 1,
         unit_price: svc.default_price ?? 0,
         billing_frequency: def.billing_frequency,
-      });
+      };
+      if (accountsPrefill && isAccountsServiceCode((svc as any).code)) {
+        line.period_start = accountsPrefill.period_start;
+        line.period_end = accountsPrefill.period_end;
+        line.period_label = accountsPrefill.period_label;
+        // The accountant still confirms it, exactly as on the hand-picked path.
+        line.period_confirmed = false;
+      }
+      newLines.push(line);
     }
     if (newLines.length > 0) setLines(newLines);
     autoPopulatedRef.current = true;
