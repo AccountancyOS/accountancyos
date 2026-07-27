@@ -22,6 +22,20 @@ interface EngagementLetter {
   signed_at: string | null;
   signature_token: string | null;
   token_expires_at: string | null;
+  signing_rule: string | null;
+}
+
+/**
+ * Phase 2 T2d-3: a multi-signatory letter is signed through one personal link per
+ * signatory, so "sent" and "signed" are no longer the whole story — staff need to see
+ * who is outstanding.
+ */
+interface LetterSignatory {
+  id: string;
+  signer_name: string | null;
+  signer_email: string;
+  signed_at: string | null;
+  required: boolean;
 }
 
 const EngagementLetterSection = ({
@@ -35,6 +49,7 @@ const EngagementLetterSection = ({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [letter, setLetter] = useState<EngagementLetter | null>(null);
+  const [signatories, setSignatories] = useState<LetterSignatory[]>([]);
   const [hasMailbox, setHasMailbox] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -46,12 +61,24 @@ const EngagementLetterSection = ({
     try {
       const { data, error } = await supabase
         .from("engagement_letters")
-        .select("id, sent_at, viewed_at, signed_at, signature_token, token_expires_at")
+        .select("id, sent_at, viewed_at, signed_at, signature_token, token_expires_at, signing_rule")
         .eq("onboarding_application_id", applicationId)
         .maybeSingle();
 
       if (error) throw error;
       setLetter(data);
+
+      if (data?.id) {
+        const { data: sigs, error: sigError } = await supabase
+          .from("engagement_letter_signatories")
+          .select("id, signer_name, signer_email, signed_at, required")
+          .eq("engagement_letter_id", data.id)
+          .order("created_at", { ascending: true });
+        if (sigError) throw sigError;
+        setSignatories(sigs ?? []);
+      } else {
+        setSignatories([]);
+      }
     } catch (error: any) {
       console.error("Error loading engagement letter:", error);
     } finally {
@@ -128,10 +155,21 @@ const EngagementLetterSection = ({
         throw new Error(data.error || "Failed to send engagement letter");
       }
 
-      toast({
-        title: "Engagement letter sent",
-        description: `Sent from ${data.sent_via} to ${recipientEmail}`,
-      });
+      if (data.already_signed) {
+        toast({
+          title: "Nothing to send",
+          description: data.message || "Every signatory has already signed.",
+        });
+      } else {
+        const count: number = data.recipient_count ?? 1;
+        toast({
+          title: count > 1 ? "Engagement letter sent to signatories" : "Engagement letter sent",
+          description:
+            count > 1
+              ? `Sent from ${data.sent_via} — ${count} personal signing links`
+              : `Sent from ${data.sent_via} to ${recipientEmail}`,
+        });
+      }
 
       loadEngagementLetter();
       onLetterStatusChange?.();
@@ -146,9 +184,21 @@ const EngagementLetterSection = ({
     }
   };
 
+  // Only `required` signatories count towards the signing rule — the same rule the
+  // activation gate evaluates (public.el_signature_progress).
+  const requiredSignatories = signatories.filter((s) => s.required);
+  const signedRequired = requiredSignatories.filter((s) => s.signed_at);
+  const ruleSatisfied =
+    requiredSignatories.length === 0
+      ? Boolean(letter?.signed_at)
+      : letter?.signing_rule === "any"
+        ? signedRequired.length >= 1
+        : signedRequired.length === requiredSignatories.length;
+
   const getStatus = () => {
     if (!letter) return "not_created";
-    if (letter.signed_at) return "signed";
+    if (letter.signed_at || ruleSatisfied) return "signed";
+    if (signedRequired.length > 0) return "partially_signed";
     if (letter.viewed_at) return "viewed";
     if (letter.sent_at) return "sent";
     return "draft";
@@ -161,6 +211,11 @@ const EngagementLetterSection = ({
     draft: { label: "Draft", variant: "secondary" as const, icon: Clock },
     sent: { label: "Sent", variant: "default" as const, icon: Send },
     viewed: { label: "Viewed", variant: "default" as const, icon: Eye },
+    partially_signed: {
+      label: `Partially Signed (${signedRequired.length}/${requiredSignatories.length})`,
+      variant: "secondary" as const,
+      icon: FileSignature,
+    },
     signed: { label: "Signed", variant: "default" as const, icon: CheckCircle },
   };
 
@@ -227,6 +282,39 @@ const EngagementLetterSection = ({
           )}
         </div>
 
+        {/* Signatories — who has signed, who is outstanding */}
+        {signatories.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {letter?.signing_rule === "any"
+                ? "Signatories (any one may sign)"
+                : "Signatories (all must sign)"}
+            </p>
+            <ul className="space-y-1.5">
+              {signatories.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 text-sm">
+                  {s.signed_at ? (
+                    <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="truncate">
+                    {s.signer_name || s.signer_email}
+                    {!s.required && (
+                      <span className="text-xs text-muted-foreground"> (optional)</span>
+                    )}
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                    {s.signed_at
+                      ? format(new Date(s.signed_at), "dd MMM yyyy 'at' HH:mm")
+                      : "Awaiting signature"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="pt-2 flex flex-wrap gap-2">
           {letter?.signature_token && (
@@ -259,7 +347,11 @@ const EngagementLetterSection = ({
         </div>
         {status !== "signed" && !letter?.sent_at && hasMailbox !== false && (
           <p className="text-xs text-muted-foreground">
-            Will be sent to: {recipientEmail}
+            {signatories.length > 0
+              ? `Each signatory receives their own signing link: ${signatories
+                  .map((s) => s.signer_email)
+                  .join(", ")}`
+              : `Will be sent to: ${recipientEmail}`}
           </p>
         )}
 
