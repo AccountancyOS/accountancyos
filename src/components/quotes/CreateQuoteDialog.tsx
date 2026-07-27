@@ -283,6 +283,9 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   // CH officers fetched on demand per lead id (leads store no officer list — see the
   // effect below). An entry of [] means "asked, none available" and stops re-fetching.
   const [leadOfficers, setLeadOfficers] = useState<Record<string, unknown[]>>({});
+  // Set when a stale lead reference was dropped, so the accountant is told rather than
+  // silently losing the lead they started from. See the effect below.
+  const [staleLeadDropped, setStaleLeadDropped] = useState(false);
   const [lines, setLines] = useState<QuoteLine[]>([
     { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" },
   ]);
@@ -334,8 +337,23 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
       setLeadId(initialLeadId || "");
       autoPopulatedRef.current = false;
       setSignatorySnapshot(null);
+      setStaleLeadDropped(false);
     }
   }, [open, initialLeadId]);
+
+  // `quotes.lead_id` is a foreign key, so a lead id that no longer exists fails the
+  // insert with an opaque constraint error. The dialog used to trust initialLeadId (from
+  // /quotes?create=true&lead_id=…) and its own state indefinitely: an old tab, the back
+  // button, a bookmark, or any lead deleted since the page loaded left leadId pointing at
+  // a row that was gone. Radix Select renders a value with no matching option as the
+  // placeholder, so the dialog looked like nothing was selected while still sending the
+  // dead id. Invariant: leadId names a lead that exists, or is empty.
+  useEffect(() => {
+    if (!leadId || !leads) return;
+    if (leads.some((l) => l.id === leadId)) return;
+    setLeadId("");
+    setStaleLeadDropped(true);
+  }, [leadId, leads]);
 
   // A different lead is a different signing entity — drop any prior snapshot so
   // the section re-seeds (SA individual default / company directors) cleanly.
@@ -408,6 +426,14 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!organization?.id) throw new Error("No organization");
+
+      // Defence in depth behind the invariant above: never send a lead id the loaded list
+      // does not contain, whatever raced or re-rendered.
+      if (leadId && leads && !leads.some((l) => l.id === leadId)) {
+        throw new Error(
+          "That lead no longer exists. Choose a lead, or create the quote without one.",
+        );
+      }
 
       // Generate quote number
       const { data: quoteNumber, error: fnError } = await supabase.rpc(
@@ -931,6 +957,12 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                 ))}
               </SelectContent>
             </Select>
+            {staleLeadDropped && !leadId && (
+              <p className="text-xs text-amber-600">
+                The lead this quote was started from no longer exists — it may have been
+                deleted. Choose a lead below, or create the quote without one.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
