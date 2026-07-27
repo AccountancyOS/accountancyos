@@ -58,6 +58,12 @@ import {
   type VatFrequency,
 } from "@/lib/proposal/vat-periods";
 import { Badge } from "@/components/ui/badge";
+import { ProposalSignatoriesSection } from "@/components/quotes/ProposalSignatoriesSection";
+import {
+  validateSignatorySnapshot,
+  type SignatorySnapshot,
+} from "@/lib/proposal/signatories";
+import type { ClientType } from "@/lib/client-types";
 
 /**
  * Proposal Phase 1 T5b — per-VAT-service group state. The frequency/stagger and
@@ -268,6 +274,10 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [showPricing, setShowPricing] = useState(true);
+  // Proposal Phase 2 T2e — the proposal's own signatory snapshot (null until
+  // first edited). Persisted to quotes.signatory_snapshot so later CH/contact
+  // changes never silently mutate this in-flight proposal.
+  const [signatorySnapshot, setSignatorySnapshot] = useState<SignatorySnapshot | null>(null);
   const [lines, setLines] = useState<QuoteLine[]>([
     { service_id: "", quantity: 1, unit_price: 0, billing_frequency: "now" },
   ]);
@@ -318,8 +328,15 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     if (open) {
       setLeadId(initialLeadId || "");
       autoPopulatedRef.current = false;
+      setSignatorySnapshot(null);
     }
   }, [open, initialLeadId]);
+
+  // A different lead is a different signing entity — drop any prior snapshot so
+  // the section re-seeds (SA individual default / company directors) cleanly.
+  useEffect(() => {
+    setSignatorySnapshot(null);
+  }, [leadId]);
 
   // Auto-populate default service lines once leads + services + initialLeadId are available
   useEffect(() => {
@@ -400,18 +417,24 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
         0
       );
 
-      // Create quote
+      // Create quote. signatory_snapshot is a Phase 2 T2e additive jsonb column
+      // not yet in the generated Supabase types — attach it via a cast payload.
+      const quotePayload: Record<string, unknown> = {
+        organization_id: organization.id,
+        quote_number: quoteNumber,
+        lead_id: leadId || null,
+        total_amount: total,
+        valid_until: validUntil || null,
+        notes: notes || null,
+        status: "draft",
+      };
+      if (signatorySnapshot && signatorySnapshot.signatories.length > 0) {
+        quotePayload.signatory_snapshot = signatorySnapshot;
+      }
+
       const { data: quote, error: quoteError } = await supabase
         .from("quotes")
-        .insert({
-          organization_id: organization.id,
-          quote_number: quoteNumber,
-          lead_id: leadId || null,
-          total_amount: total,
-          valid_until: validUntil || null,
-          notes: notes || null,
-          status: "draft",
-        })
+        .insert(quotePayload as any)
         .select()
         .single();
 
@@ -814,10 +837,20 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
     });
   });
 
+  // Proposal Phase 2 T2e — if any signatories have been chosen, the snapshot must
+  // satisfy the block-rules (≥1, every email present/valid, exactly one primary,
+  // known rule) before the proposal can be created. Leaving it untouched is
+  // allowed at draft creation (the column is additive/nullable).
+  const signatoriesInvalid =
+    !!signatorySnapshot &&
+    signatorySnapshot.signatories.length > 0 &&
+    !validateSignatorySnapshot(signatorySnapshot).ok;
+
   const canSubmit =
     lines.every((l) => l.service_id && l.quantity > 0) &&
     !unconfirmedAccountsLine &&
-    !vatGroupInvalid;
+    !vatGroupInvalid &&
+    !signatoriesInvalid;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1352,6 +1385,19 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
               );
             })}
           </div>
+
+          {selectedLead && (
+            <ProposalSignatoriesSection
+              leadType={(selectedLead as any).lead_type as ClientType | undefined}
+              chSource={selectedLead as { ch_company_profile?: unknown }}
+              individual={{
+                name: [selectedLead.first_name, selectedLead.last_name].filter(Boolean).join(" ").trim(),
+                email: selectedLead.email ?? "",
+              }}
+              value={signatorySnapshot}
+              onChange={setSignatorySnapshot}
+            />
+          )}
 
           <div className="pt-4 border-t space-y-3">
             <div className="flex justify-between items-center">

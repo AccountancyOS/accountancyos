@@ -1,0 +1,44 @@
+{
+  "release_id": "2026-07-27-quotes-signatory-snapshot",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-27T00:00:00Z",
+  "approver": null,
+  "summary": "Proposal Phase 2, Task 2e (connector-independent part) — additive column public.quotes.signatory_snapshot jsonb. Stores the proposal's OWN signatory list + signing rule ({ rule: 'all'|'any', signatories: [{ person_id?, contact_id?, ch_officer_id?, name, email, is_primary, required }] }) so that later Companies-House / contact changes never silently mutate an in-flight proposal. ADDITIVE ONLY, safe to apply, with NO live-body dependency: a single ALTER TABLE ... ADD COLUMN IF NOT EXISTS. No function is re-issued; no RPC, gate, trigger, RLS policy, or CHECK is touched. Nothing reads the column yet — the acceptance-time flow of this snapshot into engagement_letters / engagement_letter_signatories is Task 2d (connector-blocked). App side: the CreateQuoteDialog Signatories step (ProposalSignatoriesSection.tsx + src/lib/proposal/signatories.ts) writes this snapshot on quote creation.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "context": "Phase 2 needs the proposal to capture who signs (CH directors / linked individual + manual signatories), one primary contact, an email each, and an all-must-sign (default) / any-one-may-sign rule, stored immutably on the proposal. Task 2e's connector-independent part is the selection UI plus this additive storage column. The acceptance-time creation of engagement_letter_signatories from the snapshot (Task 2d) is deferred and connector-blocked.",
+    "scope": "Additive only — one ADD COLUMN IF NOT EXISTS on public.quotes. No existing object altered or dropped; no function re-issued; no live function body required."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260727120000_quotes_signatory_snapshot.sql",
+      "sha256": "f8c76414b87aff4a86dd00847759ae8fdfa18b39eeeb107f796bd57990a902e1",
+      "expected_objects": [
+        {
+          "id": "quotes-signatory-snapshot-column",
+          "object": "column public.quotes.signatory_snapshot jsonb (nullable, no default) exists",
+          "result": "pending",
+          "verify_via": "db_schema -> expect public.quotes.signatory_snapshot of type jsonb, is_nullable = YES, no column default. Confirm no other column/constraint/policy on public.quotes changed."
+        }
+      ]
+    }
+  ],
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply migration 20260727120000_quotes_signatory_snapshot.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Task 2d (connector-blocked): consume quotes.signatory_snapshot at proposal acceptance to create engagement_letters.signing_rule + engagement_letter_signatories rows, then evaluate the rule in the consolidated sign RPC. Until then the column is written by the UI but not read."
+  ]
+}
