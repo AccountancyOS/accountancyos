@@ -16,7 +16,7 @@ const COMPANY_D = "e8bb1202-fa75-477f-b98c-26404468f1f5";
 
 const USERS = {
   A: "portal-a@accountancyos.test",
-  B: "portal-b@accountancyos.test",
+  B: "portal-b-qa@accountancyos.test",
   C: "portal-c@accountancyos.test",
   D: "portal-d@accountancyos.test",
 };

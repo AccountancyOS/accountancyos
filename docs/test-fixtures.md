@@ -8,7 +8,7 @@ All passwords: `PortalQA!2026`. Seed via `supabase/functions/seed-portal-test-us
 | Email | Role | Notes |
 |---|---|---|
 | `portal-a@accountancyos.test` | Portal user (Client A — sole trader) | `portal_access.status = active`; rich data |
-| `portal-b@accountancyos.test` | Portal user (Client B — individual) | Active, minimal visibility flags |
+| `portal-b-qa@accountancyos.test` | Portal user (Client B — individual) | Active, minimal visibility flags |
 | `portal-c@accountancyos.test` | Portal user (Company C1 + C2) | Limited company access, dual-entity |
 | `portal-d@accountancyos.test` | Portal user (Company D) | `portal_access.status = revoked` — used to verify revoke path |
 
@@ -23,6 +23,7 @@ Tracked in `docs/critical-workflows.md` §15. Until then, RLS isolation is asser
 
 ## Do Not Use for Tests
 - `amyleestevens7@gmail.com` (real client at Blue Tick)
+- `portal-b@accountancyos.test` (retired fixture address; reserved by legacy auth identity drift)
 - Any production accountant or client account
 
 ## Re-seeding

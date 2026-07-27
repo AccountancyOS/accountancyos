@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
 
     const emails = {
       A: "portal-a@accountancyos.test",
-      B: "portal-b@accountancyos.test",
+      B: "portal-b-qa@accountancyos.test",
       C: "portal-c@accountancyos.test",
       D: "portal-d@accountancyos.test",
     };
