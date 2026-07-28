@@ -143,8 +143,10 @@ export async function getDefaultSavedView(organizationId: string, userId: string
     .eq('organization_id', organizationId)
     .eq('user_id', userId)
     .eq('entity_type', entityType)
+    // Having no default view is normal, so absence must not be an error. `.single()`
+    // returned PGRST116 (HTTP 406) on every /jobs load for every user without one.
     .eq('is_default', true)
-    .single();
+    .maybeSingle();
   if (error) return null;
   return data as unknown as SavedView;
 }

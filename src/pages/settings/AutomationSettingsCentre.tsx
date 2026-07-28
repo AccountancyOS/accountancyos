@@ -112,22 +112,28 @@ export default function AutomationSettingsCentre() {
                 const c = counts[cat.key] ?? { rules: 0, chasers: 0 };
                 return (
                   <AccordionItem value={cat.key} key={cat.key} className="border rounded-lg px-4">
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center gap-3 text-left flex-1">
-                        <span className="font-medium">{cat.label}</span>
-                        {cat.sales ? (
-                          <Badge variant="outline" className="border-orange-500/40 text-orange-500">Sales</Badge>
-                        ) : (
-                          <Badge variant="outline">Service</Badge>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          {c.rules} rules · {c.chasers} chasers
-                        </span>
-                        <div className="ml-auto pr-3">
-                          <CategoryKillSwitch categoryKey={cat.key} categoryLabel={cat.label} />
+                    {/* The kill switch sits BESIDE the trigger, not inside it.
+                        AccordionTrigger renders a <button>, so nesting the switch
+                        produced invalid <button>-in-<button> markup — and meant
+                        toggling a category also opened the accordion. */}
+                    <div className="flex items-center">
+                      <AccordionTrigger className="hover:no-underline flex-1">
+                        <div className="flex items-center gap-3 text-left flex-1">
+                          <span className="font-medium">{cat.label}</span>
+                          {cat.sales ? (
+                            <Badge variant="outline" className="border-orange-500/40 text-orange-500">Sales</Badge>
+                          ) : (
+                            <Badge variant="outline">Service</Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {c.rules} rules · {c.chasers} chasers
+                          </span>
                         </div>
+                      </AccordionTrigger>
+                      <div className="pl-3 shrink-0">
+                        <CategoryKillSwitch categoryKey={cat.key} categoryLabel={cat.label} />
                       </div>
-                    </AccordionTrigger>
+                    </div>
                     <AccordionContent>
                       <p className="text-sm text-muted-foreground mb-3">{cat.description}</p>
                       <CategoryAutomationEditor categoryKey={cat.key} categoryLabel={cat.label} />

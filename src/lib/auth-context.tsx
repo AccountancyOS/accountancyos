@@ -54,11 +54,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Fetch organization ID for current user
   const fetchOrganizationId = async (userId: string): Promise<string | null> => {
+    // A portal user legitimately has NO organization_users row, so absence is not an
+    // error. `.single()` made every authenticated portal page fire four 406s
+    // (PGRST116) into the console and into error telemetry. `limit(1)` also keeps a
+    // second membership row from raising, since one identity belongs to one practice.
     const { data, error } = await supabase
       .from('organization_users')
       .select('organization_id')
       .eq('user_id', userId)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (error || !data) {
       console.debug('[Auth] No organization found for user');

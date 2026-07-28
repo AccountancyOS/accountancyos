@@ -1,5 +1,16 @@
 import { Check, Circle, Clock, Send, FileSignature, Shield, UserCheck } from "lucide-react";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+
+/**
+ * Every date in this product is UK-formatted. These read `toLocaleDateString()`, which
+ * follows the VIEWER's locale — so the timeline rendered "Sent 7/27/2026" next to
+ * "27 July 2026" fields on the same screen for a UK user on a US-defaulted browser.
+ */
+function formatUk(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : format(date, "dd MMM yyyy");
+}
 
 interface Step {
   id: string;
@@ -62,35 +73,35 @@ const OnboardingStatusStepper = ({
     {
       id: "quote_sent",
       label: "Quote Sent",
-      description: quoteSentAt ? `Sent ${new Date(quoteSentAt).toLocaleDateString()}` : undefined,
+      description: quoteSentAt ? `Sent ${formatUk(quoteSentAt)}` : undefined,
       icon: <Send className="h-4 w-4" />,
       timestamp: quoteSentAt,
     },
     {
       id: "quote_accepted",
       label: "Quote Accepted",
-      description: quoteAcceptedAt ? `Accepted ${new Date(quoteAcceptedAt).toLocaleDateString()}` : undefined,
+      description: quoteAcceptedAt ? `Accepted ${formatUk(quoteAcceptedAt)}` : undefined,
       icon: <Check className="h-4 w-4" />,
       timestamp: quoteAcceptedAt,
     },
     {
       id: "contracts_signed",
       label: "Contracts Signed",
-      description: engagementLetterSignedAt ? `Signed ${new Date(engagementLetterSignedAt).toLocaleDateString()}` : undefined,
+      description: engagementLetterSignedAt ? `Signed ${formatUk(engagementLetterSignedAt)}` : undefined,
       icon: <FileSignature className="h-4 w-4" />,
       timestamp: engagementLetterSignedAt,
     },
     {
       id: "aml_verified",
       label: "AML Verified",
-      description: amlVerifiedAt ? `Verified ${new Date(amlVerifiedAt).toLocaleDateString()}` : undefined,
+      description: amlVerifiedAt ? `Verified ${formatUk(amlVerifiedAt)}` : undefined,
       icon: <Shield className="h-4 w-4" />,
       timestamp: amlVerifiedAt,
     },
     {
       id: "client_active",
       label: "Client Active",
-      description: approvedAt ? `Created ${new Date(approvedAt).toLocaleDateString()}` : undefined,
+      description: approvedAt ? `Created ${formatUk(approvedAt)}` : undefined,
       icon: <UserCheck className="h-4 w-4" />,
       timestamp: approvedAt,
     },
