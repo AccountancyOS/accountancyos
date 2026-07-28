@@ -1,0 +1,66 @@
+{
+  "release_id": "2026-07-28-profiles-email-signature",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-28T00:00:00Z",
+  "approver": "Owner ruling 2026-07-28 (signature location)",
+  "summary": "DEF-013. Adds public.profiles.email_signature (nullable text) and repoints /settings/my-profile at it. The page previously read and wrote organization_users.email_signature, a column that does not exist, so every load returned SQLSTATE 42703 and every save silently failed. One additive nullable column; no existing column, constraint, policy or trigger is altered.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "symptom": "A staff member could type a signature, be told it saved, and have nothing stored. Engagement letters and system emails then went out unsigned with no indication why — another instance of the Gate 6 pattern the audit called out as the product's largest risk.",
+    "root_cause": "The UI targeted organization_users.email_signature. That column has never existed; PostgreSQL returned 42703 on both the read and the write.",
+    "ruling": "Owner, 2026-07-28: the signature lives on profiles.email_signature. The staff member owns their personal signature; practice branding and the legal footer remain organisation-level settings.",
+    "why_profiles_is_right": "It also makes it true by construction that one person has ONE signature, rather than a different signature per practice membership — which is what an organization_users column implies, and which contradicts the launch ruling that one identity belongs to one practice.",
+    "no_backfill": "There is nothing to migrate. The column the app wrote to never existed, so no prior value exists anywhere."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260728150000_profiles_email_signature.sql",
+      "sha256": "1e1b0314431c3ab2f3c8c5b711a62e8cf5e40c5824a82f0788f099faee559592",
+      "expected_objects": [
+        {
+          "id": "profiles-email-signature-column",
+          "object": "column public.profiles.email_signature text, nullable, no default",
+          "result": "pending",
+          "verify_via": "db_schema -> public.profiles.email_signature type text, is_nullable = YES, no column default. Confirm no other column on profiles changed."
+        },
+        {
+          "id": "profile-settings-round-trips",
+          "object": "/settings/my-profile saves and reloads a signature",
+          "result": "pending",
+          "verify_via": "Set a signature, save, reload the page and confirm it persists; then db_select profiles for that user id and confirm the stored value matches. Before this release the same actions reported success and stored nothing."
+        },
+        {
+          "id": "null-signature-breaks-nothing",
+          "object": "A staff member with no signature can still send an engagement letter and system email",
+          "result": "pending",
+          "verify_via": "With email_signature NULL, send an engagement letter and confirm it queues and renders normally. NULL means 'no personal signature', never a failure — this is the regression that would matter."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "assessment": "Forward-only but trivially reversible: DROP COLUMN would discard any signature staff have since saved. Reverting the app change alone restores the broken behaviour.",
+    "data_risk": "None on apply. One additive nullable column; no data is read or written by the migration."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260728150000_profiles_email_signature.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "Confirm profiles' existing RLS lets a staff member read and update their OWN row — the page writes under the user's session, so an over-restrictive policy would leave the save failing for a different reason.",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Nothing yet CONSUMES profiles.email_signature. The audit's observed impact — engagement letters and system emails sent without the staff signature — is only half-closed by storing it: send-engagement-letter and the email templates must render it, treating NULL as empty. That is the next increment and is what actually closes DEF-013.",
+    "Confirm profiles has an RLS policy allowing a user to UPDATE their own row. If it does not, the page will still fail to save — with a different error code, which would look like this fix not working."
+  ]
+}

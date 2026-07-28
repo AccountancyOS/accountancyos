@@ -21,11 +21,12 @@ export default function MyProfileSettings() {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;
       if (!userId) return;
+      // DEF-013: the signature belongs to the person, not to a practice membership.
+      // organization_users has no email_signature column — every read returned 42703.
       const { data } = await supabase
-        .from("organization_users")
+        .from("profiles")
         .select("email_signature")
-        .eq("organization_id", organization.id)
-        .eq("user_id", userId)
+        .eq("id", userId)
         .maybeSingle();
       setSignature((data as any)?.email_signature ?? "");
       setLoading(false);
@@ -38,10 +39,9 @@ export default function MyProfileSettings() {
     const { data: auth } = await supabase.auth.getUser();
     const userId = auth.user?.id;
     const { error } = await supabase
-      .from("organization_users")
+      .from("profiles")
       .update({ email_signature: signature } as any)
-      .eq("organization_id", organization.id)
-      .eq("user_id", userId!);
+      .eq("id", userId!);
     setSaving(false);
     if (error) {
       toast({ title: "Save Failed", description: error.message, variant: "destructive" });

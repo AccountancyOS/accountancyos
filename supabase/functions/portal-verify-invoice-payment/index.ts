@@ -6,11 +6,31 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 // session actually paid (on the practice's Connect account) and marks the
 // AccountancyOS invoice paid. Idempotent. Verify-on-return so we don't depend on
 // Connect webhook configuration.
+//
+// DEF-024: this used to read no Authorization header, resolve no user and check no
+// portal_access — it took a caller-supplied invoice_id on trust and answered with a
+// service-role client. It could not falsely settle an invoice (the Stripe session still
+// had to be paid and to carry a matching invoice_id), but it was an oracle: it told any
+// anonymous caller whether an invoice id existed, whether the practice had Stripe
+// configured, and it let them drive Stripe API calls on the practice's integration.
+//
+// It now authorises exactly as portal-pay-invoice does — the local reference pattern:
+// identify the portal user from their JWT, then confirm active portal_access to the
+// invoice's entity, queried under the USER's token so RLS enforces ownership rather
+// than trusting a lookup made with the service role.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+/**
+ * One message for "no such invoice" and for "not yours".
+ *
+ * Distinguishing them re-creates the enumeration oracle this fix removes: a caller who
+ * can tell those two apart can walk the id space and map which invoices exist.
+ */
+const NOT_YOURS = "Invoice not found or not accessible";
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -22,17 +42,40 @@ serve(async (req: Request) => {
       });
     }
 
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { persistSession: false } },
-    );
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+
+    // 1. Identify the portal user from their JWT.
+    const jwt = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+    if (!jwt) throw new Error("Not authenticated");
+    const userClient = createClient(SUPABASE_URL, ANON, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } }, auth: { persistSession: false },
+    });
+    const { data: userData } = await userClient.auth.getUser();
+    const userId = userData?.user?.id;
+    if (!userId) throw new Error("Not authenticated");
 
     const { data: inv, error: invErr } = await admin
       .from("invoices")
       .select("id, organization_id, client_id, company_id, total_gross, amount_paid, status")
       .eq("id", invoice_id)
       .maybeSingle();
-    if (invErr || !inv) throw new Error("Invoice not found");
+    if (invErr || !inv) throw new Error(NOT_YOURS);
+
+    // 2. Authorise BEFORE anything else is disclosed or any Stripe call is made: the
+    //    portal user must hold active portal_access to this invoice's entity. Queried
+    //    under the user's JWT so RLS (user_id = auth.uid()) does the enforcing.
+    const entityCol = inv.client_id ? "client_id" : "company_id";
+    const entityId = inv.client_id ?? inv.company_id;
+    const { data: access } = await userClient
+      .from("portal_access")
+      .select("id")
+      .eq(entityCol, entityId)
+      .eq("is_active", true)
+      .limit(1);
+    if (!access || access.length === 0) throw new Error(NOT_YOURS);
 
     // Already settled — idempotent success.
     if (inv.status === "PAID") {

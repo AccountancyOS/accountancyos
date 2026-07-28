@@ -80,3 +80,57 @@ describe("DEF-010 — one canonical MTD quarterly service", () => {
     expect(mtd).toMatch(/MTD_SERVICE_CODES = \["mtd_quarter", "mtd_itsa_final"\]/);
   });
 });
+
+describe("DEF-010 — sa_mtd is an anchor, not a billable line", () => {
+  const DIALOG = read("src/components/quotes/CreateQuoteDialog.tsx");
+
+  it("is hidden from the quote builder", () => {
+    expect(DIALOG).toMatch(/filter\(\(s: any\) => s\.code !== "sa_mtd"\)/);
+    // The picker must render the filtered list, not the raw services query.
+    expect(DIALOG).toMatch(/\{sellableServices\.map\(\(service\) =>/);
+    expect(DIALOG).not.toMatch(/\{services\?\.map\(\(service\) =>/);
+  });
+
+  it("is NOT deactivated or deleted — materialisation depends on it", () => {
+    // It carries canonical_service_code 'self_assessment_mtd_quarterly' and doubles as
+    // the client type. Retiring the row would stop MTD jobs being created.
+    const retire = read(
+      "supabase/migrations/20260728130000_retire_legacy_mtd_quarterly_service.sql",
+    );
+    expect(retire).not.toMatch(/'sa_mtd'/);
+    const prices = read(
+      "supabase/migrations/20260728140000_service_prices_and_unpriced_state.sql",
+    );
+    expect(prices).not.toMatch(/UPDATE public\.services_catalog[\s\S]{0,200}active = false/);
+    // The engine still keys on it.
+    const mig = read("supabase/migrations/20260725140000_mtd_deadlines_and_service.sql");
+    expect(mig).toMatch(/sc\.code = 'sa_mtd'/);
+  });
+});
+
+describe("DEF-010 — an unset price is unset, never £0.00", () => {
+  const MIG = read(
+    "supabase/migrations/20260728140000_service_prices_and_unpriced_state.sql",
+  );
+  const DIALOG = read("src/components/quotes/CreateQuoteDialog.tsx");
+
+  it("makes 'not yet priced' representable", () => {
+    expect(MIG).toMatch(/ALTER COLUMN default_price DROP NOT NULL/);
+    expect(MIG).toMatch(/ALTER COLUMN default_price DROP DEFAULT/);
+  });
+
+  it("applies the owner's prices to the three unpriced services", () => {
+    expect(MIG).toMatch(/SET default_price = 1000\.00[\s\S]{0,120}LLP accounts production/);
+    expect(MIG).toMatch(/SET default_price = 250\.00[\s\S]{0,120}Sole trader accounts/);
+    expect(MIG).toMatch(/SET default_price = 250\.00[\s\S]{0,120}Trust Registration Service/);
+    // Never overwrite a price a practice has already set.
+    expect(MIG).toMatch(/AND COALESCE\(default_price, 0\) = 0/);
+  });
+
+  it("never renders an unpriced service as a zero fee", () => {
+    // Zero means INCLUDED everywhere in this product, so an unpriced service must not
+    // borrow that rendering.
+    expect(DIALOG).toMatch(/not priced/i);
+    expect(DIALOG).not.toMatch(/£\$\{service\.default_price\.toFixed\(2\)\}/);
+  });
+});

@@ -21,6 +21,13 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = true
   [functions.ch-officers]
     verify_jwt = true
+  # Both portal payment endpoints act on a client's invoice and must never be reachable
+  # anonymously. portal-verify-invoice-payment had no entry at all (DEF-024/DEF-025), so
+  # the platform let unauthenticated calls through to the function body.
+  [functions.portal-pay-invoice]
+    verify_jwt = true
+  [functions.portal-verify-invoice-payment]
+    verify_jwt = true
   [functions.companies-house-sync]
     verify_jwt = true
   [functions.customer-portal]

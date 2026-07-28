@@ -63,6 +63,30 @@ DEF-004.
 
 ---
 
+## 2a. Remediation evidence
+
+| Defect | State | Evidence |
+|---|---|---|
+| DEF-015 (`el_signature_progress` only) | CLOSED | Migration `20260728120000` → executor version `20260728121603`. LIVE: `anon` EXECUTE = false; `authenticated`/`service_role` = true. Receipt completed. 92 functions remain. |
+| DEF-007 | FIXED, awaiting deploy | Commit `4e1cc99` — `maybeSingle()` in `jobs-filter-service.ts`. |
+| DEF-009 | FIXED, awaiting deploy | Commit `4e1cc99` — UK formatting in `OnboardingStatusStepper`. |
+| DEF-011 | FIXED, awaiting deploy | Commit `4e1cc99` — `maybeSingle()` + `limit(1)` in `auth-context.tsx`. |
+| DEF-014 | FIXED, awaiting deploy | Commit `4e1cc99` — kill switch moved out of `AccordionTrigger`. |
+| DEF-010 part 1 (legacy orphan) | FIXED, awaiting apply | Migration `20260728130000`, commit `4e1cc99`. |
+| DEF-010 part 2 (`sa_mtd` double-billing) | FIXED, awaiting deploy + verification | Builder-hiding in `CreateQuoteDialog`; closes only once job materialisation is re-verified live. |
+| DEF-010 part 3 (unpriced services) | FIXED, awaiting apply | Migration `20260728140000` — `default_price` nullable + the owner's three prices. Send-time guard still outstanding. |
+| DEF-024 | FIXED, awaiting deploy | JWT + `portal_access` authorisation, uniform not-found response, explicit `verify_jwt` in `config.toml`. |
+| DEF-013 | PARTIAL, awaiting apply | Migration `20260728150000` + settings page repointed. Not closed until the letter and email templates render the signature. |
+
+Suite at the time of writing: **705 tests passing, typecheck clean**. (705 is the test
+count, not a commit — the commits are `c9d1a0f` and `4e1cc99`.)
+
+DEF-010 is deliberately tracked as three parts. Retiring the legacy orphan does not close
+the `sa_mtd` double-billing exposure, and neither closes the unpriced-service exposure;
+each has its own evidence and its own verification.
+
+---
+
 ## 2. What is already done
 
 Two of the three DEF-023 symptoms were fixed yesterday, before this handoff arrived:

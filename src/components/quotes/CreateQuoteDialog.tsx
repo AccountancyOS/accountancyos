@@ -578,6 +578,21 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
 
   // The selected lead carries the raw Companies House profile (limited_company /
   // llp leads) — the source for the accounts-period prefill.
+  /**
+   * Services an accountant may put on a proposal.
+   *
+   * `sa_mtd` is excluded: it is an internal classification anchor, not a billable line.
+   * It carries canonical_service_code `self_assessment_mtd_quarterly`, which the
+   * materialisation engine keys on, and it doubles as the client type — so it must NOT
+   * be deactivated or deleted. But an MTD tax year is sold as four `mtd_quarter` lines
+   * plus one `mtd_itsa_final`, so offering `sa_mtd` beside them lets one obligation be
+   * billed twice (DEF-010).
+   */
+  const sellableServices = useMemo(
+    () => (services ?? []).filter((s: any) => s.code !== "sa_mtd"),
+    [services],
+  );
+
   const selectedLead = leads?.find((l) => l.id === leadId);
   const chAccountsPeriod = selectedLead
     ? nextAccountsPeriodFromCH(selectedLead as any)
@@ -1373,9 +1388,12 @@ const CreateQuoteDialog = ({ open, onOpenChange, initialLeadId }: CreateQuoteDia
                         <SelectValue placeholder="Select service..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {services?.map((service) => (
+                        {sellableServices.map((service) => (
                           <SelectItem key={service.id} value={service.id}>
-                            {service.name} - £{service.default_price.toFixed(2)}/year
+                            {service.name}
+                            {service.default_price === null || service.default_price === undefined
+                              ? " — not priced"
+                              : ` - £${Number(service.default_price).toFixed(2)}/year`}
                           </SelectItem>
                         ))}
                       </SelectContent>
