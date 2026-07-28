@@ -336,7 +336,7 @@ reproduce on this run.
 |---|---|---|
 | 0 | Requirements freeze | BLOCKED — awaiting owner rulings |
 | 1 | Environment preflight | PARTIAL — DEF-001..005 raised |
-| 2 | Catastrophic-risk tests | NOT STARTED |
+| 2 | Catastrophic-risk tests | SUPERSEDED — see revised phase table at end of report |
 | 3 | Core commercial journey | COMPLETE — end-to-end lead → quote → acceptance → onboarding → AML → approval → client → portal login all PASS; only email delivery (DEF-003) fails |
 | 4 | Module coverage | LARGELY COMPLETE — 37-route sweep executed; DEF-006/007/008/012/013/014 raised; bills/invoices/automations still blocked by DEF-001/002 |
 
