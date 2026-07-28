@@ -1,7 +1,7 @@
 {
   "release_id": "2026-07-28-profiles-email-signature",
   "release_kind": "migration",
-  "status": "applied",
+  "status": "live_verified",
   "declared_at": "2026-07-28T00:00:00Z",
   "approver": "Owner ruling 2026-07-28 (signature location)",
   "summary": "DEF-013. Adds public.profiles.email_signature (nullable text) and repoints /settings/my-profile at it. The page previously read and wrote organization_users.email_signature, a column that does not exist, so every load returned SQLSTATE 42703 and every save silently failed. One additive nullable column; no existing column, constraint, policy or trigger is altered.",
@@ -70,5 +70,13 @@
       "profiles.email_signature column present (nullable text)",
       "profiles RLS: profiles_select_same_org (SELECT) + profiles_update_own (UPDATE) \u2014 a staff member can save their own signature"
     ]
-  }
+  },
+  "migration_identity": {
+    "authored_version": "20260728150000",
+    "authored_path": "supabase/migrations/20260728150000_profiles_email_signature.sql",
+    "authored_sha256": "1e1b0314431c3ab2f3c8c5b711a62e8cf5e40c5824a82f0788f099faee559592",
+    "executor_applied_version": "20260728125821",
+    "identity_note": "The executor re-timestamps the migration on apply. The authored version is the source identity of record; the executor version is only the row key in supabase_migrations.schema_migrations. This rename is standing evidence for DEF-020/DEF-023 and must not be treated as replacing source identity."
+  },
+  "live_verified_at": "2026-07-28T13:40:00Z"
 }

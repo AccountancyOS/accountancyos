@@ -1,7 +1,7 @@
 {
   "release_id": "2026-07-28-retire-legacy-mtd-quarterly",
   "release_kind": "migration",
-  "status": "applied",
+  "status": "live_verified",
   "declared_at": "2026-07-28T00:00:00Z",
   "approver": null,
   "summary": "DEF-010 (catalogue half). Deactivates the legacy services_catalog entry with code 'mtd_quarterly' ('MTD Quarterly Submission', \u00a375) across all organizations, leaving the canonical 'mtd_quarter' ('MTD Quarterly Filing') as the only quarterly MTD service the quote builder offers. Sets active = false; the row is NOT deleted. No schema change.",
@@ -68,5 +68,13 @@
       "profiles.email_signature column present (nullable text)",
       "profiles RLS: profiles_select_same_org (SELECT) + profiles_update_own (UPDATE) \u2014 a staff member can save their own signature"
     ]
-  }
+  },
+  "migration_identity": {
+    "authored_version": "20260728130000",
+    "authored_path": "supabase/migrations/20260728130000_retire_legacy_mtd_quarterly_service.sql",
+    "authored_sha256": "ee30ef80eaa6916af99306f4bbbe99051b3de16c20117ca098972d24a027830b",
+    "executor_applied_version": "20260728125739",
+    "identity_note": "The executor re-timestamps the migration on apply. The authored version is the source identity of record; the executor version is only the row key in supabase_migrations.schema_migrations. This rename is standing evidence for DEF-020/DEF-023 and must not be treated as replacing source identity."
+  },
+  "live_verified_at": "2026-07-28T13:40:00Z"
 }
