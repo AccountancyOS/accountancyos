@@ -37,6 +37,34 @@ timestamp, so the filename never matches `schema_migrations.version`. The bindin
 release is the **git commit SHA + file path + content checksum**, mapped to the live deployment
 via a **release receipt** stored in git.
 
+### 1a. The migration ledger is NOT readable, so it is not the evidence
+
+`supabase_migrations.schema_migrations` cannot be read by either party in this toolchain
+(established 2026-07-28):
+
+- the **executor** cannot read it from its exec role;
+- **Claude** cannot read it through the database connector, which exposes only the `public`
+  schema — `db_select` on it returns *"Could not find the table 'public.schema_migrations'"*.
+
+So the step "confirm a row exists in `supabase_migrations.schema_migrations`", which earlier
+receipts carry in their apply instructions, is **unverifiable by anyone**. Asking for it produced
+attestation dressed as verification: a claim that a file ran, restated.
+
+**Object verification is the authoritative proof that a migration applied**, and it always was
+the stronger evidence. A ledger row proves a *file executed*; a changed function def-hash, a
+present column, or a widened CHECK proves the *effect landed* — which is the thing anyone
+actually cares about, and the thing that catches a migration that ran and silently did nothing.
+
+Therefore:
+
+- Every receipt MUST state its apply evidence as `expected_objects` with a live `verify_via`.
+- Receipts MUST NOT list the `schema_migrations` check as a verification step. Recording the
+  executor's applied version remains useful as *provenance* where the executor can supply it,
+  but it is not evidence and its absence does not block completing a receipt.
+- This limitation is DEF-020 evidence: with no readable ledger and no per-function version probe
+  on 60 of 62 functions, git-versus-LIVE migration identity cannot presently be reconciled by
+  either party. It is a governance gap, not a paperwork one.
+
 ## 2. A "release" is a unit
 
 A release is a set of artifacts that ship together, tied to **one merged commit SHA**, with a

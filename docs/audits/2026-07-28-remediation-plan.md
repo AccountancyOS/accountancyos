@@ -76,10 +76,28 @@ DEF-004.
 | DEF-010 part 2 (`sa_mtd` double-billing) | FIXED, awaiting deploy + verification | Builder-hiding in `CreateQuoteDialog`; closes only once job materialisation is re-verified live. |
 | DEF-010 part 3 (unpriced services) | FIXED, awaiting apply | Migration `20260728140000` — `default_price` nullable + the owner's three prices. Send-time guard still outstanding. |
 | DEF-024 | FIXED, awaiting deploy | JWT + `portal_access` authorisation, uniform not-found response, explicit `verify_jwt` in `config.toml`. |
-| DEF-013 | PARTIAL, awaiting apply | Migration `20260728150000` + settings page repointed. Not closed until the letter and email templates render the signature. |
+| DEF-013 | CLOSED | Migration `20260728150000` applied; `profiles.email_signature` present, RLS `profiles_update_own` confirmed. `send-engagement-letter` renders it in both the variant path (`{{staff_signature}}`) and the default wording; NULL renders nothing. Commit `243d898`. |
+| DEF-006 | CLOSED | Migration `20260728160000` applied. Forbidden path verified FIRST — no session → `42501`; member calling a foreign org id → `42501`, so the qualification did not turn the `EXISTS` always-true. Success path returns a result set instead of `42702`; new `prosrc` md5 `99175c30…`. App-side error state confirmed distinct from empty. Sibling `get_bank_connection_health_for_entity` checked and cleared — it authorises via `portal_can_access_bookkeeping`/`portal_has_perm` and references only its IN parameters. Per-status verification (connected/expired/degraded) still needs real connection fixtures. |
+| DEF-012 | FIXED, awaiting deploy | Commit `c5e37b3` — explicit batched query, no foreign key. Orphan check run 2026-07-28: **1 membership, 0 orphans, 0 pending invitations**. Note `organization_users` has no status column at all, so a "legitimate pending membership" cannot exist in this schema — an orphan could only ever be corrupt data. DEF-012 was never an orphan problem: the embed failed for a fully intact single-member tenant. Fixture-based role testing (Owner/Staff/Admin, removed member, multiple roles) belongs with the approved Phase 0 §4 fixture work. |
 
-Suite at the time of writing: **705 tests passing, typecheck clean**. (705 is the test
-count, not a commit — the commits are `c9d1a0f` and `4e1cc99`.)
+Suite at the time of writing: **719 tests passing, typecheck clean**. (Earlier figures like
+705 are test counts, not commits.)
+
+### New DEF-020 evidence, found while verifying this batch
+
+`supabase_migrations.schema_migrations` is readable by **neither** party: not by the executor
+from its exec role, and not by Claude through the database connector, which exposes only the
+`public` schema. The step "confirm a row exists in `schema_migrations`" that earlier receipts
+carry is therefore unverifiable by anyone — attestation dressed as verification.
+
+`docs/releases/production-release-convention.md` §1a now records this and makes **object
+verification the authoritative proof of apply**, which was always the stronger evidence: a
+ledger row proves a file executed, a changed def-hash proves the effect landed. Receipts must
+not list the ledger check as a verification step.
+
+This is a governance gap, not paperwork. With no readable ledger and a version probe on only 2
+of 62 functions, git-versus-LIVE identity cannot presently be reconciled by either party — which
+is precisely what DEF-020 says.
 
 DEF-010 is deliberately tracked as three parts. Retiring the legacy orphan does not close
 the `sa_mtd` double-billing exposure, and neither closes the unpriced-service exposure;
