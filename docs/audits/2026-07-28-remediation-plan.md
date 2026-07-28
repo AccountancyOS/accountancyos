@@ -179,14 +179,24 @@ and it needs no product decision.
 
 ---
 
-## 6. Open questions for the owner
+## 6. Owner rulings (answered 2026-07-28)
 
-1. **DEF-016** — can the auditor supply the missing entry, or should it be re-derived from
-   the cascade evidence (§1)?
-2. **DEF-010** — which of the overlapping MTD services is canonical, and what should a
-   £0.00 service mean: genuinely free, "included", or not-yet-priced?
-3. **DEF-013** — where should a staff email signature live?
-4. **DEF-022** — is public practice signup ever intended, or gated permanently?
-5. **Bookkeeping coverage** — the audit did not demonstrate the bookkeeping write paths end
-   to end, and several cannot pass until DEF-001/002 are fixed. That module should not be
-   described as tested until it is re-run afterwards.
+1. **DEF-016** — **the auditor supplies the missing register entry.** No re-derivation, no
+   guessing. DEF-016 stays tracked as *undefined — blocking by declaration* until those
+   notes arrive; it is not planned around and its severity is not reconstructed.
+2. **DEF-010** — **both MTD entries are canonical, because they are different
+   obligations:** *MTD Quarterly Updates* (recurring quarterly submissions) and *MTD Final
+   Declaration* (separate annual finalisation). Any further catalogue entry describing the
+   same quarterly or annual obligation is a duplicate and must be **mapped onto the
+   corresponding canonical service**, not maintained alongside it. A displayed **£0.00
+   means "Included"** — confirmed as the engine's existing behaviour: `isIncludedLine()`
+   in `src/lib/quote-defaults.ts` treats a zero unit price (or zero subtotal) as Included,
+   renders it as such, and excludes it from the one-off total, the monthly total and the
+   Stripe checkout line items. So this is a catalogue-data reconciliation, not a code
+   change. £0.00 must never be used to mean "not yet priced".
+3. **DEF-013** — the staff email signature lives on the **per-user profile**. No
+   practice-level template and no override layer for launch.
+4. **DEF-022** — public practice signup is **gated for launch, re-openable later.**
+   Disable behind a flag rather than deleting the path.
+5. **Bookkeeping coverage** — accepted. The bookkeeping module is **not to be described as
+   tested** until its write paths are re-run after DEF-001/DEF-002 deploy together.
