@@ -154,6 +154,20 @@ serve(async (req: Request) => {
 
     const firmName = org?.name || 'Your Accountant';
 
+    // DEF-013: the sending staff member's personal signature, from profiles (the owner's
+    // ruling on where it lives). NULL/empty is normal and must never block a send — it
+    // simply renders nothing. Practice branding and the legal footer stay separate,
+    // organisation-level concerns and are not this.
+    const { data: senderProfile } = await serviceSupabase
+      .from('profiles')
+      .select('email_signature')
+      .eq('id', user.id)
+      .maybeSingle();
+    const staffSignature = (senderProfile?.email_signature ?? '').trim();
+    const signatureHtml = staffSignature
+      ? `<div style="margin-top: 24px; color: #4a4a4a; line-height: 1.6;">${staffSignature}</div>`
+      : '';
+
     // Get connected mailbox for this user
     const { data: mailbox, error: mailboxError } = await userSupabase
       .from('connected_mailboxes')
@@ -419,6 +433,8 @@ serve(async (req: Request) => {
         .replaceAll('{{client.name}}', to.name ?? recipientName ?? '')
         .replaceAll('{{firm_name}}', firmName)
         .replaceAll('{{firm.name}}', firmName)
+        // A variant that does not use the merge field simply renders without it.
+        .replaceAll('{{staff_signature}}', signatureHtml)
         .replaceAll('{{signing_url}}', signingUrl);
 
     const coSignerNote = recipients.length > 1
@@ -447,6 +463,7 @@ serve(async (req: Request) => {
         <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">
           This link will expire in 14 days. If you have any questions, please don't hesitate to contact us.
         </p>
+        ${signatureHtml}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
         <p style="color: #9ca3af; font-size: 12px;">
           Sent from ${firmName} via AccountancyOS

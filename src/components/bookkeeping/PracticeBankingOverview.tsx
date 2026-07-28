@@ -30,7 +30,11 @@ const STATUS_VARIANT: Record<OrgBankConnectionHealth["derived_status"], "default
 
 export function PracticeBankingOverview() {
   const { organization } = useOrganization();
-  const { data, isLoading } = useOrgBankConnectionHealth(organization?.id);
+  // DEF-006: when this RPC failed, `data` was undefined, `rows` fell back to [] and the
+  // card announced "No bank connections across the practice yet." A hard failure was
+  // rendered as reassurance — an expired consent looked exactly like a healthy practice
+  // with nothing connected. The error state must be distinguishable from the empty one.
+  const { data, isLoading, isError, error } = useOrgBankConnectionHealth(organization?.id);
 
   const rows = data ?? [];
   const unhealthy = rows.filter((r) => r.derived_status !== "connected");
@@ -48,6 +52,16 @@ export function PracticeBankingOverview() {
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
+        ) : isError ? (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Bank connection health is unavailable</AlertTitle>
+            <AlertDescription>
+              We could not check your bank connections, so this list may be incomplete.
+              Do not treat it as confirmation that every feed is healthy.
+              {error instanceof Error && error.message ? ` (${error.message})` : ""}
+            </AlertDescription>
+          </Alert>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No bank connections across the practice yet.

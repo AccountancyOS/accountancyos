@@ -134,3 +134,51 @@ describe("DEF-010 — an unset price is unset, never £0.00", () => {
     expect(DIALOG).not.toMatch(/£\$\{service\.default_price\.toFixed\(2\)\}/);
   });
 });
+
+describe("DEF-006 — bank connection health works, and says so when it does not", () => {
+  const MIG = read(
+    "supabase/migrations/20260728160000_fix_bank_connection_health_ambiguity.sql",
+  );
+  const CARD = read("src/components/bookkeeping/PracticeBankingOverview.tsx");
+
+  it("qualifies the reference that collided with the OUT parameter", () => {
+    expect(MIG).toMatch(/FROM public\.organization_users ou/);
+    expect(MIG).toMatch(/ou\.user_id = auth\.uid\(\) AND ou\.organization_id = _org_id/);
+    // The pragma would change how every unqualified name in the body resolves. Comments
+    // are stripped first — the migration's own rationale names the thing it avoided, and
+    // a guard a comment can trip is a guard that gets deleted rather than fixed.
+    const sql = MIG.replace(/^\s*--.*$/gm, "");
+    expect(sql).not.toMatch(/#variable_conflict/);
+  });
+
+  it("keeps the authorisation check", () => {
+    // The edit is inside the authorisation EXISTS, so this is what a mistake would break.
+    expect(MIG).toMatch(/RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501'/);
+  });
+
+  it("distinguishes failure from emptiness in the UI", () => {
+    // The card used to fall back to [] and announce "No bank connections" when the RPC
+    // failed — a hard failure rendered as reassurance.
+    expect(CARD).toMatch(/isError/);
+    expect(CARD).toMatch(/Bank connection health is unavailable/);
+  });
+});
+
+describe("DEF-013 — the staff signature is actually rendered", () => {
+  const FN = read("supabase/functions/send-engagement-letter/index.ts");
+
+  it("reads the signature from profiles, per the owner's ruling", () => {
+    expect(FN).toMatch(/from\('profiles'\)[\s\S]{0,120}select\('email_signature'\)/);
+  });
+
+  it("treats an absent signature as empty, never as a failure", () => {
+    expect(FN).toMatch(/senderProfile\?\.email_signature \?\? ''/);
+    // NULL must not block a send.
+    expect(FN).toMatch(/staffSignature\s*\n?\s*\?/);
+  });
+
+  it("renders it in both the variant and the default wording", () => {
+    expect(FN).toMatch(/\{\{staff_signature\}\}/);
+    expect(FN).toMatch(/\$\{signatureHtml\}/);
+  });
+});
