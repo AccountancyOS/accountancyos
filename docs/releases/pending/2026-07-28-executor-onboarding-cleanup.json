@@ -1,0 +1,65 @@
+{
+  "release_id": "2026-07-28-executor-onboarding-cleanup",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-28T00:00:00Z",
+  "approver": null,
+  "summary": "Executor-authored one-off data cleanup: deletes onboarding application 6bb5670c-cfb9-4dbb-912e-e491f0d916ee together with its engagement letters, onboarding documents and onboarding events, and deletes job 67ead073-4693-46ec-a56e-a35ac28082e5. Contains no schema change and no function, policy or trigger definition.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "provenance": {
+    "authored_by": "Lovable Cloud (executor), arriving in the repo via commit f4c7627/2a305a4 alongside the Blue Tick tenant cleanup",
+    "receipt_authored_by": "Claude, to bring the file under the receipt gate — it reached main with no receipt, and a post-regime migration that deletes rows is exactly what the gate exists to govern",
+    "applied_state": "UNVERIFIED. The executor's commit message ('Verified post-cleanup state') implies it ran, but the connector token was expired when this receipt was written so it was not independently confirmed. It is recorded as pending rather than added to docs/audits/unapplied-migrations-baseline.json, because writing a version into the applied baseline asserts an apply that nobody has checked."
+  },
+
+  "problem": {
+    "context": "Test data left over from the proposal/onboarding end-to-end runs on 2026-07-27. Removing it is reasonable housekeeping on a pre-launch tenant.",
+    "risk_noted": "This is an irreversible DELETE across five tables, keyed on hard-coded ids, with no WHERE guard on organization_id and no record of what the rows contained. If either id were wrong, the deletion would be silent and unrecoverable. That is not an objection to this particular cleanup — it is the reason a data-deleting migration should carry a receipt naming exactly what it removes."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260728115825_d8b9728c-9cf1-422c-9e6b-bb1a8f12d920.sql",
+      "sha256": "03b0ced56e377a2286f0ccac32eb8a25441004ae6674053f4105b716596c1738",
+      "expected_objects": [
+        {
+          "id": "onboarding-application-removed",
+          "object": "onboarding_applications row 6bb5670c-cfb9-4dbb-912e-e491f0d916ee no longer exists, along with its engagement_letters, onboarding_documents and onboarding_events",
+          "result": "pending",
+          "verify_via": "db_select onboarding_applications filtered on that id -> zero rows; likewise engagement_letters on onboarding_application_id, onboarding_documents and onboarding_events on application_id."
+        },
+        {
+          "id": "job-removed",
+          "object": "jobs row 67ead073-4693-46ec-a56e-a35ac28082e5 no longer exists",
+          "result": "pending",
+          "verify_via": "db_select jobs filtered on that id -> zero rows."
+        },
+        {
+          "id": "no-collateral-deletion",
+          "object": "No other onboarding application, engagement letter or job was removed",
+          "result": "pending",
+          "verify_via": "Compare current counts of onboarding_applications, engagement_letters and jobs against expectations for the tenant. The migration is keyed on two hard-coded ids, so anything beyond those two entities disappearing indicates a cascade nobody intended."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "assessment": "None. The deleted rows are not recoverable from within the database — restoring them requires a backup.",
+    "data_risk": "Irreversible by design. Recorded here so the deletion is at least documented, which it otherwise would not have been."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "If already applied, confirm the version in supabase_migrations.schema_migrations and tell Claude, who will complete this receipt and move it to docs/releases/.",
+      "If not yet applied, confirm both hard-coded ids are the intended test records BEFORE applying — the deletion cannot be undone."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Data-only migrations that delete rows should state, in the file itself, which tenant and which test run the ids belong to. A future reader of this migration has no way to tell whether those ids were test data or a client's real onboarding."
+  ]
+}
