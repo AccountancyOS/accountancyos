@@ -1,54 +1,44 @@
-## Adopted programme
+## Where the audit stands
 
-I am adopting your programme as written. Phases, evidence standard, hard gates, severity model, scoring and deliverables are taken verbatim as the specification for this run. The plan below records how it will be executed and, importantly, where this environment cannot satisfy it.
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Requirements freeze | BLOCKED — six owner rulings outstanding |
+| 1 | Preflight | PARTIAL — DEF-001..005 |
+| 2 | Catastrophic risk | COMPLETE — RLS + immutability PASS; DEF-015, DEF-016 |
+| 3 | Commercial journey | COMPLETE — only DEF-003 fails |
+| 4 | Module coverage | LARGELY COMPLETE — DEF-006/007/008/012/013/014 |
+| 5 | Non-functional | NOT STARTED |
+| 6 | Operational | NOT STARTED |
+| 7 | Security & deployment integrity | PARTIAL — DEF-004/005/015 |
+| 8 | Cleanup verification | NOT STARTED |
 
-## Environment limits you must decide on before Phase 1
+No production code or schema changes in this run. Discovery only; defects recorded, fixed later on your approval via git-authored migrations.
 
-These are structural, not effort-related. Each needs a ruling from you, because under your own rules an unverifiable gate cannot be scored as passing.
+## Next run
 
-**Gate 7 — rehearsed backup restore.** Lovable Cloud gives no restore-into-a-safe-environment capability from here. I can evidence that backups exist and record the recovery point, but I cannot rehearse recovery. Under your gate list that is INSUFFICIENT EVIDENCE, not PASS. Options: accept it as a recorded residual risk with a named owner, or treat it as blocking and arrange restore rehearsal outside Lovable.
+**Phase 5 — Non-functional readiness (informational, per your own rule)**
+- Query-plan and latency profile on the heaviest read paths: Overview dashboard aggregates, clients list, jobs board, deadlines calendar, trial balance and general ledger RPCs. Capture p50/p95 from repeated live calls plus `EXPLAIN` shapes.
+- Slow-query and index review against live statistics; flag sequential scans on tenant-scoped tables and missing indexes on `organization_id` / foreign keys.
+- Payload-size and N+1 review on the routes that fired the most requests during the Phase 4 sweep.
+- Accessibility and responsive spot-check on the five highest-traffic accountant screens and the portal dashboard.
+- Recorded as informational because Blue Tick holds near-zero volume; real p95 needs seeding, which is one of your outstanding rulings.
 
-**Gate 9 / Phase 6 — monitoring and alerting.** There is no alerting infrastructure in this project. I can prove the *detection signal exists* (logs, queue state, `email_send_log`, automation execution rows are all queryable) but there is no threshold, destination, owner, runbook or tested alert delivery. I expect Phase 6 to come back largely NOT IMPLEMENTED. That is a finding, not a test failure, and it will materially cap the launch cohort.
+**Phase 6 — Operational readiness**
+- Enumerate what detection signal actually exists: edge-function logs, `email_send_log`, `email_queue` states, automation execution rows, audit tables.
+- Enumerate scheduled jobs actually present in production versus those the product assumes exist (already known: no `process-email-queue` schedule).
+- Backup existence and recovery point evidence; restore rehearsal remains unavailable and will be recorded as INSUFFICIENT EVIDENCE, not PASS.
+- Alerting: thresholds, destinations, owners, runbooks. Expected to come back NOT IMPLEMENTED, which caps the launch cohort.
+- Release-integrity check: compare live edge-function version probes and `schema_migrations` against the git baseline; report drift.
 
-**Second tenant for isolation testing.** Blue Tick alone cannot prove isolation. I need to create a second practice tenant with its own owner identity and a small record set. Confirm I may create it, and whether it should be destroyed at cleanup or retained as a permanent QA tenant. Retaining it is the better long-term answer.
+**Phase 7 completion**
+- Storage bucket policies and public-object exposure.
+- Auth configuration: password policy, email confirmation, session lifetime, redirect allow-list, provider settings.
+- Secret handling in edge functions: any secret reaching a log, response body or client.
+- Full `anon`-executable RPC enumeration with an authorisation-check verdict per function, so DEF-015 has a definitive remediation list rather than a sample.
 
-**Owner / Staff / Admin identities.** You have Owner. Staff and Admin fixtures need creating in Blue Tick to test the permission matrix at all. Confirm.
+**Phase 8 — deferred**
+Cleanup stays deferred until you confirm, since the ledger records are what keep DEF-003 and DEF-011 reproducible.
 
-**Multi-practice identity.** Testable only if the product claims to support it. My reading of the schema (`organization_users`, `portal_access`) is that a portal identity is single-practice, but this is one of your unresolved decisions — it will sit as PRODUCT DECISION REQUIRED until you rule.
+## Output
 
-**Production-sized performance data.** Blue Tick was wiped and is near-empty. Real p50/p95 numbers need seeded volume — several thousand transactions, hundreds of clients. I can seed synthetic `E2E-` volume, which is realistic for query planning but not for real-world data shapes. Without it, Phase 5 performance is informational only, as your own rule states.
-
-**Reliability injection.** Network loss, storage failure, worker restart and provider outage cannot be induced against managed infrastructure. I can test what is inducible — duplicate invocation, duplicate webhook, timeout behaviour, database rejection, concurrent writes, stale state — and will register the rest as UNTESTABLE with reasoning rather than quietly omitting them.
-
-**Sandbox-gated externals.** HMRC and Companies House filing paths are sandbox-pinned; Stripe is not in live mode. Submission correctness is therefore assessable only to the boundary of our own payload construction. That boundary will be stated precisely.
-
-## Phase 0 is the real dependency
-
-Phase 0 is not a formality here and it cannot be completed by me alone. The ten open product decisions you listed are genuine forks — direct client creation, Quotes as a surface, the Qualified stage, questionnaire period allocation, re-signature triggers, contact signing rights, job rollover, workpaper locking, billing ownership. Every one of them determines whether observed behaviour is correct or defective.
-
-My approach: I build the requirements matrix from the codebase, migrations, memory and docs, and for each open decision I present the behaviour the system *actually implements today*, with evidence. You then either ratify the implemented behaviour as the requirement, or declare it wrong. Ratifying is usually fast; it is far quicker to react to "here is what it does" than to specify from scratch.
-
-Anything you do not rule on is recorded as PRODUCT DECISION REQUIRED with its launch impact, and cannot be scored PASS.
-
-## Execution shape
-
-Phase 0 (requirements freeze, decisions surfaced) → Phase 1 (preflight, hard stop on failure) → Phase 2 (catastrophic-risk: identity, tenant isolation, data integrity — anything failing here halts normal testing and escalates immediately) → Phase 3 (the continuous commercial journey) → Phase 4 (module coverage) → Phase 5 (non-functional) → Phase 6 (operational) → Phase 7 (security and deployment integrity) → Phase 8 (cleanup verification).
-
-Every case carries a stable ID and the full evidence set you specified: UI result via Playwright with trace and screenshot, HTTP status and body, console output, SQL verification against the system of record, storage verification, edge-function log, audit-event verification, cleanup status. PASS requires the user-visible result and every applicable system-of-record result to agree. No production-code changes during discovery; defects are recorded, then fixed and retested only after your approval.
-
-All artefacts land under `docs/audits/2026-07-27-launch-readiness-e2e/`, with the principal report at `docs/audits/2026-07-27-launch-readiness-e2e.md`. A machine-readable creation ledger records every row ID, storage path, auth identity, queued message and external reference from the first write, so cleanup is provable rather than best-effort.
-
-Checkpoint after each phase. Immediate interruption for any P0/P1, isolation failure, financial or statutory incorrectness, or cleanup touching pre-existing records.
-
-## Honest expectation
-
-Based on what this project's history already shows — orphaned auth identities, PostgREST conflict-inference failures, migration drift between Git and live, sandbox-pinned filing, no alerting layer — I do not expect a GO verdict. My working expectation is CONDITIONAL GO at "Blue Tick internal use" or "one supervised pilot client", with recovery rehearsal and monitoring as the two structural gaps. I would rather set that expectation now than deliver a reassuring number that conceals a failed gate.
-
-On sign-off: you cannot credibly hold all four approval roles yourself. I will record the governance limitation explicitly in the sign-off block as your programme requires.
-
-## What I need to start
-
-1. Rulings on the six environment limits above (second tenant, Staff/Admin fixtures, restore rehearsal, monitoring scope, performance seeding, multi-practice claim).
-2. Agreement to the Phase 0 method — I present implemented behaviour, you ratify or reject.
-
-Give me those and I begin Phase 0 immediately.
+`docs/audits/2026-07-27-launch-readiness-e2e.md` updated: stale Phase 2 row corrected, Phase 5/6/7 sections appended, defect register extended with any new IDs, phase table and verdict refreshed. Checkpoint back to you at the end, with immediate interruption for any new P0/P1.
