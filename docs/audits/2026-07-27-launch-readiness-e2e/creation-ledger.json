@@ -1,30 +1,62 @@
 {
   "audit": "2026-07-27-launch-readiness-e2e",
+  "status": "FINALISED 2026-07-28 — closed for additions; awaiting owner authorisation for Phase 8",
   "baseline_commit": "d7aca9be9c0af1d28b3d67695888d1529dd6afc6",
   "tenant_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
-  "cleanup_policy": "All records listed here are deleted in Phase 8 and the deletion is re-verified by count query.",
+  "cleanup_policy": "Nothing in this ledger is deleted until the owner authorises Phase 8 in writing. On authorisation, every entry marked cleanup:\"delete\" is removed and the deletion re-verified by count query. Entries marked cleanup:\"retain\" are evidence and survive Phase 8.",
   "created_records": [
-    { "table": "leads", "id": "33e42ab2", "label": "E2E Probe" },
-    { "table": "quotes", "ref": "Q-26-0002", "label": "Advisory & Consultancy £150 one-off" },
-    { "table": "onboarding_applications", "id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee", "status": "approved" },
-    { "table": "clients", "id": "f1565f89-e78c-4e19-8fea-66ab9b8ff294", "label": "E2E Probe" },
-    { "table": "jobs", "id": "67ead073-4693-46ec-a56e-a35ac28082e5", "label": "Advisory & Consultancy - Setup Pending" },
-    { "table": "portal_access", "id": "6a439e29-5c20-4404-bcda-4eb28f107705", "status": "invited -> accepted" },
-    { "table": "onboarding_documents", "count": 2, "label": "id.png, addr.png" }
+    { "table": "leads", "id": "33e42ab2", "label": "E2E Probe", "cleanup": "delete" },
+    { "table": "quotes", "ref": "Q-26-0002", "label": "Advisory & Consultancy £150 one-off", "cleanup": "retain", "reason": "DEF-003 reproduction: its queued email row is the undelivered artefact" },
+    { "table": "onboarding_applications", "id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee", "status": "approved", "cleanup": "delete" },
+    { "table": "clients", "id": "f1565f89-e78c-4e19-8fea-66ab9b8ff294", "label": "E2E Probe", "cleanup": "delete" },
+    { "table": "jobs", "id": "67ead073-4693-46ec-a56e-a35ac28082e5", "label": "Advisory & Consultancy - Setup Pending", "cleanup": "delete" },
+    { "table": "portal_access", "id": "6a439e29-5c20-4404-bcda-4eb28f107705", "status": "invited -> accepted", "cleanup": "retain", "reason": "DEF-011 reproduction: portal session is required to re-observe the accountant-side org lookup" },
+    { "table": "onboarding_documents", "count": 2, "label": "id.png, addr.png", "cleanup": "delete" }
   ],
   "auth_identities_created": [
-    { "email": "e2e-lead@accountancyos.test", "user_id": "0436110a-dcd7-406e-8af0-adaa0b956670", "purpose": "portal login" }
+    { "email": "e2e-lead@accountancyos.test", "user_id": "0436110a-dcd7-406e-8af0-adaa0b956670", "purpose": "portal login", "cleanup": "retain", "reason": "required for DEF-011; delete last, after evidence is signed off" }
   ],
   "storage_objects_created": [
-    { "bucket": "onboarding", "objects": ["id.png", "addr.png"], "application_id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee" }
+    {
+      "bucket": "onboarding-documents",
+      "prefix": "a857a12c-a125-41de-bb45-9eb556d5b467/onboarding/6bb5670c-cfb9-4dbb-912e-e491f0d916ee/687726fef65a93df68996a6c8c80e926b7ef0c09a3a11b5caf0be51d9d653208/",
+      "objects": ["id-1785188594340.png", "proof_of_address-1785188603364.png"],
+      "cleanup": "delete"
+    }
   ],
   "outbound_sends": [
-    { "note": "3 emails queued to email_queue, all still status=pending and never dispatched (DEF-003). No mail left the system." }
+    { "note": "Emails queued during the audit remain in email_queue at status=pending and were never dispatched (DEF-003). No mail left the system.", "cleanup": "retain", "reason": "the pending rows ARE the DEF-003 evidence" }
   ],
+  "outside_this_ledger": {
+    "summary": "Confirmed by direct LIVE queries on 2026-07-28. The following exist but were NOT created by this audit and are therefore out of scope for Phase 8 cleanup.",
+    "queued_email": [
+      "email_queue currently holds 4 pending / 10 sent rows. Only the audit's own quote/portal sends belong to this ledger; the remainder pre-date the audit.",
+      "email_send_log holds 49 pending / 11 failed / 38 sent rows, the oldest from June. These pre-date the audit and are DEF-003 background evidence. Do not purge in Phase 8."
+    ],
+    "test_identities": [
+      "e2e-lead@accountancyos.test is the only *.accountancyos.test identity present on LIVE. The earlier portal-a / portal-b-qa QA fixtures are no longer present and need no cleanup.",
+      "leon@bluetickaccountants.com is the real owner identity and is never touched."
+    ],
+    "storage_objects": [
+      "Four further onboarding-documents objects exist under applications eb73d94d… (17:32) and 52b26a90… (20:11) from pre-audit manual testing on 2026-07-27. Out of ledger; owner decision whether to purge separately."
+    ],
+    "cron_entries": [
+      "Twelve cron jobs exist on LIVE. The audit created none and modified none.",
+      "process-email-queue is absent (DEF-003) — a missing entry, not a created one.",
+      "Six of the twelve fail on every run (DEF-018). Both are pre-existing production state and must NOT be altered as part of cleanup."
+    ],
+    "external_sandbox_records": [
+      "Companies House: read-only lookups only (ch-officers / companies-house-sync). No records created at CH.",
+      "HMRC: sandbox only, no submission was made during this audit; no obligation or submission record exists externally.",
+      "Stripe: no checkout session, customer, invoice or payment was created during this audit. Nothing to reverse.",
+      "No third-party mail was delivered, because the queue never drained."
+    ],
+    "conclusion": "Nothing created by this audit falls outside the ledger. The only live artefacts outside it are pre-existing production state (historic email rows, pre-audit storage objects, the cron estate) which Phase 8 must leave untouched."
+  },
   "notes": [
-    "Phase 1 preflight was executed read-only. No records created yet.",
+    "Phase 1 preflight was executed read-only.",
     "Adversarial RPC probes used non-existent UUIDs (…0000fe) so no live row was reachable; all probes were rejected or returned not-found.",
     "Phase 3 created the records above end-to-end through the UI. All use the @accountancyos.test domain so no real recipient can be contacted.",
-    "Records are retained deliberately until Phase 8 so DEF-003 and DEF-011 remain reproducible."
+    "Records marked retain are held until the owner confirms the defect evidence is no longer needed."
   ]
 }
