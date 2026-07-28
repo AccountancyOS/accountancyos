@@ -4,7 +4,7 @@
 - Latest applied migration: `20260727205037`
 - Tenant under test: Blue Tick Accountants (`a857a12c-a125-41de-bb45-9eb556d5b467`)
 - Identity: live owner `leon@bluetickaccountants.com`
-- Status: **IN PROGRESS** — Phases 1–7 executed; Phase 0 blocked on owner rulings, Phase 8 deferred
+- Status: **IN PROGRESS** — Phases 1–7 complete; Phase 0 blocked on owner rulings, Phase 8 deferred
 
 ---
 
