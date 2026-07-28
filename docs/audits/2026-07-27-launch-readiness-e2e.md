@@ -4,7 +4,7 @@
 - Latest applied migration: `20260727205037`
 - Tenant under test: Blue Tick Accountants (`a857a12c-a125-41de-bb45-9eb556d5b467`)
 - Identity: live owner `leon@bluetickaccountants.com`
-- Status: **IN PROGRESS** — Phases 1–7 executed; Phase 0 blocked on owner rulings, Phase 8 deferred
+- Status: **IN PROGRESS** — Phases 1–7 complete; Phase 0 blocked on owner rulings, Phase 8 deferred
 
 ---
 
@@ -621,12 +621,133 @@ key. No secret material is logged, returned or echoed. **PASS.**
 
 ---
 
+## Phase 1 — Environment preflight (completed 2026-07-28)
+
+The outstanding half of Phase 1: build integrity, dependency posture, the full
+database-linter sweep, and the edge-function inventory. Executed against the working
+tree and LIVE.
+
+### Build and test integrity
+
+| Check | Result | Detail |
+|---|---|---|
+| TypeScript (`tsgo --noEmit`, app project) | **PASS** | Exit 0, zero diagnostics |
+| Unit and regression suite (`vitest run`) | **FAIL — 2 of 692** | 690 pass; both failures are governance gates, see DEF-023 |
+| Dependency vulnerability scan | **PASS** | No high or critical advisories |
+
+The two failures are not product regressions. Both are the repository's own
+release-governance gates firing correctly:
+`src/test/regression/migration-release-receipt-gate.test.ts` and
+`src/test/regression/billing-frequency-annual.test.ts`.
+
+### DEF-023 — P2 — Executor-applied migrations break the git↔live identity chain
+
+`main` cannot go green. Two migration files exist in `supabase/migrations/` that no
+release receipt covers and that git never authored under those names:
+
+- `20260727204940_04833756-72e4-4740-9c60-7ecad1707e77.sql`
+- `20260727205036_36d29c39-d655-48b3-9ece-0de14f6ab1e2.sql`
+
+They are the Lovable-executor copies of the reviewed git migrations
+`20260727160000_quote_token_returns_onboarding_token.sql` and
+`20260727170000_billing_frequency_annual.sql`. Content is equivalent; **filenames and
+versions are not**. Two consequences, both structural rather than cosmetic:
+
+1. `migration-release-receipt-gate` reports both as pending-and-unreceipted, because
+   the receipts in `docs/releases/pending/` reference the *git* paths and checksums.
+2. `billing-frequency-annual` asserts that the latest definer of
+   `public_get_quote_by_token` is `20260727170000_billing_frequency_annual.sql`; live
+   ownership has moved to `20260727205036_36d29c39-…`, so the ownership assertion that
+   protects the onboarding-token repair from being silently reverted no longer holds.
+
+This is precisely the architectural limitation recorded in §10 of the release
+convention, now with a concrete cost: the executor renames what it applies, so a
+reviewed commit and the live schema history cannot be reconciled by identity, only by
+content comparison. Remediation is an owner decision — either the receipts and the two
+regression gates are re-pointed at the executor filenames, or the duplicate files are
+reconciled in git. Lovable should not resolve this unilaterally; doing so would be the
+same class of unreviewed change the convention exists to prevent.
+
+### Database linter (full sweep, LIVE)
+
+683 findings, **zero at ERROR level**. Independently corroborates the Phase 2 RLS
+result: no table is missing RLS, and no policy is flagged as permissive.
+
+| Class | Count | Maps to |
+|---|---|---|
+| Signed-in users can execute `SECURITY DEFINER` function | 576 | Context for DEF-015 |
+| Public (`anon`) can execute `SECURITY DEFINER` function | 93 | **DEF-015** — exact match with the Phase 7 enumeration |
+| Function search path mutable | 14 | **DEF-005** |
+
+The 93 anon-executable functions reconcile exactly with the independently derived
+Phase 7 figure. DEF-015 is confirmed by two separate methods.
+
+### Edge-function inventory
+
+61 functions in the repository; 52 have an explicit `supabase/config.toml` block. No
+config entry references a function that does not exist. Nine functions carry no
+explicit `verify_jwt` policy:
+
+`automation-dry-run`, `clone-workpaper-template`, `gdpr-data-deletion`,
+`gdpr-data-export`, `mcp`, `portal-pay-invoice`, `portal-qa-probe`,
+`portal-verify-invoice-payment`, `seed-portal-test-users`.
+
+All eight HTTP-invocable ones were probed unauthenticated against LIVE with an empty
+JSON body:
+
+| Function | Unauthenticated response | Verdict |
+|---|---|---|
+| `portal-qa-probe` | `401 unauthorized` | PASS |
+| `automation-dry-run` | `401 Unauthorized` | PASS |
+| `gdpr-data-export` | `401 Unauthorized` | PASS |
+| `clone-workpaper-template` | `401 Missing Authorization` | PASS |
+| `seed-portal-test-users` | `401 unauthorized` (shared-secret header) | PASS |
+| `portal-pay-invoice` | `400 invoice_id required`, then JWT + `portal_access` check under RLS | PASS |
+| `portal-verify-invoice-payment` | `400 invoice_id and session_id required` — **no caller check at all** | **DEF-024** |
+
+### DEF-024 — P2 — `portal-verify-invoice-payment` is anon-callable with service-role
+
+`supabase/functions/portal-verify-invoice-payment/index.ts` reads no `Authorization`
+header, resolves no user, and checks no `portal_access` row. It constructs a
+service-role client immediately and reads `invoices` and `organizations` by the
+caller-supplied `invoice_id`. Confirmed reachable from the open internet with no
+credential.
+
+Financial impact is contained rather than absent: the function refuses to settle
+anything unless Stripe returns a session whose `metadata.invoice_id` matches and whose
+`payment_status` is `paid`, on the practice's own Connect account. An attacker cannot
+mark an unpaid invoice paid. What is exposed is an **unauthenticated oracle** —
+differential error messages disclose whether an arbitrary invoice UUID exists
+(`Invoice not found`) and whether its practice has Stripe connected (`Practice has no
+Stripe account`) — plus an unauthenticated path into Stripe API calls chargeable to the
+practice's account. The correct shape is the one `portal-pay-invoice` already uses in
+the same directory: validate the JWT, then confirm `portal_access` under the user's own
+RLS before touching service-role.
+
+### DEF-025 — P3 — Nine functions have no explicit `verify_jwt` policy
+
+The nine above rely on the platform default rather than a declared stance. Each
+currently enforces its own check in code (except DEF-024), so this is a governance gap
+rather than a live exposure: the JWT posture of 15% of the function estate is implicit
+and cannot be reviewed in a diff. Every function should carry an explicit block, with a
+comment where `verify_jwt = false` is deliberate — the pattern `handle-email-unsubscribe`
+already sets.
+
+### Preflight items still not evidenced
+
+`STRIPE_SECRET_KEY`, HMRC and Companies House credentials are present and exercised by
+live calls elsewhere in this audit. Secret *rotation* history, and any staging
+environment separate from production, remain unevidenced and are folded into the
+outstanding owner rulings.
+
+---
+
 ## Phase status (revised 2026-07-28)
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Requirements freeze | BLOCKED — six owner rulings outstanding |
-| 1 | Environment preflight | PARTIAL — DEF-001..005 |
+| 1 | Environment preflight | COMPLETE — DEF-001..005 carried; DEF-023/024/025 raised |
 | 2 | Catastrophic-risk tests | COMPLETE — RLS coverage and immutability PASS; DEF-015, DEF-016 raised |
 | 3 | Core commercial journey | COMPLETE — journey PASS, delivery FAIL (DEF-003) |
 | 4 | Module coverage | LARGELY COMPLETE — DEF-006/007/008/012/013/014 |
