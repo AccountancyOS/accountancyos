@@ -13,6 +13,19 @@ import { resolve } from "node:path";
 const root = resolve(__dirname, "../../../");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 
+/**
+ * The file with comments stripped.
+ *
+ * Assertions of the form "this pattern must no longer appear" have to read code, not
+ * prose: a fix's own rationale usually names the thing it removed, and a guard that a
+ * comment can trip is a guard someone deletes rather than fixes.
+ */
+const readCode = (p: string) =>
+  read(p)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/^\s*--.*$/gm, "");
+
 describe("DEF-007 — /jobs no longer 406s on every load", () => {
   it("treats a missing default saved view as absence, not an error", () => {
     const svc = read("src/lib/jobs-filter-service.ts");
@@ -180,5 +193,50 @@ describe("DEF-013 — the staff signature is actually rendered", () => {
   it("renders it in both the variant and the default wording", () => {
     expect(FN).toMatch(/\{\{staff_signature\}\}/);
     expect(FN).toMatch(/\$\{signatureHtml\}/);
+  });
+});
+
+describe("DEF-012 — permissions administration loads", () => {
+  const PAGE = read("src/pages/settings/PermissionsSettings.tsx");
+
+  it("does not rely on a PostgREST relationship that does not exist", () => {
+    // The embed required a declared FK from organization_users.user_id to profiles.id.
+    // There isn't one, so every load failed with PGRST200 and the page spun for ever.
+    expect(readCode("src/pages/settings/PermissionsSettings.tsx")).not.toMatch(
+      /profiles:user_id\s*\(/,
+    );
+  });
+
+  it("batches the profile lookup instead of querying per member", () => {
+    expect(PAGE).toMatch(/from\("profiles"\)[\s\S]{0,200}\.in\("id", userIds\)/);
+    // De-duplicated so a repeated user_id cannot inflate the batch.
+    expect(PAGE).toMatch(/\[\.\.\.new Set\(memberships\.map\(\(m\) => m\.user_id\)/);
+  });
+
+  it("adds no foreign key to satisfy the UI", () => {
+    // Ruled out deliberately: a constraint would fail against existing orphaned
+    // memberships and would make an incomplete membership unrepresentable.
+    const migrations = read(
+      "supabase/migrations/20260728150000_profiles_email_signature.sql",
+    );
+    expect(migrations).not.toMatch(/REFERENCES public\.profiles/);
+  });
+
+  it("renders a membership without a profile as incomplete, not as an error", () => {
+    expect(PAGE).toMatch(/Membership active, profile incomplete/);
+    // The role must stay administrable — the membership is real.
+    expect(PAGE).toMatch(/profile: profilesById\.get\(m\.user_id\) \?\? null/);
+  });
+
+  it("distinguishes failure from an empty team", () => {
+    expect(PAGE).toMatch(/isError/);
+    expect(PAGE).toMatch(/Team members could not be loaded/);
+    // A failed load must not imply roles changed.
+    expect(PAGE).toMatch(/Roles and access are unchanged/);
+  });
+
+  it("survives a profile lookup failure without blanking the team", () => {
+    // Memberships and roles are authoritative even with no display names.
+    expect(PAGE).toMatch(/rendering memberships without names/);
   });
 });

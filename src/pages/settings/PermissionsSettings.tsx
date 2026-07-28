@@ -65,6 +65,24 @@ const PERMISSIONS_MATRIX: { permission: string; label: string; roles: AppRole[] 
   { permission: "can_view_all_jobs", label: "View All Jobs", roles: ["owner", "admin", "manager", "staff"] },
 ];
 
+/** The profile fields the team table displays. Absent for an incomplete membership. */
+interface MemberProfile {
+  id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+}
+
+/** A membership joined to its profile in application code — see the query below. */
+interface TeamMember {
+  id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+  /** null when no profile exists for this user, or RLS hides it. */
+  profile: MemberProfile | null;
+}
+
 export default function PermissionsSettings() {
   const queryClient = useQueryClient();
   const { organization } = useOrganization();
@@ -73,31 +91,63 @@ export default function PermissionsSettings() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "staff">("staff");
 
-  // Fetch team members
-  const { data: teamMembers, isLoading } = useQuery({
+  /**
+   * Team members, joined to their profiles in application code.
+   *
+   * DEF-012: this used the PostgREST embed `profiles:user_id (...)`, which requires a
+   * declared foreign key from organization_users.user_id to profiles.id. No such key
+   * exists, so every load failed with PGRST200 and the page spun for ever — team
+   * administration was entirely unavailable: no viewing, no inviting, no role changes.
+   *
+   * Fixed with an explicit batched query rather than by adding the foreign key. A
+   * constraint would fail against any membership row whose profile is missing, and it
+   * would make an incomplete membership impossible to represent at all — the fix must not
+   * depend on deleting or fabricating profiles to satisfy a UI query. A foreign key is
+   * only appropriate once the membership lifecycle guarantees a profile at insertion.
+   *
+   * Two queries total, regardless of team size: the memberships, then all their profiles
+   * in one `in(...)`. Profiles are read under the user's session, so RLS still decides
+   * what is visible — a membership row whose profile RLS hides simply renders as
+   * incomplete, exactly like one whose profile does not exist.
+   */
+  const { data: teamMembers, isLoading, isError, error } = useQuery({
     queryKey: ["team-members", organization?.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<TeamMember[]> => {
       if (!organization?.id) return [];
 
-      const { data, error } = await supabase
+      const { data: memberships, error: membershipError } = await supabase
         .from("organization_users")
-        .select(`
-          id,
-          user_id,
-          role,
-          created_at,
-          profiles:user_id (
-            id,
-            email,
-            first_name,
-            last_name
-          )
-        `)
+        .select("id, user_id, role, created_at")
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: true });
 
-      if (error) throw error;
-      return data || [];
+      if (membershipError) throw membershipError;
+      if (!memberships || memberships.length === 0) return [];
+
+      const userIds = [...new Set(memberships.map((m) => m.user_id).filter(Boolean))];
+
+      // One batched fetch — never one query per member.
+      const profilesById = new Map<string, MemberProfile>();
+      if (userIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, email, first_name, last_name")
+          .in("id", userIds);
+        // A profile lookup failure must not blank the team list: memberships and roles
+        // are still authoritative and still administrable without a display name.
+        if (profileError) {
+          console.warn("[permissions] profile lookup failed; rendering memberships without names", profileError);
+        }
+        for (const p of profiles ?? []) profilesById.set(p.id, p as MemberProfile);
+      }
+
+      return memberships.map((m) => ({
+        id: m.id,
+        user_id: m.user_id,
+        role: m.role,
+        created_at: m.created_at,
+        profile: profilesById.get(m.user_id) ?? null,
+      }));
     },
     enabled: !!organization?.id,
   });
@@ -293,6 +343,17 @@ export default function PermissionsSettings() {
                 <div className="text-sm text-muted-foreground py-8 text-center">
                   Loading team members...
                 </div>
+              ) : isError ? (
+                // Previously this branch did not exist: the query threw PGRST200, nothing
+                // rendered it, and the page appeared to load for ever.
+                <div className="text-center py-8">
+                  <p className="font-medium text-destructive">Team members could not be loaded</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Roles and access are unchanged. Please try again, and contact support if
+                    this persists.
+                    {error instanceof Error && error.message ? ` (${error.message})` : ""}
+                  </p>
+                </div>
               ) : !teamMembers || teamMembers.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -309,12 +370,18 @@ export default function PermissionsSettings() {
                   </TableHeader>
                   <TableBody>
                     {teamMembers.map((member) => {
-                      const profile = member.profiles as { email?: string; first_name?: string; last_name?: string } | null;
+                      const profile = member.profile;
+                      // A membership with no profile is a real, administrable state — the
+                      // role still applies and must stay changeable. It is shown as
+                      // incomplete rather than as "Unknown", which read like a bug.
+                      const incomplete = !profile;
                       const name = profile?.first_name && profile?.last_name
                         ? `${profile.first_name} ${profile.last_name}`
-                        : profile?.email || "Unknown";
-                      const initials = name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-                      
+                        : profile?.email || "Profile not set up";
+                      const initials = incomplete
+                        ? "?"
+                        : name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+
                       return (
                         <TableRow key={member.id}>
                           <TableCell>
@@ -324,7 +391,13 @@ export default function PermissionsSettings() {
                               </Avatar>
                               <div>
                                 <p className="font-medium">{name}</p>
-                                <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                                {incomplete ? (
+                                  <p className="text-sm text-muted-foreground">
+                                    Membership active, profile incomplete
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                                )}
                               </div>
                             </div>
                           </TableCell>
