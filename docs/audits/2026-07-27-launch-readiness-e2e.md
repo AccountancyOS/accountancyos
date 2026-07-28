@@ -4,7 +4,7 @@
 - Latest applied migration: `20260727205037`
 - Tenant under test: Blue Tick Accountants (`a857a12c-a125-41de-bb45-9eb556d5b467`)
 - Identity: live owner `leon@bluetickaccountants.com`
-- Status: **IN PROGRESS** — Phases 1–7 complete; Phase 0 blocked on owner rulings, Phase 8 deferred
+- Status: **FINALISED for Phases 1–7** (2026-07-28) — Phase 0 blocked on six owner rulings; Phase 8 deferred pending written authorisation. See "Report closure" at the end.
 
 ---
 
@@ -784,3 +784,66 @@ today) → **DEF-018** (silently disables three subsystems) → **DEF-003** → 
 → **DEF-001/002** → **DEF-019** (monitoring, which is what would have caught DEF-018).
 All are schema or infrastructure changes and therefore belong in git-authored
 migrations from you, not Lovable hand-patches.
+
+---
+
+## Report closure (2026-07-28)
+
+This report is **finalised for Phases 1–7**. No further findings will be added
+under this audit ID. Phase 0 remains blocked on the six owner rulings below and
+Phase 8 is deferred pending written authorisation. No production code or schema
+was changed in the course of closing the report.
+
+### Evidence preservation
+
+The following live artefacts are held deliberately so DEF-003 and DEF-011 remain
+reproducible, and are excluded from Phase 8 until the owner signs the evidence off:
+
+| Defect | Evidence retained | Why it cannot be recreated after cleanup |
+|---|---|---|
+| DEF-003 | Quote `Q-26-0002` and its `email_queue` row at `status='pending'`; the 49 `pending` rows in `email_send_log` dating to June | The pending rows are the proof that no dispatch ever occurred. Deleting them destroys the only record distinguishing "never sent" from "sent and unlogged". |
+| DEF-003 | Absence of `process-email-queue` from `cron.job` (12 jobs present, none of them the drainer) | State, not a record — but the queue rows are what make the absence *observable* in the product. |
+| DEF-011 | `portal_access` `6a439e29…` and the `e2e-lead@accountancyos.test` identity | A portal session is required to re-observe the accountant-side org lookup firing inside the portal. Without a live portal login the defect cannot be re-demonstrated. |
+| DEF-018 | `cron.job_run_details` (26,208 failures across seven days) | Retained by the platform, not by the audit. Not affected by cleanup, but it ages out — capture any screenshots needed now. |
+| DEF-001/002/006/012/013 | Reproduced by direct RPC call, no fixture data required | Independent of cleanup. |
+| DEF-015/016/021/022/023/024/025 | Configuration and catalogue state | Independent of cleanup. |
+
+Everything else created by the audit is listed in `creation-ledger.json` with an
+explicit `cleanup` disposition of `delete` or `retain`.
+
+### Scope of "CONDITIONAL GO"
+
+**Confirmed: CONDITIONAL GO means Blue Tick internal testing only. It is not an
+external client launch of any kind.** Specifically it permits Blue Tick staff to
+operate the product against Blue Tick's own tenant, with the operator aware that
+delivery and scheduling are unreliable. It does **not** permit:
+
+- inviting any real external client to the portal;
+- relying on any emailed artefact (quote, engagement letter, invoice, chaser,
+  portal invite) reaching a recipient — DEF-003 means it will not;
+- any live HMRC or Companies House submission on behalf of a client;
+- taking payment from a client;
+- treating any figure, deadline or automation outcome in the product as
+  authoritative without manual verification, given DEF-018.
+
+The conditions lift only when DEF-015, DEF-018, DEF-003 and DEF-016 are closed
+and re-verified against LIVE.
+
+### Phase 0 — the six outstanding owner rulings
+
+| # | Ruling required | Recommendation | Consequence of the alternative |
+|---|---|---|---|
+| 1 | **Restore rehearsal** — may a point-in-time restore be rehearsed, and into what target? | Rehearse into a throwaway clone, not production. Nothing else evidences Gate 7. | Decline, and Gate 7 (recoverability) stays at INSUFFICIENT EVIDENCE permanently — you would be launching with an untested backup. |
+| 2 | **Monitoring/alerting layer** — approve building one (DEF-019), and where do alerts land? | Approve. Minimum: cron-failure and queue-depth alerts to a monitored inbox or Slack. This is what would have caught DEF-018 on day one instead of day 26,208. | Decline, and every future silent failure is found the same way this one was: by someone querying the database by hand, weeks late. |
+| 3 | **Second tenant** — may a second live organisation be created for cross-tenant isolation testing? | Approve a disposable second tenant. RLS currently passes by inspection, not by adversarial proof across a real tenant boundary. | Decline, and cross-tenant isolation remains inferred from policy text. A single mis-scoped policy would be undetectable until a client sees another client's data. |
+| 4 | **Staff / Admin fixtures** — may Staff and Admin users be provisioned in the live tenant? | Approve, disposable and named `*-qa@`. The three-role hierarchy has only ever been exercised as Owner. | Decline, and Staff and Admin permission paths ship completely untested — the highest-likelihood source of an access-control incident at launch. |
+| 5 | **Multi-practice identity** — should one email be able to belong to more than one practice, and if so, how does it switch? | Rule "one identity, one practice" for launch. It matches the email-uniqueness policy already in force and avoids a switching UI you do not need yet. | Rule the other way and it becomes a schema and session change — organisation switching, scoped RLS re-verification — that cannot be added safely post-launch. |
+| 6 | **Performance seeding** — may production-scale volume (≈5k clients, ≈50k jobs) be seeded to make Phase 5 meaningful? | Approve into the throwaway clone from ruling 1, not into Blue Tick. DEF-017 (324 unindexed foreign keys) is unquantified without it. | Decline, and all Phase 5 numbers stay informational. You would discover the index gap under real client load. |
+
+Rulings 1 and 6 pair naturally: one clone serves both. Rulings 3 and 4 are the
+only ones that touch the live instance, and both are disposable.
+
+### Sequencing
+
+Phase 8 cleanup runs only on separate written authorisation, and only after the
+owner confirms the retained evidence above is no longer required.
