@@ -626,7 +626,7 @@ key. No secret material is logged, returned or echoed. **PASS.**
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Requirements freeze | BLOCKED — six owner rulings outstanding |
-| 1 | Environment preflight | PARTIAL — DEF-001..005 |
+| 1 | Environment preflight | COMPLETE — DEF-001..005 carried; DEF-023/024/025 raised |
 | 2 | Catastrophic-risk tests | COMPLETE — RLS coverage and immutability PASS; DEF-015, DEF-016 raised |
 | 3 | Core commercial journey | COMPLETE — journey PASS, delivery FAIL (DEF-003) |
 | 4 | Module coverage | LARGELY COMPLETE — DEF-006/007/008/012/013/014 |
