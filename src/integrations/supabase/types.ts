@@ -15455,7 +15455,7 @@ export type Database = {
           code: string
           created_at: string
           default_job_template_id: string | null
-          default_price: number
+          default_price: number | null
           description: string | null
           entity_scope: string
           id: string
@@ -15477,7 +15477,7 @@ export type Database = {
           code: string
           created_at?: string
           default_job_template_id?: string | null
-          default_price: number
+          default_price?: number | null
           description?: string | null
           entity_scope?: string
           id?: string
@@ -15499,7 +15499,7 @@ export type Database = {
           code?: string
           created_at?: string
           default_job_template_id?: string | null
-          default_price?: number
+          default_price?: number | null
           description?: string | null
           entity_scope?: string
           id?: string
