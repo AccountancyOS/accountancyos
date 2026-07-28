@@ -14070,6 +14070,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           email: string | null
+          email_signature: string | null
           first_name: string | null
           id: string
           last_name: string | null
@@ -14079,6 +14080,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_signature?: string | null
           first_name?: string | null
           id: string
           last_name?: string | null
@@ -14088,6 +14090,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_signature?: string | null
           first_name?: string | null
           id?: string
           last_name?: string | null
