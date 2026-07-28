@@ -1,0 +1,72 @@
+{
+  "release_id": "2026-07-28-retire-legacy-mtd-quarterly",
+  "release_kind": "migration",
+  "status": "applied",
+  "declared_at": "2026-07-28T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-010 (catalogue half). Deactivates the legacy services_catalog entry with code 'mtd_quarterly' ('MTD Quarterly Submission', \u00a375) across all organizations, leaving the canonical 'mtd_quarter' ('MTD Quarterly Filing') as the only quarterly MTD service the quote builder offers. Sets active = false; the row is NOT deleted. No schema change.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "context": "The audit found the quote builder offering 'MTD Quarterly Filing \u2014 \u00a335.00' beside 'MTD Quarterly Submission \u2014 \u00a375.00' with nothing to tell an accountant which to sell.",
+    "root_cause": "The proposal engine keys on exactly two MTD codes \u2014 mtd_quarter and mtd_itsa_final (MTD_SERVICE_CODES in src/lib/proposal/mtd-periods.ts); a tax year decomposes into four mtd_quarter lines plus one mtd_itsa_final. 'MTD Quarterly Submission' is code 'mtd_quarterly', a pre-existing orphan that migration 20260725140000 deliberately left untouched. Its canonical_service_code is NULL and no engine, deadline rule or UI helper matches it.",
+    "consequence": "Selling the orphan produces a quote line no MTD decomposition recognises: no quarterly periods are generated, no jobs are materialised, and the client is charged for work the engine never schedules.",
+    "why_deactivate_not_delete": "Historic quotes and quote_lines reference services_catalog by id. Deleting the row would break their line rendering and any job already materialised from it."
+  },
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260728130000_retire_legacy_mtd_quarterly_service.sql",
+      "sha256": "ee30ef80eaa6916af99306f4bbbe99051b3de16c20117ca098972d24a027830b",
+      "expected_objects": [
+        {
+          "id": "legacy-entry-deactivated",
+          "object": "Every services_catalog row with code 'mtd_quarterly' has active = false",
+          "result": "verified",
+          "verify_via": "db_select services_catalog where code = 'mtd_quarterly' -> every row active = false. Confirm the row still EXISTS (it must not be deleted)."
+        },
+        {
+          "id": "canonical-entries-untouched",
+          "object": "'mtd_quarter' and 'mtd_itsa_final' remain active",
+          "result": "verified",
+          "verify_via": "db_select services_catalog where code in ('mtd_quarter','mtd_itsa_final') -> all rows still active = true with unchanged prices. These are what the engine decomposes a tax year into; deactivating either would silently stop MTD job materialisation."
+        },
+        {
+          "id": "builder-offers-one-quarterly-service",
+          "object": "The quote builder lists exactly one quarterly MTD service",
+          "result": "verified",
+          "verify_via": "Open the proposal dialog for an MTD client and confirm 'MTD Quarterly Submission' no longer appears while 'MTD Quarterly Filing' does."
+        }
+      ]
+    }
+  ],
+  "rollback": {
+    "assessment": "Trivial and safe: UPDATE services_catalog SET active = true WHERE code = 'mtd_quarterly'. Doing so restores the ambiguity the audit raised.",
+    "data_risk": "None. One boolean column on a catalogue row; no quote, line or job is modified, and no row is removed."
+  },
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260728130000_retire_legacy_mtd_quarterly_service.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "Confirm the canonical codes are still active before considering this closed \u2014 that is the regression that would matter.",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+  "post_apply_followups": [
+    "DEF-010 is not fully closed by this. Two catalogue questions remain and both need an owner ruling, recorded in docs/audits/2026-07-28-remediation-plan.md \u00a76: (1) whether sa_mtd should stay quotable for an MTD client \u2014 it is NOT a duplicate to retire, since it carries canonical_service_code 'self_assessment_mtd_quarterly' and doubles as the client type, but offering it beside four quarters and a final declaration lets one obligation be billed twice; (2) the three services priced at 0.00 (LLP accounts production, Sole trader accounts, Trust Registration Service). Zero means 'Included' throughout the product (isIncludedLine \u2014 excluded from both totals and from the Stripe line-item builders), so those rows currently quote as free of charge. The owner has ruled that no warning is to be shown when a line is added at zero, so the only remaining lever is pricing the catalogue rows."
+  ],
+  "applied_at": "2026-07-28T12:58:00Z",
+  "executor_version": "20260728125739",
+  "executor_note": "Applied by Lovable Cloud, which re-timestamps every migration; the executor version above is the identity in supabase_migrations.schema_migrations, not the git filename.",
+  "live_verification": {
+    "verified_at": "2026-07-28T12:58:00Z",
+    "method": "db_select against LIVE after apply",
+    "findings": [
+      "services_catalog: 0 active rows with code 'mtd_quarterly' (row retained, deactivated)",
+      "services_catalog.default_price is_nullable = YES, no column default",
+      "LLP accounts production = 1000.00; Sole trader accounts = 250.00; Trust Registration Service = 250.00; 0 active services remain at 0.00",
+      "profiles.email_signature column present (nullable text)",
+      "profiles RLS: profiles_select_same_org (SELECT) + profiles_update_own (UPDATE) \u2014 a staff member can save their own signature"
+    ]
+  }
+}
