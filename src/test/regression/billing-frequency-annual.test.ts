@@ -72,11 +72,24 @@ describe("a quote line can be one-off, monthly or annual", () => {
     expect(MIG).not.toMatch(/\*\s*12/);
   });
 
-  it("owns the live body of public_get_quote_by_token, after the token repair", () => {
-    expect(latestDefinerOf("public_get_quote_by_token")).toBe(MIG_NAME);
-    // It is based on the token repair, so that fix must not be lost by applying this.
+  it("carries the token repair forward rather than reverting it", () => {
+    // Built on the token repair, so applying this must not lose it.
     expect(MIG).toMatch(/'onboarding_access_token', v_access_token/);
     expect(MIG).toMatch(/IF v_quote\.status <> 'accepted' THEN\s+v_access_token := NULL;/);
     expect(MIG).toMatch(/APPLY AFTER 20260727160000/);
+  });
+
+  /**
+   * The executor re-authors each migration under its own timestamp when applying, so the
+   * last definer is usually that copy rather than the file written here. What must hold
+   * is that whichever file owns the body carries BOTH changes — a re-author based on an
+   * older copy would silently drop one.
+   */
+  it("keeps both changes in whichever migration owns the function", () => {
+    const owner = latestDefinerOf("public_get_quote_by_token");
+    expect(owner).toBeDefined();
+    const ownerBody = readFileSync(resolve(migDir, owner as string), "utf8");
+    expect(ownerBody).toMatch(/total_annual/);
+    expect(ownerBody).toMatch(/onboarding_access_token/);
   });
 });

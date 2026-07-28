@@ -1,0 +1,88 @@
+{
+  "release_id": "2026-07-27-engagement-letter-quoted-fees",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-27T00:00:00Z",
+  "approver": null,
+  "summary": "The engagement letter now states the fees exactly as the proposal quoted them. Re-issues public_preview_engagement_letter and public_sign_engagement_letter from their live bodies so each service line reads a fee and a period ('GBP 960.00 per year') instead of a raw vocabulary token, and the fee section lists every non-zero period — one-off, monthly and annual — rather than the two-bucket sentence that would now omit an annual fee entirely. Variant templates gain a {{total_annual}} merge field. render_engagement_letter_body is NOT modified.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "apply_order": "APPLY AFTER 2026-07-27-billing-frequency-annual (migration 20260727170000), which introduced the annual period and the accepted_snapshot.total_annual bucket this reads.",
+
+  "problem": {
+    "context": "The engagement letter is the contract. Two wording defects made it misstate what the client agreed to.",
+    "defect_1": "Each service line ended with an internal vocabulary token — '(monthly)', '(now)' — rather than a period a client can read.",
+    "defect_2": "The fee paragraph knew only two buckets: 'One-off fees due now total X. Ongoing monthly fees total Y per month.' Since 20260727170000, total_now means one-off ONLY, so an annual fee appears in NEITHER sentence. A fee the client had agreed to would be silently absent from the document they sign — worse than being mislabelled.",
+    "scope": "Wording only. No table, column, constraint, policy or trigger is touched, and the signing side effects (engagement_letters row, contracts_signed_at, status advance, token guard) are reproduced from the live body unchanged."
+  },
+
+  "live_bodies_used": [
+    {
+      "function": "public.public_preview_engagement_letter(uuid, text)",
+      "live_def_hash_before": "62319ab49fe6829a50964735e47b548d",
+      "fetched_at": "2026-07-27",
+      "basis": "Fetched via MCP catalog_functions(include_source: true) and reproduced verbatim except the line rendering, the fee section, and the {{total_annual}} substitution."
+    },
+    {
+      "function": "public.public_sign_engagement_letter(uuid, jsonb, text)",
+      "live_def_hash_before": "6c803c5dc60f01747d75d9a34ca8c8f1",
+      "fetched_at": "2026-07-27",
+      "basis": "Fetched via MCP catalog_functions(include_source: true) and reproduced verbatim except the same three wording changes."
+    },
+    {
+      "function": "public.render_engagement_letter_body(text, text, text, text, text, numeric, numeric, timestamptz)",
+      "basis": "NOT modified. It is a pure IMMUTABLE merge-field replacer whose signature carries only the one-off and monthly totals. Adding an argument would mean either a signature change or a second overload, and this codebase has already been bitten by two divergent overloads of one RPC (public_reject_quote_by_token). The callers substitute {{total_annual}} on its rendered output instead."
+    }
+  ],
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260727180000_engagement_letter_states_quoted_fees.sql",
+      "sha256": "b48e76d4462a6fee21ce4b964bb4f5a7f2edded58c735c7461a1c3357de6444b",
+      "expected_objects": [
+        {
+          "id": "letter-lines-state-a-period",
+          "object": "Both letter-composing functions render each line as an amount plus 'one-off' / 'per month' / 'per year'",
+          "result": "pending",
+          "verify_via": "catalog_functions(name_like: 'engagement_letter', include_source: true) -> both def-hashes CHANGED from 62319ab49fe6829a50964735e47b548d and 6c803c5dc60f01747d75d9a34ca8c8f1; neither body contains COALESCE(v_line->>'billing_frequency','annual'). Then db_rpc public_preview_engagement_letter for an application whose proposal has an annual line and read the returned HTML."
+        },
+        {
+          "id": "fee-section-lists-every-period",
+          "object": "The fee section lists each non-zero period and states explicitly when nothing is payable",
+          "result": "pending",
+          "verify_via": "In the same preview output, confirm an annual fee appears under 'per year' and is not missing; confirm a one-off fee reads 'due on acceptance'. For a zero-fee (all Included) proposal, confirm 'No fees are payable under this engagement' rather than an empty list."
+        },
+        {
+          "id": "renderer-untouched",
+          "object": "public.render_engagement_letter_body is unchanged",
+          "result": "pending",
+          "verify_via": "catalog_functions(name_like: 'render_engagement_letter_body') -> def-hash unchanged from whatever it is immediately before this apply. Record that hash first."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "assessment": "Forward-only, and low risk: wording only. Both functions can be restored from the recorded live hashes, at the cost of reinstating a letter that omits annual fees.",
+    "data_risk": "None on apply. At runtime the signing path writes exactly what it wrote before — the only difference is the wording of document_content it composes. Letters already signed are untouched: their content is frozen evidence."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Record the current def-hash of render_engagement_letter_body first, so the 'unchanged' check has a baseline.",
+      "Apply 20260727170000_billing_frequency_annual.sql FIRST if it is not already applied.",
+      "Then apply 20260727180000_engagement_letter_states_quoted_fees.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version so the drift guard stays green.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "Letters composed BEFORE this apply keep their wording — engagement_letters.document_content is written once and is frozen evidence once signed. Any unsigned letter that was already generated should be regenerated by re-sending it, not edited in place.",
+    "Stripe checkout and invoicing still read the same figures and have not been examined against the three-period rule. They must be checked before any real money moves — an annual line reaching a monthly Stripe subscription would repeat the original 12x error in the other direction.",
+    "The default billing period for company services (accounts, CT600, confirmation statement) is still 'monthly', inherited from when monthly was one of only two options. Most practices quote those annually. Changing it is a commercial default, so it awaits the owner's decision."
+  ]
+}
