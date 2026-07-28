@@ -1,29 +1,26 @@
 {
   "release_id": "2026-07-28-bank-connection-health-ambiguity",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "live_verified",
   "declared_at": "2026-07-28T00:00:00Z",
   "approver": null,
   "summary": "DEF-006. Re-issues public.get_bank_connection_health_for_org(uuid) from its live body, aliasing and qualifying the two references in its authorisation check that collided with the OUT parameter of the same name. Every call previously aborted with 42702. Signature, volatility, security mode, search_path and the returned column list are unchanged.",
-
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "problem": {
     "symptom": "/bookkeeping fires this RPC three times per load and every call fails with `42702 column reference \"organization_id\" is ambiguous`. Bank connection health is never displayed.",
     "root_cause": "The function's RETURNS TABLE list declares an OUT parameter named organization_id. Inside the authorisation check the same name is written unqualified (`WHERE user_id = auth.uid() AND organization_id = _org_id`), so PostgreSQL cannot tell whether it means the OUT parameter or organization_users' column.",
-    "gate_6": "The user never learns. The page ignores the failure and renders as though every connection were healthy, so an expired consent or a broken feed is indistinguishable from a working one. The app-side half of this release fixes that separately: the overview card previously fell back to an empty list and announced 'No bank connections across the practice yet' — a hard failure rendered as reassurance.",
+    "gate_6": "The user never learns. The page ignores the failure and renders as though every connection were healthy, so an expired consent or a broken feed is indistinguishable from a working one. The app-side half of this release fixes that separately: the overview card previously fell back to an empty list and announced 'No bank connections across the practice yet' \u2014 a hard failure rendered as reassurance.",
     "fix_choice": "Aliased and qualified rather than `#variable_conflict use_column`. The pragma silently changes how EVERY unqualified name in the body resolves; the alias changes exactly the two references that are wrong and leaves the rest provably alone."
   },
-
   "live_bodies_used": [
     {
       "function": "public.get_bank_connection_health_for_org(uuid)",
       "live_def_hash_before": "7012eeed15ee414c3bec6df9d574ad9d",
       "fetched_at": "2026-07-28",
-      "basis": "Fetched via MCP catalog_functions(include_source: true) and reproduced verbatim except the two qualifications in the authorisation EXISTS."
+      "basis": "Fetched via MCP catalog_functions(include_source: true) and reproduced verbatim except the two qualifications in the authorisation EXISTS.",
+      "live_prosrc_md5_after": "99175c3082742f9efc09f43fc0ad3b07"
     }
   ],
-
   "migrations": [
     {
       "path": "supabase/migrations/20260728160000_fix_bank_connection_health_ambiguity.sql",
@@ -32,44 +29,45 @@
         {
           "id": "rpc-returns-rows",
           "object": "get_bank_connection_health_for_org(uuid) returns rows instead of raising 42702",
-          "result": "pending",
+          "result": "pass \u2014 body now contains `organization_users ou` and `ou.organization_id = _org_id`; prosrc md5 99175c3082742f9efc09f43fc0ad3b07. Called for org a857a12c-a125-41de-bb45-9eb556d5b467 as a member: returned a result set (0 rows, no connections seeded) instead of 42702.",
           "verify_via": "catalog_functions(name_like: 'get_bank_connection_health_for_org', include_source: true) -> def-hash CHANGED from 7012eeed15ee414c3bec6df9d574ad9d; body contains `organization_users ou` and `ou.organization_id = _org_id`. Then db_rpc it with a real organization id and confirm a result set (possibly empty) rather than an error."
         },
         {
           "id": "authorisation-still-enforced",
           "object": "A caller who is not a member of the organization still gets 42501 'forbidden'",
-          "result": "pending",
-          "verify_via": "Call it with an organization id the signed-in user does NOT belong to and confirm it still raises forbidden. The change touches the authorisation check itself, so this is the regression that would matter — a qualification mistake could turn the EXISTS into something always true."
+          "result": "pass \u2014 VERIFIED FIRST, before any success path. (a) No session (auth.uid() NULL): raises 42501 forbidden. (b) Authenticated member calling a FOREIGN organization id: raises 42501 forbidden. The EXISTS did not become always-true.",
+          "verify_via": "Call it with an organization id the signed-in user does NOT belong to and confirm it still raises forbidden. The change touches the authorisation check itself, so this is the regression that would matter \u2014 a qualification mistake could turn the EXISTS into something always true."
         },
         {
           "id": "bookkeeping-shows-health",
           "object": "/bookkeeping displays connection health, and displays an explicit error state when it cannot",
-          "result": "pending",
-          "verify_via": "Load /bookkeeping and confirm the Practice Banking Health card lists connections. Then confirm the failure path is distinguishable from the empty path — with the RPC failing, the card must say health is unavailable, not 'No bank connections across the practice yet'."
+          "result": "pass (code-level) \u2014 PracticeBankingOverview renders a destructive \"Bank connection health is unavailable\" alert on isError, distinct from the \"No bank connections across the practice yet\" empty state. Live visual confirmation with real connection fixtures is still outstanding (see post_apply_followups).",
+          "verify_via": "Load /bookkeeping and confirm the Practice Banking Health card lists connections. Then confirm the failure path is distinguishable from the empty path \u2014 with the RPC failing, the card must say health is unavailable, not 'No bank connections across the practice yet'."
         }
-      ]
+      ],
+      "applied_via": "Lovable Cloud migration flow, 2026-07-28",
+      "migration_identity_note": "Applied from the reviewed file (sha256 4b74b0d3d6945ff822ed52443400ac2f7ae852ec903ab680cee7bfd8ebf4fc30, checksum re-verified before apply). The executor assigns its own version timestamp and supabase_migrations.schema_migrations is not readable from the exec role (permission denied for schema supabase_migrations), so the executor version could not be recorded here. Further DEF-020/023 evidence: source identity is not preserved by the executor."
     }
   ],
-
   "rollback": {
     "assessment": "Forward-only. Restoring 7012eeed reinstates a function that cannot execute at all, so there is no scenario in which rolling back is preferable.",
     "data_risk": "None. The function is STABLE and reads only; the migration changes name resolution, not behaviour."
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
       "Apply 20260728160000_fix_bank_connection_health_ambiguity.sql via the Lovable migration flow.",
       "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
-      "Verify the forbidden path FIRST — an authorisation check was edited.",
+      "Verify the forbidden path FIRST \u2014 an authorisation check was edited.",
       "Then load /bookkeeping and confirm health is displayed.",
       "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
       "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
     ]
   },
-
   "post_apply_followups": [
-    "get_bank_connection_health_for_entity was NOT examined. It is the sibling RPC used on the entity-level view and may carry the same OUT-parameter collision; it should be checked against its live body before the bookkeeping module is described as working.",
-    "The audit's remaining DEF-006 actions — verifying the connected, disconnected, expired, degraded and no-connection states individually — need real connection fixtures and are not covered by this release."
-  ]
+    "RESOLVED: get_bank_connection_health_for_entity was inspected against its live body. It carries no OUT-parameter collision \u2014 its authorisation goes through portal_can_access_bookkeeping/portal_has_perm and its body references only the _client_id/_company_id IN parameters. No sibling fix needed.",
+    "OPEN: the connected, disconnected, expired, degraded and no-connection states are still unverified individually \u2014 they need real bank connection fixtures, which the org currently has none of (the RPC returns 0 rows).",
+    "OPEN: executor migration version unrecorded (schema_migrations not readable from the exec role)."
+  ],
+  "verified_at": "2026-07-28"
 }
