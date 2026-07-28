@@ -1,7 +1,7 @@
 {
   "release_id": "2026-07-28-service-prices-and-unpriced-state",
   "release_kind": "migration",
-  "status": "applied",
+  "status": "live_verified",
   "declared_at": "2026-07-28T00:00:00Z",
   "approver": "Owner ruling 2026-07-28 (prices supplied by the owner)",
   "summary": "DEF-010 (pricing half). Makes services_catalog.default_price NULLABLE so 'not yet priced' is representable, and applies the owner's prices to the three services that were sitting at 0.00: LLP accounts production \u00a31000.00, Sole trader accounts \u00a3250.00, Trust Registration Service \u00a3250.00. One ALTER COLUMN pair and three guarded UPDATEs; no row is added, removed or deactivated.",
@@ -69,5 +69,13 @@
       "profiles.email_signature column present (nullable text)",
       "profiles RLS: profiles_select_same_org (SELECT) + profiles_update_own (UPDATE) \u2014 a staff member can save their own signature"
     ]
-  }
+  },
+  "migration_identity": {
+    "authored_version": "20260728140000",
+    "authored_path": "supabase/migrations/20260728140000_service_prices_and_unpriced_state.sql",
+    "authored_sha256": "da4290f2cd9519e9a22993893a7dfaa54f3ce7a8f51374c60145cb973db61bd1",
+    "executor_applied_version": "20260728125803",
+    "identity_note": "The executor re-timestamps the migration on apply. The authored version is the source identity of record; the executor version is only the row key in supabase_migrations.schema_migrations. This rename is standing evidence for DEF-020/DEF-023 and must not be treated as replacing source identity."
+  },
+  "live_verified_at": "2026-07-28T13:40:00Z"
 }
