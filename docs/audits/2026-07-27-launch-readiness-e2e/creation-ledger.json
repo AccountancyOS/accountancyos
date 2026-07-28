@@ -1,31 +1,81 @@
 {
   "audit": "2026-07-27-launch-readiness-e2e",
-  "status": "FINALISED 2026-07-28 — closed for additions; awaiting owner authorisation for Phase 8",
+  "status": "PHASE 8 EXECUTED 2026-07-28 \u2014 deletable entries removed; retained evidence held under deferred cleanup obligations",
   "baseline_commit": "d7aca9be9c0af1d28b3d67695888d1529dd6afc6",
   "tenant_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
   "cleanup_policy": "Nothing in this ledger is deleted until the owner authorises Phase 8 in writing. On authorisation, every entry marked cleanup:\"delete\" is removed and the deletion re-verified by count query. Entries marked cleanup:\"retain\" are evidence and survive Phase 8.",
   "created_records": [
-    { "table": "leads", "id": "33e42ab2", "label": "E2E Probe", "cleanup": "delete" },
-    { "table": "quotes", "ref": "Q-26-0002", "label": "Advisory & Consultancy £150 one-off", "cleanup": "retain", "reason": "DEF-003 reproduction: its queued email row is the undelivered artefact" },
-    { "table": "onboarding_applications", "id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee", "status": "approved", "cleanup": "delete" },
-    { "table": "clients", "id": "f1565f89-e78c-4e19-8fea-66ab9b8ff294", "label": "E2E Probe", "cleanup": "delete" },
-    { "table": "jobs", "id": "67ead073-4693-46ec-a56e-a35ac28082e5", "label": "Advisory & Consultancy - Setup Pending", "cleanup": "delete" },
-    { "table": "portal_access", "id": "6a439e29-5c20-4404-bcda-4eb28f107705", "status": "invited -> accepted", "cleanup": "retain", "reason": "DEF-011 reproduction: portal session is required to re-observe the accountant-side org lookup" },
-    { "table": "onboarding_documents", "count": 2, "label": "id.png, addr.png", "cleanup": "delete" }
+    {
+      "table": "leads",
+      "id": "33e42ab2",
+      "label": "E2E Probe",
+      "cleanup": "delete"
+    },
+    {
+      "table": "quotes",
+      "ref": "Q-26-0002",
+      "label": "Advisory & Consultancy \u00a3150 one-off",
+      "cleanup": "retain",
+      "reason": "DEF-003 reproduction: its queued email row is the undelivered artefact"
+    },
+    {
+      "table": "onboarding_applications",
+      "id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee",
+      "status": "approved",
+      "cleanup": "delete"
+    },
+    {
+      "table": "clients",
+      "id": "f1565f89-e78c-4e19-8fea-66ab9b8ff294",
+      "label": "E2E Probe",
+      "cleanup": "delete"
+    },
+    {
+      "table": "jobs",
+      "id": "67ead073-4693-46ec-a56e-a35ac28082e5",
+      "label": "Advisory & Consultancy - Setup Pending",
+      "cleanup": "delete"
+    },
+    {
+      "table": "portal_access",
+      "id": "6a439e29-5c20-4404-bcda-4eb28f107705",
+      "status": "invited -> accepted",
+      "cleanup": "retain",
+      "reason": "DEF-011 reproduction: portal session is required to re-observe the accountant-side org lookup"
+    },
+    {
+      "table": "onboarding_documents",
+      "count": 2,
+      "label": "id.png, addr.png",
+      "cleanup": "delete"
+    }
   ],
   "auth_identities_created": [
-    { "email": "e2e-lead@accountancyos.test", "user_id": "0436110a-dcd7-406e-8af0-adaa0b956670", "purpose": "portal login", "cleanup": "retain", "reason": "required for DEF-011; delete last, after evidence is signed off" }
+    {
+      "email": "e2e-lead@accountancyos.test",
+      "user_id": "0436110a-dcd7-406e-8af0-adaa0b956670",
+      "purpose": "portal login",
+      "cleanup": "retain",
+      "reason": "required for DEF-011; delete last, after evidence is signed off"
+    }
   ],
   "storage_objects_created": [
     {
       "bucket": "onboarding-documents",
       "prefix": "a857a12c-a125-41de-bb45-9eb556d5b467/onboarding/6bb5670c-cfb9-4dbb-912e-e491f0d916ee/687726fef65a93df68996a6c8c80e926b7ef0c09a3a11b5caf0be51d9d653208/",
-      "objects": ["id-1785188594340.png", "proof_of_address-1785188603364.png"],
+      "objects": [
+        "id-1785188594340.png",
+        "proof_of_address-1785188603364.png"
+      ],
       "cleanup": "delete"
     }
   ],
   "outbound_sends": [
-    { "note": "Emails queued during the audit remain in email_queue at status=pending and were never dispatched (DEF-003). No mail left the system.", "cleanup": "retain", "reason": "the pending rows ARE the DEF-003 evidence" }
+    {
+      "note": "Emails queued during the audit remain in email_queue at status=pending and were never dispatched (DEF-003). No mail left the system.",
+      "cleanup": "retain",
+      "reason": "the pending rows ARE the DEF-003 evidence"
+    }
   ],
   "outside_this_ledger": {
     "summary": "Confirmed by direct LIVE queries on 2026-07-28. The following exist but were NOT created by this audit and are therefore out of scope for Phase 8 cleanup.",
@@ -38,11 +88,11 @@
       "leon@bluetickaccountants.com is the real owner identity and is never touched."
     ],
     "storage_objects": [
-      "Four further onboarding-documents objects exist under applications eb73d94d… (17:32) and 52b26a90… (20:11) from pre-audit manual testing on 2026-07-27. Out of ledger; owner decision whether to purge separately."
+      "Four further onboarding-documents objects exist under applications eb73d94d\u2026 (17:32) and 52b26a90\u2026 (20:11) from pre-audit manual testing on 2026-07-27. Out of ledger; owner decision whether to purge separately."
     ],
     "cron_entries": [
       "Twelve cron jobs exist on LIVE. The audit created none and modified none.",
-      "process-email-queue is absent (DEF-003) — a missing entry, not a created one.",
+      "process-email-queue is absent (DEF-003) \u2014 a missing entry, not a created one.",
       "Six of the twelve fail on every run (DEF-018). Both are pre-existing production state and must NOT be altered as part of cleanup."
     ],
     "external_sandbox_records": [
@@ -55,8 +105,101 @@
   },
   "notes": [
     "Phase 1 preflight was executed read-only.",
-    "Adversarial RPC probes used non-existent UUIDs (…0000fe) so no live row was reachable; all probes were rejected or returned not-found.",
+    "Adversarial RPC probes used non-existent UUIDs (\u20260000fe) so no live row was reachable; all probes were rejected or returned not-found.",
     "Phase 3 created the records above end-to-end through the UI. All use the @accountancyos.test domain so no real recipient can be contacted.",
     "Records marked retain are held until the owner confirms the defect evidence is no longer needed."
+  ],
+  "phase_8_execution": {
+    "authorised_by": "owner, 2026-07-28",
+    "executed_at": "2026-07-28",
+    "method": "single data-operation migration (no schema change) applied via the authorised production executor",
+    "deleted": [
+      {
+        "table": "jobs",
+        "id": "67ead073-4693-46ec-a56e-a35ac28082e5",
+        "verified_count": 0
+      },
+      {
+        "table": "onboarding_applications",
+        "id": "6bb5670c-cfb9-4dbb-912e-e491f0d916ee",
+        "verified_count": 0
+      },
+      {
+        "table": "onboarding_documents",
+        "count": 2,
+        "verified_count": 0
+      },
+      {
+        "table": "onboarding_events",
+        "count": 5,
+        "verified_count": 0,
+        "note": "cascade collateral of the audit application"
+      },
+      {
+        "table": "engagement_letters",
+        "id": "f8f6d78c-9d3f-4527-a266-c75d7bf700df",
+        "verified_count": 0,
+        "note": "draft letter created by the audit run; not itemised in the original ledger, deleted as audit collateral"
+      }
+    ],
+    "not_deleted_blocked": [
+      {
+        "table": "clients",
+        "id": "f1565f89-e78c-4e19-8fea-66ab9b8ff294",
+        "reason": "portal_access.client_id is ON DELETE CASCADE \u2014 deleting the client would destroy the retained DEF-011 portal_access row"
+      },
+      {
+        "table": "leads",
+        "id": "33e42ab2-3012-4741-9012-32f612f766cc",
+        "reason": "quotes.lead_id is ON DELETE SET NULL \u2014 deleting the lead would sever the retained DEF-003 quote from its origin"
+      }
+    ],
+    "not_deleted_platform_limit": [
+      {
+        "store": "storage.objects",
+        "bucket": "onboarding-documents",
+        "objects": 2,
+        "reason": "Storage rejects direct deletion (storage.protect_delete); removal requires the Storage API with a service-role key, which is not available to the executor on Lovable Cloud.",
+        "disposition": "deferred cleanup obligation OBL-003"
+      }
+    ],
+    "untouched": "All pre-audit records and infrastructure (historic email_send_log / email_queue rows, pre-audit storage objects, the twelve cron jobs, real owner identities) were not modified."
+  },
+  "deferred_cleanup_obligations": [
+    {
+      "id": "OBL-001",
+      "defect": "DEF-003",
+      "retained_objects": [
+        "quotes Q-26-0002 (64e4d464-ae34-456a-8369-79ab1b7dc131)",
+        "its pending email_queue row",
+        "leads 33e42ab2-3012-4741-9012-32f612f766cc (cascade-linked origin)"
+      ],
+      "owner": "Blue Tick owner (Leon)",
+      "deletion_condition": "Delete once the email scheduling/queue fix (process-email-queue cron + queue drain) is deployed and a fresh quote send is retested end-to-end.",
+      "must_not_be_retained_indefinitely": true
+    },
+    {
+      "id": "OBL-002",
+      "defect": "DEF-011",
+      "retained_objects": [
+        "portal_access 6a439e29-5c20-4404-bcda-4eb28f107705",
+        "clients f1565f89-e78c-4e19-8fea-66ab9b8ff294",
+        "auth identity e2e-lead@accountancyos.test (0436110a-dcd7-406e-8af0-adaa0b956670)"
+      ],
+      "owner": "Blue Tick owner (Leon)",
+      "deletion_condition": "Delete once the portal/accountant-side organisation lookup fix is deployed and portal login is retested; delete the auth identity last.",
+      "must_not_be_retained_indefinitely": true
+    },
+    {
+      "id": "OBL-003",
+      "defect": "none \u2014 platform limitation",
+      "retained_objects": [
+        "onboarding-documents/a857a12c-.../onboarding/6bb5670c-.../id-1785188594340.png",
+        "\u2026/proof_of_address-1785188603364.png"
+      ],
+      "owner": "Blue Tick owner (Leon)",
+      "deletion_condition": "Delete via the Storage API (service-role) or the Cloud storage browser; the database rows referencing them are already gone, so these are orphaned binaries only.",
+      "must_not_be_retained_indefinitely": true
+    }
   ]
 }
