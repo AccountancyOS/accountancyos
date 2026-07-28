@@ -3,18 +3,21 @@
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Requirements freeze | BLOCKED — six owner rulings outstanding |
-| 1 | Preflight | PARTIAL — DEF-001..005 |
+| 1 | Preflight | COMPLETE — DEF-001..005, DEF-023/024/025 |
 | 2 | Catastrophic risk | COMPLETE — RLS + immutability PASS; DEF-015, DEF-016 |
 | 3 | Commercial journey | COMPLETE — only DEF-003 fails |
 | 4 | Module coverage | LARGELY COMPLETE — DEF-006/007/008/012/013/014 |
-| 5 | Non-functional | NOT STARTED |
-| 6 | Operational | NOT STARTED |
-| 7 | Security & deployment integrity | PARTIAL — DEF-004/005/015 |
+| 5 | Non-functional | COMPLETE (informational) — DEF-017 |
+| 6 | Operational | COMPLETE — DEF-018/019/020 |
+| 7 | Security & deployment integrity | COMPLETE — DEF-015/021/022 |
 | 8 | Cleanup verification | NOT STARTED |
 
 No production code or schema changes in this run. Discovery only; defects recorded, fixed later on your approval via git-authored migrations.
 
 ## Next run
+
+Only Phase 0 (blocked on six owner rulings) and Phase 8 (cleanup, deferred pending
+your go-ahead) remain. Everything below is the record of the completed runs.
 
 **Phase 5 — Non-functional readiness (informational, per your own rule)**
 - Query-plan and latency profile on the heaviest read paths: Overview dashboard aggregates, clients list, jobs board, deadlines calendar, trial balance and general ledger RPCs. Capture p50/p95 from repeated live calls plus `EXPLAIN` shapes.
