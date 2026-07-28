@@ -1,0 +1,66 @@
+{
+  "release_id": "2026-07-28-revoke-anon-el-signature-progress",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-28T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-015 containment for one function. Revokes EXECUTE on public.el_signature_progress(uuid) from PUBLIC and anon, and grants it explicitly to authenticated and service_role. Grants only — no function body, signature, table, policy or trigger is altered.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "context": "The launch-readiness audit (docs/audits/2026-07-27-launch-readiness-e2e.md, DEF-015) enumerated 93 SECURITY DEFINER functions that anon may execute and that contain no internal authorisation check. public.el_signature_progress is on that list, in risk class 1 — data disclosure on a caller-supplied UUID.",
+    "cause": "Introduced by 20260727140000 as SECURITY DEFINER without revoking the default PUBLIC EXECUTE grant Postgres applies to every new function. It is an internal helper — the single implementation of the engagement-letter signing rule — and was never intended as a public endpoint.",
+    "exposure": "To an unauthenticated caller holding an engagement-letter UUID it discloses the signing rule and the required/signed signatory counts. Modest in isolation, but it is an oracle on an enumerable identifier with no token check.",
+    "deliberately_out_of_scope": "public_get_engagement_letter_for_signing and public_sign_engagement_letter_as_signatory KEEP their anon grants. A client following an emailed signing link has no session; both authorise on the signing token itself, matching the public_get_onboarding pattern. Revoking those would break the client-facing signing journey.",
+    "scale": "This is 1 of the 93 functions in DEF-015. It is authored separately because it is a defect introduced by this repo yesterday, is unambiguous, and needs no product decision. The remaining 92 require the batched, risk-classed review described in docs/audits/2026-07-28-remediation-plan.md."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260728120000_revoke_anon_el_signature_progress.sql",
+      "sha256": "50d95b50fbc318c74c98cd268cd3c481d512d7b02223b008d8a1841d4dc1c3a0",
+      "expected_objects": [
+        {
+          "id": "anon-execute-revoked",
+          "object": "anon can no longer EXECUTE public.el_signature_progress(uuid); authenticated and service_role can",
+          "result": "pending",
+          "verify_via": "catalog_grants / has_function_privilege('anon', 'public.el_signature_progress(uuid)', 'EXECUTE') -> false; same check for 'authenticated' -> true. Then call the function with the anon key and expect a permission-denied error rather than a result."
+        },
+        {
+          "id": "signing-journey-unaffected",
+          "object": "The client-facing signing journey still works end to end",
+          "result": "pending",
+          "verify_via": "With the anon key and no session, call public_get_engagement_letter_for_signing with a valid signatory token — it must still return the letter and its progress block. That function is SECURITY DEFINER and reaches el_signature_progress as the definer, so the revoke must not affect it. This is the regression that would matter."
+        },
+        {
+          "id": "gate-unaffected",
+          "object": "lifecycle_onboarding_gates still evaluates the signature rule",
+          "result": "pending",
+          "verify_via": "db_rpc lifecycle_onboarding_gates for an application with signatory rows and confirm engagement_letter_signed and activation_ready are computed as before. It is SECURITY DEFINER and calls the helper as the definer."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "assessment": "Trivial: GRANT EXECUTE ... TO anon restores the previous state. Doing so reinstates the DEF-015 exposure.",
+    "data_risk": "None. Grants only; no data is read or written by the migration."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260728120000_revoke_anon_el_signature_progress.sql via the Lovable migration flow.",
+      "Confirm the card returns green AND a row exists in supabase_migrations.schema_migrations (verify against LIVE, not just Test).",
+      "Immediately exercise the client signing link end to end — this is the one thing a bad revoke would break.",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "92 functions remain on the DEF-015 list. They need enumeration with signature, owner, security mode, grants and intended caller, then revoke-by-default and regrant-by-exception, batched by risk class so a mistaken revoke cannot take out the client-facing token-gated endpoints in one go.",
+    "A CI check should fail when a new SECURITY DEFINER function is created without an explicit grant decision. Every function in this repo currently inherits PUBLIC EXECUTE silently — which is exactly how this one ended up on the list."
+  ]
+}
