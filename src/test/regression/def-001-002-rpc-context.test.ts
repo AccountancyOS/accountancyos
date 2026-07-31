@@ -147,9 +147,38 @@ describe("ownership and privileges are explicit", () => {
     expect(block).toContain("public.update_invoice_draft_safe(uuid,uuid,text,text,text,text,text,text,jsonb)");
   });
 
-  it("leaves sandbox_exec alone", () => {
-    // Executor infrastructure — not this repair's to judge.
+  it("never revokes sandbox_exec", () => {
+    // Executor infrastructure — this repair tightens PUBLIC and anon only.
     expect(CODE).not.toMatch(/REVOKE[\s\S]{0,60}sandbox_exec/);
+  });
+
+  /**
+   * The 9-argument update is a NEW signature: it has no historical ACL, so "untouched"
+   * would leave executor infrastructure able to create an invoice draft but not update
+   * one. Both canonical signatures must state the grant.
+   */
+  it("grants sandbox_exec EXECUTE on both canonical invoice-draft signatures", () => {
+    expect(CODE).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.create_invoice_draft_safe\(\s*uuid, text, uuid, text, uuid, text, text, text, text, text, text, text, text, jsonb\s*\) TO sandbox_exec;/,
+    );
+    expect(CODE).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.update_invoice_draft_safe\(\s*uuid, uuid, text, text, text, text, text, text, jsonb\s*\) TO sandbox_exec;/,
+    );
+  });
+
+  /**
+   * Atomicity cannot rest on the executor: its wrapping behaviour is not introspectable
+   * and DEF-020/023 record that it departs from convention. The file wraps itself.
+   */
+  it("wraps the whole forward migration in exactly one transaction", () => {
+    const begins = (CODE.match(/^BEGIN;$/gm) ?? []).length;
+    const commits = (CODE.match(/^COMMIT;$/gm) ?? []).length;
+    expect(begins).toBe(1);
+    expect(commits).toBe(1);
+    expect(CODE.indexOf("BEGIN;")).toBeLessThan(CODE.indexOf("CREATE OR REPLACE FUNCTION"));
+    expect(CODE.lastIndexOf("COMMIT;")).toBeGreaterThan(CODE.lastIndexOf("GRANT EXECUTE"));
+    // Nothing that is forbidden inside a transaction block.
+    expect(CODE).not.toMatch(/CREATE INDEX CONCURRENTLY|\bVACUUM\b|ALTER TYPE[\s\S]{0,40}ADD VALUE|ALTER SYSTEM/);
   });
 });
 
