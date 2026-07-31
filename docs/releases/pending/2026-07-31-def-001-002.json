@@ -1,7 +1,7 @@
 {
   "release_id": "2026-07-31-def-001-002",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "pending_final_approval_of_amended_artifact",
   "declared_at": "2026-07-31T00:00:00Z",
   "approver": null,
   "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
@@ -10,14 +10,14 @@
     "audit_said": 10,
     "evidenced": 8,
     "basis": "Three independent sources agree. (1) Repository: parsing every CREATE FUNCTION and CREATE OR REPLACE FUNCTION block in the five migrations mentioning set_rpc_context yields 15 names that ever called it. (2) LIVE: a sweep of all 368 public function bodies via mcp_list_functions found exactly 8 still calling it and 10 instances already inlining set_config. (3) The executor's unrestricted pg_proc query (2026-07-31T20:15:16Z) returned calls_helper = true on exactly those 8 rows and no others.",
-    "no_live_only_callers": "Confirmed. The DEF-020 residual risk \u2014 a function created directly on LIVE and never committed \u2014 is closed for this defect.",
+    "no_live_only_callers": "Confirmed. The DEF-020 residual risk — a function created directly on LIVE and never committed — is closed for this defect.",
     "audit_statements_contradicted": "Invoice drafting is NOT broken (all four overloads already inline set_config), and neither is supplier payment via record_invoice_payment_safe. DEF-002's claim that one invoice-draft overload contains the DEF-001 failure is unsupported; that defect is a pure signature collision.",
-    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper \u2014 the December remediation touched one more function than the repository records. Recorded, not acted on."
+    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper — the December remediation touched one more function than the repository records. Recorded, not acted on."
   },
   "migrations": [
     {
       "path": "supabase/migrations/20260731210000_def_001_002_rpc_context_and_invoice_draft.sql",
-      "sha256": "aee9c160b5594b2748db7434c8397d22fd7e13100803204e1d04ba6cdf4830f5",
+      "sha256": "0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6",
       "expected_objects": [
         {
           "id": "no-function-calls-the-deleted-helper",
@@ -45,9 +45,9 @@
         },
         {
           "id": "privileges-tightened",
-          "object": "PUBLIC and anon can no longer execute the ten affected functions; authenticated and service_role can; sandbox_exec unchanged",
+          "object": "Final ACL on all ten affected signatures: owner postgres; EXECUTE to authenticated, service_role and sandbox_exec; NO EXECUTE for PUBLIC or anon",
           "result": "pending",
-          "verify_via": "Executor pg_proc: proacl for each of the ten no longer contains '=X/postgres' or 'anon=X/postgres', still contains authenticated, service_role and sandbox_exec; proowner is postgres. Then call one RPC with the anon key and expect a permission denied rather than the previous JSON {\"success\":false,\"error\":\"Not authenticated\"}."
+          "verify_via": "Executor pg_proc: for each of the ten, proowner is postgres and proacl contains authenticated=X, service_role=X and sandbox_exec=X, and contains neither '=X/postgres' (PUBLIC) nor 'anon=X/postgres'. sandbox_exec must be present on the NEW 9-argument update_invoice_draft_safe as well as the 14-argument create - that is the amended grant. Then call one RPC with the anon key and expect a hard permission denied rather than the previous 42501 'Not authenticated' body."
         },
         {
           "id": "portal-capability-retained",
@@ -67,20 +67,28 @@
           "result": "pending",
           "verify_via": "Create with an entity belonging to another organisation -> 42501 'Entity does not belong to organization'. Create and update with a customer belonging to another organisation -> 42501 'Customer does not belong to organization'. Neither check existed in both overloads before."
         }
-      ]
+      ],
+      "superseded_sha256": {
+        "aee9c160b5594b2748db7434c8397d22fd7e13100803204e1d04ba6cdf4830f5": "as authored at 5c76747, before the two owner-approved amendments"
+      }
     }
   ],
   "rollback": {
     "script": "docs/releases/rollback/2026-07-31-def-001-002-rollback.sql",
     "assessment": "Available but strongly discouraged. Rolling back reinstates 42883 on all eight functions (bill approval, voiding, supplier payments, customer creation, all four automation-rule operations), restores the PGRST203 ambiguity, loses the entity and customer relationship checks, and restores PUBLIC and anon EXECUTE on privileged mutating functions. Fix forward instead.",
-    "data_risk": "None on apply \u2014 the migration creates and replaces functions and adjusts grants; it reads and writes no table data.",
-    "self_contained": "Yes. The script runs as-is inside a single transaction: it embeds all twelve pre-migration function definitions verbatim (the eight bodies reverted to calling public.set_rpc_context(), the 14-arg create restored to 0be3f28b, and the three superseded invoice-draft signatures recreated), drops the new 9-argument update by complete signature, and restores the inventoried owner and ACLs. No manual insertion of historical bodies, no operator steps. Superseded signatures are recreated BEFORE the drop so update payloads never become unresolvable."
+    "data_risk": "None on apply — the migration creates and replaces functions and adjusts grants; it reads and writes no table data.",
+    "self_contained": "Yes. The script runs as-is inside a single transaction: it embeds all twelve pre-migration function definitions verbatim (the eight bodies reverted to calling public.set_rpc_context(), the 14-arg create restored to 0be3f28b, and the three superseded invoice-draft signatures recreated), drops the new 9-argument update by complete signature, and restores the inventoried owner and ACLs. No manual insertion of historical bodies, no operator steps. Superseded signatures are recreated BEFORE the drop so update payloads never become unresolvable.",
+    "sha256": "f9113d5ca10546802732d1cc93e2b14f5daa9d7ce4c86051e7cfa2388a53534e",
+    "source": "Claude commit 0993679, incorporated unmodified.",
+    "transaction": "Exactly one top-level BEGIN; and one COMMIT;.",
+    "guard": "Guarded by src/test/regression/def-001-002-rpc-context.test.ts: 12 CREATE OR REPLACE blocks, 8 restored set_rpc_context callers, DROP of the 9-argument update by complete signature, recreate-before-drop ordering, single BEGIN/COMMIT, no OPERATOR STEP text, SELF-CONTAINED AND EXECUTABLE header, file absent from supabase/migrations/. All passing.",
+    "post_rollback_verification_form": "Comment-form operator queries at the end of the file (expect 8 helper callers, 4 invoice-draft overloads, ACLs carrying =X and anon). These are manual queries, not in-transaction assertions that would abort a partial rollback. Flagged, not changed."
   },
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
       "Apply 20260731210000_def_001_002_rpc_context_and_invoice_draft.sql via the Lovable migration flow. It is deliberately ONE migration: DEF-001 and DEF-002 must not exist in a half-fixed state.",
-      "Verify the privilege change FIRST \u2014 grants were altered on ten privileged functions.",
+      "Verify the privilege change FIRST — grants were altered on ten privileged functions.",
       "Then re-run the full LIVE body sweep and confirm zero references to set_rpc_context remain.",
       "Then exercise all four observed invoice-draft payloads for ambiguity.",
       "Then exercise each of the eight repaired callers end to end.",
@@ -90,7 +98,96 @@
   },
   "post_apply_followups": [
     "The app.rpc flag is now set by eighteen functions and read by none: is_rpc_context() no longer exists and the policies that consumed it are constant false. It was inlined here only to keep the eight consistent with the ten already repaired. Deciding whether to restore the RPC-write-guard properly or strip app.rpc everywhere is a separate security-architecture task, deliberately not taken as a side effect of this repair.",
-    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 \u00a74 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
-    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source \u2014 the same route that closed the DEF-001 count."
-  ]
+    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
+    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source — the same route that closed the DEF-001 count."
+  ],
+  "amendment": {
+    "amended_at": "2026-07-31T20:45:00Z",
+    "authority": "Owner approval, 2026-07-31, following the pre-apply verification report.",
+    "incorporates": "Claude commit 0993679 - self-contained, executable rollback with its guards, unmodified.",
+    "forward_migration_changes": [
+      {
+        "id": "explicit-transaction-wrapper",
+        "kind": "operational, not functional",
+        "change": "Top-level BEGIN; at line 56 (before the first CREATE OR REPLACE FUNCTION) and COMMIT; at line 741 (after the final GRANT). No statement added, removed, reordered or altered. Atomicity no longer depends on the Lovable executor's unintrospectable wrapping behaviour; a nested BEGIN/COMMIT is a no-op if the executor does wrap."
+      },
+      {
+        "id": "sandbox-exec-grant",
+        "kind": "functional - the ONLY functional change since 5c76747",
+        "change": "Two explicit GRANT EXECUTE ... TO sandbox_exec statements after the Part 4 loop, covering the canonical 14-argument create_invoice_draft_safe and the canonical 9-argument update_invoice_draft_safe. Idempotent for the create; load-bearing for the update, a NEW signature with no ACL to inherit that would otherwise have ended with no sandbox_exec EXECUTE."
+      }
+    ],
+    "no_other_functional_change": "Verified. Between 5c76747 and the amended file the only differences are the BEGIN;/COMMIT; pair, the two GRANT statements, and comment text documenting both. All eight repaired bodies, both canonical bodies, the three DROPs, the Part 4 loop and its ten signatures are byte-identical."
+  },
+  "pre_apply_verification": {
+    "report": "docs/audits/2026-07-31-def-001-002-pre-apply-verification.md",
+    "applied": false,
+    "note": "Read-only catalogue queries and unauthenticated PostgREST probes only. Nothing on LIVE was changed.",
+    "verification_language_correction": "The ten affected signatures are EIGHT repaired helper callers plus TWO resulting canonical invoice-draft signatures. The live helper-caller count was and remains eight; 'ten' never refers to broken functions.",
+    "transaction_semantics": {
+      "explicit_control_in_file": true,
+      "transaction_count": "Forward migration: exactly one top-level BEGIN; (line 56) and one COMMIT; (line 741). Rollback: exactly one top-level BEGIN; and one COMMIT;. Verified by anchored grep and asserted in src/test/regression/def-001-002-rpc-context.test.ts.",
+      "all_statements_transaction_safe": true,
+      "basis": "Only CREATE OR REPLACE FUNCTION (x10), DROP FUNCTION IF EXISTS (x3), two DO blocks issuing ALTER FUNCTION OWNER / REVOKE / GRANT, and two explicit GRANTs. No CREATE INDEX CONCURRENTLY, VACUUM, ALTER TYPE ADD VALUE or ALTER SYSTEM. The eleven other BEGIN tokens are plpgsql block openers inside function bodies.",
+      "executor_wrapping": "Still UNVERIFIED and unverifiable from here - the executor is not introspectable and a BEGIN/ROLLBACK rehearsal is impossible (sandbox_exec has no DDL rights). No longer load-bearing: the file wraps itself, so it is atomic whether or not the executor also wraps it.",
+      "failure_mid_file": "Nothing persists; the wrapper aborts the whole file and the catalogue is unchanged. Second line of defence retained: the three DROPs sit after all ten creates, so even a hypothetical unwrapped partial state cannot leave the canonical functions missing while the superseded overloads are gone."
+    },
+    "behavioural_verification": {
+      "non_production_database_available": false,
+      "basis": "Lovable Cloud exposes one database and it is production. No preview, staging, branch or restored clone exists. Phase 0 s1 disposable clone approved in principle, not provisioned. sandbox_exec has no DDL rights, so even an aborted-transaction rehearsal is impossible.",
+      "fixture_free_harness": "PostgREST overload resolution IS testable without fixtures: send each payload shape unauthenticated with all-zero UUIDs and classify the response as PostgREST-level (PGRST203/PGRST202) versus function-level (42501/42883). No rows are written because every function rejects a null auth.uid() before any DML.",
+      "live_baseline_pre_apply": [
+        {
+          "probe": "A",
+          "payload": "service 14-key create",
+          "result": "42501 Not authenticated (HTTP 401)",
+          "class": "function-level"
+        },
+        {
+          "probe": "B",
+          "payload": "OpsHealth 4-key create",
+          "result": "PGRST203 between 13-arg date and 14-arg text creates (HTTP 300)",
+          "class": "postgrest-level"
+        },
+        {
+          "probe": "C",
+          "payload": "service 9-key update",
+          "result": "PGRST202 no match; hint names the 8-arg text signature (HTTP 404)",
+          "class": "postgrest-level"
+        },
+        {
+          "probe": "D",
+          "payload": "OpsHealth 2-key update",
+          "result": "PGRST203 between the two 8-arg updates (HTTP 300)",
+          "class": "postgrest-level"
+        },
+        {
+          "probe": "E",
+          "payload": "approve_bill_safe",
+          "result": "42883 function public.set_rpc_context() does not exist (HTTP 404)",
+          "class": "function-level, DEF-001 outage confirmed live"
+        }
+      ],
+      "required_post_apply_result": "All five probes must return a function-level error. Because anon EXECUTE is revoked the expected anon response becomes 42501 permission denied for function, proving both single-candidate resolution and the anon revocation. Any remaining PGRST203 or PGRST202 is a FAILED release.",
+      "still_unprovable_pre_apply": [
+        "portal create/edit with allow_invoice_create",
+        "member lacking can_create_invoices refused on update",
+        "cross-tenant entity rejection on create",
+        "cross-tenant customer rejection on create and update",
+        "invalid replacement lines leave existing lines intact",
+        "remaining_balance correctness",
+        "success paths of the eight repaired callers (reachability is probeable, success is not)",
+        "ACL behaviour for authenticated (needs a session)"
+      ],
+      "blocker": "Phase 0 s4 Staff/Admin and second-tenant fixtures are approved but not provisioned, and the tenant has no invoices after the data wipe.",
+      "go_no_go": "Requires explicit human decision: (a) provision the disposable clone and fixtures and rehearse first, or (b) apply on the outage argument accepting that authorisation and data-integrity behaviours reach production unproven. Not chosen by the executor."
+    },
+    "open_rulings": {
+      "sandbox_exec_asymmetry": {
+        "finding": "As authored, the migration contained no GRANT to sandbox_exec. The nine pre-existing signatures keep theirs implicitly; the NEW 9-argument update had no ACL to inherit and would have ended with no sandbox_exec EXECUTE - able to be created but not updated by executor infrastructure.",
+        "status": "RESOLVED - option (a) taken under owner approval 2026-07-31. Both canonical invoice-draft signatures now carry an explicit GRANT EXECUTE ... TO sandbox_exec. Forward-migration checksum recalculated to 0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6."
+      }
+    }
+  },
+  "live_apply": "HELD. Nothing applied to LIVE."
 }
