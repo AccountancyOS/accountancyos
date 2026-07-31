@@ -1,13 +1,11 @@
 {
   "release_id": "2026-07-31-def-001-002",
   "release_kind": "migration",
-  "status": "pending",
+  "status": "pending_owner_ruling",
   "declared_at": "2026-07-31T00:00:00Z",
   "approver": null,
   "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
-
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "count_correction": {
     "audit_said": 10,
     "evidenced": 8,
@@ -16,7 +14,6 @@
     "audit_statements_contradicted": "Invoice drafting is NOT broken (all four overloads already inline set_config), and neither is supplier payment via record_invoice_payment_safe. DEF-002's claim that one invoice-draft overload contains the DEF-001 failure is unsupported; that defect is a pure signature collision.",
     "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper — the December remediation touched one more function than the repository records. Recorded, not acted on."
   },
-
   "migrations": [
     {
       "path": "supabase/migrations/20260731210000_def_001_002_rpc_context_and_invoice_draft.sql",
@@ -48,9 +45,9 @@
         },
         {
           "id": "privileges-tightened",
-          "object": "PUBLIC and anon can no longer execute the ten affected functions; authenticated and service_role can; sandbox_exec unchanged",
+          "object": "PUBLIC and anon can no longer execute the ten affected functions; authenticated and service_role can; sandbox_exec retained on the nine pre-existing signatures and ABSENT on the newly created 9-argument update (see pre_apply_verification.open_rulings.sandbox_exec_asymmetry)",
           "result": "pending",
-          "verify_via": "Executor pg_proc: proacl for each of the ten no longer contains '=X/postgres' or 'anon=X/postgres', still contains authenticated, service_role and sandbox_exec; proowner is postgres. Then call one RPC with the anon key and expect a permission denied rather than the previous JSON {\"success\":false,\"error\":\"Not authenticated\"}."
+          "verify_via": "Executor pg_proc: proacl for each of the ten no longer contains '=X/postgres' or 'anon=X/postgres' and still contains authenticated and service_role; proowner is postgres. sandbox_exec must still be present on the nine pre-existing signatures; it will NOT be present on the new update_invoice_draft_safe 9-argument signature unless the owner ruling adds it. Then call one RPC with the anon key and expect a permission denied rather than the previous 42501 'Not authenticated' body."
         },
         {
           "id": "portal-capability-retained",
@@ -73,13 +70,16 @@
       ]
     }
   ],
-
   "rollback": {
     "script": "docs/releases/rollback/2026-07-31-def-001-002-rollback.sql",
     "assessment": "Available but strongly discouraged. Rolling back reinstates 42883 on all eight functions (bill approval, voiding, supplier payments, customer creation, all four automation-rule operations), restores the PGRST203 ambiguity, loses the entity and customer relationship checks, and restores PUBLIC and anon EXECUTE on privileged mutating functions. Fix forward instead.",
-    "data_risk": "None on apply — the migration creates and replaces functions and adjusts grants; it reads and writes no table data."
+    "data_risk": "None on apply — the migration creates and replaces functions and adjusts grants; it reads and writes no table data.",
+    "executable": true,
+    "sha256": "c0b1391b3e496c35562d2a171a68e6998cf539d544922ac6c2b0ba468bd58269",
+    "provenance": "Every definition dumped from the LIVE catalogue via pg_get_functiondef() BEFORE apply. Bodies, argument names, types, order, defaults, return types, security mode, volatility and SET search_path are exactly as LIVE held them - nothing retyped or reconstructed.",
+    "contents": "Twelve verbatim pre-migration definitions; DROP of the new 9-argument update placed AFTER the restores so the service payload never resolves to nothing; ALTER FUNCTION OWNER TO postgres and exact pre-migration ACLs (PUBLIC, anon, authenticated, service_role, sandbox_exec) restored last; explicit BEGIN/COMMIT wrapper; two post-rollback assertions (8 helper callers, 2+2 invoice-draft overloads) that abort the transaction so a partial rollback cannot be mistaken for success.",
+    "location_rationale": "Kept outside supabase/migrations/ so it can never be applied by accident."
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
@@ -92,10 +92,84 @@
       "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
     ]
   },
-
   "post_apply_followups": [
     "The app.rpc flag is now set by eighteen functions and read by none: is_rpc_context() no longer exists and the policies that consumed it are constant false. It was inlined here only to keep the eight consistent with the ten already repaired. Deciding whether to restore the RPC-write-guard properly or strip app.rpc everywhere is a separate security-architecture task, deliberately not taken as a side effect of this repair.",
     "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
     "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source — the same route that closed the DEF-001 count."
-  ]
+  ],
+  "pre_apply_verification": {
+    "report": "docs/audits/2026-07-31-def-001-002-pre-apply-verification.md",
+    "applied": false,
+    "note": "Read-only catalogue queries and unauthenticated PostgREST probes only. Nothing on LIVE was changed.",
+    "verification_language_correction": "The ten affected signatures are EIGHT repaired helper callers plus TWO resulting canonical invoice-draft signatures. The live count of helper callers was and remains eight; 'ten' never refers to broken functions.",
+    "transaction_semantics": {
+      "explicit_control_in_file": false,
+      "all_statements_transaction_safe": true,
+      "basis": "Only CREATE OR REPLACE FUNCTION (x10), DROP FUNCTION IF EXISTS (x3) and two DO blocks issuing ALTER FUNCTION OWNER / REVOKE / GRANT. No CREATE INDEX CONCURRENTLY, VACUUM, ALTER TYPE ADD VALUE or ALTER SYSTEM. The eleven BEGIN tokens are plpgsql block openers inside function bodies.",
+      "executor_wrapping": "UNVERIFIED. The Lovable executor is not introspectable and a BEGIN/ROLLBACK rehearsal is impossible: the sandbox_exec role has no DDL rights (permission denied for schema public).",
+      "worst_partial_state": "The three DROPs are positioned after all ten creates, so a mid-file failure cannot leave the canonical functions missing while the superseded overloads are gone. Partial states are degraded-or-better, never worse than current LIVE.",
+      "available_mitigation": "Wrap the file in explicit BEGIN; / COMMIT; so atomicity does not depend on undocumented executor behaviour. Not applied - it changes the checksum and is Claude's call."
+    },
+    "behavioural_verification": {
+      "non_production_database_available": false,
+      "basis": "Lovable Cloud exposes one database and it is production. No preview, staging, branch or restored clone exists. Phase 0 s1 disposable clone is approved in principle but not provisioned.",
+      "fixture_free_harness": "PostgREST overload resolution IS testable without fixtures: send each payload shape unauthenticated with all-zero UUIDs and classify the response as PostgREST-level (PGRST203/PGRST202) versus function-level (42501/42883). No rows are written because every function rejects a null auth.uid() before any DML.",
+      "live_baseline_pre_apply": [
+        {
+          "probe": "A",
+          "payload": "service 14-key create",
+          "result": "42501 Not authenticated (HTTP 401)",
+          "class": "function-level"
+        },
+        {
+          "probe": "B",
+          "payload": "OpsHealth 4-key create",
+          "result": "PGRST203 between 13-arg date and 14-arg text creates (HTTP 300)",
+          "class": "postgrest-level"
+        },
+        {
+          "probe": "C",
+          "payload": "service 9-key update",
+          "result": "PGRST202 no match, hint names the 8-arg text signature (HTTP 404)",
+          "class": "postgrest-level"
+        },
+        {
+          "probe": "D",
+          "payload": "OpsHealth 2-key update",
+          "result": "PGRST203 between the two 8-arg updates (HTTP 300)",
+          "class": "postgrest-level"
+        },
+        {
+          "probe": "E",
+          "payload": "approve_bill_safe",
+          "result": "42883 function public.set_rpc_context() does not exist (HTTP 404)",
+          "class": "function-level, DEF-001 outage confirmed live"
+        }
+      ],
+      "required_post_apply_result": "All five probes must return a function-level error. Because anon EXECUTE is revoked, the expected anon response becomes 42501 permission denied for function, which simultaneously proves single-candidate resolution and the anon revocation. Any remaining PGRST203 or PGRST202 is a FAILED release.",
+      "still_unprovable_pre_apply": [
+        "portal create/edit with allow_invoice_create",
+        "member lacking can_create_invoices refused on update",
+        "cross-tenant entity rejection on create",
+        "cross-tenant customer rejection on create and update",
+        "invalid replacement lines leave existing lines intact",
+        "remaining_balance correctness",
+        "success paths of the eight repaired callers (reachability is probeable, success is not)"
+      ],
+      "blocker": "Phase 0 s4 Staff/Admin and second-tenant fixtures are approved but not provisioned, and the tenant has no invoices after the data wipe.",
+      "go_no_go": "Requires explicit human decision: (a) provision the disposable clone and fixtures and rehearse first, or (b) apply against the outage argument accepting that authorisation and data-integrity behaviours reach production unproven. Not chosen by the executor."
+    },
+    "open_rulings": {
+      "sandbox_exec_asymmetry": {
+        "finding": "The migration contains no GRANT to sandbox_exec. The nine pre-existing signatures keep their sandbox_exec grant because REVOKE FROM PUBLIC/anon does not touch an independent grantee and CREATE OR REPLACE preserves an existing ACL. The NEW 9-argument update_invoice_draft_safe has no historical ACL, is created with implicit PUBLIC EXECUTE, then has PUBLIC revoked and only authenticated and service_role granted - so sandbox_exec ends with no EXECUTE on the canonical update while holding EXECUTE on the canonical create and all eight repaired functions.",
+        "impact": "Infrastructure/diagnostic paths running as sandbox_exec can create an invoice draft but not update one. Unintended inconsistency, not a reviewed tightening.",
+        "options": [
+          "(a) GRANT EXECUTE ON FUNCTION public.update_invoice_draft_safe(uuid,uuid,text,text,text,text,text,text,jsonb) TO sandbox_exec - preserves symmetry",
+          "(b) REVOKE ALL FROM sandbox_exec on all ten and state the intent explicitly - symmetry by removal"
+        ],
+        "recommendation": "(a). This release is a repair plus a PUBLIC/anon tightening; silently dropping an infrastructure role from one of ten functions is an unreviewed side effect.",
+        "status": "OPEN - migration left unmodified pending the ruling; either option changes the checksum and needs Claude's re-review."
+      }
+    }
+  }
 }
