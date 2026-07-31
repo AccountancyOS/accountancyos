@@ -1007,8 +1007,8 @@ BEGIN
   SELECT count(*) INTO v_helper_callers
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public' AND p.prosrc LIKE '%set_rpc_context%';
-  IF v_helper_callers <> 12 THEN
-    RAISE EXCEPTION 'Rollback incomplete: expected 12 set_rpc_context callers, found %', v_helper_callers;
+  IF v_helper_callers <> 8 THEN
+    RAISE EXCEPTION 'Rollback incomplete: expected 8 set_rpc_context callers, found %', v_helper_callers;
   END IF;
 
   SELECT count(*) INTO v_create_overloads
