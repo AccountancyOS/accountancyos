@@ -83,11 +83,11 @@ DEF-004.
 Suite at the time of writing: **719 tests passing, typecheck clean**. (Earlier figures like
 705 are test counts, not commits.)
 
-### DEF-001 reconciliation — evidence complete, correction NOT yet applied
+### DEF-001 corrected: TEN → EIGHT (confirmed 2026-07-31)
 
-The audit states ten broken function bodies. Repository evidence supports **eight**. The
-correction from ten to eight is deliberately **not made below** until the LIVE `pg_proc`
-inventory confirms it — recorded here as evidence, not as a finding.
+The audit states ten broken function bodies. **The evidenced number is eight.** The
+correction is now applied, confirmed by the executor's unrestricted `pg_proc` inventory
+(2026-07-31T20:15:16Z): `calls_helper = true` on exactly eight rows, no LIVE-only caller.
 
 **Method.** `set_rpc_context` appears in five migrations. Parsing every `CREATE FUNCTION`
 *and* `CREATE OR REPLACE FUNCTION` block in them yields **fifteen function names that ever

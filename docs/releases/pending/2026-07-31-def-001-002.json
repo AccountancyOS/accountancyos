@@ -1,0 +1,101 @@
+{
+  "release_id": "2026-07-31-def-001-002",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-07-31T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "count_correction": {
+    "audit_said": 10,
+    "evidenced": 8,
+    "basis": "Three independent sources agree. (1) Repository: parsing every CREATE FUNCTION and CREATE OR REPLACE FUNCTION block in the five migrations mentioning set_rpc_context yields 15 names that ever called it. (2) LIVE: a sweep of all 368 public function bodies via mcp_list_functions found exactly 8 still calling it and 10 instances already inlining set_config. (3) The executor's unrestricted pg_proc query (2026-07-31T20:15:16Z) returned calls_helper = true on exactly those 8 rows and no others.",
+    "no_live_only_callers": "Confirmed. The DEF-020 residual risk — a function created directly on LIVE and never committed — is closed for this defect.",
+    "audit_statements_contradicted": "Invoice drafting is NOT broken (all four overloads already inline set_config), and neither is supplier payment via record_invoice_payment_safe. DEF-002's claim that one invoice-draft overload contains the DEF-001 failure is unsupported; that defect is a pure signature collision.",
+    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper — the December remediation touched one more function than the repository records. Recorded, not acted on."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260731210000_def_001_002_rpc_context_and_invoice_draft.sql",
+      "sha256": "aee9c160b5594b2748db7434c8397d22fd7e13100803204e1d04ba6cdf4830f5",
+      "expected_objects": [
+        {
+          "id": "no-function-calls-the-deleted-helper",
+          "object": "Zero public functions reference set_rpc_context",
+          "result": "pending",
+          "verify_via": "db_rpc mcp_list_functions with name_like '' and include_source true, then search all bodies for set_rpc_context -> zero matches. Before this release the same sweep returned 8."
+        },
+        {
+          "id": "eight-bodies-repaired",
+          "object": "All eight repaired functions have new def-hashes and execute without 42883",
+          "result": "pending",
+          "verify_via": "catalog_functions per name -> def-hash CHANGED from de32451b/3803ae13/dbe752a5/1ef6b7fc/75551314/cc7973c4/2dbb0171/1ca6a433. Then exercise each live caller: bill approval, bill voiding, supplier payment, customer creation, automation rule create/edit/toggle/delete. Each must complete rather than returning 42883."
+        },
+        {
+          "id": "invoice-draft-candidates-unambiguous",
+          "object": "Exactly one create_invoice_draft_safe and one update_invoice_draft_safe remain",
+          "result": "pending",
+          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') -> exactly 2 rows: create with 14 args, update with 9. Then exercise all four observed payloads and confirm none returns PGRST203 or PGRST202: service 14-key create, OpsHealth 4-key create, service 9-key update, OpsHealth 2-key update."
+        },
+        {
+          "id": "ops-health-line-preservation",
+          "object": "A failed update raises AND leaves existing invoice lines intact",
+          "result": "pending",
+          "verify_via": "Run the OpsHealth diagnostic that creates a draft with a line named 'Original Line - DO NOT DELETE', then updates with quantity 'abc'. The call must ERROR and the original line must still be present. This is the behaviour only the strict implementation has."
+        },
+        {
+          "id": "privileges-tightened",
+          "object": "PUBLIC and anon can no longer execute the ten affected functions; authenticated and service_role can; sandbox_exec unchanged",
+          "result": "pending",
+          "verify_via": "Executor pg_proc: proacl for each of the ten no longer contains '=X/postgres' or 'anon=X/postgres', still contains authenticated, service_role and sandbox_exec; proowner is postgres. Then call one RPC with the anon key and expect a permission denied rather than the previous JSON {\"success\":false,\"error\":\"Not authenticated\"}."
+        },
+        {
+          "id": "portal-capability-retained",
+          "object": "A portal user with allow_invoice_create can still create and edit their own draft invoice",
+          "result": "pending",
+          "verify_via": "As a portal user holding allow_invoice_create, create a draft invoice for their own entity and edit it. Both must succeed. Then confirm the same user cannot touch another client's invoice, and cannot approve, issue, void or record payment. This is the capability the ruling required be preserved."
+        },
+        {
+          "id": "capability-tightening-behaves-as-specified",
+          "object": "An organisation member WITHOUT can_create_invoices is refused on update",
+          "result": "pending",
+          "verify_via": "As a member lacking the capability, call the canonical update and expect 42501. This is the one intentional behaviour change in the family and the most likely source of a 'regression' report."
+        },
+        {
+          "id": "cross-tenant-relationship-checks",
+          "object": "Create rejects a foreign entity; create and update reject a foreign customer",
+          "result": "pending",
+          "verify_via": "Create with an entity belonging to another organisation -> 42501 'Entity does not belong to organization'. Create and update with a customer belonging to another organisation -> 42501 'Customer does not belong to organization'. Neither check existed in both overloads before."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "script": "docs/releases/rollback/2026-07-31-def-001-002-rollback.sql",
+    "assessment": "Available but strongly discouraged. Rolling back reinstates 42883 on all eight functions (bill approval, voiding, supplier payments, customer creation, all four automation-rule operations), restores the PGRST203 ambiguity, loses the entity and customer relationship checks, and restores PUBLIC and anon EXECUTE on privileged mutating functions. Fix forward instead.",
+    "data_risk": "None on apply — the migration creates and replaces functions and adjusts grants; it reads and writes no table data."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260731210000_def_001_002_rpc_context_and_invoice_draft.sql via the Lovable migration flow. It is deliberately ONE migration: DEF-001 and DEF-002 must not exist in a half-fixed state.",
+      "Verify the privilege change FIRST — grants were altered on ten privileged functions.",
+      "Then re-run the full LIVE body sweep and confirm zero references to set_rpc_context remain.",
+      "Then exercise all four observed invoice-draft payloads for ambiguity.",
+      "Then exercise each of the eight repaired callers end to end.",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "The app.rpc flag is now set by eighteen functions and read by none: is_rpc_context() no longer exists and the policies that consumed it are constant false. It was inlined here only to keep the eight consistent with the ten already repaired. Deciding whether to restore the RPC-write-guard properly or strip app.rpc everywhere is a separate security-architecture task, deliberately not taken as a side effect of this repair.",
+    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
+    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source — the same route that closed the DEF-001 count."
+  ]
+}
