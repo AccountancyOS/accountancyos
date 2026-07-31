@@ -83,6 +83,48 @@ DEF-004.
 Suite at the time of writing: **719 tests passing, typecheck clean**. (Earlier figures like
 705 are test counts, not commits.)
 
+### DEF-001 reconciliation — evidence complete, correction NOT yet applied
+
+The audit states ten broken function bodies. Repository evidence supports **eight**. The
+correction from ten to eight is deliberately **not made below** until the LIVE `pg_proc`
+inventory confirms it — recorded here as evidence, not as a finding.
+
+**Method.** `set_rpc_context` appears in five migrations. Parsing every `CREATE FUNCTION`
+*and* `CREATE OR REPLACE FUNCTION` block in them yields **fifteen function names that ever
+called the helper**; each was then checked against its live body. (A first pass matched only
+`CREATE OR REPLACE FUNCTION` and returned two — the December migration uses bare
+`CREATE FUNCTION`. Any future body-search over these files must match both forms.)
+
+**Result — 17 instances across 15 names:**
+
+- **8 still call `public.set_rpc_context()`:** `create_automation_rule_safe` (`de32451b`),
+  `update_automation_rule_safe` (`3803ae13`), `toggle_automation_rule_safe` (`dbe752a5`),
+  `delete_automation_rule_safe` (`1ef6b7fc`), `approve_bill_safe` (`75551314`),
+  `void_bill_safe` (`cc7973c4`), `record_bill_payment_safe` (`2dbb0171`),
+  `create_customer_safe` (`1ca6a433`).
+- **9 already inline `set_config`:** `create_invoice_draft_safe` ×2,
+  `update_invoice_draft_safe` ×2, `queue_email_safe`, `issue_invoice_safe`,
+  `void_invoice_safe`, `create_bill_draft_safe`, `record_invoice_payment_safe`.
+
+8 + 9 = 17; 15 names with two double-overloaded names = 17 instances. The December
+remediation repaired seven names and missed eight.
+
+**Two audit statements are contradicted by the live bodies** and must not be repeated:
+invoice drafting is *not* currently broken (all four overloads are already inlined), and
+neither is supplier payment via `record_invoice_payment_safe`. DEF-002's claim that one
+invoice-draft overload "contains the DEF-001 failure" is likewise unsupported — that defect
+is a pure signature collision.
+
+**Why this is not yet conclusive.** Repository enumeration cannot see a function created
+directly on LIVE and never committed, which DEF-020 establishes as a real risk here. The
+outstanding `pg_proc` query closes that and is required regardless for `proacl`/`proowner`,
+which the database connector cannot read (it exposes `db_select` over public tables,
+`db_rpc`, and the `catalog_*` helpers — none reach function ACLs or ownership). It must be
+run by the executor.
+
+If it returns additional LIVE-only callers, the repair set expands on that evidence. The
+number will not be forced back to either eight or ten.
+
 ### New DEF-020 evidence, found while verifying this batch
 
 `supabase_migrations.schema_migrations` is readable by **neither** party: not by the executor
