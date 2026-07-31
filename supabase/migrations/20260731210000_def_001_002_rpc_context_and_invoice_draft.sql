@@ -24,15 +24,36 @@
 -- SECURITY DEFINER functions that mutate data. They are not exploitable — each rejects a
 -- null auth.uid() internally, which is why they are outside DEF-015's 93 — but the grant is
 -- an unreviewed default of the same class. PUBLIC and anon are revoked; authenticated and
--- service_role are granted explicitly. sandbox_exec is left untouched: it is executor
--- infrastructure and not mine to judge.
+-- service_role are granted explicitly.
+--   >>> sandbox_exec: for the nine PRE-EXISTING signatures it is preserved by doing nothing
+--   >>> — REVOKE FROM PUBLIC/anon does not touch an independent grantee, and CREATE OR
+--   >>> REPLACE keeps an existing function's ACL. But the canonical 9-argument
+--   >>> update_invoice_draft_safe is a NEW signature with no historical ACL to preserve, so
+--   >>> "untouched" is meaningless for it: it would be created with implicit PUBLIC EXECUTE,
+--   >>> have PUBLIC revoked, and end with no sandbox_exec grant — able to be created but not
+--   >>> updated by executor infrastructure. Part 4 therefore grants sandbox_exec EXECUTE
+--   >>> explicitly on BOTH canonical invoice-draft signatures, so their final ACLs are
+--   >>> identical and stated rather than inherited. (Owner ruling, 2026-07-31.)
 --   >>> BEHAVIOUR CHANGE: an anonymous caller previously received a JSON
 --   >>> {"success":false,"error":"Not authenticated"}; it will now get a hard permission
 --   >>> denied. No legitimate caller is affected — portal users are `authenticated`.
 --
 -- ORDER. Canonical invoice-draft functions are created BEFORE the superseded signatures are
 -- dropped, so the operation is never unavailable mid-deploy.
+--
+-- TRANSACTION. This file opens with BEGIN; and closes with COMMIT;. Every statement in it is
+-- transactional DDL — CREATE OR REPLACE FUNCTION, DROP FUNCTION IF EXISTS, ALTER FUNCTION
+-- OWNER, REVOKE and GRANT. There is no CREATE INDEX CONCURRENTLY, VACUUM, ALTER TYPE ADD
+-- VALUE or ALTER SYSTEM, so nothing here forbids running inside a transaction block. The
+-- wrapper is explicit because "one migration file" is not proof of transactional execution:
+-- the Lovable executor's wrapping behaviour is not introspectable from the repository, and
+-- DEF-020/023 already record that this executor departs from convention. Whether the
+-- executor also wraps the file is now irrelevant — a nested BEGIN/COMMIT is a harmless
+-- no-op, while an unwrapped executor is made atomic by this file itself. DEF-001 and
+-- DEF-002 must not be able to exist in a half-applied state.
 -- =====================================================================================
+
+BEGIN;
 
 -- ===================================================================================
 -- PART 1 — the eight DEF-001 repairs.
@@ -670,7 +691,17 @@ DROP FUNCTION IF EXISTS public.update_invoice_draft_safe(
 -- PART 4 — ownership and privileges, stated explicitly for every affected signature.
 -- Inventory (executor, 2026-07-31): owner postgres; ACL `=X` (PUBLIC) + anon +
 -- authenticated + service_role + sandbox_exec. PUBLIC and anon are revoked as unreviewed
--- defaults on privileged mutating functions. sandbox_exec is preserved untouched.
+-- defaults on privileged mutating functions.
+--
+-- sandbox_exec: preserved implicitly on the nine pre-existing signatures (the REVOKEs below
+-- name only PUBLIC and anon, and CREATE OR REPLACE retains an existing ACL), and granted
+-- EXPLICITLY on both canonical invoice-draft signatures — the 9-argument update is new and
+-- has no ACL to inherit, so leaving it implicit would silently drop executor infrastructure
+-- from one of the ten. Stated for the 14-argument create too, so the pair is symmetrical
+-- and provable from this file rather than from history.
+--
+-- Final ACL, all ten signatures: owner postgres; EXECUTE to authenticated, service_role and
+-- sandbox_exec; NO EXECUTE for PUBLIC or anon.
 -- ===================================================================================
 DO $$
 DECLARE
@@ -695,3 +726,16 @@ BEGIN
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role', v_sig);
   END LOOP;
 END $$;
+
+-- The two canonical invoice-draft signatures, stated explicitly. Idempotent for the
+-- 14-argument create (which already held the grant); load-bearing for the 9-argument
+-- update, which this migration creates and which would otherwise end with no sandbox_exec
+-- EXECUTE at all.
+GRANT EXECUTE ON FUNCTION public.create_invoice_draft_safe(
+  uuid, text, uuid, text, uuid, text, text, text, text, text, text, text, text, jsonb
+) TO sandbox_exec;
+GRANT EXECUTE ON FUNCTION public.update_invoice_draft_safe(
+  uuid, uuid, text, text, text, text, text, text, jsonb
+) TO sandbox_exec;
+
+COMMIT;
