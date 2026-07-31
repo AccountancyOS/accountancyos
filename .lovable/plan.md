@@ -1,47 +1,38 @@
-## Where the audit stands
+# Apply DEF-001 + DEF-002 (one atomic migration)
 
-| Phase | Scope | Status |
-|---|---|---|
-| 0 | Requirements freeze | BLOCKED — six owner rulings outstanding |
-| 1 | Preflight | COMPLETE — DEF-001..005, DEF-023/024/025 |
-| 2 | Catastrophic risk | COMPLETE — RLS + immutability PASS; DEF-015, DEF-016 |
-| 3 | Commercial journey | COMPLETE — only DEF-003 fails |
-| 4 | Module coverage | LARGELY COMPLETE — DEF-006/007/008/012/013/014 |
-| 5 | Non-functional | COMPLETE (informational) — DEF-017 |
-| 6 | Operational | COMPLETE — DEF-018/019/020 |
-| 7 | Security & deployment integrity | COMPLETE — DEF-015/021/022 |
-| 8 | Cleanup verification | NOT STARTED |
+Claude's branch (5c76747) is in the working tree and verified against LIVE. Nothing has been applied. This plan covers the apply, the privilege check first, and the honest scope of what can and cannot be verified today.
 
-No production code or schema changes in this run. Discovery only; defects recorded, fixed later on your approval via git-authored migrations.
+## Pre-apply checks already done
 
-## Next run
+- `supabase/migrations/20260731210000_def_001_002_rpc_context_and_invoice_draft.sql` is present and its SHA-256 is `aee9c160b5594b2748db7434c8397d22fd7e13100803204e1d04ba6cdf4830f5` — byte-identical to the receipt.
+- Live signature inventory re-run: the four invoice-draft overloads exist exactly as the matrix records them (13-arg date create, 14-arg text create, 8-arg date update, 8-arg text update). The three signatures the migration drops all exist; the two it replaces in place have parameter names identical to the migration's, so `CREATE OR REPLACE` will not fail with a parameter-rename error.
+- Only application code calls these RPCs (`src/lib/invoice-draft-service.ts`, `src/pages/OpsHealth.tsx`). No edge function calls them, so no function redeploy is coupled to this migration.
+- Confirmed the service's update payload sends `p_notes`, which no current live candidate accepts — consistent with the reported resolution failure.
 
-Only Phase 0 (blocked on six owner rulings) and Phase 8 (cleanup, deferred pending
-your go-ahead) remain. Everything below is the record of the completed runs.
+## Apply sequence
 
-**Phase 5 — Non-functional readiness (informational, per your own rule)**
-- Query-plan and latency profile on the heaviest read paths: Overview dashboard aggregates, clients list, jobs board, deadlines calendar, trial balance and general ledger RPCs. Capture p50/p95 from repeated live calls plus `EXPLAIN` shapes.
-- Slow-query and index review against live statistics; flag sequential scans on tenant-scoped tables and missing indexes on `organization_id` / foreign keys.
-- Payload-size and N+1 review on the routes that fired the most requests during the Phase 4 sweep.
-- Accessibility and responsive spot-check on the five highest-traffic accountant screens and the portal dashboard.
-- Recorded as informational because Blue Tick holds near-zero volume; real p95 needs seeding, which is one of your outstanding rulings.
+1. Apply the migration as a single unit through the Lovable migration flow. It is not split; DEF-001 and DEF-002 must not exist half-fixed.
+2. Verify the privilege change first, as the receipt requires: for all ten affected signatures confirm `proacl` no longer contains PUBLIC (`=X/postgres`) or `anon`, still contains `authenticated`, `service_role` and `sandbox_exec`, and `proowner` is `postgres`.
+3. Sweep every public function body for `set_rpc_context` and confirm zero matches (was 8).
+4. Confirm exactly two invoice-draft candidates remain: create with 14 arguments, update with 9.
+5. Confirm the eight repaired bodies have new definition hashes, replacing `de32451b / 3803ae13 / dbe752a5 / 1ef6b7fc / 75551314 / cc7973c4 / 2dbb0171 / 1ca6a433`.
+6. Record both the authored version (`20260731210000`) and the executor version in the receipt, then move it out of `pending/`.
+7. Refresh `docs/audits/unapplied-migrations-baseline.json`.
 
-**Phase 6 — Operational readiness**
-- Enumerate what detection signal actually exists: edge-function logs, `email_send_log`, `email_queue` states, automation execution rows, audit tables.
-- Enumerate scheduled jobs actually present in production versus those the product assumes exist (already known: no `process-email-queue` schedule).
-- Backup existence and recovery point evidence; restore rehearsal remains unavailable and will be recorded as INSUFFICIENT EVIDENCE, not PASS.
-- Alerting: thresholds, destinations, owners, runbooks. Expected to come back NOT IMPLEMENTED, which caps the launch cohort.
-- Release-integrity check: compare live edge-function version probes and `schema_migrations` against the git baseline; report drift.
+## What will be verified now vs deferred
 
-**Phase 7 completion**
-- Storage bucket policies and public-object exposure.
-- Auth configuration: password policy, email confirmation, session lifetime, redirect allow-list, provider settings.
-- Secret handling in edge functions: any secret reaching a log, response body or client.
-- Full `anon`-executable RPC enumeration with an authorisation-check verdict per function, so DEF-015 has a definitive remediation list rather than a sample.
+Verifiable immediately from the catalogue, without fixtures: privileges, ownership, zero helper references, candidate uniqueness, changed body hashes.
 
-**Phase 8 — deferred**
-Cleanup stays deferred until you confirm, since the ledger records are what keep DEF-003 and DEF-011 reproducible.
+Deferred as post-apply behavioural checks in the receipt, because they need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 and the current tenant has no invoices after the wipe: portal create/edit, the `can_create_invoices` refusal on update, cross-tenant entity and customer rejection, line preservation on a failed update, and the four payload resolutions end to end. These will be reported as not executed rather than simulated.
 
-## Output
+## Points flagged for the record
 
-`docs/audits/2026-07-27-launch-readiness-e2e.md` updated: stale Phase 2 row corrected, Phase 5/6/7 sections appended, defect register extended with any new IDs, phase table and verdict refreshed. Checkpoint back to you at the end, with immediate interruption for any new P0/P1.
+- The `can_create_invoices` tightening on update is a deliberate behaviour change, not a repair. A member without that capability could edit drafts before and cannot after. It is the most likely thing to be reported as a regression.
+- Revoking PUBLIC and anon changes the anon-caller response from `{"success":false,"error":"Not authenticated"}` to a hard permission denied. `sandbox_exec` is untouched.
+- The rollback is intentionally not fully automatic and reinstates the outage; it stays outside `supabase/migrations/`.
+- `app.rpc` is now written by eighteen functions and read by none. Deciding whether to restore the RPC write guard or strip the flag is a separate security-architecture task, not taken as a side effect here.
+- `update_bill_draft_safe` is inlined on LIVE though git never had it that way — recorded as DEF-020 drift, not acted on.
+
+## Not in this change
+
+No application code, no edge-function deploy, no frontend publish. The 19 regression guards are static and already pass on the branch.
