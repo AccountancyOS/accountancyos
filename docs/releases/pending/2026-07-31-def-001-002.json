@@ -5,18 +5,15 @@
   "declared_at": "2026-07-31T00:00:00Z",
   "approver": null,
   "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
-
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "count_correction": {
     "audit_said": 10,
     "evidenced": 8,
     "basis": "Three independent sources agree. (1) Repository: parsing every CREATE FUNCTION and CREATE OR REPLACE FUNCTION block in the five migrations mentioning set_rpc_context yields 15 names that ever called it. (2) LIVE: a sweep of all 368 public function bodies via mcp_list_functions found exactly 8 still calling it and 10 instances already inlining set_config. (3) The executor's unrestricted pg_proc query (2026-07-31T20:15:16Z) returned calls_helper = true on exactly those 8 rows and no others.",
-    "no_live_only_callers": "Confirmed. The DEF-020 residual risk — a function created directly on LIVE and never committed — is closed for this defect.",
+    "no_live_only_callers": "Confirmed. The DEF-020 residual risk \u2014 a function created directly on LIVE and never committed \u2014 is closed for this defect.",
     "audit_statements_contradicted": "Invoice drafting is NOT broken (all four overloads already inline set_config), and neither is supplier payment via record_invoice_payment_safe. DEF-002's claim that one invoice-draft overload contains the DEF-001 failure is unsupported; that defect is a pure signature collision.",
-    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper — the December remediation touched one more function than the repository records. Recorded, not acted on."
+    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper \u2014 the December remediation touched one more function than the repository records. Recorded, not acted on."
   },
-
   "migrations": [
     {
       "path": "supabase/migrations/20260731210000_def_001_002_rpc_context_and_invoice_draft.sql",
@@ -73,18 +70,17 @@
       ]
     }
   ],
-
   "rollback": {
     "script": "docs/releases/rollback/2026-07-31-def-001-002-rollback.sql",
     "assessment": "Available but strongly discouraged. Rolling back reinstates 42883 on all eight functions (bill approval, voiding, supplier payments, customer creation, all four automation-rule operations), restores the PGRST203 ambiguity, loses the entity and customer relationship checks, and restores PUBLIC and anon EXECUTE on privileged mutating functions. Fix forward instead.",
-    "data_risk": "None on apply — the migration creates and replaces functions and adjusts grants; it reads and writes no table data."
+    "data_risk": "None on apply \u2014 the migration creates and replaces functions and adjusts grants; it reads and writes no table data.",
+    "self_contained": "Yes. The script runs as-is inside a single transaction: it embeds all twelve pre-migration function definitions verbatim (the eight bodies reverted to calling public.set_rpc_context(), the 14-arg create restored to 0be3f28b, and the three superseded invoice-draft signatures recreated), drops the new 9-argument update by complete signature, and restores the inventoried owner and ACLs. No manual insertion of historical bodies, no operator steps. Superseded signatures are recreated BEFORE the drop so update payloads never become unresolvable."
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
       "Apply 20260731210000_def_001_002_rpc_context_and_invoice_draft.sql via the Lovable migration flow. It is deliberately ONE migration: DEF-001 and DEF-002 must not exist in a half-fixed state.",
-      "Verify the privilege change FIRST — grants were altered on ten privileged functions.",
+      "Verify the privilege change FIRST \u2014 grants were altered on ten privileged functions.",
       "Then re-run the full LIVE body sweep and confirm zero references to set_rpc_context remain.",
       "Then exercise all four observed invoice-draft payloads for ambiguity.",
       "Then exercise each of the eight repaired callers end to end.",
@@ -92,10 +88,9 @@
       "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
     ]
   },
-
   "post_apply_followups": [
     "The app.rpc flag is now set by eighteen functions and read by none: is_rpc_context() no longer exists and the policies that consumed it are constant false. It was inlined here only to keep the eight consistent with the ten already repaired. Deciding whether to restore the RPC-write-guard properly or strip app.rpc everywhere is a separate security-architecture task, deliberately not taken as a side effect of this repair.",
-    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
-    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source — the same route that closed the DEF-001 count."
+    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 \u00a74 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
+    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source \u2014 the same route that closed the DEF-001 count."
   ]
 }

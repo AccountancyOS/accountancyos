@@ -169,8 +169,35 @@ describe("release hygiene", () => {
     const rb = read("docs/releases/rollback/2026-07-31-def-001-002-rollback.sql");
     expect(rb).toMatch(/ROLLING BACK RESTORES BROKEN AND WEAKER BEHAVIOUR/);
     expect(rb).toMatch(/42883/);
-    expect(rb).toMatch(/cross-tenant attachment/);
+    expect(rb).toMatch(/Cross-tenant relationship checks are lost/);
     // Rollback must not live where it could be applied as a migration.
     expect(() => read("supabase/migrations/2026-07-31-def-001-002-rollback.sql")).toThrow();
+  });
+
+  /**
+   * A rollback that tells an operator to paste historical bodies is not a rollback. It
+   * must run as-is: every superseded definition embedded verbatim, the whole thing atomic.
+   */
+  it("ships a rollback that is self-contained and executable", () => {
+    const rb = read("docs/releases/rollback/2026-07-31-def-001-002-rollback.sql");
+    const code = rb.replace(/^\s*--.*$/gm, "");
+
+    // 8 reverted bodies + 3 recreated superseded signatures + 1 restored 14-arg create.
+    expect((code.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length).toBe(12);
+    // Every one of the eight goes back to calling the deleted helper.
+    expect((code.match(/PERFORM public\.set_rpc_context\(\);/g) ?? []).length).toBe(8);
+    // The new canonical update is removed, by complete signature.
+    expect(code).toMatch(
+      /DROP FUNCTION IF EXISTS public\.update_invoice_draft_safe\(\s*uuid, uuid, text, text, text, text, text, text, jsonb\)/,
+    );
+    // All-or-nothing.
+    expect(code).toMatch(/^BEGIN;/m);
+    expect(code).toMatch(/^COMMIT;/m);
+    // No human in the loop.
+    expect(rb).not.toMatch(/OPERATOR STEP/);
+    expect(rb).toMatch(/SELF-CONTAINED AND EXECUTABLE/);
+    // Recreates BEFORE the drop, so update is never unresolvable.
+    expect(code.indexOf("CREATE OR REPLACE FUNCTION public.update_invoice_draft_safe(p_invoice_id uuid, p_customer_id uuid DEFAULT NULL::uuid, p_contact_name text DEFAULT NULL::text, p_reference text"))
+      .toBeLessThan(code.indexOf("DROP FUNCTION"));
   });
 });
