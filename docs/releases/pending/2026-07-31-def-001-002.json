@@ -1,18 +1,18 @@
 {
   "release_id": "2026-07-31-def-001-002",
   "release_kind": "migration",
-  "status": "pending_final_approval_of_amended_artifact",
+  "status": "live_verified",
   "declared_at": "2026-07-31T00:00:00Z",
-  "approver": null,
+  "approver": "Owner, 2026-08-01. Final approval of amended forward migration 0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6 and rollback f9113d5ca10546802732d1cc93e2b14f5daa9d7ce4c86051e7cfa2388a53534e.",
   "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
   "count_correction": {
     "audit_said": 10,
     "evidenced": 8,
     "basis": "Three independent sources agree. (1) Repository: parsing every CREATE FUNCTION and CREATE OR REPLACE FUNCTION block in the five migrations mentioning set_rpc_context yields 15 names that ever called it. (2) LIVE: a sweep of all 368 public function bodies via mcp_list_functions found exactly 8 still calling it and 10 instances already inlining set_config. (3) The executor's unrestricted pg_proc query (2026-07-31T20:15:16Z) returned calls_helper = true on exactly those 8 rows and no others.",
-    "no_live_only_callers": "Confirmed. The DEF-020 residual risk — a function created directly on LIVE and never committed — is closed for this defect.",
+    "no_live_only_callers": "Confirmed. The DEF-020 residual risk \u2014 a function created directly on LIVE and never committed \u2014 is closed for this defect.",
     "audit_statements_contradicted": "Invoice drafting is NOT broken (all four overloads already inline set_config), and neither is supplier payment via record_invoice_payment_safe. DEF-002's claim that one invoice-draft overload contains the DEF-001 failure is unsupported; that defect is a pure signature collision.",
-    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper — the December remediation touched one more function than the repository records. Recorded, not acted on."
+    "incidental_drift": "update_bill_draft_safe (23eac9e3) is inlined on LIVE although its git definition never referenced the helper \u2014 the December remediation touched one more function than the repository records. Recorded, not acted on."
   },
   "migrations": [
     {
@@ -29,13 +29,13 @@
           "id": "eight-bodies-repaired",
           "object": "All eight repaired functions have new def-hashes and execute without 42883",
           "result": "pending",
-          "verify_via": "catalog_functions per name -> def-hash CHANGED from de32451b/3803ae13/dbe752a5/1ef6b7fc/75551314/cc7973c4/2dbb0171/1ca6a433. Then exercise each live caller: bill approval, bill voiding, supplier payment, customer creation, automation rule create/edit/toggle/delete. Each must complete rather than returning 42883."
+          "verify_via": "catalog_functions per name -> def-hash CHANGED from de32451b/3803ae13/dbe752a5/1ef6b7fc/75551314/cc7973c4/2dbb0171/1ca6a433, plus a full body sweep showing zero references to set_rpc_context. Catalogue inspection is the AUTHORITATIVE proof: with anon EXECUTE revoked, an unauthenticated probe returns permission-denied without entering the function and cannot independently prove 42883 is gone. A probe returning 42883 is a hard failure. Behavioural end-to-end exercise of the eight callers is deferred to the Phase 0 fixture work."
         },
         {
           "id": "invoice-draft-candidates-unambiguous",
           "object": "Exactly one create_invoice_draft_safe and one update_invoice_draft_safe remain",
           "result": "pending",
-          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') -> exactly 2 rows: create with 14 args, update with 9. Then exercise all four observed payloads and confirm none returns PGRST203 or PGRST202: service 14-key create, OpsHealth 4-key create, service 9-key update, OpsHealth 2-key update."
+          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') -> exactly 2 rows: create with 14 args, update with 9. Then send all four observed payloads unauthenticated (service 14-key create, OpsHealth 4-key create, service 9-key update, OpsHealth 2-key update) and confirm none returns PGRST203 or PGRST202. Expected pass response is a database permission-denied (42501 permission denied for function ...), because anon EXECUTE is revoked; probes do not reach function-level validation. No probe may return 42883."
         },
         {
           "id": "ops-health-line-preservation",
@@ -47,7 +47,7 @@
           "id": "privileges-tightened",
           "object": "Final ACL on all ten affected signatures: owner postgres; EXECUTE to authenticated, service_role and sandbox_exec; NO EXECUTE for PUBLIC or anon",
           "result": "pending",
-          "verify_via": "Executor pg_proc: for each of the ten, proowner is postgres and proacl contains authenticated=X, service_role=X and sandbox_exec=X, and contains neither '=X/postgres' (PUBLIC) nor 'anon=X/postgres'. sandbox_exec must be present on the NEW 9-argument update_invoice_draft_safe as well as the 14-argument create - that is the amended grant. Then call one RPC with the anon key and expect a hard permission denied rather than the previous 42501 'Not authenticated' body."
+          "verify_via": "Executor pg_proc: for each of the ten, proowner is postgres and proacl contains authenticated=X, service_role=X and sandbox_exec=X, and contains neither '=X/postgres' (PUBLIC) nor 'anon=X/postgres'. sandbox_exec must be present on the NEW 9-argument update_invoice_draft_safe as well as the 14-argument create - that is the amended grant. Then call one RPC with the anon key and expect a hard database permission-denied for the function, rather than the previous 42501 'Not authenticated' body which proved function entry."
         },
         {
           "id": "portal-capability-retained",
@@ -76,7 +76,7 @@
   "rollback": {
     "script": "docs/releases/rollback/2026-07-31-def-001-002-rollback.sql",
     "assessment": "Available but strongly discouraged. Rolling back reinstates 42883 on all eight functions (bill approval, voiding, supplier payments, customer creation, all four automation-rule operations), restores the PGRST203 ambiguity, loses the entity and customer relationship checks, and restores PUBLIC and anon EXECUTE on privileged mutating functions. Fix forward instead.",
-    "data_risk": "None on apply — the migration creates and replaces functions and adjusts grants; it reads and writes no table data.",
+    "data_risk": "None on apply \u2014 the migration creates and replaces functions and adjusts grants; it reads and writes no table data.",
     "self_contained": "Yes. The script runs as-is inside a single transaction: it embeds all twelve pre-migration function definitions verbatim (the eight bodies reverted to calling public.set_rpc_context(), the 14-arg create restored to 0be3f28b, and the three superseded invoice-draft signatures recreated), drops the new 9-argument update by complete signature, and restores the inventoried owner and ACLs. No manual insertion of historical bodies, no operator steps. Superseded signatures are recreated BEFORE the drop so update payloads never become unresolvable.",
     "sha256": "f9113d5ca10546802732d1cc93e2b14f5daa9d7ce4c86051e7cfa2388a53534e",
     "source": "Claude commit 0993679, incorporated unmodified.",
@@ -88,7 +88,7 @@
     "executor": "Lovable Cloud",
     "steps": [
       "Apply 20260731210000_def_001_002_rpc_context_and_invoice_draft.sql via the Lovable migration flow. It is deliberately ONE migration: DEF-001 and DEF-002 must not exist in a half-fixed state.",
-      "Verify the privilege change FIRST — grants were altered on ten privileged functions.",
+      "Verify the privilege change FIRST \u2014 grants were altered on ten privileged functions.",
       "Then re-run the full LIVE body sweep and confirm zero references to set_rpc_context remain.",
       "Then exercise all four observed invoice-draft payloads for ambiguity.",
       "Then exercise each of the eight repaired callers end to end.",
@@ -98,8 +98,8 @@
   },
   "post_apply_followups": [
     "The app.rpc flag is now set by eighteen functions and read by none: is_rpc_context() no longer exists and the policies that consumed it are constant false. It was inlined here only to keep the eight consistent with the ten already repaired. Deciding whether to restore the RPC-write-guard properly or strip app.rpc everywhere is a separate security-architecture task, deliberately not taken as a side effect of this repair.",
-    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
-    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source — the same route that closed the DEF-001 count."
+    "The behavioural tests listed above need the Staff/Admin and second-tenant fixtures approved in Phase 0 \u00a74 of the audit. The tests in src/test/regression/def-001-002-rpc-context.test.ts are static guards over the migration and callers; they do not execute the RPCs.",
+    "DEF-005 (mutable search_path) and the remaining 92 DEF-015 functions are both now verifiable without executor SQL, using db_rpc on mcp_list_functions with include_source \u2014 the same route that closed the DEF-001 count."
   ],
   "amendment": {
     "amended_at": "2026-07-31T20:45:00Z",
@@ -189,5 +189,41 @@
       }
     }
   },
-  "live_apply": "HELD. Nothing applied to LIVE."
+  "live_apply": {
+    "applied_at": "2026-08-01T08:18:47Z",
+    "authored_version": "20260731210000",
+    "executor_version": "20260801081847",
+    "artifact_sha256": "0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6",
+    "transaction": "Applied as one atomic transaction (file-level BEGIN;/COMMIT;). Migration reported success; no partial state.",
+    "gates": {
+      "signature_count": "PASS - exactly 10 rows: 8 repaired helper callers + 2 canonical invoice-draft signatures.",
+      "helper_references": "PASS - 0 public function bodies reference set_rpc_context (was 8); public.set_rpc_context itself does not exist.",
+      "create_candidates": "PASS - exactly 1, canonical 14-argument signature (uuid,text,uuid,text,uuid,text,text,text,text,text,text,text,text,jsonb).",
+      "update_candidates": "PASS - exactly 1, canonical 9-argument signature (uuid,uuid,text,text,text,text,text,text,jsonb).",
+      "ownership": "PASS - owner postgres on all ten.",
+      "acl": "PASS - all ten: authenticated=X, service_role=X, sandbox_exec=X; no bare =X (PUBLIC) and no anon grant.",
+      "definition_hashes": "PASS - all eight repaired hashes changed: create_automation_rule_safe de32451b->5dd4a94d, update_automation_rule_safe 3803ae13->0817073d, toggle_automation_rule_safe dbe752a5->9c543364, delete_automation_rule_safe 1ef6b7fc->7fc01064, approve_bill_safe 75551314->b4a2945c, void_bill_safe cc7973c4->1e5a0d0d, record_bill_payment_safe 2dbb0171->292cc437, create_customer_safe 1ca6a433->ad24db0f. Canonical create 0f9e8acf, canonical update 99c9bde5.",
+      "probes": "PASS - all four invoice payload shapes (14-key create, 4-key create, 9-key update, 2-key update) and approve_bill_safe returned HTTP 401 / 42501 \"permission denied for function ...\". No PGRST202, no PGRST203, no 42883. Expected result under the corrected probe expectations: PostgREST resolved a single candidate, then the database refused anon EXECUTE.",
+      "helper_caller_proof": "Catalogue inspection is authoritative: zero set_rpc_context references and eight changed definition hashes. The anonymous probe cannot enter the function and does not independently prove 42883 removal."
+    },
+    "rollback_required": false
+  },
+  "probe_expectations": {
+    "authority": "Owner correction, 2026-08-01, receipt-only. No migration bytes changed; forward checksum remains 0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6.",
+    "unauthenticated_probes": "Because EXECUTE is revoked from PUBLIC and anon, an unauthenticated probe is EXPECTED to produce a database permission-denied response (42501 permission denied for function ...) AFTER PostgREST resolves the canonical function. Probes are NOT expected to reach function-level validation or authentication logic.",
+    "invoice_probe_success_criterion": "Success means the response is no longer PGRST202 or PGRST203. Anonymous permission-denied is an acceptable and expected pass.",
+    "helper_caller_criterion": "For the eight repaired helper callers, catalogue inspection (zero public function bodies referencing set_rpc_context, plus changed definition hashes) is the AUTHORITATIVE proof of removal. An anonymous permission-denied response cannot execute the function and therefore cannot independently prove removal of 42883.",
+    "hard_failure": "No probe may return 42883 under any circumstances."
+  },
+  "behavioural_verification_status": {
+    "state": "UNEXECUTED \u2014 must not be marked passed without Phase 0 \u00a74 fixtures.",
+    "items": [
+      "capability enforcement (member without can_create_invoices refused on update)",
+      "tenant isolation (foreign entity / foreign customer rejection on create and update)",
+      "validate-before-delete",
+      "invoice line preservation on failed update",
+      "portal behaviour (allow_invoice_create create+edit own draft; refusal on others)",
+      "remaining_balance correctness"
+    ]
+  }
 }
