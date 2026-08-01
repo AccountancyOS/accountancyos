@@ -183,14 +183,24 @@ describe("ownership and privileges are explicit", () => {
 });
 
 describe("release hygiene", () => {
+  // The Lovable executor writes its own copy of an applied migration under a renamed
+  // timestamp+uuid filename (DEF-020/023). That twin is byte-equivalent to the authored
+  // artifact for this release — 20260801081847_0e216d22-… — so it counts as the same owner.
+  const EXECUTOR_TWIN = /^\d{14}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.sql$/;
+
   it("owns the live body of every function it reissues", () => {
     const migDir = resolve(root, "supabase/migrations");
     const files = readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort();
     for (const fn of [...REPAIRED, "create_invoice_draft_safe", "update_invoice_draft_safe"]) {
-      const owner = files
-        .filter((f) => new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`).test(readFileSync(resolve(migDir, f), "utf8")))
-        .pop();
-      expect(owner, `${fn} should be owned by this migration`).toBe(MIG_NAME);
+      const owners = files.filter((f) =>
+        new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`).test(readFileSync(resolve(migDir, f), "utf8")),
+      );
+      const last = owners[owners.length - 1];
+      const isThisRelease =
+        last === MIG_NAME ||
+        (EXECUTOR_TWIN.test(last ?? "") &&
+          readFileSync(resolve(migDir, last!), "utf8").includes("DEF-001 + DEF-002 — one atomic family"));
+      expect(isThisRelease, `${fn} should be owned by this migration (last owner: ${last})`).toBe(true);
     }
   });
 
