@@ -229,4 +229,28 @@ describe("release hygiene", () => {
     expect(code.indexOf("CREATE OR REPLACE FUNCTION public.update_invoice_draft_safe(p_invoice_id uuid, p_customer_id uuid DEFAULT NULL::uuid, p_contact_name text DEFAULT NULL::text, p_reference text"))
       .toBeLessThan(code.indexOf("DROP FUNCTION"));
   });
+
+  /**
+   * A partial rollback must abort itself. Verification AFTER commit cannot do that — it
+   * would leave a half-reverted database, which is worse than either the pre- or the
+   * post-migration state.
+   */
+  it("verifies its own end state before committing", () => {
+    const rb = read("docs/releases/rollback/2026-07-31-def-001-002-rollback.sql");
+    const code = rb.replace(/^\s*--.*$/gm, "");
+
+    const verifyAt = code.indexOf("Rollback incomplete");
+    const commitAt = code.lastIndexOf("COMMIT;");
+    expect(verifyAt).toBeGreaterThan(-1);
+    expect(verifyAt).toBeLessThan(commitAt);
+
+    // Each assertion aborts rather than merely reporting.
+    expect((code.match(/RAISE EXCEPTION 'Rollback incomplete/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    // The four things that define a complete revert.
+    expect(code).toMatch(/reference set_rpc_context, expected 8/);
+    expect(code).toMatch(/invoice-draft overload\(s\) present, expected 4/);
+    expect(code).toMatch(/9-argument update_invoice_draft_safe still exists/);
+    expect(code).toMatch(/PUBLIC EXECUTE not restored/);
+    expect(code).toMatch(/anon EXECUTE not restored/);
+  });
 });

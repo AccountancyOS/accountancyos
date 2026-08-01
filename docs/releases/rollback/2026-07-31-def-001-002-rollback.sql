@@ -843,13 +843,68 @@ BEGIN
   END LOOP;
 END $$;
 
-COMMIT;
+-- ── 8. In-transaction verification — a partial rollback aborts itself ────────────────
+-- These run BEFORE COMMIT. Any failure raises, the transaction rolls back, and the
+-- database is left exactly as it was when this script started. Comment-form operator
+-- queries after COMMIT would not do that: a half-completed rollback would persist, which
+-- is a worse state than either the pre- or post-migration one.
+DO $$
+DECLARE
+  v_count int;
+  v_sig text;
+  v_sigs text[] := ARRAY[
+    'public.create_automation_rule_safe(uuid,text,text,jsonb,text,jsonb,boolean,text)',
+    'public.update_automation_rule_safe(uuid,text,text,jsonb,text,jsonb,boolean,text)',
+    'public.toggle_automation_rule_safe(uuid,boolean)',
+    'public.delete_automation_rule_safe(uuid)',
+    'public.approve_bill_safe(uuid)',
+    'public.void_bill_safe(uuid,text)',
+    'public.record_bill_payment_safe(uuid,numeric,date,uuid,text,text)',
+    'public.create_customer_safe(uuid,text,uuid,text,text,text,jsonb,text,text,integer,text,text)',
+    'public.create_invoice_draft_safe(uuid,text,uuid,text,uuid,text,text,text,date,date,text,text,jsonb)',
+    'public.create_invoice_draft_safe(uuid,text,uuid,text,uuid,text,text,text,text,text,text,text,text,jsonb)',
+    'public.update_invoice_draft_safe(uuid,uuid,text,text,date,date,text,jsonb)',
+    'public.update_invoice_draft_safe(uuid,uuid,text,text,text,text,text,jsonb)'
+  ];
+BEGIN
+  -- (a) The eight call the helper again.
+  SELECT count(*) INTO v_count
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public' AND p.prosrc LIKE '%set_rpc_context%';
+  IF v_count <> 8 THEN
+    RAISE EXCEPTION 'Rollback incomplete: % function(s) reference set_rpc_context, expected 8', v_count;
+  END IF;
 
--- ── Post-rollback verification ───────────────────────────────────────────────────────
--- 1. Eight functions reference set_rpc_context again:
---      SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
---       WHERE n.nspname='public' AND p.prosrc LIKE '%set_rpc_context%' ORDER BY 1;   -- expect 8
--- 2. Four invoice-draft overloads exist again (2 create, 2 update), and the 9-arg update is gone:
---      SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
---       WHERE n.nspname='public' AND p.proname LIKE '%invoice_draft_safe' ORDER BY 1;  -- expect 4
--- 3. ACLs carry =X and anon again on all twelve.
+  -- (b) Four invoice-draft overloads exist again.
+  SELECT count(*) INTO v_count
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname IN ('create_invoice_draft_safe', 'update_invoice_draft_safe');
+  IF v_count <> 4 THEN
+    RAISE EXCEPTION 'Rollback incomplete: % invoice-draft overload(s) present, expected 4', v_count;
+  END IF;
+
+  -- (c) The new 9-argument update is gone. Checked by arity, so it cannot be satisfied by
+  --     a differently-typed 9-arg function sneaking through.
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'update_invoice_draft_safe' AND p.pronargs = 9
+  ) THEN
+    RAISE EXCEPTION 'Rollback incomplete: the 9-argument update_invoice_draft_safe still exists';
+  END IF;
+
+  -- (d) Every signature exists and has PUBLIC and anon EXECUTE restored. has_function_privilege
+  --     raises undefined_function if a signature is missing, so this also proves existence.
+  FOREACH v_sig IN ARRAY v_sigs LOOP
+    IF NOT has_function_privilege('public', v_sig, 'EXECUTE') THEN
+      RAISE EXCEPTION 'Rollback incomplete: PUBLIC EXECUTE not restored on %', v_sig;
+    END IF;
+    IF NOT has_function_privilege('anon', v_sig, 'EXECUTE') THEN
+      RAISE EXCEPTION 'Rollback incomplete: anon EXECUTE not restored on %', v_sig;
+    END IF;
+  END LOOP;
+
+  RAISE NOTICE 'Rollback verified: 8 helper callers, 4 invoice-draft overloads, 9-arg update removed, ACLs restored on 12 signatures.';
+END $$;
+
+COMMIT;
