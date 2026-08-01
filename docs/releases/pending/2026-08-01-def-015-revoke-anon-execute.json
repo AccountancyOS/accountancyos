@@ -1,0 +1,95 @@
+{
+  "release_id": "2026-08-01-def-015-revoke-anon-execute",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-08-01T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-015. Revokes PUBLIC and anon EXECUTE from 90 SECURITY DEFINER function names in public that carry no internal authorisation check, granting EXECUTE explicitly to authenticated and service_role. Grants only — no function body, signature, table, policy or trigger is altered. Catalog-driven by name so every overload is covered and each signature is resolved by the database.",
+
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+
+  "problem": {
+    "context": "A SECURITY DEFINER function executes as its owner and bypasses RLS. Where anon may call it AND the body checks nothing, both gates are open. The anon key ships inside the frontend bundle, so 'reachable by anon' means reachable by anyone who opens developer tools.",
+    "evidence": "Confirmed live by the audit: find_entities_by_email returned a real client record to the anon key with no session. Enumeration for this release: all 368 public function bodies swept via db_rpc mcp_list_functions (2026-08-01), filtered to SECURITY DEFINER, non-trigger functions containing none of auth.uid(), auth.role(), current_setting, user_in_organization, user_has_organization_access, user_has_role_at_least, has_organization_role, portal_has_perm, portal_can_access, an onboarding-token check or a token validator. That yields 89.",
+    "why_revoke_not_patch": "Most are not defective. Some ARE the check — can_manage_team(_user_id, _org_id) answers a question about a user it was handed, and portal_user_has_entity_access does the same. Some are pure computation (calculate_deadline). Some are cron-driven infrastructure. The defect is the grant, not the body.",
+    "count_note": "90 names, not 89. grant_person_portal_access is added deliberately although it does NOT meet the no-check test — it calls user_has_organization_access() and raises, so an anonymous caller is already refused. The audit listed it among its highest-risk functions because its pattern list did not recognise helper-based checks; that is a false positive there and part of why that enumeration reached 93 where a body sweep reaches 89. It is revoked anyway: a function that grants portal access should not be callable without a session even when it would refuse."
+  },
+
+  "blast_radius_analysis": {
+    "anonymous_pages": "No function in the set is called from any anonymous page. PublicQuoteView, PublicOnboarding, EngagementLetterPreview and the whole portal directory call only public_*/portal_* endpoints that authorise on a token or portal permission; none is in the set. Asserted by a test listing all 19 such RPCs.",
+    "client_callers": "28 of the set are called from client code, every one from an AUTHENTICATED screen — permission hooks, the automation engine, CreateQuoteDialog, the chart-of-accounts tab, filing approval, the MCP catalog tools. authenticated keeps EXECUTE.",
+    "edge_function_callers": "13 are called from edge functions, every one with the SERVICE-ROLE key — outlook-sync (find_entities_by_email), auth-email-hook (enqueue_email), process-email-queue (claim_email_queue_row, read_email_batch, delete_email, move_to_dlq), truelayer-auth/sync (portal_user_has_entity_access). service_role keeps EXECUTE.",
+    "transitive_calls": "A SECURITY DEFINER function calling another executes it as the definer, so internal helpers stay reachable from the public endpoints that use them. Already proven by el_signature_progress, revoked 2026-07-28 with the client signing page unaffected.",
+    "portal_users": "Portal users are `authenticated` — signed in, simply not organisation members — so portal functionality is unaffected.",
+    "residual_risk": "The cross-reference covers src/ and supabase/functions/. It would not catch a call made with the anon key from a Lovable-deployed screen absent from git, which DEF-020 establishes as a real possibility. The realistic failure is a staff screen throwing a permission error on a helper misjudged as internal — visible immediately, fixed by regranting that one signature."
+  },
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260801120000_def_015_revoke_anon_execute.sql",
+      "sha256": "d96e6bc9633f1e8ea53dd38d5f1c0218285254a6cc3281de0db6fc209b77bd06",
+      "expected_objects": [
+        {
+          "id": "anon-execute-revoked",
+          "object": "anon holds no EXECUTE on any of the 90 names, across every overload",
+          "result": "pending",
+          "verify_via": "For each name, for every overload: has_function_privilege('anon', oid::regprocedure, 'EXECUTE') = false. The migration asserts this itself before COMMIT, so a partial application aborts; confirm independently after apply."
+        },
+        {
+          "id": "staff-access-preserved",
+          "object": "authenticated and service_role retain EXECUTE on all of them",
+          "result": "pending",
+          "verify_via": "has_function_privilege('authenticated', ..., 'EXECUTE') = true and the same for service_role. Also asserted in-migration. This is the regression that would matter."
+        },
+        {
+          "id": "exposed-function-closed",
+          "object": "find_entities_by_email no longer answers an unauthenticated caller",
+          "result": "pending",
+          "verify_via": "Call it with the anon key and no session. Before: returned a real client record. After: permission denied. This is the audit's proof-of-exposure case and the single most important check."
+        },
+        {
+          "id": "client-journeys-unaffected",
+          "object": "The anonymous client journeys still work end to end",
+          "result": "pending",
+          "verify_via": "Open a proposal link and accept it; continue into onboarding; open an engagement-letter signing link. All must behave exactly as before — they depend on public_* endpoints that keep their anon grant, and on helpers reached as the definer."
+        },
+        {
+          "id": "staff-surfaces-unaffected",
+          "object": "Authenticated staff screens that call these functions still work",
+          "result": "pending",
+          "verify_via": "Load the permissions settings page (can_manage_team, can_manage_practice_settings), the automations page (can_manage_automation_rules), the chart-of-accounts tab (seed_default_chart_of_accounts) and create a quote (generate_quote_number). Any permission error here means a helper was misjudged — regrant that signature rather than reverting the release."
+        },
+        {
+          "id": "sandbox-exec-untouched",
+          "object": "Independent grantees such as sandbox_exec keep their grants",
+          "result": "pending",
+          "verify_via": "proacl still lists sandbox_exec where it did before. REVOKE FROM PUBLIC/anon does not affect a separate grantee, and the migration never names sandbox_exec."
+        }
+      ]
+    }
+  ],
+
+  "rollback": {
+    "assessment": "Simple and safe: GRANT EXECUTE ON FUNCTION <signature> TO anon for the affected signatures, or for a single function if only one proves to need it. Prefer regranting the one signature over reverting the whole release — a blanket revert restores anonymous access to find_entities_by_email, which is the confirmed exposure.",
+    "data_risk": "None. Grants only; the migration reads and writes no table data and alters no function body."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260801120000_def_015_revoke_anon_execute.sql via the Lovable migration flow. It opens its own BEGIN; and verifies its end state before COMMIT, so a partial application aborts itself.",
+      "Confirm the NOTICE reports the number of signatures revoked — expect it to exceed 90, since names with overloads contribute more than one signature.",
+      "Verify the exposed case FIRST: find_entities_by_email with the anon key must now be refused.",
+      "Then walk one anonymous client journey end to end — proposal link, accept, onboarding, engagement-letter signing.",
+      "Then load the staff surfaces listed in the expected objects.",
+      "After apply: refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Notify Claude to run the expected-object verification and complete this receipt (move out of pending/)."
+    ]
+  },
+
+  "post_apply_followups": [
+    "DEF-004 remains open and is NOT closed by this. That finding counts 326 anon-executable SECURITY DEFINER functions including those that authorise internally; this release covers the subset with no check plus grant_person_portal_access. Reducing the remainder is a separate sweep.",
+    "The mechanism that created this list is still live: Postgres grants PUBLIC EXECUTE on every new function by default, and nothing in CI objects. The audit's requested guard — fail when a new SECURITY DEFINER function appears without an explicit grant decision — is what stops the list regrowing, and is not in this release.",
+    "DEF-005 needs reconciling before it can be closed: the audit reports 14 functions with mutable search_path; a live sweep on 2026-08-01 found 4 (delete_email, enqueue_email, move_to_dlq, read_email_batch). Fixing 4 of 14 and declaring it done would be worse than leaving it open."
+  ]
+}
