@@ -1,7 +1,7 @@
 {
   "release_id": "2026-07-31-def-001-002",
   "release_kind": "migration",
-  "status": "approved_apply_in_progress",
+  "status": "live_verified",
   "declared_at": "2026-07-31T00:00:00Z",
   "approver": "Owner, 2026-08-01. Final approval of amended forward migration 0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6 and rollback f9113d5ca10546802732d1cc93e2b14f5daa9d7ce4c86051e7cfa2388a53534e.",
   "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
@@ -189,7 +189,25 @@
       }
     }
   },
-  "live_apply": "HELD. Nothing applied to LIVE.",
+  "live_apply": {
+    "applied_at": "2026-08-01T08:18:47Z",
+    "authored_version": "20260731210000",
+    "executor_version": "20260801081847",
+    "artifact_sha256": "0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6",
+    "transaction": "Applied as one atomic transaction (file-level BEGIN;/COMMIT;). Migration reported success; no partial state.",
+    "gates": {
+      "signature_count": "PASS - exactly 10 rows: 8 repaired helper callers + 2 canonical invoice-draft signatures.",
+      "helper_references": "PASS - 0 public function bodies reference set_rpc_context (was 8); public.set_rpc_context itself does not exist.",
+      "create_candidates": "PASS - exactly 1, canonical 14-argument signature (uuid,text,uuid,text,uuid,text,text,text,text,text,text,text,text,jsonb).",
+      "update_candidates": "PASS - exactly 1, canonical 9-argument signature (uuid,uuid,text,text,text,text,text,text,jsonb).",
+      "ownership": "PASS - owner postgres on all ten.",
+      "acl": "PASS - all ten: authenticated=X, service_role=X, sandbox_exec=X; no bare =X (PUBLIC) and no anon grant.",
+      "definition_hashes": "PASS - all eight repaired hashes changed: create_automation_rule_safe de32451b->5dd4a94d, update_automation_rule_safe 3803ae13->0817073d, toggle_automation_rule_safe dbe752a5->9c543364, delete_automation_rule_safe 1ef6b7fc->7fc01064, approve_bill_safe 75551314->b4a2945c, void_bill_safe cc7973c4->1e5a0d0d, record_bill_payment_safe 2dbb0171->292cc437, create_customer_safe 1ca6a433->ad24db0f. Canonical create 0f9e8acf, canonical update 99c9bde5.",
+      "probes": "PASS - all four invoice payload shapes (14-key create, 4-key create, 9-key update, 2-key update) and approve_bill_safe returned HTTP 401 / 42501 \"permission denied for function ...\". No PGRST202, no PGRST203, no 42883. Expected result under the corrected probe expectations: PostgREST resolved a single candidate, then the database refused anon EXECUTE.",
+      "helper_caller_proof": "Catalogue inspection is authoritative: zero set_rpc_context references and eight changed definition hashes. The anonymous probe cannot enter the function and does not independently prove 42883 removal."
+    },
+    "rollback_required": false
+  },
   "probe_expectations": {
     "authority": "Owner correction, 2026-08-01, receipt-only. No migration bytes changed; forward checksum remains 0d18496c878a350e9a1e6d544df7b1dc7ce37737f0c86f4185150c989fe9ead6.",
     "unauthenticated_probes": "Because EXECUTE is revoked from PUBLIC and anon, an unauthenticated probe is EXPECTED to produce a database permission-denied response (42501 permission denied for function ...) AFTER PostgREST resolves the canonical function. Probes are NOT expected to reach function-level validation or authentication logic.",
