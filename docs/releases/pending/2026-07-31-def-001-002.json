@@ -66,7 +66,7 @@
           "object": "An organisation member WITHOUT can_create_invoices is refused on update",
           "result": "not-demonstrable",
           "verify_via": "As a member lacking the capability, call the canonical update and expect 42501. This is the one intentional behaviour change in the family and the most likely source of a 'regression' report.",
-          "evidence": "LIVE 2026-08-03: unreachable state. can_create_invoices requires role >= 'staff', and organization_users_role_check permits only 'owner', 'admin' and 'staff' \u2014 every possible member therefore satisfies it, so 'a member without can_create_invoices' cannot exist. The adjacent guard was exercised instead: a non-member caller is refused with 42501 'Access denied to organization'. Logged as an open question (DEF-029): either the role constraint should admit 'viewer'/'manager', or the capability branch is dead code."
+          "evidence": "LIVE 2026-08-03: unreachable state. can_create_invoices requires role >= 'staff', and organization_users_role_check permits only 'owner', 'admin' and 'staff' \u2014 every possible member therefore satisfies it, so 'a member without can_create_invoices' cannot exist. The adjacent guard was exercised instead: a non-member caller is refused with 42501 'Access denied to organization'. Logged as an open question (DEF-030): either the role constraint should admit 'viewer'/'manager', or the capability branch is dead code."
         },
         {
           "id": "cross-tenant-relationship-checks",
