@@ -297,6 +297,16 @@ export function InvoiceEditorDialog({
     mutationFn: async (data: InvoiceFormData) => {
       if (!organization?.id) throw new Error("No organization");
 
+      // invoice_lines.account_id is NOT NULL, and a new line starts with no account
+      // chosen. Catch it here so the user gets the line number rather than a 22023
+      // from the RPC after a round trip. The RPC validates it too (DEF-029).
+      const unaccountedLine = lines.findIndex((line) => !line.account_id);
+      if (unaccountedLine !== -1) {
+        throw new Error(
+          `Line ${unaccountedLine + 1}: choose an account before saving.`
+        );
+      }
+
       const lineInputs: InvoiceLineInput[] = lines.map((line) => ({
         description: line.description,
         quantity: line.quantity,

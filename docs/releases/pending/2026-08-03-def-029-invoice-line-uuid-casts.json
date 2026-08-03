@@ -1,0 +1,108 @@
+{
+  "release_id": "2026-08-03-def-029-invoice-line-uuid-casts",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-08-03T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-029. Restores the ::uuid casts that the DEF-001/DEF-002 canonical rewrite dropped from the invoice-draft line inserts, and validates the NOT NULL account_id explicitly so the repair does not simply move the failure from 42804 to 23502. Re-issues the two canonical bodies only; no signature, table, policy, trigger or grant is altered.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "defect": "DEF-029, severity critical. Invoice drafting with lines is broken on LIVE.",
+    "introduced_by": "THIS PROJECT — migration 20260731210000 (DEF-001/DEF-002), applied 2026-08-01 as executor version 20260801081847. Not inherited. The superseded overloads all carried the cast (see 20251217224432); the canonical rewrite dropped it.",
+    "mechanism": "Both canonical bodies insert NULLIF(v_line->>'vat_code_id','') and NULLIF(v_line->>'account_id','') — both of type text — into invoice_lines.vat_code_id and invoice_lines.account_id, which are uuid. PostgreSQL raises 42804 'column is of type uuid but expression is of type text' for ANY create or update supplying at least one line. A draft saves only with an empty lines array.",
+    "second_defect_found_authoring_this_fix": "invoice_lines.account_id is NOT NULL with no default. src/lib/invoice-draft-service.ts sends account_id: line.account_id || '' and the editor allows a line to be saved with no account chosen, so '' reaches the RPC routinely. Restoring the cast ALONE would convert 42804 into a raw 23502 not-null violation for exactly those lines — a different error, the same broken save. The executor's DEF-029 entry describes only the cast; this half is not in it and would have produced a fix that still failed in the common case.",
+    "why_both_harnesses_missed_it": "Every probe on both verification routes passed an EMPTY lines array — the executor's rolled-back-transaction run and my connector probes alike. The defect is unreachable without at least one line. Recorded in the DEF-001/002 receipt so the next overload or privilege harness includes a populated payload."
+  },
+  "design_decisions": [
+    {
+      "decision": "Validate account_id, do not default it.",
+      "rationale": "Which nominal account a line posts to is an accounting decision. Inventing a fallback would put wrong figures in the ledger silently, which the filing-engine architecture in CLAUDE.md forbids — the ledger is the root of every downstream projection. The RPC raises 22023 naming the line instead, in the same shape as the existing quantity/unit_price/vat_rate validations.",
+      "guarded_by": "A test asserts no default or fallback account is introduced."
+    },
+    {
+      "decision": "Validate uuid well-formedness too.",
+      "rationale": "A malformed identifier would otherwise surface as an opaque 22P02 from the cast. It now raises the same 22023 with an actionable message."
+    },
+    {
+      "decision": "Validate before mutating in the update path.",
+      "rationale": "update_invoice_draft_safe deletes all existing lines then re-inserts. The new checks sit in its PHASE 1 validation loop, ahead of the DELETE, so a bad line is rejected before anything is destroyed. This strengthens the ops-health-line-preservation property the DEF-001/002 receipt verified, rather than relying only on transaction rollback."
+    },
+    {
+      "decision": "No GRANT statements.",
+      "rationale": "CREATE OR REPLACE FUNCTION preserves owner and ACL. The DEF-001/002 privilege state (postgres/authenticated/service_role/sandbox_exec; no PUBLIC, no anon) and the DEF-015 revocation therefore carry over untouched. The migration ASSERTS this rather than re-granting, so a silent ACL change fails the apply instead of being papered over."
+    }
+  ],
+  "authoring_method": "Both bodies were extracted from the LIVE definitions (create md5 0f9e8acf, update md5 99c9bde5, matching catalog_functions) and edited programmatically against asserted anchors — the script fails if any anchor is absent or matches more than once. Nothing else in either body was retyped, reordered or reformatted. This follows the RPC replacement guard: never re-author a large body by hand.",
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260803120000_def_029_invoice_line_uuid_casts.sql",
+      "sha256": "9345ea0be36e5a1777b4f5090ac04994d65ab2770f35c6a6c4058b9c9d5ce936",
+      "expected_objects": [
+        {
+          "id": "casts-restored",
+          "object": "Neither canonical body inserts an uncast NULLIF into a uuid column",
+          "result": "pending",
+          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') with include_source, or pg_proc.prosrc: no occurrence of NULLIF(v_line->>'vat_code_id', ''), or NULLIF(v_line->>'account_id', ''), without ::uuid. The migration asserts this itself before COMMIT; confirm independently after apply."
+        },
+        {
+          "id": "draft-with-lines-saves",
+          "object": "A draft carrying at least one well-formed line saves",
+          "result": "pending",
+          "verify_via": "THE PROOF-OF-REPAIR CASE, and the one both harnesses previously skipped. Create a draft with one line carrying a real account_id and a real vat_code_id, then update it with two lines. Before: 42804 on both. After: both succeed and invoice_lines holds the expected rows with the totals recomputed. An EMPTY lines array does NOT exercise this defect and must not be used as evidence."
+        },
+        {
+          "id": "missing-account-is-a-clean-error",
+          "object": "A line with no account_id raises 22023 naming the line, not 23502",
+          "result": "pending",
+          "verify_via": "Call create with a line omitting account_id (or sending ''). Expect 22023 'Invalid line 1: account_id is required'. A 23502 not-null violation here means the validation was skipped and the fix is incomplete."
+        },
+        {
+          "id": "malformed-uuid-is-a-clean-error",
+          "object": "A malformed identifier raises 22023, not 22P02",
+          "result": "pending",
+          "verify_via": "Call create with account_id 'abc'. Expect 22023 'Invalid line 1: account_id is not a valid identifier'."
+        },
+        {
+          "id": "update-destroys-nothing-on-a-bad-line",
+          "object": "A rejected update leaves the existing lines intact",
+          "result": "pending",
+          "verify_via": "Take a draft with a line named 'Original Line - DO NOT DELETE'. Update it with two lines, the second missing account_id. The call must raise 22023 and the original line must still be present — count and content unchanged. Validation now precedes the DELETE, so this must hold independently of rollback."
+        },
+        {
+          "id": "def-001-002-015-undisturbed",
+          "object": "Exactly two signatures; no set_rpc_context; anon still has no EXECUTE; authenticated, service_role and sandbox_exec retain it",
+          "result": "pending",
+          "verify_via": "catalog_functions -> exactly 2 invoice-draft rows (14-arg create, 9-arg update). prosrc contains no set_rpc_context. proacl on both: postgres/authenticated/service_role/sandbox_exec, no PUBLIC (=X), no anon. All asserted in-migration; confirm independently, as CREATE OR REPLACE is being relied on to preserve the ACL."
+        },
+        {
+          "id": "editor-blocks-the-save-client-side",
+          "object": "The invoice editor refuses to save a line with no account, naming the line",
+          "result": "pending",
+          "verify_via": "APP-SIDE, ships on the next frontend publish, no migration needed. In the invoice editor add a line, leave Account unset, save. Expect an inline 'Line 1: choose an account before saving.' toast and no network round trip."
+        }
+      ],
+      "rollback_note": "No rollback script. Reverting means reinstating a body that raises 42804 on every draft with lines — a fix-forward-only change. The prior bodies remain recoverable from migration 20260731210000 and from the def-hashes recorded in the DEF-001/002 receipt if it ever became necessary."
+    }
+  ],
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260803120000_def_029_invoice_line_uuid_casts.sql. It is self-verifying: a DO block asserts the end state before COMMIT, so a partial apply aborts.",
+      "Reproduce the ORIGINAL failure first if a draft is available — create a draft with one line and confirm 42804 pre-apply. Gate 6 of the verification standard: five defects have reported success while nothing durable happened.",
+      "After apply, run draft-with-lines-saves. This is the check that matters; an empty lines array proves nothing.",
+      "Then the two error-shape checks and the line-preservation check.",
+      "Then confirm signatures, prosrc and proacl are undisturbed.",
+      "Refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Publish the frontend for the editor-side guard.",
+      "Notify Claude to complete this receipt."
+    ]
+  },
+  "guarded_by": "src/test/regression/def-029-invoice-line-uuid-casts.test.ts — 15 static guards over the migration and both callers, including a check that no default nominal account is introduced and that validation precedes the DELETE in the update path. The uncast-NULLIF detector was run against the LIVE broken bodies and matches all four occurrences, so it demonstrably catches the defect rather than merely passing on the fix.",
+  "live_apply": "NOT APPLIED. Authored 2026-08-03, awaiting the executor.",
+  "open_after_this": [
+    "DEF-026 approve_bill_safe writes status 'APPROVED', rejected by bills_status_check. Bill approval broken on LIVE.",
+    "DEF-027 create_customer_safe inserts four columns absent from public.customers. Customer creation via the safe RPC broken on LIVE.",
+    "DEF-028 stamp_portal_provenance() selects portal_access.contact_id, which does not exist — every portal write to a table carrying that trigger fails 42703. Critical, and it blocks the portal-capability check on the DEF-001/002 receipt.",
+    "DEF-030 can_create_invoices requires role >= staff while organization_users_role_check permits only owner/admin/staff, so the capability branch can never refuse a member. Needs an owner ruling: widen the role vocabulary, or delete the dead branch."
+  ]
+}

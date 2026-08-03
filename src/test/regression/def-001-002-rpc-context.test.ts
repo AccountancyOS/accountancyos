@@ -183,14 +183,26 @@ describe("ownership and privileges are explicit", () => {
 });
 
 describe("release hygiene", () => {
-  it("owns the live body of every function it reissues", () => {
+  /**
+   * The two invoice-draft bodies were handed on to DEF-029 (20260803120000), which
+   * repaired the missing ::uuid casts this family introduced. Ownership is asserted
+   * against whichever migration is the last definer — never pinned to this file —
+   * because the executor re-timestamps migrations and filename ownership was never
+   * a stable identity.
+   */
+  const HANDED_ON: Record<string, string> = {
+    create_invoice_draft_safe: "20260803120000_def_029_invoice_line_uuid_casts.sql",
+    update_invoice_draft_safe: "20260803120000_def_029_invoice_line_uuid_casts.sql",
+  };
+
+  it("owns the live body of every function it reissues, or records who took it over", () => {
     const migDir = resolve(root, "supabase/migrations");
     const files = readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort();
     for (const fn of [...REPAIRED, "create_invoice_draft_safe", "update_invoice_draft_safe"]) {
       const owner = files
         .filter((f) => new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`).test(readFileSync(resolve(migDir, f), "utf8")))
         .pop();
-      expect(owner, `${fn} should be owned by this migration`).toBe(MIG_NAME);
+      expect(owner, `${fn} has an unrecorded later definer`).toBe(HANDED_ON[fn] ?? MIG_NAME);
     }
   });
 
