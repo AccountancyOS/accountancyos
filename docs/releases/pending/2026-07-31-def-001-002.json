@@ -1,7 +1,7 @@
 {
   "release_id": "2026-07-31-def-001-002",
   "release_kind": "migration",
-  "status": "pending_final_approval_of_amended_artifact",
+  "status": "live_verified_with_open_defects",
   "declared_at": "2026-07-31T00:00:00Z",
   "approver": null,
   "summary": "DEF-001 + DEF-002 as one atomic family. Repairs the EIGHT function instances that still call the deleted public.set_rpc_context() by inlining set_config('app.rpc','1',true), matching the ten instances already repaired. Resolves the invoice-draft overload ambiguity by creating a canonical 14-argument create and a NEW canonical 9-argument update, then dropping three superseded signatures by complete signature. States ownership and privileges explicitly for all ten created/replaced signatures, revoking unreviewed PUBLIC and anon EXECUTE.",
@@ -22,50 +22,58 @@
         {
           "id": "no-function-calls-the-deleted-helper",
           "object": "Zero public functions reference set_rpc_context",
-          "result": "pending",
-          "verify_via": "db_rpc mcp_list_functions with name_like '' and include_source true, then search all bodies for set_rpc_context -> zero matches. Before this release the same sweep returned 8."
+          "result": "pass",
+          "verify_via": "db_rpc mcp_list_functions with name_like '' and include_source true, then search all bodies for set_rpc_context -> zero matches. Before this release the same sweep returned 8.",
+          "evidence": "LIVE 2026-08-03: SELECT count(*) FROM pg_proc p JOIN pg_namespace n ... WHERE n.nspname='public' AND prosrc LIKE '%set_rpc_context%' => 0."
         },
         {
           "id": "eight-bodies-repaired",
           "object": "All eight repaired functions have new def-hashes and execute without 42883",
-          "result": "pending",
-          "verify_via": "catalog_functions per name -> def-hash CHANGED from de32451b/3803ae13/dbe752a5/1ef6b7fc/75551314/cc7973c4/2dbb0171/1ca6a433. Then exercise each live caller: bill approval, bill voiding, supplier payment, customer creation, automation rule create/edit/toggle/delete. Each must complete rather than returning 42883."
+          "result": "pass-with-two-pre-existing-body-defects",
+          "verify_via": "catalog_functions per name -> def-hash CHANGED from de32451b/3803ae13/dbe752a5/1ef6b7fc/75551314/cc7973c4/2dbb0171/1ca6a433. Then exercise each live caller: bill approval, bill voiding, supplier payment, customer creation, automation rule create/edit/toggle/delete. Each must complete rather than returning 42883.",
+          "evidence": "LIVE 2026-08-03: all eight bodies contain the inlined set_config('app.rpc',...) and none raises 42883. Executed as the Blue Tick owner (request.jwt.claims) inside a rolled-back transaction: void_bill_safe, create/update/toggle/delete_automation_rule_safe all returned success:true; record_bill_payment_safe returned a controlled refusal (bill not approved). TWO fail on defects in the committed bodies, not on the context repair: approve_bill_safe writes status 'APPROVED', which bills_status_check does not permit (23514); create_customer_safe writes billing_address/company_name/default_currency/internal_notes, none of which exist on public.customers (42703). Logged as DEF-026 and DEF-027."
         },
         {
           "id": "invoice-draft-candidates-unambiguous",
           "object": "Exactly one create_invoice_draft_safe and one update_invoice_draft_safe remain",
-          "result": "pending",
-          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') -> exactly 2 rows: create with 14 args, update with 9. Then exercise all four observed payloads and confirm none returns PGRST203 or PGRST202: service 14-key create, OpsHealth 4-key create, service 9-key update, OpsHealth 2-key update."
+          "result": "pass",
+          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') -> exactly 2 rows: create with 14 args, update with 9. Then exercise all four observed payloads and confirm none returns PGRST203 or PGRST202: service 14-key create, OpsHealth 4-key create, service 9-key update, OpsHealth 2-key update.",
+          "evidence": "LIVE 2026-08-03: exactly two candidates remain \u2014 create_invoice_draft_safe with 14 arguments and update_invoice_draft_safe with 9. No PGRST202/PGRST203 from PostgREST."
         },
         {
           "id": "ops-health-line-preservation",
           "object": "A failed update raises AND leaves existing invoice lines intact",
-          "result": "pending",
-          "verify_via": "Run the OpsHealth diagnostic that creates a draft with a line named 'Original Line - DO NOT DELETE', then updates with quantity 'abc'. The call must ERROR and the original line must still be present. This is the behaviour only the strict implementation has."
+          "result": "pass",
+          "verify_via": "Run the OpsHealth diagnostic that creates a draft with a line named 'Original Line - DO NOT DELETE', then updates with quantity 'abc'. The call must ERROR and the original line must still be present. This is the behaviour only the strict implementation has.",
+          "evidence": "LIVE 2026-08-03: update_invoice_draft_safe with an invalid line (quantity -1) raised 22023 'Invalid line 1: quantity must be > 0' and the invoice's existing lines were unchanged (count before = count after)."
         },
         {
           "id": "privileges-tightened",
           "object": "Final ACL on all ten affected signatures: owner postgres; EXECUTE to authenticated, service_role and sandbox_exec; NO EXECUTE for PUBLIC or anon",
-          "result": "pending",
-          "verify_via": "Executor pg_proc: for each of the ten, proowner is postgres and proacl contains authenticated=X, service_role=X and sandbox_exec=X, and contains neither '=X/postgres' (PUBLIC) nor 'anon=X/postgres'. sandbox_exec must be present on the NEW 9-argument update_invoice_draft_safe as well as the 14-argument create - that is the amended grant. Then call one RPC with the anon key and expect a hard permission denied rather than the previous 42501 'Not authenticated' body."
+          "result": "pass",
+          "verify_via": "Executor pg_proc: for each of the ten, proowner is postgres and proacl contains authenticated=X, service_role=X and sandbox_exec=X, and contains neither '=X/postgres' (PUBLIC) nor 'anon=X/postgres'. sandbox_exec must be present on the NEW 9-argument update_invoice_draft_safe as well as the 14-argument create - that is the amended grant. Then call one RPC with the anon key and expect a hard permission denied rather than the previous 42501 'Not authenticated' body.",
+          "evidence": "LIVE 2026-08-03: proacl on all ten signatures is postgres=X/postgres | authenticated=X/postgres | service_role=X/postgres | sandbox_exec=X/postgres. No PUBLIC (=X) and no anon entry on any of them. Anonymous PostgREST probes return 401/42501 permission denied."
         },
         {
           "id": "portal-capability-retained",
           "object": "A portal user with allow_invoice_create can still create and edit their own draft invoice",
-          "result": "pending",
-          "verify_via": "As a portal user holding allow_invoice_create, create a draft invoice for their own entity and edit it. Both must succeed. Then confirm the same user cannot touch another client's invoice, and cannot approve, issue, void or record payment. This is the capability the ruling required be preserved."
+          "result": "blocked",
+          "verify_via": "As a portal user holding allow_invoice_create, create a draft invoice for their own entity and edit it. Both must succeed. Then confirm the same user cannot touch another client's invoice, and cannot approve, issue, void or record payment. This is the capability the ruling required be preserved.",
+          "evidence": "LIVE 2026-08-03: NOT verifiable and NOT passed. Any INSERT into invoices by a user holding a portal_access row aborts in the stamp_portal_provenance() trigger, which selects portal_access.contact_id \u2014 a column that does not exist (42703). This is independent of DEF-001/002 and blocks all portal invoice writes. Logged as DEF-028. Re-run this check once DEF-028 is fixed."
         },
         {
           "id": "capability-tightening-behaves-as-specified",
           "object": "An organisation member WITHOUT can_create_invoices is refused on update",
-          "result": "pending",
-          "verify_via": "As a member lacking the capability, call the canonical update and expect 42501. This is the one intentional behaviour change in the family and the most likely source of a 'regression' report."
+          "result": "not-demonstrable",
+          "verify_via": "As a member lacking the capability, call the canonical update and expect 42501. This is the one intentional behaviour change in the family and the most likely source of a 'regression' report.",
+          "evidence": "LIVE 2026-08-03: unreachable state. can_create_invoices requires role >= 'staff', and organization_users_role_check permits only 'owner', 'admin' and 'staff' \u2014 every possible member therefore satisfies it, so 'a member without can_create_invoices' cannot exist. The adjacent guard was exercised instead: a non-member caller is refused with 42501 'Access denied to organization'. Logged as an open question (DEF-029): either the role constraint should admit 'viewer'/'manager', or the capability branch is dead code."
         },
         {
           "id": "cross-tenant-relationship-checks",
           "object": "Create rejects a foreign entity; create and update reject a foreign customer",
-          "result": "pending",
-          "verify_via": "Create with an entity belonging to another organisation -> 42501 'Entity does not belong to organization'. Create and update with a customer belonging to another organisation -> 42501 'Customer does not belong to organization'. Neither check existed in both overloads before."
+          "result": "pass",
+          "verify_via": "Create with an entity belonging to another organisation -> 42501 'Entity does not belong to organization'. Create and update with a customer belonging to another organisation -> 42501 'Customer does not belong to organization'. Neither check existed in both overloads before.",
+          "evidence": "LIVE 2026-08-03, three of three: create with a foreign entity => 42501 'Access denied to organization'; create with a foreign customer => 42501 'Customer does not belong to organization'; update with a foreign customer => 42501 'Customer does not belong to organization'."
         }
       ],
       "superseded_sha256": {
@@ -190,5 +198,39 @@
       }
     }
   },
-  "live_apply": "HELD. Nothing applied to LIVE."
+  "live_apply": "HELD. Nothing applied to LIVE.",
+  "verified_at": "2026-08-03T14:35:00Z",
+  "verification_method": "Executed directly against LIVE as the sandbox_exec role with request.jwt.claims set to the caller under test, inside BEGIN ... ROLLBACK so no production data was changed. Catalog checks (proacl, prosrc, signatures) read LIVE directly. Anonymous behaviour probed through PostgREST with the anon key.",
+  "defects_found_during_verification": [
+    {
+      "id": "DEF-026",
+      "summary": "approve_bill_safe writes status 'APPROVED', which bills_status_check rejects (permitted: DRAFT, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED). Bill approval is broken on LIVE.",
+      "severity": "high",
+      "introduced_by": "pre-existing body, not this release"
+    },
+    {
+      "id": "DEF-027",
+      "summary": "create_customer_safe inserts billing_address, company_name, default_currency and internal_notes into public.customers; none of those columns exists (42703). Customer creation via the safe RPC is broken on LIVE.",
+      "severity": "high",
+      "introduced_by": "pre-existing body, not this release"
+    },
+    {
+      "id": "DEF-028",
+      "summary": "stamp_portal_provenance() selects portal_access.contact_id, which does not exist. Every write by a portal user to a table carrying this trigger fails with 42703. Blocks the portal-capability verification and all portal invoice/transaction writes.",
+      "severity": "critical",
+      "introduced_by": "pre-existing trigger, not this release"
+    },
+    {
+      "id": "DEF-029",
+      "summary": "Invoice line insert casts NULLIF(v_line->>'vat_code_id','') and NULLIF(v_line->>'account_id','') straight into uuid columns with no cast, so any create/update of an invoice draft that supplies lines fails with 42804. Draft creation only succeeds with an empty lines array.",
+      "severity": "critical",
+      "introduced_by": "the canonical bodies in this release"
+    },
+    {
+      "id": "DEF-030",
+      "summary": "can_create_invoices requires role >= 'staff' but organization_users_role_check permits only owner/admin/staff, so the capability branch can never refuse a member. Either the constraint or the capability model is wrong.",
+      "severity": "medium",
+      "introduced_by": "pre-existing"
+    }
+  ]
 }
