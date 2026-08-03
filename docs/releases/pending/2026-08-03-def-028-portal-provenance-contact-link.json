@@ -1,0 +1,93 @@
+{
+  "release_id": "2026-08-03-def-028-portal-provenance-contact-link",
+  "release_kind": "migration",
+  "status": "pending",
+  "declared_at": "2026-08-03T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-028. Removes an impossible column lookup from stamp_portal_provenance(), which has raised 42703 on every portal write to invoices, bills, bank_transactions and receipts since the function was created. Re-issues one trigger function; no table, column, trigger, policy or grant is altered.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "defect": "DEF-028, severity critical.",
+    "mechanism": "stamp_portal_provenance() resolved the writing contact by selecting a contact id off public.portal_access. That column does not exist, so the statement raises 42703 'column \"contact_id\" does not exist'.",
+    "age": "Authored broken. The identical statement is present in the creating migration 20260608112113 — it has never worked. This is not drift and not a regression from any recent release.",
+    "why_it_survived": "The function returns early for non-portal callers, so the broken statement is unreachable for accountant and staff writes. Only a portal session reaches it. It was found because the DEF-001/002 verification tried to exercise the portal invoice-create capability.",
+    "blast_radius": "Four BEFORE INSERT OR UPDATE triggers, all enabled: trg_portal_provenance_invoices, trg_portal_provenance_bills, trg_portal_provenance_bank_tx, trg_portal_provenance_receipts.",
+    "product_consequence": "Portal invoice creation, bill creation, receipt upload and transaction explanation have NEVER worked end to end. The portal_visibility_settings capabilities allow_invoice_create, allow_bill_create, allow_receipt_upload and allow_transaction_explain have been unusable in practice regardless of how they were configured. This should be treated as a feature that has not shipped, not as a regression."
+  },
+  "the_decision_not_taken": {
+    "finding": "There is NO correct column to substitute. No table in the schema links an authenticated user to a contacts row: portal_access carries user_id, client_id, company_id and role; contacts carries no user_id. stamp_portal_provenance is also the ONLY function in the database that references created_by_contact_id, so there is no established resolution pattern to copy.",
+    "chosen": "v_contact is left explicitly NULL and the audit metadata records contact_attribution = 'unresolved_no_portal_contact_link', so the gap is visible in the audit trail rather than indistinguishable from a genuine absence.",
+    "why_this_loses_nothing": "Because the lookup always raised, created_by_contact_id has never been populated on any row. Nothing that works today is lost. Actor attribution remains durable: bookkeeping_audit_log.actor_id records auth.uid(), and created_by_portal / source = 'portal' still mark provenance. The COALESCE is kept so an explicitly supplied value still wins and so populating v_contact later needs no other change.",
+    "explicitly_rejected": "Matching a portal user to a contact by email or name. Identity by name-match is forbidden by the governance design (2026-07-22-data-governance-architecture-design.md, owner-confirmed decision 2). It would attribute writes to the wrong person, which is worse than NULL. A test guards that no such matching is introduced.",
+    "OWNER_DECISION_REQUIRED": "Should portal_access carry a real contact FK, so portal writes can be attributed to a named person? That is a product decision about the portal identity model — today a portal login is bound to a client/company, not to a contact. It is NOT required to close this outage and is deliberately not bundled here. If the answer is yes it needs its own increment: the column, a backfill rule that does not rely on name or email matching, and the trigger change to consume it."
+  },
+  "authoring_method": "The body was extracted from the LIVE definition (md5 f67d2205) and edited programmatically against asserted anchors — the script fails if an anchor is missing or matches more than once. Exactly two edits: the lookup statement replaced with an explicit NULL assignment plus the reasoning, and the audit metadata gaining the contact_attribution marker. Nothing else retyped or reordered. Triggers are untouched; replacing a function body leaves its attachments in place.",
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260803140000_def_028_portal_provenance_contact_link.sql",
+      "sha256": "401d7b55afba10bf3c0fe2066b63f79be79dfed2d1b16ec7ad8b5d7dc8a10f10",
+      "expected_objects": [
+        {
+          "id": "lookup-removed",
+          "result": "pending",
+          "object": "stamp_portal_provenance no longer executes the impossible lookup",
+          "verify_via": "pg_proc.prosrc for stamp_portal_provenance contains no 'INTO v_contact FROM'. Matched on the statement rather than the table name, which still appears in the body comment. Asserted in-migration; confirm independently."
+        },
+        {
+          "id": "portal-write-succeeds",
+          "result": "pending",
+          "object": "A portal user can create an invoice",
+          "verify_via": "THE PROOF-OF-REPAIR CASE. Reproduce the failure FIRST: as a portal user holding allow_invoice_create, create an invoice and confirm 42703 pre-apply. After apply the same write must succeed, with created_by_portal = true, source = 'portal', and created_by_contact_id NULL. Requires a portal session — the same fixture the DEF-001/002 receipt needs."
+        },
+        {
+          "id": "all-four-tables",
+          "result": "pending",
+          "object": "Portal writes work on all four tables carrying the trigger",
+          "verify_via": "Repeat a portal write against bills, receipts and bank_transactions. bank_transactions takes the UPDATE branch (updated_by_portal) rather than the INSERT branch, so it must be exercised separately — it is the one path with different behaviour."
+        },
+        {
+          "id": "review-gating-still-applies",
+          "result": "pending",
+          "object": "review_status is still forced to pending_review where configured",
+          "verify_via": "With portal_visibility_settings.client_bookkeeping_mode = 'review_required' (or the per-table require_review_* flag set), a portal INSERT must land with review_status = 'pending_review'. This is the responsibility most at risk from a body replacement and must not be assumed from the diff."
+        },
+        {
+          "id": "audit-row-written",
+          "result": "pending",
+          "object": "bookkeeping_audit_log records the write, marked unresolved",
+          "verify_via": "After a portal write, the new bookkeeping_audit_log row must carry actor_id = the portal user, actor_role = 'portal', and metadata.contact_attribution = 'unresolved_no_portal_contact_link'."
+        },
+        {
+          "id": "accountant-writes-unaffected",
+          "result": "pending",
+          "object": "Staff writes still take the early return and are unchanged",
+          "verify_via": "As an organisation member, create an invoice. It must succeed with created_by_portal false and no bookkeeping_audit_log row from this trigger. This path was never broken and must stay that way."
+        },
+        {
+          "id": "four-triggers-still-enabled",
+          "result": "pending",
+          "object": "All four attachments survive the replace and stay enabled",
+          "verify_via": "pg_trigger: exactly 4 non-internal, non-disabled triggers point at stamp_portal_provenance. Asserted in-migration."
+        }
+      ],
+      "rollback_note": "No rollback script. Reverting reinstates a function that raises 42703 on every portal write — fix-forward only. The prior body is recoverable from 20260608112113 and from live def-hash f67d2205 if ever needed."
+    }
+  ],
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Apply 20260803140000_def_028_portal_provenance_contact_link.sql. Self-verifying: a DO block asserts the end state before COMMIT, including that all four triggers survive, so a partial apply aborts.",
+      "Reproduce the failure FIRST with a portal session — a portal invoice create must return 42703 pre-apply.",
+      "After apply, re-run that write and confirm it succeeds.",
+      "Exercise bills, receipts and bank_transactions too; bank_transactions takes the other branch.",
+      "Confirm review gating still forces pending_review where configured — this is the responsibility most at risk.",
+      "Confirm an accountant write is still unaffected.",
+      "Refresh docs/audits/unapplied-migrations-baseline.json with the new applied version.",
+      "Report back so I can complete this receipt.",
+      "Then the portal-capability check on docs/releases/pending/2026-07-31-def-001-002.json becomes runnable for the first time — it was blocked by this defect."
+    ]
+  },
+  "guarded_by": "src/test/regression/def-028-portal-provenance.test.ts — 11 static guards. The lookup detector was run against the LIVE broken body and matches, so it catches the defect rather than merely passing on the fix. Guards also assert the repair is a removal and not a truncation, that no email/name identity matching is introduced, and that the migration touches no trigger or table.",
+  "live_apply": "NOT APPLIED. Authored 2026-08-03, awaiting the executor.",
+  "unblocks": "docs/releases/pending/2026-07-31-def-001-002.json — the portal-capability-retained check, recorded there as blocked by DEF-028."
+}
