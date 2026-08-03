@@ -1,0 +1,68 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import Arrow from '../components/Arrow.astro';
+import { site } from '../site.config.ts';
+
+const links = [
+  { label: 'Return to the homepage', href: '/' },
+  { label: 'Explore our services', href: '/services/' },
+  { label: 'Read our insights', href: '/insights/' },
+  { label: `Contact ${site.shortName}`, href: '/contact/' },
+];
+---
+
+<ContentLayout
+  title={`Page not found | ${site.name}`}
+  description="The page could not be found."
+  noindex={true}
+  eyebrow="404"
+  heading="That page could not be <em>found.</em>"
+  lead={[
+    'The page may have moved, the address may be incorrect or the content may no longer be available.',
+  ]}
+>
+  <div class="container">
+    <section class="prose-section">
+      <ul class="notfound-links">
+        {
+          links.map((l) => (
+            <li>
+              <a href={l.href}>
+                {l.label}
+                <Arrow />
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </div>
+</ContentLayout>
+
+<style>
+  .notfound-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+    max-width: 560px;
+  }
+  .notfound-links li {
+    border-bottom: 1px solid var(--rule);
+  }
+  .notfound-links a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 0;
+    font-family: var(--serif);
+    font-size: clamp(20px, 2.2vw, 26px);
+    color: var(--ink);
+    transition: color 0.25s ease, padding 0.3s ease;
+  }
+  .notfound-links a:hover {
+    color: var(--accent);
+    padding-left: 8px;
+  }
+</style>

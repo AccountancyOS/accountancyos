@@ -1,0 +1,112 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import BookingForm from '../components/BookingForm.astro';
+import { site } from '../site.config.ts';
+import {
+  organizationNode,
+  webPageNode,
+  breadcrumbNode,
+  graph,
+} from '../lib/schema.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Book an introductory call', url: '/book-a-call/' },
+];
+const title = `Book an Introductory Call | ${site.name}`;
+const description =
+  'Book an introductory call with The Tax Network Group — a focused conversation to understand your affairs, what you need and whether we are the right fit.';
+const schedulerUrl = site.cta.schedulerEmbedUrl;
+
+const schema = graph([
+  organizationNode(),
+  webPageNode({ url: '/book-a-call/', name: title, description }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={title}
+  description={description}
+  crumbs={crumbs}
+  eyebrow="Book a call"
+  heading="Book an introductory <em>call.</em>"
+  lead={[
+    'A focused conversation to understand what you need, how your affairs are handled today, and whether The Tax Network Group is the right fit.',
+  ]}
+  schema={schema}
+>
+  <div class="container">
+    <div class="book-grid">
+      <aside class="book-aside prose">
+        <h2>What the call covers</h2>
+        <ul>
+          <li>your situation and what you are trying to achieve</li>
+          <li>how your tax affairs are handled today</li>
+          <li>what is not working, or the decision ahead</li>
+          <li>the level of support you are looking for</li>
+        </ul>
+        <p>
+          The purpose is to determine whether we are likely to be the right fit and to
+          identify a sensible next step.
+        </p>
+        <div class="callout">
+          <span class="callout-label">Before the call</span>
+          <p>
+            It helps to think about what you would most like to improve, any immediate
+            deadlines or transactions, and what a successful first year with a new adviser
+            would look like.
+          </p>
+        </div>
+      </aside>
+
+      <div class="book-main">
+        {
+          schedulerUrl ? (
+            <div class="scheduler-embed">
+              <iframe
+                src={schedulerUrl}
+                title="Schedule an introductory call"
+                loading="lazy"
+                width="100%"
+                height="720"
+              />
+            </div>
+          ) : (
+            <BookingForm />
+          )
+        }
+      </div>
+    </div>
+  </div>
+</ContentLayout>
+
+<style>
+  .book-grid {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: clamp(32px, 5vw, 80px);
+    align-items: start;
+    padding-bottom: clamp(72px, 9vw, 128px);
+  }
+  .book-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .scheduler-embed {
+    border: 1px solid var(--rule-strong);
+    background: var(--bg-2);
+  }
+  .scheduler-embed iframe {
+    display: block;
+    border: 0;
+    width: 100%;
+  }
+  @media (max-width: 880px) {
+    .book-grid {
+      grid-template-columns: 1fr;
+      gap: 44px;
+    }
+  }
+</style>

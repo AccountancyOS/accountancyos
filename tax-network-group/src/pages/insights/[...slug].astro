@@ -1,0 +1,219 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { getCollection, render } from 'astro:content';
+import ContentLayout from '../../layouts/ContentLayout.astro';
+import CtaBand from '../../components/CtaBand.astro';
+import { insightCategories } from '../../content.config.ts';
+import { serviceById } from '../../data/services.ts';
+import { site } from '../../site.config.ts';
+import {
+  organizationNode,
+  webPageNode,
+  breadcrumbNode,
+  graph,
+} from '../../lib/schema.ts';
+
+export const getStaticPaths = (async () => {
+  const posts = await getCollection('insights', ({ data }) => !data.draft);
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}) satisfies GetStaticPaths;
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const d = post.data;
+const url = `/insights/${post.id}/`;
+
+const catLabel =
+  insightCategories.find((c) => c.slug === d.category)?.label ?? d.category;
+
+const words = (post.body ?? '').trim().split(/\s+/).filter(Boolean).length;
+const readingTime = d.readingTime ?? Math.max(1, Math.round(words / 200));
+
+const dateFmt = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+const isoDate = (dt: Date) => dt.toISOString();
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Insights', url: '/insights/' },
+  { name: d.title, url },
+];
+
+const relatedService = d.relatedService ? serviceById(d.relatedService) : undefined;
+
+const seoTitle = d.seoTitle ?? `${d.title} | ${site.name}`;
+const absImage = d.socialImage ?? '/og-default.svg';
+
+const articleNode: Record<string, unknown> = {
+  '@type': 'Article',
+  headline: d.title,
+  description: d.metaDescription,
+  articleSection: catLabel,
+  datePublished: isoDate(d.publishDate),
+  dateModified: isoDate(d.lastModified ?? d.lastReviewed ?? d.publishDate),
+  author: { '@type': 'Organization', name: d.author, '@id': `${site.url}/#organization` },
+  publisher: { '@id': `${site.url}/#organization` },
+  mainEntityOfPage: new URL(url, site.url).href,
+  inLanguage: site.lang,
+};
+if (d.sources?.length) {
+  articleNode.citation = d.sources.map((s) => s.url);
+}
+
+const schema = graph([
+  organizationNode(),
+  articleNode,
+  webPageNode({ url, name: seoTitle, description: d.metaDescription }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={seoTitle}
+  description={d.metaDescription}
+  canonical={d.canonical}
+  image={absImage}
+  noindex={d.noindex}
+  ogType="article"
+  crumbs={crumbs}
+  eyebrow={catLabel}
+  heading={d.title}
+  schema={schema}
+>
+  <div class="container">
+    <div class="article-byline">
+      <span class="cell">
+        Published
+        <strong><time datetime={isoDate(d.publishDate)}>{dateFmt.format(d.publishDate)}</time></strong>
+      </span>
+      {
+        d.lastReviewed && (
+          <span class="cell">
+            Last reviewed
+            <strong>
+              <time datetime={isoDate(d.lastReviewed)}>{dateFmt.format(d.lastReviewed)}</time>
+            </strong>
+          </span>
+        )
+      }
+      <span class="cell">Author<strong>{d.author}</strong></span>
+      {d.reviewer && <span class="cell">Reviewed by<strong>{d.reviewer}</strong></span>}
+      <span class="cell">Reading time<strong>{readingTime} min</strong></span>
+    </div>
+
+    <article class="prose article-body">
+      <Content />
+    </article>
+
+    {
+      d.sources && d.sources.length > 0 && (
+        <section class="article-sources">
+          <h2>Sources</h2>
+          <ul>
+            {d.sources.map((s) => (
+              <li>
+                <a href={s.url} rel="noopener noreferrer" target="_blank">
+                  {s.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      relatedService && (
+        <section class="article-related">
+          <p class="eyebrow">Related service</p>
+          <a href={`/services/${relatedService.slug}/`} class="related-link">
+            {relatedService.label} — {relatedService.suitedTo}
+          </a>
+        </section>
+      )
+    }
+  </div>
+
+  <CtaBand
+    heading="Turn a question into <em>clear advice.</em>"
+    copy="If this raises something specific to your situation, the next step is a short conversation."
+    secondaryLabel="Tell us about your affairs"
+    secondaryHref="/contact/"
+  />
+</ContentLayout>
+
+<style>
+  .article-byline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    padding: 4px 0 clamp(32px, 4vw, 48px);
+  }
+  .article-byline .cell {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .article-byline .cell strong {
+    display: block;
+    margin-top: 4px;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13px;
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 500;
+  }
+  .article-body {
+    max-width: 68ch;
+  }
+  .article-sources {
+    margin-top: clamp(40px, 5vw, 64px);
+    padding-top: 28px;
+    border-top: 1px solid var(--rule);
+    max-width: 68ch;
+  }
+  .article-sources h2 {
+    margin: 0 0 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .article-sources ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .article-sources a {
+    color: var(--accent);
+    border-bottom: 1px solid var(--rule-strong);
+    font-size: 15px;
+  }
+  .article-related {
+    margin-top: clamp(40px, 5vw, 64px);
+  }
+  .article-related .related-link {
+    display: inline-block;
+    margin-top: 12px;
+    font-family: var(--serif);
+    font-size: clamp(20px, 2.2vw, 26px);
+    color: var(--ink);
+    border-bottom: 1px solid var(--rule-strong);
+    transition: color 0.25s ease, border-color 0.25s ease;
+  }
+  .article-related .related-link:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+</style>

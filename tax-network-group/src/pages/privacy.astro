@@ -1,0 +1,59 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import { site } from '../site.config.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Privacy policy', url: '/privacy/' },
+];
+---
+
+<ContentLayout
+  title={`Privacy Policy | ${site.name}`}
+  description="Privacy policy for The Tax Network Group."
+  noindex={true}
+  crumbs={crumbs}
+  eyebrow="Legal"
+  heading="Privacy policy."
+>
+  <div class="container">
+    <section class="prose-section">
+      <div class="prose">
+        <div class="callout">
+          <span class="callout-label">Draft — requires approval before publication</span>
+          <p>
+            This page requires approval and completion using the final legal entity
+            details, data-processing arrangements, cookies, analytics tools, marketing
+            systems and professional engagement structure.
+          </p>
+        </div>
+
+        <h2>What the final policy will address</h2>
+        <p>
+          Where applicable, the published privacy policy will explain how we handle
+          personal data in relation to:
+        </p>
+        <ul>
+          <li>enquiry and booking forms</li>
+          <li>scheduling software</li>
+          <li>email correspondence</li>
+          <li>any client relationship management (CRM) system</li>
+          <li>website analytics and cookies</li>
+          <li>newsletter subscriptions</li>
+          <li>client onboarding</li>
+          <li>identity and anti-money-laundering (AML) information</li>
+          <li>accounting and tax records</li>
+          <li>subcontractors and data processors</li>
+          <li>any international data transfers</li>
+          <li>data retention periods</li>
+          <li>your rights as a data subject</li>
+          <li>how to contact us about a privacy request</li>
+        </ul>
+        <p>
+          Until this policy is finalised, please <a href="/contact/">contact us</a> with
+          any questions about how your information is handled.
+        </p>
+      </div>
+    </section>
+  </div>
+</ContentLayout>

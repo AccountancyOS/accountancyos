@@ -1,0 +1,190 @@
+---
+import { site, footerNav } from '../site.config.ts';
+import Wordmark from './Wordmark.astro';
+
+const year = new Date().getFullYear();
+const { legal, contact } = site;
+---
+
+<footer class="footer on-dark" data-screen-label="Footer">
+  <div class="container">
+    <div class="footer-top">
+      <div>
+        <Wordmark href="/" />
+        <p class="footer-blurb">{site.positioning}</p>
+        <div class="footer-cta">
+          <a href={site.cta.scheduleUrl} class="btn btn-primary">{site.cta.scheduleLabel}</a>
+          <a href={site.cta.loginUrl} class="btn btn-outline">{site.cta.loginLabel}</a>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h2 class="footer-heading">Services</h2>
+        <ul>
+          {footerNav.services.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2 class="footer-heading">Practice</h2>
+        <ul>
+          {footerNav.practice.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2 class="footer-heading">Office</h2>
+        <ul>
+          <li>{contact.availability}</li>
+          <li>{contact.location}</li>
+          {contact.email && (
+            <li><a href={`mailto:${contact.email}`}>{contact.email}</a></li>
+          )}
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-regulatory">
+      <p>
+        {site.name} is the trading name of {legal.entityName}, a company registered in
+        England and Wales under company number {legal.companyNumber}. Registered office:
+        {' '}{legal.registeredOffice}.
+      </p>
+      <p>
+        The information on this website is general in nature and does not constitute
+        accounting, tax, legal or investment advice. Advice should be obtained for your
+        specific circumstances.
+      </p>
+    </div>
+
+    <div class="footer-bottom">
+      <span>© {year} {site.name} · All rights reserved</span>
+      <div class="footer-legal">
+        {footerNav.legal.map((l) => <a href={l.href}>{l.label}</a>)}
+      </div>
+    </div>
+  </div>
+</footer>
+
+<style is:global>
+  .footer {
+    background: var(--bg-3);
+    color: var(--on-dark);
+    padding: clamp(72px, 8vw, 112px) 0 36px;
+  }
+  .footer .container {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+  }
+  .footer-top {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: clamp(28px, 4vw, 56px);
+  }
+  .footer .wordmark {
+    color: var(--on-dark);
+  }
+  .footer .wordmark .mark {
+    background: var(--on-dark-accent);
+  }
+  .footer-blurb {
+    margin-top: 20px;
+    color: var(--on-dark-muted);
+    font-size: 14px;
+    line-height: 1.7;
+    max-width: 32ch;
+  }
+  .footer-heading {
+    margin: 0 0 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--on-dark-muted);
+  }
+  .footer-col ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    color: var(--on-dark-muted);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .footer-col a {
+    font-size: 14px;
+    color: var(--on-dark);
+    transition: color 0.25s ease;
+  }
+  .footer-col a:hover {
+    color: var(--on-dark-accent);
+  }
+  .footer-cta {
+    margin-top: 20px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .footer-cta .btn-primary {
+    background: var(--on-dark-accent);
+    color: var(--bg-3);
+  }
+  .footer-cta .btn-primary:hover {
+    background: var(--on-dark);
+  }
+  .footer-cta .btn-outline {
+    color: var(--on-dark);
+    border-color: var(--on-dark-line);
+  }
+  .footer-cta .btn-outline:hover {
+    border-color: var(--on-dark);
+  }
+  .footer-regulatory {
+    color: var(--on-dark-muted);
+    font-size: 12px;
+    line-height: 1.7;
+    max-width: 78ch;
+  }
+  .footer-regulatory p {
+    margin: 0 0 10px;
+  }
+  .footer-bottom {
+    border-top: 1px solid var(--on-dark-rule);
+    padding-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--on-dark-muted);
+  }
+  .footer-bottom a {
+    color: var(--on-dark-muted);
+    transition: color 0.25s ease;
+  }
+  .footer-bottom a:hover {
+    color: var(--on-dark);
+  }
+  .footer-legal {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+  @media (max-width: 880px) {
+    .footer-top {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 540px) {
+    .footer-top {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

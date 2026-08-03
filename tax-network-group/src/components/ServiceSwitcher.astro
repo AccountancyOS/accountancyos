@@ -1,0 +1,422 @@
+---
+import { services } from '../data/services.ts';
+import SectionTag from './SectionTag.astro';
+import Illustration from './Illustration.astro';
+import Arrow from './Arrow.astro';
+---
+
+<section class="services" id="services" data-screen-label="03 Services">
+  <div class="container">
+    <div class="services-head">
+      <div class="reveal">
+        <SectionTag label="02 — Services" />
+        <h2 class="display">We advise across a range of <em>tax matters.</em></h2>
+      </div>
+      <p class="services-sub reveal" style="--rd: 120ms">
+        A focused practice covering owner-managed businesses, individuals, property and
+        complex advisory work. Select a matter to read more.
+      </p>
+    </div>
+
+    <!-- Desktop switcher (tabs) -->
+    <div class="switcher reveal" style="--rd: 160ms">
+      <ul class="switcher-list" role="tablist" aria-label="Services">
+        {
+          services.map((s, i) => (
+            <li class:list={['switcher-item', { 'is-active': i === 0 }]} role="presentation">
+              <button
+                class="switcher-btn"
+                role="tab"
+                aria-selected={i === 0 ? 'true' : 'false'}
+                tabindex={i === 0 ? 0 : -1}
+                data-target={s.id}
+                id={`tab-${s.id}`}
+                aria-controls={s.id}
+              >
+                <span class="num">{s.number}</span>
+                <span class="label">{s.label}</span>
+              </button>
+            </li>
+          ))
+        }
+      </ul>
+
+      <div class="switcher-panel">
+        {
+          services.map((s, i) => (
+            <article
+              class:list={['panel', { 'is-active': i === 0 }]}
+              id={s.id}
+              role="tabpanel"
+              aria-labelledby={`tab-${s.id}`}
+              hidden={i !== 0}
+            >
+              <div class="panel-grid">
+                <div class="panel-copy">
+                  <span class="num">Service · {s.number}</span>
+                  <h3>
+                    {s.headingParts[0]}
+                    <span class="it">{s.headingParts[1]}</span>
+                    {s.headingParts[2]}
+                  </h3>
+                  <p>{s.body}</p>
+                  <a href={`/services/${s.slug}/`} class="learn-more">
+                    Learn more
+                    <Arrow />
+                  </a>
+                  <div class="panel-meta">
+                    <span>Suited to<strong>{s.suitedTo}</strong></span>
+                    <span>Engagement<strong>{s.engagement}</strong></span>
+                  </div>
+                </div>
+                <Illustration name={s.illustration} class="panel-plate" />
+              </div>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+
+    <!-- Mobile accordion (same data, presentation switched by breakpoint) -->
+    <ul class="acc-list">
+      {
+        services.map((s, i) => (
+          <li class="acc-item">
+            <details open={i === 0}>
+              <summary class="acc-summary">
+                <span>{s.label}</span>
+                <span class="plus" aria-hidden="true" />
+              </summary>
+              <div class="acc-body">
+                <p>
+                  {s.headingParts.join('')} {s.body}
+                </p>
+                <a href={`/services/${s.slug}/`} class="learn-more">
+                  Learn more
+                  <Arrow />
+                </a>
+              </div>
+            </details>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style is:global>
+  .services {
+    background: var(--bg-2);
+    padding: clamp(80px, 10vw, 140px) 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .services-head {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: clamp(32px, 5vw, 88px);
+    align-items: end;
+    margin-bottom: clamp(48px, 6vw, 80px);
+  }
+  .services h2 {
+    margin: 0;
+    font-size: clamp(34px, 4.4vw, 60px);
+    max-width: 16ch;
+  }
+  .services-sub {
+    color: var(--muted);
+    max-width: 46ch;
+    font-size: 15px;
+    line-height: 1.7;
+    margin: 0;
+  }
+  .switcher {
+    display: grid;
+    grid-template-columns: 4fr 8fr;
+    gap: clamp(24px, 4vw, 72px);
+    align-items: start;
+  }
+  .switcher-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+  }
+  .switcher-item {
+    border-bottom: 1px solid var(--rule);
+  }
+  .switcher-btn {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+    padding: 22px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(22px, 2.4vw, 30px);
+    color: var(--ink-2);
+    line-height: 1.15;
+    transition: color 0.3s ease, padding 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+    position: relative;
+  }
+  .switcher-btn::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 0;
+    height: 1px;
+    background: var(--ink);
+    transform: translateY(-50%);
+    transition: width 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .switcher-btn .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    font-weight: 400;
+    width: 36px;
+    flex-shrink: 0;
+  }
+  .switcher-btn .label {
+    flex: 1;
+  }
+  .switcher-btn:hover {
+    color: var(--ink);
+  }
+  .switcher-item.is-active .switcher-btn {
+    color: var(--ink);
+    padding-left: 24px;
+  }
+  .switcher-item.is-active .switcher-btn::before {
+    width: 14px;
+  }
+  .switcher-item.is-active .switcher-btn .label {
+    font-style: italic;
+  }
+  .switcher-panel {
+    position: relative;
+    min-height: 380px;
+  }
+  .panel {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .panel.is-active {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .panel-grid {
+    display: grid;
+    grid-template-columns: 5fr 4fr;
+    gap: clamp(24px, 4vw, 56px);
+    align-items: start;
+  }
+  .panel-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .panel-copy .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+  .panel-copy h3 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(28px, 3.4vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+  .panel-copy h3 .it {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .panel-copy p {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--ink-2);
+    max-width: 50ch;
+  }
+  .panel-meta {
+    display: flex;
+    gap: 28px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .panel-meta span strong {
+    display: block;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 12.5px;
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+  .panel-plate {
+    aspect-ratio: 4 / 3;
+    min-height: 300px;
+  }
+
+  /* Mobile accordion */
+  .acc-list {
+    display: none;
+  }
+  @media (max-width: 980px) {
+    .services-head {
+      grid-template-columns: 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    .switcher {
+      display: none;
+    }
+    .acc-list {
+      display: block;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border-top: 1px solid var(--rule);
+    }
+    .acc-item {
+      border-bottom: 1px solid var(--rule);
+    }
+    .acc-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 0;
+      cursor: pointer;
+      font-family: var(--serif);
+      font-size: 24px;
+      line-height: 1.1;
+      color: var(--ink);
+      list-style: none;
+    }
+    .acc-summary::-webkit-details-marker {
+      display: none;
+    }
+    .acc-summary .plus {
+      width: 14px;
+      height: 14px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .acc-summary .plus::before,
+    .acc-summary .plus::after {
+      content: '';
+      position: absolute;
+      background: var(--ink);
+    }
+    .acc-summary .plus::before {
+      left: 0;
+      right: 0;
+      top: 6px;
+      height: 1px;
+    }
+    .acc-summary .plus::after {
+      top: 0;
+      bottom: 0;
+      left: 6px;
+      width: 1px;
+      transition: transform 0.3s;
+    }
+    .acc-item details[open] .acc-summary .plus::after {
+      transform: scaleY(0);
+    }
+    .acc-body {
+      padding: 0 0 28px;
+      color: var(--ink-2);
+      font-size: 15.5px;
+      line-height: 1.7;
+    }
+    .acc-body p {
+      margin: 0;
+    }
+    .acc-body .learn-more {
+      margin-top: 18px;
+    }
+  }
+</style>
+
+<script>
+  // Service switcher — tabs on desktop, native <details> accordion on mobile.
+  const tabs = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.switcher-btn'),
+  );
+  const panels = Array.from(
+    document.querySelectorAll<HTMLElement>('.switcher-panel .panel'),
+  );
+  const items = Array.from(document.querySelectorAll<HTMLElement>('.switcher-item'));
+  const ids = tabs.map((t) => t.dataset.target ?? '');
+
+  function activate(target: string, focus = false) {
+    if (!ids.includes(target)) return;
+    tabs.forEach((t, i) => {
+      const isMe = t.dataset.target === target;
+      t.setAttribute('aria-selected', isMe ? 'true' : 'false');
+      t.tabIndex = isMe ? 0 : -1;
+      items[i]?.classList.toggle('is-active', isMe);
+    });
+    panels.forEach((p) => {
+      const isMe = p.id === target;
+      p.classList.toggle('is-active', isMe);
+      if (isMe) p.removeAttribute('hidden');
+      else p.setAttribute('hidden', '');
+    });
+    if (focus) tabs.find((t) => t.dataset.target === target)?.focus();
+  }
+
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => activate(tab.dataset.target ?? ''));
+    tab.addEventListener('keydown', (e) => {
+      let next: number | null = null;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft')
+        next = (i - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      if (next !== null) {
+        e.preventDefault();
+        activate(tabs[next]!.dataset.target ?? '', true);
+      }
+    });
+  });
+
+  // In-page anchors whose target matches a tab id also activate that tab.
+  document.querySelectorAll<HTMLAnchorElement>('a[href*="#"]').forEach((a) => {
+    a.addEventListener('click', () => {
+      const hash = a.hash?.slice(1);
+      if (hash && ids.includes(hash)) activate(hash);
+    });
+  });
+
+  // Deep-link: open the matching tab from the URL hash on load and on change.
+  const openFromHash = () => {
+    const hash = window.location.hash.slice(1);
+    if (hash && ids.includes(hash)) activate(hash);
+  };
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
+</script>

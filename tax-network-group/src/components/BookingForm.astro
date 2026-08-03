@@ -1,0 +1,118 @@
+---
+import '../styles/forms.css';
+import Arrow from './Arrow.astro';
+import { site } from '../site.config.ts';
+
+const endpoint = site.cta.formEndpoint;
+const mailto = site.contact.email;
+---
+
+<div class="lead-form-wrap">
+  <div class="form-status" data-form-success hidden tabindex="-1" role="status">
+    <h3>Thank you — we have your request.</h3>
+    <p>
+      We will be in touch to confirm a time for your introductory call. Before we speak,
+      it helps to consider what you would most like to improve, any immediate deadlines,
+      and what a good outcome would look like for you.
+    </p>
+  </div>
+
+  <div class="form-status form-error-banner" data-form-error hidden tabindex="-1" role="alert">
+    <h3>Your request could not be sent.</h3>
+    <p>
+      Please check the highlighted fields and try again. If the problem continues, email
+      us directly at <a href={`mailto:${mailto}`}>{mailto}</a>.
+    </p>
+  </div>
+
+  <form
+    class="lead-form"
+    data-lead-form
+    data-endpoint={endpoint}
+    data-mailto={mailto}
+    data-subject="Introductory call request — The Tax Network Group"
+    method="post"
+    action={endpoint || `mailto:${mailto}`}
+  >
+    <div class="form-grid">
+      <div class="field">
+        <label for="bName">Name <span class="req" aria-hidden="true">*</span></label>
+        <input id="bName" name="name" type="text" autocomplete="name" required />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="bEmail">Email <span class="req" aria-hidden="true">*</span></label>
+        <input id="bEmail" name="email" type="email" autocomplete="email" required />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field">
+        <label for="bCompany">Company or organisation <span class="optional">(optional)</span></label>
+        <input id="bCompany" name="company" type="text" autocomplete="organization" />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="bArea">Which area? <span class="req" aria-hidden="true">*</span></label>
+        <select id="bArea" name="area" required>
+          <option value="" disabled selected>Please select…</option>
+          <option>Limited Company</option>
+          <option>Self-Employed</option>
+          <option>Landlords</option>
+          <option>Inheritance Tax</option>
+          <option>Tax Advisory</option>
+          <option>Not sure / other</option>
+        </select>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field span-2">
+        <label for="bReason">Reason for the call <span class="req" aria-hidden="true">*</span></label>
+        <textarea id="bReason" name="reason" required></textarea>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field">
+        <label for="bArrangement">Current adviser or arrangement <span class="optional">(optional)</span></label>
+        <input id="bArrangement" name="currentArrangement" type="text" />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="bTiming">Preferred timing <span class="req" aria-hidden="true">*</span></label>
+        <select id="bTiming" name="timing" required>
+          <option value="" disabled selected>Please select…</option>
+          <option>This week</option>
+          <option>Within the next fortnight</option>
+          <option>Flexible</option>
+        </select>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="hp-field" aria-hidden="true">
+        <label for="b_company_url">Do not fill this in</label>
+        <input class="hp-input" id="b_company_url" name="company_url" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <div class="consent">
+        <input id="bConsent" name="consent" type="checkbox" required />
+        <label for="bConsent">
+          I agree that The Tax Network Group may use these details to arrange the call, in
+          line with the <a href="/privacy/">privacy policy</a>.
+          <span class="req" aria-hidden="true">*</span>
+        </label>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          Request your call
+          <Arrow />
+        </button>
+        <span class="form-note">No sensitive documents, please.</span>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+  import '../scripts/leadForm.ts';
+</script>

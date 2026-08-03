@@ -1,0 +1,170 @@
+/* =====================================================================
+   Form styles — accessible, editorial. Shared by the enquiry and
+   pre-booking forms.
+   ===================================================================== */
+
+.lead-form {
+  max-width: 640px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px 24px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.field.span-2 {
+  grid-column: 1 / -1;
+}
+.field label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.field label .req {
+  color: var(--accent);
+}
+.field .optional {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--rule-strong);
+  font-family: var(--sans);
+  font-size: 11px;
+}
+.field input,
+.field select,
+.field textarea {
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 12px 14px;
+  width: 100%;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.field textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.6;
+}
+.field select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236F6960' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px;
+  padding-right: 38px;
+  cursor: pointer;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.field input[aria-invalid='true'],
+.field select[aria-invalid='true'],
+.field textarea[aria-invalid='true'] {
+  border-color: #a8341f;
+}
+.field-error {
+  font-size: 12.5px;
+  color: #a8341f;
+  min-height: 0;
+}
+
+/* Honeypot — visually and programmatically hidden from users. */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Consent */
+.consent {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.consent input {
+  width: auto;
+  margin-top: 3px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.consent label {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
+}
+.consent a {
+  color: var(--accent);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.lead-form button[type='submit'] {
+  font-family: var(--sans);
+}
+.form-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Success / error banners */
+.form-status {
+  border: 1px solid var(--rule-strong);
+  padding: clamp(22px, 3vw, 32px);
+  background: var(--bg-2);
+}
+.form-status[hidden] {
+  display: none;
+}
+.form-status h3 {
+  margin: 0 0 10px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(22px, 2.4vw, 28px);
+  color: var(--ink);
+}
+.form-status p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.7;
+  max-width: 60ch;
+}
+.form-error-banner {
+  border-color: #a8341f;
+  background: color-mix(in oklab, #a8341f 8%, var(--bg));
+}
+
+@media (max-width: 620px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,97 @@
+---
+import Button from './Button.astro';
+import { site } from '../site.config.ts';
+
+interface Props {
+  eyebrow?: string;
+  heading: string;
+  copy?: string;
+  primaryLabel?: string;
+  primaryHref?: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+}
+
+const {
+  eyebrow = 'Get in touch',
+  heading,
+  copy,
+  primaryLabel = site.cta.scheduleLabel,
+  primaryHref = site.cta.scheduleUrl,
+  secondaryLabel = 'Tell us about your business',
+  secondaryHref = '/contact/',
+} = Astro.props;
+---
+
+<section class="cta-band">
+  <div class="container">
+    <div class="cta-inner reveal">
+      <span class="eyebrow">{eyebrow}</span>
+      <h2 class="display" set:html={heading} />
+      {copy && <p>{copy}</p>}
+      <div class="cta-row">
+        <Button href={primaryHref} variant="primary" arrow>{primaryLabel}</Button>
+        {secondaryLabel && (
+          <Button href={secondaryHref} variant="outline">{secondaryLabel}</Button>
+        )}
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-band {
+    padding: clamp(72px, 9vw, 128px) 0 clamp(80px, 11vw, 150px);
+    border-top: 1px solid var(--rule);
+  }
+  .cta-inner {
+    max-width: 880px;
+    margin: 0 auto;
+    text-align: center;
+    padding: clamp(40px, 6vw, 72px) clamp(20px, 4vw, 64px);
+    border: 1px solid var(--rule-strong);
+    background: var(--bg);
+    position: relative;
+  }
+  .cta-inner::before,
+  .cta-inner::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--ink);
+  }
+  .cta-inner::before {
+    top: -1px;
+    left: -1px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .cta-inner::after {
+    bottom: -1px;
+    right: -1px;
+    border-left: 0;
+    border-top: 0;
+  }
+  .cta-inner h2 {
+    margin: 22px auto 24px;
+    font-size: clamp(30px, 4vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -0.012em;
+    max-width: 24ch;
+  }
+  .cta-inner p {
+    margin: 0 auto 36px;
+    max-width: 52ch;
+    color: var(--ink-2);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .cta-row {
+    display: inline-flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+</style>

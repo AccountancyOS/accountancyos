@@ -1,0 +1,46 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import { site } from '../site.config.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Regulatory', url: '/regulatory/' },
+];
+---
+
+<ContentLayout
+  title={`Regulatory Information | ${site.name}`}
+  description="Regulatory information for The Tax Network Group."
+  noindex={true}
+  crumbs={crumbs}
+  eyebrow="Legal"
+  heading="Regulatory information."
+>
+  <div class="container">
+    <section class="prose-section">
+      <div class="prose">
+        <div class="callout">
+          <span class="callout-label">Draft — requires verification before publication</span>
+          <p>
+            This page requires completion using verified legal entity details and
+            professional-body information. No regulated-status wording will be published
+            until it has been confirmed.
+          </p>
+        </div>
+        <p>
+          {site.name} is the trading name of {site.legal.entityName}, a company registered
+          in England and Wales under company number {site.legal.companyNumber}. Registered
+          office: {site.legal.registeredOffice}.
+        </p>
+        <p>
+          The information on this website is general in nature and does not constitute
+          accounting, tax, legal or investment advice. Advice should be obtained for your
+          specific circumstances.
+        </p>
+        <p>
+          For any questions in the meantime, please <a href="/contact/">contact us</a>.
+        </p>
+      </div>
+    </section>
+  </div>
+</ContentLayout>

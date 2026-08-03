@@ -1,0 +1,155 @@
+---
+import '../styles/forms.css';
+import Arrow from './Arrow.astro';
+import { site } from '../site.config.ts';
+
+const endpoint = site.cta.formEndpoint;
+const mailto = site.contact.email;
+---
+
+<div class="lead-form-wrap">
+  <div class="form-status" data-form-success hidden tabindex="-1" role="status">
+    <h3>Thank you. We have received your enquiry.</h3>
+    <p>
+      We will review the information provided and contact you regarding the appropriate
+      next step. We aim to respond to suitable enquiries promptly during normal working
+      days.
+    </p>
+  </div>
+
+  <div
+    class="form-status form-error-banner"
+    data-form-error
+    hidden
+    tabindex="-1"
+    role="alert"
+  >
+    <h3>Your enquiry could not be sent.</h3>
+    <p>
+      Please check the highlighted fields and try again. If the problem continues, email
+      us directly at <a href={`mailto:${mailto}`}>{mailto}</a>.
+    </p>
+  </div>
+
+  <form
+    class="lead-form"
+    data-lead-form
+    data-endpoint={endpoint}
+    data-mailto={mailto}
+    data-subject="Website enquiry — The Tax Network Group"
+    method="post"
+    action={endpoint || `mailto:${mailto}`}
+  >
+    <div class="form-grid">
+      <div class="field">
+        <label for="firstName">First name <span class="req" aria-hidden="true">*</span></label>
+        <input id="firstName" name="firstName" type="text" autocomplete="given-name" required />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="lastName">Last name <span class="req" aria-hidden="true">*</span></label>
+        <input id="lastName" name="lastName" type="text" autocomplete="family-name" required />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field">
+        <label for="email">Email <span class="req" aria-hidden="true">*</span></label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="telephone">Telephone <span class="optional">(optional)</span></label>
+        <input id="telephone" name="telephone" type="tel" autocomplete="tel" />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field">
+        <label for="company">Company or organisation <span class="optional">(optional)</span></label>
+        <input id="company" name="company" type="text" autocomplete="organization" />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="website">Website <span class="optional">(optional)</span></label>
+        <input id="website" name="website" type="url" inputmode="url" placeholder="https://" />
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field span-2">
+        <label for="area">Which area can we help with? <span class="req" aria-hidden="true">*</span></label>
+        <select id="area" name="area" required>
+          <option value="" disabled selected>Please select…</option>
+          <option>Limited Company</option>
+          <option>Self-Employed</option>
+          <option>Landlords</option>
+          <option>Inheritance Tax</option>
+          <option>Tax Advisory</option>
+          <option>Not sure / other</option>
+        </select>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field">
+        <label for="turnover">Approximate annual turnover <span class="optional">(optional)</span></label>
+        <select id="turnover" name="turnover">
+          <option value="" disabled selected>Please select…</option>
+          <option>Not applicable (personal)</option>
+          <option>Under £250,000</option>
+          <option>£250,000 – £1 million</option>
+          <option>£1 million – £5 million</option>
+          <option>More than £5 million</option>
+        </select>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="timescale">Timescale <span class="req" aria-hidden="true">*</span></label>
+        <select id="timescale" name="timescale" required>
+          <option value="" disabled selected>Please select…</option>
+          <option>As soon as possible</option>
+          <option>Within the next few months</option>
+          <option>Just exploring for now</option>
+        </select>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field span-2">
+        <label for="prompt">What is prompting your enquiry? <span class="req" aria-hidden="true">*</span></label>
+        <textarea id="prompt" name="prompt" required></textarea>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="field span-2">
+        <label for="message">Anything else we should know? <span class="optional">(optional)</span></label>
+        <textarea id="message" name="message"></textarea>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <!-- Honeypot: hidden from users; bots that fill it are rejected. -->
+      <div class="hp-field" aria-hidden="true">
+        <label for="company_url">Do not fill this in</label>
+        <input class="hp-input" id="company_url" name="company_url" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <div class="consent">
+        <input id="consent" name="consent" type="checkbox" required />
+        <label for="consent">
+          I agree that The Tax Network Group may use the details provided to respond to my
+          enquiry, in line with the <a href="/privacy/">privacy policy</a>.
+          <span class="req" aria-hidden="true">*</span>
+        </label>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          Send your enquiry
+          <Arrow />
+        </button>
+        <span class="form-note">Please do not send sensitive documents through this form.</span>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+  import '../scripts/leadForm.ts';
+</script>

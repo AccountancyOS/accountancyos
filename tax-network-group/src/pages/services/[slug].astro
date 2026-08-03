@@ -1,0 +1,151 @@
+---
+import type { GetStaticPaths } from 'astro';
+import ContentLayout from '../../layouts/ContentLayout.astro';
+import CtaBand from '../../components/CtaBand.astro';
+import Illustration from '../../components/Illustration.astro';
+import Arrow from '../../components/Arrow.astro';
+import { services, serviceById } from '../../data/services.ts';
+import { site } from '../../site.config.ts';
+import {
+  organizationNode,
+  webPageNode,
+  serviceNode,
+  breadcrumbNode,
+  graph,
+} from '../../lib/schema.ts';
+
+export const getStaticPaths = (() => {
+  return services.map((s) => ({ params: { slug: s.slug }, props: { service: s } }));
+}) satisfies GetStaticPaths;
+
+const { service } = Astro.props;
+const d = service.detail;
+const url = `/services/${service.slug}/`;
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Services', url: '/services/' },
+  { name: service.label, url },
+];
+
+const related = d.related
+  .map((id) => serviceById(id))
+  .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+const schema = graph([
+  organizationNode(),
+  serviceNode({
+    serviceType: d.serviceType,
+    name: `${service.label} tax advice`,
+    description: d.metaDescription,
+    url,
+  }),
+  webPageNode({ url, name: d.seoTitle, description: d.metaDescription }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={`${d.seoTitle} | ${site.name}`}
+  description={d.metaDescription}
+  crumbs={crumbs}
+  eyebrow={`Service · ${service.number}`}
+  heading={d.h1}
+  lead={d.lead}
+  schema={schema}
+>
+  <section class="service-plate-band">
+    <div class="container">
+      <Illustration name={service.illustration} class="service-plate" />
+      <div class="meta-row">
+        <span class="cell">Suited to<strong>{service.suitedTo}</strong></span>
+        <span class="cell">Engagement<strong>{service.engagement}</strong></span>
+        <span class="cell">Area served<strong>United Kingdom</strong></span>
+      </div>
+    </div>
+  </section>
+
+  <div class="container">
+    {
+      d.sections.map((sec) => (
+        <section class="prose-section">
+          <div class="prose-grid">
+            <h2>{sec.heading}</h2>
+            <div class="prose">
+              {sec.paragraphs?.map((p) => <p>{p}</p>)}
+              {sec.list && (
+                <ul>
+                  {sec.list.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      ))
+    }
+
+    <section class="prose-section">
+      <div class="prose-grid">
+        <h2>Engagement &amp; fees</h2>
+        <div class="prose">
+          <p>{d.engagementNote}</p>
+          <div class="callout">
+            <span class="callout-label">Important</span>
+            <p>
+              This page describes our approach in general terms and is not advice. Tax
+              treatment depends on your specific circumstances and on the law in force at
+              the time. Please obtain advice for your situation before acting.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prose-section">
+      <div class="prose-grid">
+        <h2>Related services</h2>
+        <div>
+          <div class="related-services">
+            {
+              related.map((r) => (
+                <a class="card" href={`/services/${r.slug}/`}>
+                  <span class="num">{r.number}</span>
+                  <h3>{r.label}</h3>
+                  <p>{r.body}</p>
+                  <span class="card-link">
+                    Learn more <Arrow />
+                  </span>
+                </a>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <CtaBand
+    heading={`Discuss your ${service.label.toLowerCase()} position.`}
+    copy="Arrange an introductory conversation to talk through where you are, what you need and how we can help."
+    secondaryLabel="Tell us about your affairs"
+    secondaryHref="/contact/"
+  />
+</ContentLayout>
+
+<style>
+  .service-plate-band {
+    padding-bottom: clamp(32px, 4vw, 56px);
+  }
+  .service-plate {
+    aspect-ratio: 16 / 7;
+    min-height: 240px;
+    width: 100%;
+  }
+  @media (max-width: 640px) {
+    .service-plate {
+      aspect-ratio: 4 / 3;
+    }
+  }
+</style>

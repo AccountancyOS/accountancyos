@@ -1,0 +1,158 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import CtaBand from '../components/CtaBand.astro';
+import { site } from '../site.config.ts';
+import {
+  organizationNode,
+  webPageNode,
+  breadcrumbNode,
+  graph,
+} from '../lib/schema.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'About', url: '/about/' },
+];
+const title = `About ${site.name} | Specialist UK Tax Advisers`;
+const description =
+  'A boutique, senior-led tax advisory practice for business owners, individuals and families who value careful, considered counsel. Learn about our approach and principles.';
+
+const schema = graph([
+  organizationNode(),
+  webPageNode({ url: '/about/', name: title, description, type: 'AboutPage' }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={title}
+  description={description}
+  crumbs={crumbs}
+  eyebrow="About"
+  heading="A practice built for the matters that <em>deserve care.</em>"
+  lead={[
+    'The Tax Network Group is a specialist tax advisory practice for business owners, individuals and families.',
+    'We combine dependable compliance with considered advice — the kind that is offered before a decision, not explained after it.',
+  ]}
+  schema={schema}
+>
+  <div class="container">
+    <section class="prose-section">
+      <div class="prose-grid">
+        <h2>Why the practice exists</h2>
+        <div class="prose">
+          <p>
+            Many people with genuinely important tax affairs find themselves
+            underserved. Their situation is too significant for a service that only
+            surfaces at a deadline, yet they do not want the cost, distance or complexity
+            of a large corporate firm.
+          </p>
+          <p>They want something more straightforward:</p>
+          <ul>
+            <li>reliable, accurate work they do not have to check</li>
+            <li>senior attention rather than being passed down a chain</li>
+            <li>clear explanations, in plain language</li>
+            <li>advice that looks ahead, not only backwards</li>
+            <li>discretion, and a genuine interest in getting it right</li>
+          </ul>
+          <p>
+            The Tax Network Group is designed around that expectation — a focused
+            practice, deliberately selective about the work it takes on.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="prose-section">
+      <div class="prose-grid">
+        <h2>Our principles</h2>
+        <div class="prose">
+          <h3>Accuracy before interpretation</h3>
+          <p>
+            Advice is only as dependable as the information beneath it. We get the
+            fundamentals right before building anything more sophisticated on top.
+          </p>
+          <h3>Commercial context</h3>
+          <p>
+            A tax recommendation has to sit within the wider objective — the business,
+            the family, the long-term plan. Tax should inform good decisions, not dictate
+            poor ones.
+          </p>
+          <h3>Forward planning</h3>
+          <p>
+            The most valuable conversations usually happen before a transaction,
+            commitment or deadline. We would rather raise something early than explain it
+            afterwards.
+          </p>
+          <h3>Clear accountability</h3>
+          <p>
+            Clients should always know who is responsible for what, what will be
+            delivered and when. No ambiguity, no theatre.
+          </p>
+          <h3>Selective by design</h3>
+          <p>
+            We take on work where we can make a real difference. We are not trying to be
+            the adviser for everyone.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="prose-section">
+      <div class="prose-grid">
+        <h2>Senior-led advice</h2>
+        <div class="prose">
+          <p>
+            The Tax Network Group is senior-led. The person you speak to about your
+            affairs is the person responsible for the advice — not a handover to someone
+            more junior once the engagement begins.
+          </p>
+          <p>
+            Where specialist or operational work is required, it is delivered through a
+            carefully managed team and trusted specialists, with senior oversight
+            retained throughout.
+          </p>
+          {/*
+            PLACEHOLDER — founder biography. Before launch, replace this section with an
+            accurate biography covering verified qualifications, professional-body
+            memberships, previous roles that may be named, years of experience and the
+            reason for establishing the practice. Do not publish unverified credentials.
+            See README "Placeholders requiring real information".
+          */}
+          <div class="callout">
+            <span class="callout-label">Founder profile — in preparation</span>
+            <p>
+              A full profile of the practice’s founder, including professional
+              qualifications and background, will be published here once finalised.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prose-section">
+      <div class="prose-grid">
+        <h2>A network for specialist advice</h2>
+        <div class="prose">
+          <p>
+            Not every question should be answered by the same adviser. Depending on the
+            matter, you may also need legal, corporate-finance, valuation, pensions or
+            wider financial advice.
+          </p>
+          <p>
+            Where that is the case, we say so, and work alongside your existing advisers
+            or help coordinate suitable specialists — keeping responsibilities and
+            professional relationships clear. We do not imply that we provide regulated
+            services we are not authorised to provide.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <CtaBand
+    eyebrow="Get in touch"
+    heading="A better relationship starts with a <em>better conversation.</em>"
+    copy="Tell us about your affairs and what you are looking for. We will use an introductory call to understand the position and whether we are the right fit."
+  />
+</ContentLayout>

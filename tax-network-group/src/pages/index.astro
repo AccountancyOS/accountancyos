@@ -1,0 +1,570 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Button from '../components/Button.astro';
+import SectionTag from '../components/SectionTag.astro';
+import Illustration from '../components/Illustration.astro';
+import ServiceSwitcher from '../components/ServiceSwitcher.astro';
+import { site } from '../site.config.ts';
+import { organizationNode, websiteNode, webPageNode, graph } from '../lib/schema.ts';
+
+const title =
+  'The Tax Network Group — Tax advice with clarity, discretion and commercial sense';
+const description = site.description;
+
+const schema = graph([
+  organizationNode(),
+  websiteNode(),
+  webPageNode({ url: '/', name: title, description }),
+]);
+---
+
+<BaseLayout title={title} description={description} schema={schema}>
+  <!-- ───────── Hero ───────── -->
+  <section class="hero" data-screen-label="01 Hero">
+    <div class="container">
+      <div class="hero-grid">
+        <div class="hero-text">
+          <div class="hero-meta reveal">
+            <span class="line" aria-hidden="true"></span>
+            <span class="eyebrow">Specialist Tax Advisers</span>
+          </div>
+
+          <h1 class="display reveal" style="--rd: 80ms">
+            Tax advice with <span class="it">clarity,</span><br />
+            discretion and<br />
+            commercial sense.
+          </h1>
+
+          <div class="hero-body reveal" style="--rd: 180ms">
+            <p>
+              We advise business owners, individuals and families who want their tax
+              affairs handled properly.
+            </p>
+            <p>
+              From day-to-day compliance to high-value advisory work, The Tax Network
+              Group provides thoughtful, technically strong advice with a calm, personal
+              approach.
+            </p>
+          </div>
+
+          <div class="hero-cta reveal" style="--rd: 280ms">
+            <Button href={site.cta.scheduleUrl} variant="primary" arrow>
+              {site.cta.scheduleLabel}
+            </Button>
+            <Button href={site.cta.loginUrl} variant="ghost">{site.cta.loginLabel}</Button>
+            <span class="micro" aria-hidden="true"
+              >For business owners, individuals &amp; families</span
+            >
+          </div>
+        </div>
+
+        <div class="hero-visual reveal" style="--rd: 220ms">
+          <Illustration name="hero" class="hero-plate" />
+          <div class="hero-plate-meta" aria-hidden="true">
+            <span>Plate I</span>
+            <span>Editorial · Soft daylight</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><div class="rule"></div></div>
+
+  <!-- ───────── Quiet line ───────── -->
+  <div class="container">
+    <div class="quiet-line reveal" aria-hidden="true">
+      <span>Limited Company</span><span class="seg"></span>
+      <span>Self-Employed</span><span class="seg"></span>
+      <span>Landlords</span><span class="seg"></span>
+      <span>Inheritance Tax</span><span class="seg"></span>
+      <span>Tax Advisory</span>
+    </div>
+  </div>
+
+  <div class="container"><div class="rule"></div></div>
+
+  <!-- ───────── Intro ───────── -->
+  <section class="intro" data-screen-label="02 Intro">
+    <div class="container">
+      <div class="intro-grid">
+        <div class="reveal">
+          <SectionTag label="01 — Practice" />
+          <h2 class="display">
+            A modern tax practice built around <em>trusted advice.</em>
+          </h2>
+        </div>
+        <div class="intro-copy reveal" style="--rd: 120ms">
+          <p>Tax should not feel reactive, unclear or unnecessarily complicated.</p>
+          <p>
+            We work closely with clients who value good judgement, direct communication
+            and high standards of service. For some, that means reliable ongoing support
+            with their company, property or self-employed affairs. For others, it means
+            specialist advice on structuring, transactions, succession and long-term tax
+            planning.
+          </p>
+          <p>
+            Whatever the brief, our role is the same: to bring order, confidence and
+            intelligent advice to matters that deserve careful attention.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── Services switcher ───────── -->
+  <ServiceSwitcher />
+
+  <!-- ───────── Measured advice (dark) ───────── -->
+  <section class="measured on-dark" data-screen-label="04 Measured advice">
+    <div class="container">
+      <div class="section-tag reveal measured-tag">
+        <span class="num">03 — Approach</span>
+        <span class="dash" aria-hidden="true"></span>
+      </div>
+
+      <div class="measured-grid">
+        <h2 class="reveal">Measured advice. <span class="it">Long-term thinking.</span></h2>
+        <div class="measured-copy reveal" style="--rd: 140ms">
+          <p>Good tax advice is not just about forms, deadlines and calculations.</p>
+          <p>
+            It is about understanding the wider picture — <strong
+              >your business, your assets, your family, your plans</strong
+            > — and giving advice that is technically robust, commercially sound and
+            clearly explained.
+          </p>
+          <p>
+            We believe clients are best served by advice that is thoughtful rather than
+            rushed, personal rather than process-driven, and grounded in real expertise.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── Why clients ───────── -->
+  <section class="why" data-screen-label="05 Why clients">
+    <div class="container">
+      <div class="why-head">
+        <div class="reveal">
+          <SectionTag label="04 — Working with us" />
+          <h2 class="display">
+            Why clients work with <em>The Tax Network Group.</em>
+          </h2>
+        </div>
+        <div class="why-lead reveal" style="--rd: 120ms">
+          <p>
+            Because they want more than a filing service. They want a tax adviser who is
+            responsive, commercially aware and able to deal with both the expected and the
+            more complex. They want clear answers, sensible recommendations and the
+            reassurance that important matters are being handled properly.
+          </p>
+          <p style="margin-top: 14px;">
+            That is what we aim to provide — quietly, professionally and consistently.
+          </p>
+        </div>
+      </div>
+
+      <div class="pillars">
+        <div class="pillar reveal">
+          <span class="num">i.</span>
+          <h3><span class="it">Clear</span> advice</h3>
+          <p>
+            Direct, considered answers — not jargon. We explain the position, the options
+            and what we recommend, in plain language.
+          </p>
+        </div>
+        <div class="pillar reveal" style="--rd: 100ms">
+          <span class="num">ii.</span>
+          <h3><span class="it">Thoughtful</span> structuring</h3>
+          <p>
+            Recommendations that account for the wider picture — business, family and
+            long-term plans — not just the immediate transaction.
+          </p>
+        </div>
+        <div class="pillar reveal" style="--rd: 200ms">
+          <span class="num">iii.</span>
+          <h3><span class="it">Careful</span> handling</h3>
+          <p>
+            Important matters are handled with discretion, care and the technical depth
+            they deserve, by advisers who take ownership.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── Closing CTA ───────── -->
+  <section class="closing" data-screen-label="06 Closing">
+    <div class="container">
+      <div class="closing-inner reveal">
+        <span class="eyebrow">Get in touch</span>
+        <h2 class="display">
+          If you would like to discuss your affairs, we would be
+          <em>pleased to hear from you.</em>
+        </h2>
+        <p>
+          Whether you are looking for ongoing support or advice on a specific matter, we
+          are happy to arrange an initial conversation.
+        </p>
+        <div class="closing-cta">
+          <Button href={site.cta.scheduleUrl} variant="primary" arrow>
+            {site.cta.scheduleLabel}
+          </Button>
+          <Button href={site.cta.loginUrl} variant="outline">{site.cta.loginLabel}</Button>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  /* ── Hero ── */
+  .hero {
+    padding-top: clamp(60px, 9vw, 120px);
+    padding-bottom: clamp(80px, 10vw, 140px);
+    position: relative;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: clamp(36px, 6vw, 96px);
+    align-items: end;
+  }
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .hero-meta .line {
+    flex: 0 0 56px;
+    height: 1px;
+    background: var(--rule-strong);
+  }
+  .hero h1 {
+    margin: 0 0 36px;
+    font-size: clamp(44px, 6.4vw, 96px);
+  }
+  .hero h1 .it {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .hero-body {
+    max-width: 52ch;
+    color: var(--ink-2);
+    font-size: 16.5px;
+    line-height: 1.7;
+  }
+  .hero-body p {
+    margin: 0;
+  }
+  .hero-body p + p {
+    margin-top: 14px;
+  }
+  .hero-cta {
+    margin-top: 40px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+  .hero-cta .micro {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .hero-plate {
+    aspect-ratio: 4 / 5;
+    min-height: 380px;
+  }
+  .hero-plate-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  @media (max-width: 880px) {
+    .hero-grid {
+      grid-template-columns: 1fr;
+      gap: 56px;
+    }
+    .hero-plate {
+      aspect-ratio: 5 / 4;
+    }
+  }
+
+  /* ── Quiet line ── */
+  .quiet-line {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 32px 0;
+  }
+  .quiet-line .seg {
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+  @media (max-width: 720px) {
+    .quiet-line {
+      flex-wrap: wrap;
+      gap: 12px 16px;
+    }
+    .quiet-line .seg {
+      display: none;
+    }
+  }
+
+  /* ── Intro ── */
+  .intro {
+    padding: clamp(80px, 10vw, 140px) 0;
+  }
+  .intro-grid {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: clamp(32px, 5vw, 88px);
+    align-items: start;
+  }
+  .intro h2 {
+    margin: 0;
+    font-size: clamp(34px, 4.4vw, 60px);
+    max-width: 14ch;
+  }
+  .intro-copy {
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--ink-2);
+    max-width: 56ch;
+  }
+  .intro-copy p {
+    margin: 0;
+  }
+  .intro-copy p + p {
+    margin-top: 18px;
+  }
+  @media (max-width: 880px) {
+    .intro-grid {
+      grid-template-columns: 1fr;
+      gap: 28px;
+    }
+  }
+
+  /* ── Measured advice (dark) ── */
+  .measured {
+    background: var(--bg-3);
+    color: var(--on-dark);
+    padding: clamp(96px, 12vw, 160px) 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .measured::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        ellipse at 80% 20%,
+        rgba(255, 255, 255, 0.04),
+        transparent 50%
+      ),
+      radial-gradient(ellipse at 10% 90%, rgba(255, 255, 255, 0.025), transparent 60%);
+    pointer-events: none;
+  }
+  .measured .container {
+    position: relative;
+  }
+  .measured-tag .num {
+    color: var(--on-dark-copy);
+  }
+  .measured-tag .dash {
+    background: var(--on-dark-line);
+  }
+  .measured-grid {
+    display: grid;
+    grid-template-columns: 7fr 5fr;
+    gap: clamp(40px, 6vw, 96px);
+    align-items: start;
+  }
+  .measured h2 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: clamp(40px, 5.6vw, 88px);
+    line-height: 1.04;
+    letter-spacing: -0.012em;
+    color: var(--on-dark);
+    max-width: 14ch;
+  }
+  .measured h2 .it {
+    font-style: italic;
+    color: var(--on-dark-accent);
+  }
+  .measured-copy {
+    color: var(--on-dark-copy);
+    font-size: 16px;
+    line-height: 1.8;
+    max-width: 50ch;
+    padding-top: 12px;
+  }
+  .measured-copy p {
+    margin: 0;
+  }
+  .measured-copy p + p {
+    margin-top: 18px;
+  }
+  .measured-copy strong {
+    color: var(--on-dark);
+    font-weight: 500;
+  }
+  @media (max-width: 880px) {
+    .measured-grid {
+      grid-template-columns: 1fr;
+      gap: 36px;
+    }
+  }
+
+  /* ── Why clients ── */
+  .why {
+    padding: clamp(80px, 10vw, 140px) 0;
+  }
+  .why-head {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: clamp(32px, 5vw, 88px);
+    align-items: end;
+    margin-bottom: clamp(48px, 6vw, 80px);
+  }
+  .why h2 {
+    margin: 0;
+    font-size: clamp(34px, 4.4vw, 60px);
+    max-width: 16ch;
+  }
+  .why-lead {
+    color: var(--ink-2);
+    font-size: 16px;
+    line-height: 1.75;
+    max-width: 50ch;
+  }
+  .why-lead p {
+    margin: 0;
+  }
+  .pillars {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(24px, 4vw, 72px);
+    border-top: 1px solid var(--rule-strong);
+    padding-top: clamp(36px, 4vw, 56px);
+  }
+  .pillar {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .pillar .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.18em;
+  }
+  .pillar h3 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(22px, 2.2vw, 28px);
+    line-height: 1.2;
+  }
+  .pillar h3 .it {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .pillar p {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 14.5px;
+    line-height: 1.7;
+    max-width: 36ch;
+  }
+  @media (max-width: 880px) {
+    .why-head {
+      grid-template-columns: 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    .pillars {
+      grid-template-columns: 1fr;
+      gap: 36px;
+    }
+  }
+
+  /* ── Closing ── */
+  .closing {
+    padding: clamp(80px, 10vw, 140px) 0 clamp(96px, 12vw, 160px);
+    border-top: 1px solid var(--rule);
+  }
+  .closing-inner {
+    max-width: 880px;
+    margin: 0 auto;
+    text-align: center;
+    padding: clamp(40px, 6vw, 80px) clamp(20px, 4vw, 64px);
+    border: 1px solid var(--rule-strong);
+    background: var(--bg);
+    position: relative;
+  }
+  .closing-inner::before,
+  .closing-inner::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--ink);
+  }
+  .closing-inner::before {
+    top: -1px;
+    left: -1px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .closing-inner::after {
+    bottom: -1px;
+    right: -1px;
+    border-left: 0;
+    border-top: 0;
+  }
+  .closing h2 {
+    margin: 22px auto 24px;
+    font-size: clamp(32px, 4.2vw, 56px);
+    line-height: 1.08;
+    letter-spacing: -0.012em;
+    max-width: 22ch;
+  }
+  .closing h2 .it {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .closing p {
+    margin: 0 auto 36px;
+    max-width: 52ch;
+    color: var(--ink-2);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .closing-cta {
+    display: inline-flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+</style>

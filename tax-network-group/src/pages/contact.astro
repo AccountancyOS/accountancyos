@@ -1,0 +1,143 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import EnquiryForm from '../components/EnquiryForm.astro';
+import { site } from '../site.config.ts';
+import {
+  organizationNode,
+  webPageNode,
+  breadcrumbNode,
+  graph,
+} from '../lib/schema.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Contact', url: '/contact/' },
+];
+const title = `Contact ${site.name}`;
+const description =
+  'Contact The Tax Network Group to discuss ongoing tax support, a specific matter, funding, succession or a business exit. Tell us about your affairs.';
+
+const schema = graph([
+  organizationNode(),
+  webPageNode({ url: '/contact/', name: title, description, type: 'ContactPage' }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={title}
+  description={description}
+  crumbs={crumbs}
+  eyebrow="Contact"
+  heading="Tell us about your <em>affairs.</em>"
+  lead={[
+    'Provide a few details about your situation, what has prompted the enquiry and the support you are looking for.',
+    'We will review the information and respond regarding the most appropriate next step.',
+  ]}
+  schema={schema}
+>
+  <div class="container">
+    <div class="contact-grid">
+      <aside class="contact-aside">
+        <div class="prose">
+          <h2>Who we work with</h2>
+          <p>Our services are designed primarily for:</p>
+          <ul>
+            <li>business owners and owner-managed companies</li>
+            <li>consultants, freelancers and the self-employed</li>
+            <li>landlords and property owners</li>
+            <li>individuals and families planning ahead, including for inheritance</li>
+            <li>anyone facing a more complex, one-off tax question</li>
+          </ul>
+          <p>
+            We take on work where senior, considered advice makes a real difference.
+          </p>
+        </div>
+
+        <div class="contact-details">
+          <div class="cell">
+            <span class="k">Email</span>
+            {site.contact.email && (
+              <a href={`mailto:${site.contact.email}`}>{site.contact.email}</a>
+            )}
+          </div>
+          <div class="cell">
+            <span class="k">Office</span>
+            <span>{site.contact.location}</span>
+          </div>
+          <div class="cell">
+            <span class="k">Availability</span>
+            <span>{site.contact.availability}</span>
+          </div>
+        </div>
+
+        <p class="contact-alt">
+          Prefer to speak first? <a href={site.cta.scheduleUrl}>Book an introductory call</a>
+          at a time that suits you.
+        </p>
+      </aside>
+
+      <div class="contact-form">
+        <EnquiryForm />
+      </div>
+    </div>
+  </div>
+</ContentLayout>
+
+<style>
+  .contact-grid {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: clamp(32px, 5vw, 80px);
+    align-items: start;
+    padding-bottom: clamp(72px, 9vw, 128px);
+  }
+  .contact-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  .contact-details {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-top: 28px;
+    border-top: 1px solid var(--rule);
+  }
+  .contact-details .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .contact-details .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .contact-details a,
+  .contact-details span:not(.k) {
+    font-size: 15px;
+    color: var(--ink);
+  }
+  .contact-details a:hover {
+    color: var(--accent);
+  }
+  .contact-alt {
+    font-size: 14.5px;
+    color: var(--ink-2);
+    line-height: 1.7;
+    margin: 0;
+  }
+  .contact-alt a {
+    color: var(--accent);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  @media (max-width: 880px) {
+    .contact-grid {
+      grid-template-columns: 1fr;
+      gap: 44px;
+    }
+  }
+</style>

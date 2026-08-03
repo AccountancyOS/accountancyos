@@ -1,0 +1,66 @@
+---
+import '../styles/interior.css';
+import BaseLayout from './BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import type { Crumb } from '../lib/schema.ts';
+
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  image?: string;
+  noindex?: boolean;
+  ogType?: string;
+  schema?: Record<string, unknown> | Record<string, unknown>[];
+  /** Breadcrumb trail (Home … current). Omit to hide breadcrumbs. */
+  crumbs?: Crumb[];
+  eyebrow?: string;
+  /** H1 — may contain <em> for the italic accent. */
+  heading: string;
+  /** Lead paragraphs under the H1. */
+  lead?: string[];
+}
+
+const {
+  title,
+  description,
+  canonical,
+  image,
+  noindex,
+  ogType,
+  schema,
+  crumbs,
+  eyebrow,
+  heading,
+  lead = [],
+} = Astro.props;
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  canonical={canonical}
+  image={image}
+  noindex={noindex}
+  ogType={ogType}
+  schema={schema}
+>
+  <section class="page-hero">
+    <div class="container">
+      {crumbs && crumbs.length > 0 && <Breadcrumbs crumbs={crumbs} />}
+      {eyebrow && <span class="eyebrow">{eyebrow}</span>}
+      <h1 class="display" set:html={heading} />
+      {
+        lead.length > 0 && (
+          <div class="page-lead">
+            {lead.map((p) => (
+              <p>{p}</p>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <slot />
+</BaseLayout>

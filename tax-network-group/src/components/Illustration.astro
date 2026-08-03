@@ -1,0 +1,14 @@
+---
+import { illustrations, type IllustrationName } from '../data/illustrations.ts';
+
+interface Props {
+  name: IllustrationName;
+  /** Wrapping plate class(es) for aspect ratio. */
+  class?: string;
+}
+
+const { name, class: className } = Astro.props;
+const svg = illustrations[name];
+---
+
+<div class:list={['plate', className]} set:html={svg} />

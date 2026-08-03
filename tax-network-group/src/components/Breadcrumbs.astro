@@ -1,0 +1,64 @@
+---
+import JsonLd from './JsonLd.astro';
+import { breadcrumbNode, graph, type Crumb } from '../lib/schema.ts';
+
+interface Props {
+  /** Ordered crumbs including Home first and the current page last. */
+  crumbs: Crumb[];
+}
+const { crumbs } = Astro.props;
+const last = crumbs.length - 1;
+---
+
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol>
+    {
+      crumbs.map((c, i) => (
+        <li>
+          {i < last ? (
+            <a href={c.url}>{c.name}</a>
+          ) : (
+            <span aria-current="page">{c.name}</span>
+          )}
+          {i < last && <span class="sep" aria-hidden="true">/</span>}
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<JsonLd schema={graph([breadcrumbNode(crumbs)])} />
+
+<style>
+  .breadcrumbs {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .breadcrumbs ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .breadcrumbs a {
+    color: var(--muted);
+    transition: color 0.25s ease;
+    padding: 2px 0;
+  }
+  .breadcrumbs a:hover {
+    color: var(--ink);
+  }
+  .breadcrumbs [aria-current='page'] {
+    color: var(--ink);
+  }
+  .breadcrumbs .sep {
+    color: var(--rule-strong);
+    margin-left: 10px;
+  }
+</style>

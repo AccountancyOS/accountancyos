@@ -1,0 +1,42 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import { site } from '../site.config.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Cookie policy', url: '/cookies/' },
+];
+---
+
+<ContentLayout
+  title={`Cookie Policy | ${site.name}`}
+  description="Cookie policy for The Tax Network Group."
+  noindex={true}
+  crumbs={crumbs}
+  eyebrow="Legal"
+  heading="Cookie policy."
+>
+  <div class="container">
+    <section class="prose-section">
+      <div class="prose">
+        <div class="callout">
+          <span class="callout-label">Draft — requires approval before publication</span>
+          <p>
+            This page will be completed once the analytics, marketing and consent
+            technologies in use have been confirmed. The published policy will describe
+            each cookie and similar technology, its purpose and how to manage consent.
+          </p>
+        </div>
+        <p>
+          This website currently loads only what is required to display its content and
+          does not set non-essential tracking cookies. Should analytics or marketing
+          technologies be introduced, a consent mechanism will be added and this policy
+          updated accordingly.
+        </p>
+        <p>
+          For any questions in the meantime, please <a href="/contact/">contact us</a>.
+        </p>
+      </div>
+    </section>
+  </div>
+</ContentLayout>

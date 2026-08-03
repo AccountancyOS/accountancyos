@@ -1,0 +1,11 @@
+---
+// Reusable arrow glyph. Decorative — hidden from assistive tech.
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<svg class:list={['arrow', className]} viewBox="0 0 14 8" fill="none" aria-hidden="true">
+  <path d="M0 4h12.5M9 1l3.5 3L9 7" stroke="currentColor" stroke-width="1.2"></path>
+</svg>

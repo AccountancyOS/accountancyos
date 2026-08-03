@@ -1,0 +1,86 @@
+---
+import '../styles/fonts.ts';
+import '../styles/global.css';
+import { site } from '../site.config.ts';
+import Seo from '../components/Seo.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import JsonLd from '../components/JsonLd.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  image?: string;
+  noindex?: boolean;
+  ogType?: string;
+  /** JSON-LD graph for this page. */
+  schema?: Record<string, unknown> | Record<string, unknown>[];
+  /** Extra class on <body> (e.g. for page-level theming). */
+  bodyClass?: string;
+}
+
+const {
+  title,
+  description,
+  canonical,
+  image,
+  noindex = false,
+  ogType,
+  schema,
+  bodyClass,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang={site.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f3eee4" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="mask-icon" href="/favicon.svg" color="#8a551f" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <Seo
+      title={title}
+      description={description}
+      canonical={canonical}
+      image={image}
+      noindex={noindex}
+      ogType={ogType}
+    />
+    {schema && <JsonLd schema={schema} />}
+  </head>
+  <body class:list={[bodyClass]}>
+    <a class="skip" href="#main">Skip to content</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+
+    <script>
+      // Reveal on scroll — one-shot IntersectionObserver, honours reduced motion.
+      const prefersReduced = window.matchMedia(
+        '(prefers-reduced-motion: reduce)',
+      ).matches;
+      const els = document.querySelectorAll<HTMLElement>('.reveal');
+      if (prefersReduced || !('IntersectionObserver' in window)) {
+        els.forEach((el) => el.classList.add('is-in'));
+      } else {
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => {
+              if (e.isIntersecting) {
+                e.target.classList.add('is-in');
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+        );
+        els.forEach((el) => io.observe(el));
+      }
+    </script>
+  </body>
+</html>

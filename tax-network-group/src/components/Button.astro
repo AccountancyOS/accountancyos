@@ -1,0 +1,37 @@
+---
+import Arrow from './Arrow.astro';
+
+interface Props {
+  href: string;
+  variant?: 'primary' | 'ghost' | 'outline';
+  arrow?: boolean;
+  class?: string;
+  /** Set for external links (adds rel + target). */
+  external?: boolean;
+  'aria-label'?: string;
+}
+
+const {
+  href,
+  variant = 'primary',
+  arrow = false,
+  class: className,
+  external = false,
+  'aria-label': ariaLabel,
+} = Astro.props;
+
+const isExternal = external || /^https?:\/\//.test(href);
+const rel = isExternal ? 'noopener noreferrer' : undefined;
+const target = isExternal ? '_blank' : undefined;
+---
+
+<a
+  href={href}
+  class:list={['btn', `btn-${variant}`, className]}
+  rel={rel}
+  target={target}
+  aria-label={ariaLabel}
+>
+  <slot />
+  {arrow && <Arrow />}
+</a>

@@ -1,0 +1,58 @@
+---
+import { site } from '../site.config.ts';
+
+interface Props {
+  title: string;
+  description: string;
+  /** Path (with trailing slash) OR absolute URL for canonical. Defaults to current. */
+  canonical?: string;
+  /** Absolute or root-relative OG image path. */
+  image?: string;
+  /** Prevent indexing (legal / utility / preview pages). */
+  noindex?: boolean;
+  /** 'website' | 'article' */
+  ogType?: string;
+}
+
+const {
+  title,
+  description,
+  canonical,
+  image = '/og-default.svg',
+  noindex = false,
+  ogType = 'website',
+} = Astro.props;
+
+const base = new URL(site.url);
+// Canonical: self-referencing by default, lowercase, trailing slash, https.
+const canonicalPath = canonical ?? Astro.url.pathname;
+const canonicalUrl = /^https?:\/\//.test(canonicalPath)
+  ? canonicalPath
+  : new URL(canonicalPath, base).href;
+
+const imageUrl = /^https?:\/\//.test(image) ? image : new URL(image, base).href;
+
+const robots = noindex
+  ? 'noindex, nofollow'
+  : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalUrl} />
+<meta name="robots" content={robots} />
+
+<!-- Open Graph -->
+<meta property="og:type" content={ogType} />
+<meta property="og:site_name" content={site.name} />
+<meta property="og:locale" content={site.locale} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalUrl} />
+<meta property="og:image" content={imageUrl} />
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={imageUrl} />

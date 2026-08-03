@@ -1,0 +1,347 @@
+/* =====================================================================
+   Interior / content page styles. Editorial, matching the homepage system.
+   ===================================================================== */
+
+.page-hero {
+  padding-top: clamp(40px, 6vw, 72px);
+  padding-bottom: clamp(40px, 6vw, 72px);
+}
+.page-hero .breadcrumbs {
+  margin-bottom: clamp(28px, 4vw, 44px);
+}
+.page-hero .eyebrow {
+  display: inline-block;
+  margin-bottom: 24px;
+}
+.page-hero h1 {
+  margin: 0;
+  font-size: clamp(40px, 5.2vw, 72px);
+  max-width: 20ch;
+}
+.page-hero h1 .it,
+.page-hero h1 em {
+  font-style: italic;
+  color: var(--accent);
+}
+.page-lead {
+  margin: clamp(28px, 3vw, 40px) 0 0;
+  max-width: 60ch;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.page-lead p {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: clamp(19px, 1.7vw, 23px);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* Content sections */
+.prose-section {
+  padding: clamp(40px, 5vw, 64px) 0;
+  border-top: 1px solid var(--rule);
+}
+.prose-section:first-of-type {
+  border-top: 0;
+}
+.prose-grid {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: clamp(32px, 5vw, 80px);
+  align-items: start;
+}
+.prose-grid > h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(28px, 3.4vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 16ch;
+}
+.prose-grid > h2 .it,
+.prose-grid > h2 em {
+  font-style: italic;
+  color: var(--accent);
+}
+@media (max-width: 880px) {
+  .prose-grid {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}
+
+/* Prose block */
+.prose {
+  color: var(--ink-2);
+  font-size: 16px;
+  line-height: 1.75;
+  max-width: 62ch;
+}
+.prose > * {
+  margin: 0;
+}
+.prose > * + * {
+  margin-top: 18px;
+}
+.prose h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-top: 44px;
+}
+.prose h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(20px, 2.1vw, 26px);
+  line-height: 1.2;
+  color: var(--ink);
+  margin-top: 32px;
+}
+.prose h2 .it,
+.prose h2 em,
+.prose h3 .it,
+.prose h3 em {
+  font-style: italic;
+  color: var(--accent);
+}
+.prose strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.prose a {
+  color: var(--accent);
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color 0.25s ease;
+}
+.prose a:hover {
+  border-color: var(--accent);
+}
+.prose ul,
+.prose ol {
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.prose ul li {
+  position: relative;
+  padding-left: 26px;
+}
+.prose ul li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 10px;
+  height: 1px;
+  background: var(--accent);
+}
+.prose ol {
+  counter-reset: item;
+}
+.prose ol li {
+  position: relative;
+  padding-left: 34px;
+  counter-increment: item;
+}
+.prose ol li::before {
+  content: counter(item, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+/* Disclaimer / callout */
+.callout {
+  border: 1px solid var(--rule-strong);
+  background: var(--bg-2);
+  padding: clamp(20px, 3vw, 28px);
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+.callout .callout-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 10px;
+}
+.callout p {
+  margin: 0;
+}
+.callout p + p {
+  margin-top: 12px;
+}
+
+/* Definition / meta list */
+.meta-row {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding-top: 22px;
+  margin-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+.meta-row .cell {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.meta-row .cell strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
+}
+
+/* Card grids (hubs) */
+.card-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+}
+.card-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.card-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.card {
+  background: var(--bg);
+  padding: clamp(28px, 3vw, 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  transition: background 0.3s ease;
+}
+a.card:hover {
+  background: var(--bg-2);
+}
+.card .num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+.card h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(22px, 2.2vw, 28px);
+  line-height: 1.15;
+  color: var(--ink);
+}
+.card h3 .it {
+  font-style: italic;
+  color: var(--accent);
+}
+.card p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+.card .card-link {
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+a.card:hover .card-link {
+  color: var(--accent);
+}
+@media (max-width: 880px) {
+  .card-grid.cols-2,
+  .card-grid.cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* FAQ */
+.faq {
+  border-top: 1px solid var(--rule);
+}
+.faq details {
+  border-bottom: 1px solid var(--rule);
+}
+.faq summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 26px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: baseline;
+  font-family: var(--serif);
+  font-size: clamp(19px, 2vw, 24px);
+  line-height: 1.2;
+  color: var(--ink);
+}
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+.faq summary .q-mark {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+.faq details[open] summary .q-mark {
+  transform: rotate(45deg);
+}
+.faq .faq-body {
+  padding: 0 0 28px;
+  max-width: 68ch;
+  color: var(--ink-2);
+  font-size: 15.5px;
+  line-height: 1.75;
+}
+.faq .faq-body > * {
+  margin: 0;
+}
+.faq .faq-body > * + * {
+  margin-top: 14px;
+}
+
+/* Related links row */
+.related-services {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+}
+@media (max-width: 640px) {
+  .related-services {
+    grid-template-columns: 1fr;
+  }
+}

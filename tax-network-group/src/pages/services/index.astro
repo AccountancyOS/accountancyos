@@ -1,0 +1,84 @@
+---
+import ContentLayout from '../../layouts/ContentLayout.astro';
+import CtaBand from '../../components/CtaBand.astro';
+import Arrow from '../../components/Arrow.astro';
+import { services } from '../../data/services.ts';
+import { site } from '../../site.config.ts';
+import {
+  organizationNode,
+  webPageNode,
+  breadcrumbNode,
+  graph,
+} from '../../lib/schema.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Services', url: '/services/' },
+];
+const title = `Tax Services for Business Owners, Individuals & Families | ${site.name}`;
+const description =
+  'A focused tax practice covering limited companies, the self-employed, landlords, inheritance tax and specialist advisory work. Explore how we can help.';
+
+const schema = graph([
+  organizationNode(),
+  webPageNode({ url: '/services/', name: title, description, type: 'CollectionPage' }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={title}
+  description={description}
+  crumbs={crumbs}
+  eyebrow="Services"
+  heading="A focused practice, across the matters that need <em>careful attention.</em>"
+  lead={[
+    'We deliberately keep to a defined set of services — the areas where experienced, senior-led tax advice makes the most difference.',
+    'Whether you need dependable ongoing support or advice on a single significant decision, the starting point is the same: understanding your position properly.',
+  ]}
+  schema={schema}
+>
+  <section class="prose-section">
+    <div class="container">
+      <div class="card-grid cols-2">
+        {
+          services.map((s) => (
+            <a class="card" href={`/services/${s.slug}/`}>
+              <span class="num">{s.number}</span>
+              <h3>{s.label}</h3>
+              <p>{s.body}</p>
+              <span class="card-link">
+                Learn more <Arrow />
+              </span>
+            </a>
+          ))
+        }
+        <div class="card card-quiet">
+          <span class="num">—</span>
+          <h3>Not sure where you fit?</h3>
+          <p>
+            Many clients sit across more than one of these. An introductory call is the
+            simplest way to work out what you actually need.
+          </p>
+          <a class="card-link" href={site.cta.scheduleUrl}>
+            {site.cta.scheduleLabel} <Arrow />
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <CtaBand
+    heading="Tell us what you are trying to <em>decide.</em>"
+    copy="Share a little about your situation and what has prompted the enquiry. We will suggest the most useful next step."
+  />
+</ContentLayout>
+
+<style>
+  .card-quiet {
+    background: var(--bg-2);
+  }
+  .card-quiet .card-link {
+    color: var(--accent);
+  }
+</style>

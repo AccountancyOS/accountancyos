@@ -1,0 +1,304 @@
+/* =====================================================================
+   The Tax Network Group — global stylesheet
+   Design system: "Bone & Bronze" palette, Cormorant + Helvetica type.
+   Ported from the client-approved design handoff; tokens are the shipped
+   Bone & Bronze set. Fonts are self-hosted via @fontsource (imported in
+   BaseLayout) so the family names below resolve locally.
+   ===================================================================== */
+
+:root {
+  /* Colours — Bone & Bronze */
+  --bg: #f3eee4; /* page background, warm bone */
+  --bg-2: #eae2d2; /* services band, illustration plates */
+  --bg-3: #1e1b16; /* dark bands: measured advice, footer */
+  --ink: #1b1815; /* primary text, primary button fill */
+  --ink-2: #3d3830; /* body copy, inactive tabs */
+  --muted: #6f6960; /* eyebrows, mono meta, section numbers */
+  --rule: #ccc3b2; /* hairlines, borders */
+  --rule-strong: #ac9f86; /* emphasised hairlines, outline buttons */
+  --accent: #8a551f; /* copper — italic accent words, dot, hovers */
+  --accent-2: #a87534; /* lighter copper, reserved */
+  --on-dark: #efe6d5; /* text on dark bands */
+  --on-dark-muted: #a89c82; /* muted text on dark bands */
+
+  /* Dark-band literals, tokenised */
+  --on-dark-accent: #c7c2a9; /* accent on dark: italic, dot, hover, footer btn */
+  --on-dark-copy: #bfb9a8; /* body copy on dark band */
+  --on-dark-line: rgba(199, 194, 169, 0.4); /* dashes, outline borders on dark */
+  --on-dark-rule: rgba(199, 194, 169, 0.18); /* footer bottom border */
+
+  /* Illustration stroke — deliberately not --ink */
+  --illus-stroke: #1f2433;
+
+  /* Type */
+  --serif: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
+  --sans: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --max: 1280px;
+  --gutter: clamp(20px, 4vw, 56px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'kern', 'liga', 'calt';
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-dark);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.container {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+/* ---- Accessible focus ring (production addition) ---- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+.on-dark :focus-visible,
+.footer :focus-visible,
+.measured :focus-visible {
+  outline-color: var(--on-dark-accent);
+}
+
+/* ---- Typography helpers ---- */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.display {
+  font-family: var(--serif);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  font-feature-settings: 'kern', 'liga', 'dlig', 'calt';
+}
+.display em,
+.display .it {
+  font-style: italic;
+  font-weight: 400;
+}
+.display em {
+  color: var(--accent);
+}
+.lede {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1.5;
+  color: var(--ink-2);
+  letter-spacing: 0;
+}
+p {
+  text-wrap: pretty;
+}
+
+/* ---- Section tag ---- */
+.section-tag {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.section-tag .num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.section-tag .dash {
+  width: 28px;
+  height: 1px;
+  background: var(--rule-strong);
+}
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 11px 18px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease,
+    transform 0.3s ease;
+  line-height: 1;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--ink);
+  color: var(--on-dark);
+}
+.btn-primary:hover {
+  background: var(--accent);
+}
+.btn-primary .arrow {
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.btn-primary:hover .arrow {
+  transform: translateX(3px);
+}
+.btn-ghost {
+  color: var(--ink-2);
+  border-color: transparent;
+  padding: 11px 4px;
+  background: transparent;
+}
+.btn-ghost:hover {
+  color: var(--ink);
+}
+.btn-outline {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+.btn-outline:hover {
+  border-color: var(--ink);
+}
+.arrow {
+  width: 14px;
+  height: 8px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ---- Illustration plate ---- */
+.plate {
+  position: relative;
+  background: var(--bg-2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.plate svg {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+/* ---- Rules ---- */
+.rule {
+  height: 1px;
+  background: var(--rule);
+  margin: 0;
+}
+
+/* ---- Learn more link ---- */
+.learn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ink);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--ink);
+  align-self: flex-start;
+  transition: gap 0.3s ease, color 0.3s ease;
+}
+.learn-more:hover {
+  gap: 18px;
+  color: var(--accent);
+}
+.learn-more .arrow {
+  width: 16px;
+}
+
+/* ---- Reveal on scroll ---- */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.9s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--rd, 0ms);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---- Skip link ---- */
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--ink);
+  color: var(--on-dark);
+  padding: 10px 14px;
+  z-index: 100;
+  border-radius: 2px;
+}
+.skip:focus {
+  left: 12px;
+  top: 12px;
+}
+
+/* =====================================================================
+   Reduced motion — production addition. Disable reveals, cross-fade
+   translate and hover translations; render everything visible.
+   ===================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

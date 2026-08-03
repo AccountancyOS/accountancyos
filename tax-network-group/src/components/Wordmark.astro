@@ -1,0 +1,41 @@
+---
+import { site } from '../site.config.ts';
+interface Props {
+  href?: string;
+  class?: string;
+}
+const { href = '/', class: className } = Astro.props;
+---
+
+<a href={href} class:list={['wordmark', className]} aria-label={`${site.name}, home`}>
+  <span class="mark" aria-hidden="true"></span>
+  <span>The Tax Network <span class="it">Group</span></span>
+</a>
+
+<style>
+  .wordmark {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 21px;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    line-height: 1;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .wordmark .mark {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--accent);
+    display: inline-block;
+    align-self: center;
+    transform: translateY(-1px);
+  }
+  .wordmark .it {
+    font-style: italic;
+    font-weight: 400;
+  }
+</style>
