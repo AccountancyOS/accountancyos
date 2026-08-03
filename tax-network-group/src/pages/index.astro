@@ -1,68 +1,159 @@
 ---
+import '../styles/interior.css';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Button from '../components/Button.astro';
 import SectionTag from '../components/SectionTag.astro';
 import Illustration from '../components/Illustration.astro';
-import ServiceSwitcher from '../components/ServiceSwitcher.astro';
+import AudienceSwitcher from '../components/AudienceSwitcher.astro';
+import CtaBand from '../components/CtaBand.astro';
+import Arrow from '../components/Arrow.astro';
 import { site } from '../site.config.ts';
 import { organizationNode, websiteNode, webPageNode, graph } from '../lib/schema.ts';
 
 const title =
-  'The Tax Network Group — Tax advice with clarity, discretion and commercial sense';
+  'Accountants and Business Advisers for Established Companies | Tax Network Group';
 const description = site.description;
+
+const problems = [
+  'You rarely hear from your accountant unless a deadline is approaching.',
+  'Accounts arrive too late to inform the decision they relate to.',
+  'Tax liabilities are communicated without enough warning.',
+  'There is limited understanding of the business behind the numbers.',
+  'There is no real planning for funding, succession or exit.',
+];
+
+const changes = [
+  { h: 'Stronger financial visibility', p: 'Regular, reliable information about performance, cash and margin — while there is still time to act.' },
+  { h: 'Proactive tax planning', p: 'Advice offered before the decision, not a year-end list of generic suggestions.' },
+  { h: 'Senior attention', p: 'The person responsible for the advice is the person you deal with.' },
+  { h: 'Advice throughout the year', p: 'A relationship, not an annual transaction around a filing date.' },
+  { h: 'Company and owner, together', p: 'Coordinated advice across the business and the people behind it.' },
+  { h: 'Prepared for what is next', p: 'Readiness for the decisions and transactions that change the business.' },
+];
+
+const themes = [
+  {
+    n: '01',
+    title: 'Business accountancy and tax',
+    position: 'Dependable accounting and tax compliance, delivered as part of a wider advisory relationship.',
+    body: 'Annual accounts, corporation tax, VAT, payroll and compliance — handled properly, and used as the foundation for advice rather than the whole service.',
+    href: '/business-advisory/ongoing-accountancy-support/',
+    link: 'Ongoing accountancy support',
+    illustration: 'limited' as const,
+  },
+  {
+    n: '02',
+    title: 'Financial insight and planning',
+    position: 'Clearer financial information and proactive advice throughout the year — not simply accounts after it.',
+    body: 'Management accounts, cash-flow visibility, forecasts, scenario modelling and regular review meetings that turn records into decisions.',
+    href: '/business-advisory/management-information-planning/',
+    link: 'Management information and planning',
+    illustration: 'selfEmployed' as const,
+  },
+  {
+    n: '03',
+    title: 'Growth, funding and exit',
+    position: 'Financial and tax preparation for the moments that change the value or direction of the business.',
+    body: 'Investor-ready forecasts, funding preparation, structuring, acquisition support, succession and exit readiness — grounded in the numbers.',
+    href: '/funding-exit/',
+    link: 'Funding and exit',
+    illustration: 'advisory' as const,
+  },
+];
+
+const faqs = [
+  {
+    q: 'What size of business do you work with?',
+    a: ['Our ongoing services are designed primarily for established and ambitious owner-managed businesses, typically with growing complexity and revenue above approximately £250,000. Revenue is an indicator of suitability rather than a rigid rule — complexity, ambition and the level of advice required matter just as much.'],
+  },
+  {
+    q: 'Do you provide bookkeeping and payroll?',
+    a: ['We can work with your existing bookkeeping or finance team, or provide bookkeeping, payroll and reporting support where a more managed service is required. We do not provide advice based on financial records we cannot rely upon, so where bookkeeping stays with you or another provider, an appropriate review process forms part of the service.'],
+  },
+  {
+    q: 'Can you work with our existing finance team?',
+    a: ['Yes. We regularly work alongside internal bookkeepers and finance staff, agreeing responsibilities and a review process so the information used for reporting and advice is dependable — letting you keep an effective resource while gaining stronger oversight.'],
+  },
+  {
+    q: 'Do you help with funding and exit?',
+    a: ['Yes. We help founders prepare credible, investor-ready financial information, and help owners improve reporting and prepare for a future sale or succession. We are not a regulated investment adviser or placement agent and do not guarantee that funding will be secured.'],
+  },
+  {
+    q: 'Do you advise business owners personally?',
+    a: ['Yes. For business owners and private clients with substantial or complex affairs, we provide coordinated advice across the company and the personal position — remuneration, extraction, capital gains, succession and inheritance tax — working with your other advisers where needed.'],
+  },
+  {
+    q: 'How much do your services cost?',
+    a: [site.pricing.fromLine, 'We agree a clear scope and recurring fee before an engagement begins.'],
+  },
+  {
+    q: 'Can you help us change accountant?',
+    a: ['Yes. Once appointed, we manage the professional clearance process, obtain the relevant records and review the opening position, then agree a practical handover timetable to minimise disruption.'],
+  },
+];
 
 const schema = graph([
   organizationNode(),
   websiteNode(),
   webPageNode({ url: '/', name: title, description }),
+  {
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a.join(' ') },
+    })),
+  },
 ]);
 ---
 
 <BaseLayout title={title} description={description} schema={schema}>
-  <!-- ───────── Hero ───────── -->
+  <!-- 1 ───────── Hero ───────── -->
   <section class="hero" data-screen-label="01 Hero">
     <div class="container">
       <div class="hero-grid">
         <div class="hero-text">
           <div class="hero-meta reveal">
             <span class="line" aria-hidden="true"></span>
-            <span class="eyebrow">Specialist Tax Advisers</span>
+            <span class="eyebrow">Accountancy · Tax · Advisory</span>
           </div>
 
           <h1 class="display reveal" style="--rd: 80ms">
-            Tax advice with <span class="it">clarity,</span><br />
-            discretion and<br />
-            commercial sense.
+            For business owners who <span class="it">expect more</span> from their
+            accountant.
           </h1>
 
           <div class="hero-body reveal" style="--rd: 180ms">
             <p>
-              We advise business owners, individuals and families who want their tax
-              affairs handled properly.
+              Tax Network Group provides accountancy, tax and financial advice to
+              established businesses, ambitious founders and the people behind them.
             </p>
             <p>
-              From day-to-day compliance to high-value advisory work, The Tax Network
-              Group provides thoughtful, technically strong advice with a calm, personal
-              approach.
+              We combine dependable compliance with clearer financial information,
+              proactive planning and senior advice throughout the year.
             </p>
           </div>
 
           <div class="hero-cta reveal" style="--rd: 280ms">
-            <Button href={site.cta.scheduleUrl} variant="primary" arrow>
-              {site.cta.scheduleLabel}
+            <Button href={site.cta.primaryUrl} variant="primary" arrow>
+              {site.cta.primaryLabel}
             </Button>
-            <Button href={site.cta.loginUrl} variant="ghost">{site.cta.loginLabel}</Button>
-            <span class="micro" aria-hidden="true"
-              >For business owners, individuals &amp; families</span
-            >
+            <Button href={site.cta.secondaryUrl} variant="outline">
+              {site.cta.secondaryLabel}
+            </Button>
           </div>
+
+          <p class="hero-qualify reveal" style="--rd: 340ms">
+            Designed for established and ambitious owner-managed businesses — typically with
+            revenue above approximately £250,000.
+          </p>
         </div>
 
         <div class="hero-visual reveal" style="--rd: 220ms">
           <Illustration name="hero" class="hero-plate" />
           <div class="hero-plate-meta" aria-hidden="true">
-            <span>Plate I</span>
-            <span>Editorial · Soft daylight</span>
+            <span>More than year-end compliance</span>
+            <span>Senior-led</span>
           </div>
         </div>
       </div>
@@ -70,160 +161,290 @@ const schema = graph([
   </section>
 
   <div class="container"><div class="rule"></div></div>
-
-  <!-- ───────── Quiet line ───────── -->
   <div class="container">
     <div class="quiet-line reveal" aria-hidden="true">
-      <span>Limited Company</span><span class="seg"></span>
-      <span>Self-Employed</span><span class="seg"></span>
-      <span>Landlords</span><span class="seg"></span>
-      <span>Inheritance Tax</span><span class="seg"></span>
-      <span>Tax Advisory</span>
+      <span>Established businesses</span><span class="seg"></span>
+      <span>Founders</span><span class="seg"></span>
+      <span>Private clients</span><span class="seg"></span>
+      <span>Funding &amp; exit</span>
     </div>
   </div>
-
   <div class="container"><div class="rule"></div></div>
 
-  <!-- ───────── Intro ───────── -->
-  <section class="intro" data-screen-label="02 Intro">
+  <!-- 2 ───────── The problem ───────── -->
+  <section class="problem" data-screen-label="02 Problem">
     <div class="container">
-      <div class="intro-grid">
+      <div class="problem-grid">
         <div class="reveal">
-          <SectionTag label="01 — Practice" />
+          <SectionTag label="01 — The problem" />
           <h2 class="display">
-            A modern tax practice built around <em>trusted advice.</em>
+            Technically correct compliance, but little advice during the
+            <span class="it">year.</span>
           </h2>
         </div>
-        <div class="intro-copy reveal" style="--rd: 120ms">
-          <p>Tax should not feel reactive, unclear or unnecessarily complicated.</p>
-          <p>
-            We work closely with clients who value good judgement, direct communication
-            and high standards of service. For some, that means reliable ongoing support
-            with their company, property or self-employed affairs. For others, it means
-            specialist advice on structuring, transactions, succession and long-term tax
-            planning.
+        <div class="reveal" style="--rd: 120ms">
+          <p class="problem-lead">
+            Many established businesses receive accurate, timely compliance work — and very
+            little else. The numbers are right, but they arrive too late to change anything,
+            and the conversation rarely moves beyond the filing.
           </p>
-          <p>
-            Whatever the brief, our role is the same: to bring order, confidence and
-            intelligent advice to matters that deserve careful attention.
-          </p>
+          <ul class="problem-list">
+            {problems.map((p) => <li>{p}</li>)}
+          </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ───────── Services switcher ───────── -->
-  <ServiceSwitcher />
-
-  <!-- ───────── Measured advice (dark) ───────── -->
-  <section class="measured on-dark" data-screen-label="04 Measured advice">
+  <!-- 3 ───────── Who we help (switcher) ───────── -->
+  <section class="who band" data-screen-label="03 Who we help">
     <div class="container">
-      <div class="section-tag reveal measured-tag">
-        <span class="num">03 — Approach</span>
+      <div class="section-head">
+        <div class="reveal">
+          <SectionTag label="02 — Who we help" />
+          <h2 class="display">Organised around client profile, not <span class="it">industry.</span></h2>
+        </div>
+        <p class="section-sub reveal" style="--rd: 120ms">
+          We work with established businesses, founders, business owners and private clients.
+          Select the profile that fits you best.
+        </p>
+      </div>
+      <AudienceSwitcher />
+    </div>
+  </section>
+
+  <!-- 4 ───────── What changes (dark) ───────── -->
+  <section class="changes on-dark" data-screen-label="04 What changes">
+    <div class="container">
+      <div class="section-tag reveal changes-tag">
+        <span class="num">03 — What changes</span>
         <span class="dash" aria-hidden="true"></span>
       </div>
-
-      <div class="measured-grid">
-        <h2 class="reveal">Measured advice. <span class="it">Long-term thinking.</span></h2>
-        <div class="measured-copy reveal" style="--rd: 140ms">
-          <p>Good tax advice is not just about forms, deadlines and calculations.</p>
-          <p>
-            It is about understanding the wider picture — <strong
-              >your business, your assets, your family, your plans</strong
-            > — and giving advice that is technically robust, commercially sound and
-            clearly explained.
-          </p>
-          <p>
-            We believe clients are best served by advice that is thoughtful rather than
-            rushed, personal rather than process-driven, and grounded in real expertise.
-          </p>
-        </div>
+      <h2 class="changes-h2 reveal">
+        What changes with <span class="it">Tax Network Group.</span>
+      </h2>
+      <div class="changes-grid">
+        {
+          changes.map((c, i) => (
+            <div class="change reveal" style={`--rd: ${i * 60}ms`}>
+              <span class="change-n">{String(i + 1).padStart(2, '0')}</span>
+              <h3>{c.h}</h3>
+              <p>{c.p}</p>
+            </div>
+          ))
+        }
       </div>
     </div>
   </section>
 
-  <!-- ───────── Why clients ───────── -->
-  <section class="why" data-screen-label="05 Why clients">
+  <!-- 5 ───────── What we do (three themes) ───────── -->
+  <section class="do" data-screen-label="05 What we do">
     <div class="container">
-      <div class="why-head">
+      <div class="section-head">
         <div class="reveal">
-          <SectionTag label="04 — Working with us" />
+          <SectionTag label="04 — What we do" />
+          <h2 class="display">Three ways we <span class="it">add value.</span></h2>
+        </div>
+        <p class="section-sub reveal" style="--rd: 120ms">
+          Dependable foundations, clearer information and preparation for the decisions that
+          matter — delivered as one coherent relationship.
+        </p>
+      </div>
+
+      <div class="themes">
+        {
+          themes.map((t) => (
+            <article class="theme-row reveal">
+              <div class="theme-copy">
+                <span class="num">{t.n}</span>
+                <h3>{t.title}</h3>
+                <p class="theme-position">{t.position}</p>
+                <p class="theme-body">{t.body}</p>
+                <a href={t.href} class="learn-more">
+                  {t.link}
+                  <Arrow />
+                </a>
+              </div>
+              <Illustration name={t.illustration} class="theme-plate" />
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 ───────── Flexible delivery ───────── -->
+  <section class="flex band" data-screen-label="06 Flexible delivery">
+    <div class="container">
+      <div class="prose-grid">
+        <div class="reveal">
+          <SectionTag label="05 — How we work" />
           <h2 class="display">
-            Why clients work with <em>The Tax Network Group.</em>
+            Work with your team, or let us take <span class="it">more of it on.</span>
           </h2>
         </div>
-        <div class="why-lead reveal" style="--rd: 120ms">
+        <div class="prose reveal" style="--rd: 120ms">
           <p>
-            Because they want more than a filing service. They want a tax adviser who is
-            responsive, commercially aware and able to deal with both the expected and the
-            more complex. They want clear answers, sensible recommendations and the
-            reassurance that important matters are being handled properly.
+            We can work with your existing bookkeeping or finance team, or provide
+            bookkeeping, payroll and reporting support where a more managed service is
+            required.
           </p>
-          <p style="margin-top: 14px;">
-            That is what we aim to provide — quietly, professionally and consistently.
-          </p>
-        </div>
-      </div>
-
-      <div class="pillars">
-        <div class="pillar reveal">
-          <span class="num">i.</span>
-          <h3><span class="it">Clear</span> advice</h3>
           <p>
-            Direct, considered answers — not jargon. We explain the position, the options
-            and what we recommend, in plain language.
+            We do not provide advice based on financial records we cannot rely upon. Where
+            bookkeeping remains with the client or another provider, an appropriate review
+            process forms part of the service.
           </p>
-        </div>
-        <div class="pillar reveal" style="--rd: 100ms">
-          <span class="num">ii.</span>
-          <h3><span class="it">Thoughtful</span> structuring</h3>
-          <p>
-            Recommendations that account for the wider picture — business, family and
-            long-term plans — not just the immediate transaction.
-          </p>
-        </div>
-        <div class="pillar reveal" style="--rd: 200ms">
-          <span class="num">iii.</span>
-          <h3><span class="it">Careful</span> handling</h3>
-          <p>
-            Important matters are handled with discretion, care and the technical depth
-            they deserve, by advisers who take ownership.
-          </p>
+          <a href="/business-advisory/ongoing-accountancy-support/" class="learn-more">
+            How ongoing support works
+            <Arrow />
+          </a>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ───────── Closing CTA ───────── -->
-  <section class="closing" data-screen-label="06 Closing">
+  <!-- 7 ───────── Changing accountant ───────── -->
+  <section class="changing" data-screen-label="07 Changing accountant">
     <div class="container">
-      <div class="closing-inner reveal">
-        <span class="eyebrow">Get in touch</span>
-        <h2 class="display">
-          If you would like to discuss your affairs, we would be
-          <em>pleased to hear from you.</em>
-        </h2>
-        <p>
-          Whether you are looking for ongoing support or advice on a specific matter, we
-          are happy to arrange an initial conversation.
-        </p>
-        <div class="closing-cta">
-          <Button href={site.cta.scheduleUrl} variant="primary" arrow>
-            {site.cta.scheduleLabel}
-          </Button>
-          <Button href={site.cta.loginUrl} variant="outline">{site.cta.loginLabel}</Button>
+      <div class="prose-grid">
+        <div class="reveal">
+          <SectionTag label="06 — Changing accountant" />
+          <h2 class="display">
+            A structured switch that raises your <span class="it">standards.</span>
+          </h2>
+        </div>
+        <div class="prose reveal" style="--rd: 120ms">
+          <p>
+            Changing accountant is usually more straightforward than owners expect. We
+            manage the professional clearance process, obtain the relevant records and
+            review the opening position — then agree a practical handover timetable.
+          </p>
+          <p>
+            You can speak to us confidentially before making any decision.
+          </p>
+          <a href="/who-we-help/changing-accountant/" class="learn-more">
+            How changing accountant works
+            <Arrow />
+          </a>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- 8 ───────── Private clients ───────── -->
+  <section class="private band" data-screen-label="08 Private clients">
+    <div class="container">
+      <div class="prose-grid">
+        <div class="reveal">
+          <SectionTag label="07 — Private clients" />
+          <h2 class="display">
+            Coordinated advice for business owners and <span class="it">private clients.</span>
+          </h2>
+        </div>
+        <div class="prose reveal" style="--rd: 120ms">
+          <p>
+            For business owners and high-net-worth private clients with substantial or
+            complex affairs, we advise on the company and the personal position together —
+            remuneration, capital gains, succession, inheritance tax and family wealth.
+          </p>
+          <p>
+            This is coordinated, senior-led advice, not a standalone personal tax return
+            service.
+          </p>
+          <a href="/private-clients/" class="learn-more">
+            Private client advice
+            <Arrow />
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 ───────── FAQs ───────── -->
+  <section class="faqs" data-screen-label="09 FAQs">
+    <div class="container">
+      <div class="section-head">
+        <div class="reveal">
+          <SectionTag label="08 — Questions" />
+          <h2 class="display">Frequently asked <span class="it">questions.</span></h2>
+        </div>
+      </div>
+      <div class="faq reveal">
+        {
+          faqs.map((f) => (
+            <details>
+              <summary>
+                <span>{f.q}</span>
+                <span class="q-mark" aria-hidden="true">+</span>
+              </summary>
+              <div class="faq-body">
+                {f.a.map((para) => (
+                  <p>{para}</p>
+                ))}
+              </div>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 ───────── Closing CTA ───────── -->
+  <CtaBand
+    heading="Looking for more from your <em>accountant?</em>"
+    copy="Tell us about your business, what is changing and what you need from the relationship. We will use an introductory call to understand the position and whether Tax Network Group is the right fit."
+    secondaryLabel="See who we help"
+    secondaryHref="/who-we-help/"
+  />
 </BaseLayout>
 
 <style>
+  /* ── Shared section head ── */
+  .section-head {
+    display: grid;
+    grid-template-columns: 5fr 7fr;
+    gap: clamp(32px, 5vw, 88px);
+    align-items: end;
+    margin-bottom: clamp(44px, 6vw, 72px);
+  }
+  .section-head h2 {
+    margin: 0;
+    font-size: clamp(34px, 4.4vw, 60px);
+    max-width: 18ch;
+  }
+  .section-sub {
+    color: var(--muted);
+    max-width: 46ch;
+    font-size: 15px;
+    line-height: 1.7;
+    margin: 0;
+  }
+  .band {
+    background: var(--bg-2);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  section.who,
+  section.do,
+  section.flex,
+  section.changing,
+  section.private,
+  section.faqs,
+  section.problem {
+    padding: clamp(72px, 10vw, 132px) 0;
+  }
+  @media (max-width: 900px) {
+    .section-head {
+      grid-template-columns: 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+  }
+
   /* ── Hero ── */
   .hero {
-    padding-top: clamp(60px, 9vw, 120px);
-    padding-bottom: clamp(80px, 10vw, 140px);
-    position: relative;
+    padding-top: clamp(56px, 8vw, 108px);
+    padding-bottom: clamp(72px, 9vw, 124px);
   }
   .hero-grid {
     display: grid;
@@ -235,7 +456,7 @@ const schema = graph([
     display: flex;
     align-items: center;
     gap: 14px;
-    margin-bottom: 36px;
+    margin-bottom: 34px;
   }
   .hero-meta .line {
     flex: 0 0 56px;
@@ -243,8 +464,9 @@ const schema = graph([
     background: var(--rule-strong);
   }
   .hero h1 {
-    margin: 0 0 36px;
-    font-size: clamp(44px, 6.4vw, 96px);
+    margin: 0 0 34px;
+    font-size: clamp(42px, 6vw, 88px);
+    max-width: 15ch;
   }
   .hero h1 .it {
     font-style: italic;
@@ -263,18 +485,21 @@ const schema = graph([
     margin-top: 14px;
   }
   .hero-cta {
-    margin-top: 40px;
+    margin-top: 36px;
     display: flex;
     align-items: center;
-    gap: 22px;
+    gap: 16px;
     flex-wrap: wrap;
   }
-  .hero-cta .micro {
+  .hero-qualify {
+    margin: 22px 0 0;
+    max-width: 46ch;
     font-family: var(--mono);
     font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 0.14em;
+    line-height: 1.7;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    color: var(--muted);
   }
   .hero-plate {
     aspect-ratio: 4 / 5;
@@ -284,17 +509,18 @@ const schema = graph([
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     margin-top: 14px;
     font-family: var(--mono);
     font-size: 10.5px;
     color: var(--muted);
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
   @media (max-width: 880px) {
     .hero-grid {
       grid-template-columns: 1fr;
-      gap: 56px;
+      gap: 48px;
     }
     .hero-plate {
       aspect-ratio: 5 / 4;
@@ -309,9 +535,9 @@ const schema = graph([
     color: var(--muted);
     font-family: var(--mono);
     font-size: 11px;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    padding: 32px 0;
+    padding: 30px 0;
   }
   .quiet-line .seg {
     flex: 1;
@@ -321,250 +547,213 @@ const schema = graph([
   @media (max-width: 720px) {
     .quiet-line {
       flex-wrap: wrap;
-      gap: 12px 16px;
+      gap: 10px 16px;
     }
     .quiet-line .seg {
       display: none;
     }
   }
 
-  /* ── Intro ── */
-  .intro {
-    padding: clamp(80px, 10vw, 140px) 0;
-  }
-  .intro-grid {
+  /* ── Problem ── */
+  .problem-grid {
     display: grid;
     grid-template-columns: 5fr 7fr;
     gap: clamp(32px, 5vw, 88px);
     align-items: start;
   }
-  .intro h2 {
+  .problem-grid h2 {
     margin: 0;
-    font-size: clamp(34px, 4.4vw, 60px);
-    max-width: 14ch;
+    font-size: clamp(32px, 4.2vw, 56px);
+    max-width: 15ch;
   }
-  .intro-copy {
+  .problem-lead {
+    margin: 0 0 26px;
+    color: var(--ink-2);
     font-size: 16px;
     line-height: 1.75;
-    color: var(--ink-2);
-    max-width: 56ch;
+    max-width: 54ch;
   }
-  .intro-copy p {
+  .problem-list {
+    list-style: none;
     margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
   }
-  .intro-copy p + p {
-    margin-top: 18px;
+  .problem-list li {
+    padding: 18px 0 18px 30px;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+    color: var(--ink-2);
+    font-size: 15.5px;
+    line-height: 1.6;
+    max-width: 60ch;
   }
-  @media (max-width: 880px) {
-    .intro-grid {
+  .problem-list li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+  }
+  @media (max-width: 900px) {
+    .problem-grid {
       grid-template-columns: 1fr;
-      gap: 28px;
+      gap: 24px;
     }
   }
 
-  /* ── Measured advice (dark) ── */
-  .measured {
+  /* ── What changes (dark) ── */
+  .changes {
     background: var(--bg-3);
     color: var(--on-dark);
-    padding: clamp(96px, 12vw, 160px) 0;
+    padding: clamp(84px, 11vw, 148px) 0;
     position: relative;
     overflow: hidden;
   }
-  .measured::before {
+  .changes::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(
-        ellipse at 80% 20%,
-        rgba(255, 255, 255, 0.04),
-        transparent 50%
-      ),
-      radial-gradient(ellipse at 10% 90%, rgba(255, 255, 255, 0.025), transparent 60%);
+    background: radial-gradient(ellipse at 82% 15%, rgba(255, 255, 255, 0.04), transparent 52%),
+      radial-gradient(ellipse at 8% 92%, rgba(255, 255, 255, 0.025), transparent 60%);
     pointer-events: none;
   }
-  .measured .container {
+  .changes .container {
     position: relative;
   }
-  .measured-tag .num {
+  .changes-tag .num {
     color: var(--on-dark-copy);
   }
-  .measured-tag .dash {
+  .changes-tag .dash {
     background: var(--on-dark-line);
   }
-  .measured-grid {
-    display: grid;
-    grid-template-columns: 7fr 5fr;
-    gap: clamp(40px, 6vw, 96px);
-    align-items: start;
-  }
-  .measured h2 {
-    margin: 0;
+  .changes-h2 {
+    margin: 0 0 clamp(44px, 6vw, 72px);
     font-family: var(--serif);
     font-weight: 300;
-    font-size: clamp(40px, 5.6vw, 88px);
-    line-height: 1.04;
+    font-size: clamp(36px, 5vw, 76px);
+    line-height: 1.05;
     letter-spacing: -0.012em;
     color: var(--on-dark);
-    max-width: 14ch;
+    max-width: 18ch;
   }
-  .measured h2 .it {
+  .changes-h2 .it {
     font-style: italic;
     color: var(--on-dark-accent);
   }
-  .measured-copy {
-    color: var(--on-dark-copy);
-    font-size: 16px;
-    line-height: 1.8;
-    max-width: 50ch;
-    padding-top: 12px;
-  }
-  .measured-copy p {
-    margin: 0;
-  }
-  .measured-copy p + p {
-    margin-top: 18px;
-  }
-  .measured-copy strong {
-    color: var(--on-dark);
-    font-weight: 500;
-  }
-  @media (max-width: 880px) {
-    .measured-grid {
-      grid-template-columns: 1fr;
-      gap: 36px;
-    }
-  }
-
-  /* ── Why clients ── */
-  .why {
-    padding: clamp(80px, 10vw, 140px) 0;
-  }
-  .why-head {
-    display: grid;
-    grid-template-columns: 5fr 7fr;
-    gap: clamp(32px, 5vw, 88px);
-    align-items: end;
-    margin-bottom: clamp(48px, 6vw, 80px);
-  }
-  .why h2 {
-    margin: 0;
-    font-size: clamp(34px, 4.4vw, 60px);
-    max-width: 16ch;
-  }
-  .why-lead {
-    color: var(--ink-2);
-    font-size: 16px;
-    line-height: 1.75;
-    max-width: 50ch;
-  }
-  .why-lead p {
-    margin: 0;
-  }
-  .pillars {
+  .changes-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: clamp(24px, 4vw, 72px);
-    border-top: 1px solid var(--rule-strong);
-    padding-top: clamp(36px, 4vw, 56px);
+    gap: 1px;
+    background: var(--on-dark-rule);
+    border: 1px solid var(--on-dark-rule);
   }
-  .pillar {
+  .change {
+    background: var(--bg-3);
+    padding: clamp(26px, 3vw, 38px);
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 12px;
   }
-  .pillar .num {
+  .change-n {
     font-family: var(--mono);
     font-size: 11px;
-    color: var(--muted);
     letter-spacing: 0.18em;
+    color: var(--on-dark-muted);
   }
-  .pillar h3 {
+  .change h3 {
     margin: 0;
     font-family: var(--serif);
     font-weight: 400;
-    font-size: clamp(22px, 2.2vw, 28px);
+    font-size: clamp(20px, 2.1vw, 26px);
     line-height: 1.2;
+    color: var(--on-dark);
   }
-  .pillar h3 .it {
-    font-style: italic;
-    color: var(--accent);
-  }
-  .pillar p {
+  .change p {
     margin: 0;
-    color: var(--ink-2);
+    color: var(--on-dark-copy);
     font-size: 14.5px;
     line-height: 1.7;
-    max-width: 36ch;
+    max-width: 34ch;
   }
-  @media (max-width: 880px) {
-    .why-head {
-      grid-template-columns: 1fr;
-      gap: 20px;
-      align-items: start;
+  @media (max-width: 900px) {
+    .changes-grid {
+      grid-template-columns: 1fr 1fr;
     }
-    .pillars {
+  }
+  @media (max-width: 560px) {
+    .changes-grid {
       grid-template-columns: 1fr;
-      gap: 36px;
     }
   }
 
-  /* ── Closing ── */
-  .closing {
-    padding: clamp(80px, 10vw, 140px) 0 clamp(96px, 12vw, 160px);
+  /* ── What we do (themes) ── */
+  .themes {
+    display: flex;
+    flex-direction: column;
+  }
+  .theme-row {
+    display: grid;
+    grid-template-columns: 7fr 5fr;
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+    padding: clamp(36px, 5vw, 64px) 0;
     border-top: 1px solid var(--rule);
   }
-  .closing-inner {
-    max-width: 880px;
-    margin: 0 auto;
-    text-align: center;
-    padding: clamp(40px, 6vw, 80px) clamp(20px, 4vw, 64px);
-    border: 1px solid var(--rule-strong);
-    background: var(--bg);
-    position: relative;
+  .theme-row:last-child {
+    border-bottom: 1px solid var(--rule);
   }
-  .closing-inner::before,
-  .closing-inner::after {
-    content: '';
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    border: 1px solid var(--ink);
+  .theme-row:nth-child(even) .theme-copy {
+    order: 2;
   }
-  .closing-inner::before {
-    top: -1px;
-    left: -1px;
-    border-right: 0;
-    border-bottom: 0;
+  .theme-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
   }
-  .closing-inner::after {
-    bottom: -1px;
-    right: -1px;
-    border-left: 0;
-    border-top: 0;
+  .theme-copy .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
   }
-  .closing h2 {
-    margin: 22px auto 24px;
-    font-size: clamp(32px, 4.2vw, 56px);
+  .theme-copy h3 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(28px, 3.6vw, 46px);
     line-height: 1.08;
-    letter-spacing: -0.012em;
-    max-width: 22ch;
+    letter-spacing: -0.01em;
+    color: var(--ink);
   }
-  .closing h2 .it {
+  .theme-position {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 300;
     font-style: italic;
+    font-size: clamp(18px, 1.8vw, 22px);
+    line-height: 1.4;
     color: var(--accent);
+    max-width: 44ch;
   }
-  .closing p {
-    margin: 0 auto 36px;
-    max-width: 52ch;
+  .theme-body {
+    margin: 0;
     color: var(--ink-2);
-    font-size: 16px;
-    line-height: 1.7;
+    font-size: 15.5px;
+    line-height: 1.75;
+    max-width: 52ch;
   }
-  .closing-cta {
-    display: inline-flex;
-    gap: 14px;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: center;
+  .theme-plate {
+    aspect-ratio: 4 / 3;
+    min-height: 260px;
+  }
+  @media (max-width: 900px) {
+    .theme-row {
+      grid-template-columns: 1fr;
+      gap: 28px;
+    }
+    .theme-row:nth-child(even) .theme-copy {
+      order: 0;
+    }
   }
 </style>

@@ -1,0 +1,156 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import CtaBand from './CtaBand.astro';
+import Illustration from './Illustration.astro';
+import Arrow from './Arrow.astro';
+import { site } from '../site.config.ts';
+import type { DetailPage } from '../data/pages.ts';
+import type { Crumb } from '../lib/schema.ts';
+import {
+  organizationNode,
+  webPageNode,
+  serviceNode,
+  breadcrumbNode,
+  graph,
+} from '../lib/schema.ts';
+
+interface Props {
+  page: DetailPage;
+  crumbs: Crumb[];
+}
+
+const { page, crumbs } = Astro.props;
+
+const nodes: Record<string, unknown>[] = [organizationNode()];
+if (page.serviceType) {
+  nodes.push(
+    serviceNode({
+      serviceType: page.serviceType,
+      name: page.navLabel,
+      description: page.metaDescription,
+      url: page.path,
+    }),
+  );
+}
+nodes.push(
+  webPageNode({ url: page.path, name: `${page.seoTitle} | ${site.name}`, description: page.metaDescription }),
+);
+nodes.push(breadcrumbNode(crumbs));
+const schema = graph(nodes);
+---
+
+<ContentLayout
+  title={`${page.seoTitle} | ${site.name}`}
+  description={page.metaDescription}
+  crumbs={crumbs}
+  eyebrow={page.eyebrow}
+  heading={page.h1}
+  lead={page.lead}
+  schema={schema}
+>
+  <section class="detail-plate-band">
+    <div class="container">
+      <Illustration name={page.illustration} class="detail-plate" />
+      {
+        page.meta && (
+          <div class="meta-row">
+            {page.meta.map((m) => (
+              <span class="cell">
+                {m.label}
+                <strong>{m.value}</strong>
+              </span>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <div class="container">
+    {
+      page.sections.map((sec) => (
+        <section class="prose-section">
+          <div class="prose-grid">
+            <h2>{sec.heading}</h2>
+            <div class="prose">
+              {sec.paragraphs?.map((p) => <p>{p}</p>)}
+              {sec.list && (
+                <ul>
+                  {sec.list.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      ))
+    }
+
+    {
+      page.serviceType && (
+        <section class="prose-section">
+          <div class="prose-grid">
+            <h2>A note on advice</h2>
+            <div class="prose">
+              <div class="callout">
+                <span class="callout-label">Important</span>
+                <p>
+                  This page describes our approach in general terms and is not advice. Tax
+                  and accounting treatment depends on your specific circumstances and on the
+                  law in force at the time. Please obtain advice for your situation before
+                  acting.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    {
+      page.related && page.related.length > 0 && (
+        <section class="prose-section">
+          <div class="prose-grid">
+            <h2>Related</h2>
+            <div>
+              <div class="related-services">
+                {page.related.map((r) => (
+                  <a class="card" href={r.href}>
+                    <h3>{r.label}</h3>
+                    <span class="card-link">
+                      Explore <Arrow />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )
+    }
+  </div>
+
+  <CtaBand
+    heading={page.ctaHeading ?? 'Looking for more from your <em>accountant?</em>'}
+    copy={page.ctaCopy ?? site.ctaSupport}
+    secondaryLabel="Tell us about your business"
+    secondaryHref="/contact/"
+  />
+</ContentLayout>
+
+<style>
+  .detail-plate-band {
+    padding-bottom: clamp(32px, 4vw, 56px);
+  }
+  .detail-plate {
+    aspect-ratio: 16 / 7;
+    min-height: 240px;
+    width: 100%;
+  }
+  @media (max-width: 640px) {
+    .detail-plate {
+      aspect-ratio: 4 / 3;
+    }
+  }
+</style>

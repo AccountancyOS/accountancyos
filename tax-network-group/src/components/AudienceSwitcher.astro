@@ -1,135 +1,93 @@
 ---
-import { services } from '../data/services.ts';
-import SectionTag from './SectionTag.astro';
+import { audiences } from '../data/pages.ts';
 import Illustration from './Illustration.astro';
 import Arrow from './Arrow.astro';
 ---
 
-<section class="services" id="services" data-screen-label="03 Services">
-  <div class="container">
-    <div class="services-head">
-      <div class="reveal">
-        <SectionTag label="02 — Services" />
-        <h2 class="display">We advise across a range of <em>tax matters.</em></h2>
-      </div>
-      <p class="services-sub reveal" style="--rd: 120ms">
-        A focused practice covering owner-managed businesses, individuals, property and
-        complex advisory work. Select a matter to read more.
-      </p>
-    </div>
+<div class="switcher reveal" style="--rd: 160ms">
+  <ul class="switcher-list" role="tablist" aria-label="Who we help">
+    {
+      audiences.map((a, i) => (
+        <li class:list={['switcher-item', { 'is-active': i === 0 }]} role="presentation">
+          <button
+            class="switcher-btn"
+            role="tab"
+            aria-selected={i === 0 ? 'true' : 'false'}
+            tabindex={i === 0 ? 0 : -1}
+            data-target={a.slug}
+            id={`tab-${a.slug}`}
+            aria-controls={`panel-${a.slug}`}
+          >
+            <span class="num">{String(i + 1).padStart(2, '0')}</span>
+            <span class="label">{a.navLabel}</span>
+          </button>
+        </li>
+      ))
+    }
+  </ul>
 
-    <!-- Desktop switcher (tabs) -->
-    <div class="switcher reveal" style="--rd: 160ms">
-      <ul class="switcher-list" role="tablist" aria-label="Services">
-        {
-          services.map((s, i) => (
-            <li class:list={['switcher-item', { 'is-active': i === 0 }]} role="presentation">
-              <button
-                class="switcher-btn"
-                role="tab"
-                aria-selected={i === 0 ? 'true' : 'false'}
-                tabindex={i === 0 ? 0 : -1}
-                data-target={s.id}
-                id={`tab-${s.id}`}
-                aria-controls={s.id}
-              >
-                <span class="num">{s.number}</span>
-                <span class="label">{s.label}</span>
-              </button>
-            </li>
-          ))
-        }
-      </ul>
-
-      <div class="switcher-panel">
-        {
-          services.map((s, i) => (
-            <article
-              class:list={['panel', { 'is-active': i === 0 }]}
-              id={s.id}
-              role="tabpanel"
-              aria-labelledby={`tab-${s.id}`}
-              hidden={i !== 0}
-            >
-              <div class="panel-grid">
-                <div class="panel-copy">
-                  <span class="num">Service · {s.number}</span>
-                  <h3>
-                    {s.headingParts[0]}
-                    <span class="it">{s.headingParts[1]}</span>
-                    {s.headingParts[2]}
-                  </h3>
-                  <p>{s.body}</p>
-                  <a href={`/services/${s.slug}/`} class="learn-more">
-                    Learn more
-                    <Arrow />
-                  </a>
-                  <div class="panel-meta">
-                    <span>Suited to<strong>{s.suitedTo}</strong></span>
-                    <span>Engagement<strong>{s.engagement}</strong></span>
-                  </div>
+  <div class="switcher-panel">
+    {
+      audiences.map((a, i) => (
+        <article
+          class:list={['panel', { 'is-active': i === 0 }]}
+          id={`panel-${a.slug}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${a.slug}`}
+          hidden={i !== 0}
+        >
+          <div class="panel-grid">
+            <div class="panel-copy">
+              <span class="num">Client · {String(i + 1).padStart(2, '0')}</span>
+              <h3>{a.navLabel}</h3>
+              <p>{a.cardSummary}</p>
+              <a href={a.path} class="learn-more">
+                Learn more
+                <Arrow />
+              </a>
+              {a.meta && (
+                <div class="panel-meta">
+                  {a.meta.slice(0, 2).map((m) => (
+                    <span>
+                      {m.label}
+                      <strong>{m.value}</strong>
+                    </span>
+                  ))}
                 </div>
-                <Illustration name={s.illustration} class="panel-plate" />
-              </div>
-            </article>
-          ))
-        }
-      </div>
-    </div>
-
-    <!-- Mobile accordion (same data, presentation switched by breakpoint) -->
-    <ul class="acc-list">
-      {
-        services.map((s, i) => (
-          <li class="acc-item">
-            <details open={i === 0}>
-              <summary class="acc-summary">
-                <span>{s.label}</span>
-                <span class="plus" aria-hidden="true" />
-              </summary>
-              <div class="acc-body">
-                <p>
-                  {s.headingParts.join('')} {s.body}
-                </p>
-                <a href={`/services/${s.slug}/`} class="learn-more">
-                  Learn more
-                  <Arrow />
-                </a>
-              </div>
-            </details>
-          </li>
-        ))
-      }
-    </ul>
+              )}
+            </div>
+            <Illustration name={a.illustration} class="panel-plate" />
+          </div>
+        </article>
+      ))
+    }
   </div>
-</section>
+</div>
+
+<!-- Mobile accordion (same data) -->
+<ul class="acc-list">
+  {
+    audiences.map((a, i) => (
+      <li class="acc-item">
+        <details open={i === 0}>
+          <summary class="acc-summary">
+            <span>{a.navLabel}</span>
+            <span class="plus" aria-hidden="true" />
+          </summary>
+          <div class="acc-body">
+            <p>{a.cardSummary}</p>
+            <a href={a.path} class="learn-more">
+              Learn more
+              <Arrow />
+            </a>
+          </div>
+        </details>
+      </li>
+    ))
+  }
+</ul>
 
 <style is:global>
-  .services {
-    background: var(--bg-2);
-    padding: clamp(80px, 10vw, 140px) 0;
-    border-top: 1px solid var(--rule);
-    border-bottom: 1px solid var(--rule);
-  }
-  .services-head {
-    display: grid;
-    grid-template-columns: 5fr 7fr;
-    gap: clamp(32px, 5vw, 88px);
-    align-items: end;
-    margin-bottom: clamp(48px, 6vw, 80px);
-  }
-  .services h2 {
-    margin: 0;
-    font-size: clamp(34px, 4.4vw, 60px);
-    max-width: 16ch;
-  }
-  .services-sub {
-    color: var(--muted);
-    max-width: 46ch;
-    font-size: 15px;
-    line-height: 1.7;
-    margin: 0;
-  }
   .switcher {
     display: grid;
     grid-template-columns: 4fr 8fr;
@@ -158,7 +116,7 @@ import Arrow from './Arrow.astro';
     gap: 16px;
     font-family: var(--serif);
     font-weight: 400;
-    font-size: clamp(22px, 2.4vw, 30px);
+    font-size: clamp(21px, 2.2vw, 28px);
     color: var(--ink-2);
     line-height: 1.15;
     transition: color 0.3s ease, padding 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -202,9 +160,9 @@ import Arrow from './Arrow.astro';
   }
   .switcher-panel {
     position: relative;
-    min-height: 380px;
+    min-height: 360px;
   }
-  .panel {
+  .switcher-panel .panel {
     position: absolute;
     inset: 0;
     opacity: 0;
@@ -212,7 +170,7 @@ import Arrow from './Arrow.astro';
     pointer-events: none;
     transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
-  .panel.is-active {
+  .switcher-panel .panel.is-active {
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
@@ -226,7 +184,7 @@ import Arrow from './Arrow.astro';
   .panel-copy {
     display: flex;
     flex-direction: column;
-    gap: 28px;
+    gap: 24px;
   }
   .panel-copy .num {
     font-family: var(--mono);
@@ -238,20 +196,17 @@ import Arrow from './Arrow.astro';
     margin: 0;
     font-family: var(--serif);
     font-weight: 400;
-    font-size: clamp(28px, 3.4vw, 44px);
+    font-size: clamp(28px, 3.4vw, 42px);
     line-height: 1.1;
     letter-spacing: -0.01em;
-  }
-  .panel-copy h3 .it {
-    font-style: italic;
-    color: var(--accent);
+    color: var(--ink);
   }
   .panel-copy p {
     margin: 0;
     font-size: 16px;
     line-height: 1.75;
     color: var(--ink-2);
-    max-width: 50ch;
+    max-width: 52ch;
   }
   .panel-meta {
     display: flex;
@@ -276,19 +231,13 @@ import Arrow from './Arrow.astro';
   }
   .panel-plate {
     aspect-ratio: 4 / 3;
-    min-height: 300px;
+    min-height: 280px;
   }
 
-  /* Mobile accordion */
   .acc-list {
     display: none;
   }
   @media (max-width: 980px) {
-    .services-head {
-      grid-template-columns: 1fr;
-      gap: 20px;
-      align-items: start;
-    }
     .switcher {
       display: none;
     }
@@ -309,7 +258,7 @@ import Arrow from './Arrow.astro';
       padding: 22px 0;
       cursor: pointer;
       font-family: var(--serif);
-      font-size: 24px;
+      font-size: 22px;
       line-height: 1.1;
       color: var(--ink);
       list-style: none;
@@ -352,22 +301,14 @@ import Arrow from './Arrow.astro';
       line-height: 1.7;
     }
     .acc-body p {
-      margin: 0;
-    }
-    .acc-body .learn-more {
-      margin-top: 18px;
+      margin: 0 0 16px;
     }
   }
 </style>
 
 <script>
-  // Service switcher — tabs on desktop, native <details> accordion on mobile.
-  const tabs = Array.from(
-    document.querySelectorAll<HTMLButtonElement>('.switcher-btn'),
-  );
-  const panels = Array.from(
-    document.querySelectorAll<HTMLElement>('.switcher-panel .panel'),
-  );
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.switcher-btn'));
+  const panels = Array.from(document.querySelectorAll<HTMLElement>('.switcher-panel .panel'));
   const items = Array.from(document.querySelectorAll<HTMLElement>('.switcher-item'));
   const ids = tabs.map((t) => t.dataset.target ?? '');
 
@@ -380,7 +321,7 @@ import Arrow from './Arrow.astro';
       items[i]?.classList.toggle('is-active', isMe);
     });
     panels.forEach((p) => {
-      const isMe = p.id === target;
+      const isMe = p.id === `panel-${target}`;
       p.classList.toggle('is-active', isMe);
       if (isMe) p.removeAttribute('hidden');
       else p.setAttribute('hidden', '');
@@ -393,8 +334,7 @@ import Arrow from './Arrow.astro';
     tab.addEventListener('keydown', (e) => {
       let next: number | null = null;
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (i + 1) % tabs.length;
-      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft')
-        next = (i - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length;
       else if (e.key === 'Home') next = 0;
       else if (e.key === 'End') next = tabs.length - 1;
       if (next !== null) {
@@ -403,20 +343,4 @@ import Arrow from './Arrow.astro';
       }
     });
   });
-
-  // In-page anchors whose target matches a tab id also activate that tab.
-  document.querySelectorAll<HTMLAnchorElement>('a[href*="#"]').forEach((a) => {
-    a.addEventListener('click', () => {
-      const hash = a.hash?.slice(1);
-      if (hash && ids.includes(hash)) activate(hash);
-    });
-  });
-
-  // Deep-link: open the matching tab from the URL hash on load and on change.
-  const openFromHash = () => {
-    const hash = window.location.hash.slice(1);
-    if (hash && ids.includes(hash)) activate(hash);
-  };
-  openFromHash();
-  window.addEventListener('hashchange', openFromHash);
 </script>

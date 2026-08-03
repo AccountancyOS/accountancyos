@@ -4,7 +4,7 @@ import { getCollection, render } from 'astro:content';
 import ContentLayout from '../../layouts/ContentLayout.astro';
 import CtaBand from '../../components/CtaBand.astro';
 import { insightCategories } from '../../content.config.ts';
-import { serviceById } from '../../data/services.ts';
+import { allDetailPages } from '../../data/pages.ts';
 import { site } from '../../site.config.ts';
 import {
   organizationNode,
@@ -42,7 +42,9 @@ const crumbs = [
   { name: d.title, url },
 ];
 
-const relatedService = d.relatedService ? serviceById(d.relatedService) : undefined;
+const relatedPage = d.relatedService
+  ? allDetailPages.find((p) => p.path === d.relatedService)
+  : undefined;
 
 const seoTitle = d.seoTitle ?? `${d.title} | ${site.name}`;
 const absImage = d.socialImage ?? '/og-default.svg';
@@ -126,11 +128,11 @@ const schema = graph([
     }
 
     {
-      relatedService && (
+      relatedPage && (
         <section class="article-related">
           <p class="eyebrow">Related service</p>
-          <a href={`/services/${relatedService.slug}/`} class="related-link">
-            {relatedService.label} — {relatedService.suitedTo}
+          <a href={relatedPage.path} class="related-link">
+            {relatedPage.navLabel}
           </a>
         </section>
       )
@@ -140,7 +142,7 @@ const schema = graph([
   <CtaBand
     heading="Turn a question into <em>clear advice.</em>"
     copy="If this raises something specific to your situation, the next step is a short conversation."
-    secondaryLabel="Tell us about your affairs"
+    secondaryLabel="Tell us about your business"
     secondaryHref="/contact/"
   />
 </ContentLayout>

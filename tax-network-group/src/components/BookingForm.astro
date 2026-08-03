@@ -30,7 +30,7 @@ const mailto = site.contact.email;
     data-lead-form
     data-endpoint={endpoint}
     data-mailto={mailto}
-    data-subject="Introductory call request — The Tax Network Group"
+    data-subject="Introductory call request — Tax Network Group"
     method="post"
     action={endpoint || `mailto:${mailto}`}
   >
@@ -55,11 +55,11 @@ const mailto = site.contact.email;
         <label for="bArea">Which area? <span class="req" aria-hidden="true">*</span></label>
         <select id="bArea" name="area" required>
           <option value="" disabled selected>Please select…</option>
-          <option>Limited Company</option>
-          <option>Self-Employed</option>
-          <option>Landlords</option>
-          <option>Inheritance Tax</option>
-          <option>Tax Advisory</option>
+          <option>Business accountancy and tax</option>
+          <option>Management information and planning</option>
+          <option>Growth, funding or exit</option>
+          <option>Business-owner or private-client tax</option>
+          <option>Changing accountant</option>
           <option>Not sure / other</option>
         </select>
         <span class="field-error" aria-live="polite"></span>
@@ -95,8 +95,8 @@ const mailto = site.contact.email;
       <div class="consent">
         <input id="bConsent" name="consent" type="checkbox" required />
         <label for="bConsent">
-          I agree that The Tax Network Group may use these details to arrange the call, in
-          line with the <a href="/privacy/">privacy policy</a>.
+          I agree that Tax Network Group may use these details to arrange the call, in
+          line with the <a href="/privacy-policy/">privacy policy</a>.
           <span class="req" aria-hidden="true">*</span>
         </label>
         <span class="field-error" aria-live="polite"></span>

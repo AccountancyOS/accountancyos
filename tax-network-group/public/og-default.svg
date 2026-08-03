@@ -1,15 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="The Tax Network Group — Tax advice with clarity, discretion and commercial sense">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="Tax Network Group — For business owners who expect more from their accountant">
   <rect width="1200" height="630" fill="#F3EEE4"/>
   <rect x="60" y="60" width="1080" height="510" fill="none" stroke="#AC9F86" stroke-width="1"/>
-  <!-- corner brackets -->
   <path d="M60 84 V60 H84" fill="none" stroke="#1B1815" stroke-width="1.5"/>
   <path d="M1140 546 V570 H1116" fill="none" stroke="#1B1815" stroke-width="1.5"/>
   <g transform="translate(110,120)">
     <circle cx="8" cy="8" r="8" fill="#8A551F"/>
-    <text x="28" y="16" font-family="Georgia,'Times New Roman',serif" font-size="26" font-weight="500" fill="#1B1815">The Tax Network <tspan font-style="italic" font-weight="400">Group</tspan></text>
+    <text x="28" y="16" font-family="Georgia,'Times New Roman',serif" font-size="26" font-weight="500" fill="#1B1815">Tax Network <tspan font-style="italic" font-weight="400">Group</tspan></text>
   </g>
-  <text x="110" y="330" font-family="Georgia,'Times New Roman',serif" font-size="76" font-weight="400" fill="#1B1815" letter-spacing="-1">Tax advice with <tspan font-style="italic" fill="#8A551F">clarity,</tspan></text>
-  <text x="110" y="410" font-family="Georgia,'Times New Roman',serif" font-size="76" font-weight="400" fill="#1B1815" letter-spacing="-1">discretion and commercial sense.</text>
-  <text x="110" y="500" font-family="Helvetica,Arial,sans-serif" font-size="24" fill="#3D3830">For business owners, individuals and families.</text>
-  <text x="110" y="545" font-family="'JetBrains Mono',monospace" font-size="16" letter-spacing="3" fill="#6F6960">SPECIALIST TAX ADVISERS · UNITED KINGDOM</text>
+  <text x="110" y="320" font-family="Georgia,'Times New Roman',serif" font-size="72" font-weight="400" fill="#1B1815" letter-spacing="-1">For business owners who</text>
+  <text x="110" y="398" font-family="Georgia,'Times New Roman',serif" font-size="72" font-weight="400" fill="#1B1815" letter-spacing="-1"><tspan font-style="italic" fill="#8A551F">expect more</tspan> from their accountant.</text>
+  <text x="110" y="486" font-family="Helvetica,Arial,sans-serif" font-size="23" fill="#3D3830">Accountancy, tax and financial advice for established businesses and founders.</text>
+  <text x="110" y="540" font-family="'JetBrains Mono',monospace" font-size="15" letter-spacing="3" fill="#6F6960">ACCOUNTANCY · TAX · ADVISORY · UNITED KINGDOM</text>
 </svg>

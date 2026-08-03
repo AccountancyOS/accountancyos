@@ -1,0 +1,17 @@
+---
+import type { GetStaticPaths } from 'astro';
+import DetailPageView from '../../components/DetailPageView.astro';
+import { advisory } from '../../data/pages.ts';
+
+export const getStaticPaths = (() =>
+  advisory.map((page) => ({ params: { slug: page.slug }, props: { page } }))) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Business advisory', url: '/business-advisory/' },
+  { name: page.navLabel, url: page.path },
+];
+---
+
+<DetailPageView page={page} crumbs={crumbs} />

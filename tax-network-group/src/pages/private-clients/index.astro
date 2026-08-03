@@ -1,0 +1,11 @@
+---
+import DetailPageView from '../../components/DetailPageView.astro';
+import { privateClients } from '../../data/pages.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Private clients', url: '/private-clients/' },
+];
+---
+
+<DetailPageView page={privateClients} crumbs={crumbs} />

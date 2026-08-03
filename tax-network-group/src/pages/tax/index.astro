@@ -1,0 +1,33 @@
+---
+import HubView from '../../components/HubView.astro';
+import { tax } from '../../data/pages.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Tax', url: '/tax/' },
+];
+const cards = [
+  ...tax.map((t) => ({ label: t.navLabel, href: t.path, summary: t.cardSummary })),
+  {
+    label: 'Private-client tax',
+    href: '/private-clients/',
+    summary:
+      'Coordinated tax advice for business owners and high-net-worth private clients with substantial or complex affairs.',
+  },
+];
+---
+
+<HubView
+  path="/tax/"
+  seoTitle="Business and Private-Client Tax Advice"
+  description="Corporation tax, business-owner tax planning and private-client tax — advice connected to the commercial and personal decision, not just the return."
+  crumbs={crumbs}
+  eyebrow="Tax"
+  heading="Tax advice connected to the <em>decision.</em>"
+  lead={[
+    'We combine dependable tax compliance with forward-looking planning across the company, the owner and the wider private-client position.',
+    'The aim is always the same: to consider the tax result alongside the commercial and personal objective, early enough to act deliberately.',
+  ]}
+  cards={cards}
+  ctaHeading="Discuss the decision before the tax treatment is <em>fixed.</em>"
+/>

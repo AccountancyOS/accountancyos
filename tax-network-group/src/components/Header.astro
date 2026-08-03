@@ -11,26 +11,51 @@ import Arrow from './Arrow.astro';
 
       <nav class="nav" aria-label="Primary">
         <ul class="nav-list">
-          {primaryNav.map((item) => (
-            <li><a href={item.href}>{item.label}</a></li>
-          ))}
+          {
+            primaryNav.map((item) =>
+              'children' in item && item.children ? (
+                <li class="nav-item has-children">
+                  <a href={item.href} class="nav-top">
+                    {item.label}
+                    <svg class="chev" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+                      <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.2" />
+                    </svg>
+                  </a>
+                  <div class="nav-panel">
+                    <ul>
+                      {item.children.map((c) => (
+                        <li>
+                          <a href={c.href}>{c.label}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </li>
+              ) : (
+                <li class="nav-item">
+                  <a href={item.href} class="nav-top">
+                    {item.label}
+                  </a>
+                </li>
+              ),
+            )
+          }
         </ul>
-
-        <div class="header-cta">
-          <a href={site.cta.loginUrl} class="btn btn-ghost">{site.cta.loginLabel}</a>
-          <a href={site.cta.scheduleUrl} class="btn btn-primary">
-            {site.cta.scheduleLabel}
-            <Arrow />
-          </a>
-          <button
-            class="menu-toggle"
-            id="menuToggle"
-            aria-label="Open menu"
-            aria-expanded="false"
-            aria-controls="mobileMenu"
-          >Menu</button>
-        </div>
       </nav>
+
+      <div class="header-cta">
+        <a href={site.cta.primaryUrl} class="btn btn-primary">
+          {site.cta.primaryLabel}
+          <Arrow />
+        </a>
+        <button
+          class="menu-toggle"
+          id="menuToggle"
+          aria-label="Open menu"
+          aria-expanded="false"
+          aria-controls="mobileMenu"
+        >Menu</button>
+      </div>
     </div>
   </div>
 </header>
@@ -42,19 +67,33 @@ import Arrow from './Arrow.astro';
       <Wordmark />
       <button class="menu-close" id="menuClose" aria-label="Close menu">Close</button>
     </div>
-    <nav aria-label="Mobile">
-      <ul class="mobile-nav-list">
-        {primaryNav.map((item) => (
-          <li><a href={item.href} data-menu-link>{item.label}</a></li>
-        ))}
-      </ul>
+    <nav aria-label="Mobile" class="mobile-nav">
+      {
+        primaryNav.map((item) => (
+          <div class="mobile-group">
+            <a href={item.href} class="mobile-top" data-menu-link>
+              {item.label}
+            </a>
+            {'children' in item && item.children && (
+              <ul>
+                {item.children.map((c) => (
+                  <li>
+                    <a href={c.href} data-menu-link>
+                      {c.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))
+      }
     </nav>
     <div class="mobile-menu-cta">
-      <a href={site.cta.scheduleUrl} class="btn btn-primary" data-menu-link>
-        {site.cta.scheduleLabel}
+      <a href={site.cta.primaryUrl} class="btn btn-primary" data-menu-link>
+        {site.cta.primaryLabel}
         <Arrow />
       </a>
-      <a href={site.cta.loginUrl} class="btn btn-outline" data-menu-link>{site.cta.loginLabel}</a>
     </div>
   </div>
 </div>
@@ -77,52 +116,93 @@ import Arrow from './Arrow.astro';
   .header-row {
     display: flex;
     align-items: center;
-    gap: 36px;
+    gap: 28px;
     height: 76px;
   }
   .nav {
-    display: flex;
-    align-items: center;
-    gap: 28px;
     margin-left: auto;
   }
   .nav-list {
     display: flex;
-    gap: 26px;
+    align-items: center;
+    gap: 4px;
     list-style: none;
     margin: 0;
     padding: 0;
   }
-  .nav-list a {
+  .nav-item {
+    position: relative;
+  }
+  .nav-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 13.5px;
     color: var(--ink-2);
     letter-spacing: 0.005em;
-    position: relative;
-    padding: 6px 0;
+    padding: 10px 12px;
     transition: color 0.25s ease;
   }
-  .nav-list a::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 2px;
-    height: 1px;
-    background: var(--ink);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+  .nav-top .chev {
+    width: 9px;
+    height: 6px;
+    opacity: 0.7;
+    transition: transform 0.3s ease;
   }
-  .nav-list a:hover {
+  .nav-item:hover > .nav-top,
+  .nav-item:focus-within > .nav-top {
     color: var(--ink);
   }
-  .nav-list a:hover::after {
-    transform: scaleX(1);
+  .has-children:hover .chev,
+  .has-children:focus-within .chev {
+    transform: rotate(180deg);
+  }
+  /* Dropdown panel */
+  .nav-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 288px;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    padding: 10px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(6px);
+    transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+      visibility 0.25s;
+    box-shadow: 0 18px 40px -28px rgba(30, 27, 22, 0.5);
+  }
+  .has-children:hover .nav-panel,
+  .has-children:focus-within .nav-panel {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .nav-panel ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .nav-panel a {
+    display: block;
+    padding: 11px 12px;
+    font-size: 14px;
+    color: var(--ink-2);
+    border-radius: 2px;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .nav-panel a:hover {
+    background: var(--bg-2);
+    color: var(--ink);
   }
   .header-cta {
     display: flex;
     align-items: center;
     gap: 14px;
+    margin-left: 4px;
   }
   .menu-toggle {
     display: none;
@@ -137,14 +217,13 @@ import Arrow from './Arrow.astro';
     cursor: pointer;
   }
 
-  /* Mobile menu drawer */
+  /* Mobile drawer */
   .mobile-menu {
     position: fixed;
     inset: 0;
     z-index: 60;
     background: var(--bg);
-    display: flex;
-    flex-direction: column;
+    overflow-y: auto;
     animation: menu-in 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
   .mobile-menu[hidden] {
@@ -164,13 +243,11 @@ import Arrow from './Arrow.astro';
     max-width: var(--max);
     width: 100%;
     margin: 0 auto;
-    padding: 0 var(--gutter);
+    padding: 22px var(--gutter) 48px;
     display: flex;
     flex-direction: column;
-    gap: 40px;
-    padding-top: 22px;
-    padding-bottom: 40px;
-    height: 100%;
+    gap: 32px;
+    min-height: 100%;
   }
   .mobile-menu-head {
     display: flex;
@@ -187,23 +264,40 @@ import Arrow from './Arrow.astro';
     color: var(--ink);
     cursor: pointer;
   }
-  .mobile-nav-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .mobile-nav {
     display: flex;
     flex-direction: column;
     border-top: 1px solid var(--rule);
   }
-  .mobile-nav-list li {
+  .mobile-group {
     border-bottom: 1px solid var(--rule);
+    padding: 18px 0;
   }
-  .mobile-nav-list a {
+  .mobile-top {
     display: block;
-    padding: 20px 0;
     font-family: var(--serif);
-    font-size: 28px;
+    font-size: 26px;
     color: var(--ink);
+    line-height: 1.1;
+  }
+  .mobile-group ul {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .mobile-group ul a {
+    display: block;
+    padding: 8px 0 8px 16px;
+    font-size: 15px;
+    color: var(--ink-2);
+    border-left: 1px solid var(--rule);
+  }
+  .mobile-group ul a:hover {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .mobile-menu-cta {
     display: flex;
@@ -216,17 +310,21 @@ import Arrow from './Arrow.astro';
     padding: 15px 18px;
   }
 
-  @media (max-width: 960px) {
-    .nav-list,
-    .header-cta .btn-ghost,
+  @media (max-width: 1080px) {
+    .nav-list {
+      display: none;
+    }
     .header-cta .btn-primary {
       display: none;
     }
     .menu-toggle {
       display: inline-flex;
     }
+    .nav {
+      margin-left: auto;
+    }
   }
-  @media (min-width: 961px) {
+  @media (min-width: 1081px) {
     .mobile-menu {
       display: none !important;
     }
@@ -237,16 +335,25 @@ import Arrow from './Arrow.astro';
   // Header scroll state — run once on init so a mid-page reload renders correctly.
   const header = document.getElementById('siteHeader');
   if (header) {
-    const onScroll = () => {
-      header.classList.toggle('is-scrolled', window.scrollY > 8);
-    };
+    const onScroll = () => header.classList.toggle('is-scrolled', window.scrollY > 8);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
   }
 
+  // Close any open desktop dropdown on Escape (focus returns to the trigger).
+  document.querySelectorAll<HTMLElement>('.has-children').forEach((item) => {
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        (item.querySelector('.nav-top') as HTMLElement | null)?.focus();
+        (document.activeElement as HTMLElement | null)?.blur();
+        (item.querySelector('.nav-top') as HTMLElement | null)?.focus();
+      }
+    });
+  });
+
   // Mobile menu drawer
   const toggle = document.getElementById('menuToggle');
-  const close = document.getElementById('menuClose');
+  const closeBtn = document.getElementById('menuClose');
   const menu = document.getElementById('mobileMenu');
 
   function openMenu() {
@@ -254,8 +361,7 @@ import Arrow from './Arrow.astro';
     menu.hidden = false;
     toggle.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
-    const firstLink = menu.querySelector<HTMLElement>('a, button');
-    firstLink?.focus();
+    menu.querySelector<HTMLElement>('a, button')?.focus();
     document.addEventListener('keydown', onKeydown);
   }
   function closeMenu() {
@@ -271,8 +377,8 @@ import Arrow from './Arrow.astro';
   }
 
   toggle?.addEventListener('click', openMenu);
-  close?.addEventListener('click', closeMenu);
-  menu?.querySelectorAll('[data-menu-link]').forEach((link) => {
-    link.addEventListener('click', closeMenu);
-  });
+  closeBtn?.addEventListener('click', closeMenu);
+  menu
+    ?.querySelectorAll('[data-menu-link]')
+    .forEach((link) => link.addEventListener('click', closeMenu));
 </script>

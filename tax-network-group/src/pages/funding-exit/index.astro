@@ -1,0 +1,29 @@
+---
+import HubView from '../../components/HubView.astro';
+import { fundingExit } from '../../data/pages.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Funding and exit', url: '/funding-exit/' },
+];
+const cards = fundingExit.map((f) => ({
+  label: f.navLabel,
+  href: f.path,
+  summary: f.cardSummary,
+}));
+---
+
+<HubView
+  path="/funding-exit/"
+  seoTitle="Funding and Exit Preparation"
+  description="Financial and tax preparation for the moments that change the value or direction of the business — raising funding, and preparing for a future sale or succession."
+  crumbs={crumbs}
+  eyebrow="Funding and exit"
+  heading="Prepare for the moments that change the <em>business.</em>"
+  lead={[
+    'Raising external funding and preparing for a sale or succession are among the most consequential financial events in a company’s life.',
+    'We help owners and founders prepare the financial information, planning and readiness these moments demand — well before the timetable is set by others.',
+  ]}
+  cards={cards}
+  ctaHeading="Prepare before the timetable is set for <em>you.</em>"
+/>

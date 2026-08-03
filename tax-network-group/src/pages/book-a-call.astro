@@ -15,7 +15,7 @@ const crumbs = [
 ];
 const title = `Book an Introductory Call | ${site.name}`;
 const description =
-  'Book an introductory call with The Tax Network Group — a focused conversation to understand your affairs, what you need and whether we are the right fit.';
+  'Book an introductory call with Tax Network Group — a focused conversation to understand your affairs, what you need and whether we are the right fit.';
 const schedulerUrl = site.cta.schedulerEmbedUrl;
 
 const schema = graph([
@@ -32,7 +32,7 @@ const schema = graph([
   eyebrow="Book a call"
   heading="Book an introductory <em>call.</em>"
   lead={[
-    'A focused conversation to understand what you need, how your affairs are handled today, and whether The Tax Network Group is the right fit.',
+    'A focused conversation to understand what you need, how your affairs are handled today, and whether Tax Network Group is the right fit.',
   ]}
   schema={schema}
 >
@@ -50,6 +50,11 @@ const schema = graph([
           The purpose is to determine whether we are likely to be the right fit and to
           identify a sensible next step.
         </p>
+        <div class="callout">
+          <span class="callout-label">Suitability and fees</span>
+          <p>{site.pricing.suitabilityLine}</p>
+          <p>{site.pricing.fromLine}</p>
+        </div>
         <div class="callout">
           <span class="callout-label">Before the call</span>
           <p>

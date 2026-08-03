@@ -1,5 +1,5 @@
 /**
- * Hand-drawn line illustrations for The Tax Network Group.
+ * Hand-drawn line illustrations for Tax Network Group.
  * Original artwork from the design handoff — no licensing constraints.
  * Single stroke (#1F2433 deep navy, deliberately not --ink), slight hand wobble,
  * no fills or shading. Rendered inline (not <img>) so they scale cleanly and

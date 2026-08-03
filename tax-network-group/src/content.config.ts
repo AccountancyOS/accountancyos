@@ -26,7 +26,7 @@ const insights = defineCollection({
       title: z.string(),
       summary: z.string(),
       category: z.enum(categorySlugs),
-      author: z.string().default('The Tax Network Group'),
+      author: z.string().default('Tax Network Group'),
       reviewer: z.string().optional(),
       publishDate: z.coerce.date(),
       lastReviewed: z.coerce.date().optional(),

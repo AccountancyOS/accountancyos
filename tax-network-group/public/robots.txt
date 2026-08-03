@@ -1,14 +1,11 @@
-# The Tax Network Group — robots
-# Public content is crawlable. Utility, legal and confirmation pages are
-# excluded (they also carry a noindex meta robots tag).
+# Tax Network Group — robots
+# Public content is crawlable. Legal drafts and confirmation pages are excluded
+# (they also carry a noindex meta robots tag) until approved.
 
 User-agent: *
 Allow: /
-Disallow: /login/
-Disallow: /privacy/
+Disallow: /privacy-policy/
+Disallow: /cookie-policy/
 Disallow: /terms/
-Disallow: /regulatory/
-Disallow: /cookies/
-Disallow: /enquiry-received/
 
 Sitemap: https://taxnetworkgroup.uk/sitemap-index.xml

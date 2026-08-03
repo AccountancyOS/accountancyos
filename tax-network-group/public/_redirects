@@ -1,0 +1,15 @@
+# Redirects for hosts that honour a _redirects file (Netlify, Cloudflare Pages).
+# Maps stale routes from the earlier positioning to the current structure.
+# On Vercel, replicate these as "redirects" in vercel.json.
+
+/services/                         /business-advisory/                                   301
+/services/limited-company/         /business-advisory/ongoing-accountancy-support/       301
+/services/self-employed/           /tax/                                                 301
+/services/landlords/               /private-clients/                                     301
+/services/inheritance-tax/         /private-clients/                                     301
+/services/tax-advisory/            /tax/                                                  301
+/approach/                         /about/                                               301
+/login/                            /contact/                                             301
+/regulatory/                       /about/                                               301
+/privacy/                          /privacy-policy/                                      301
+/cookies/                          /cookie-policy/                                       301

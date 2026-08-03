@@ -16,9 +16,9 @@ const crumbs = [
   { name: 'Home', url: '/' },
   { name: 'Insights', url: '/insights/' },
 ];
-const title = `Insights — Tax, Ownership and Planning | ${site.name}`;
+const title = `Insights — Accountancy, Tax, Funding and Exit | ${site.name}`;
 const description =
-  'Clear, practical analysis of the tax and financial issues that affect business owners, individuals and families — written to help you ask the right questions.';
+  'Practical analysis of the accountancy, tax, financial-management, funding and exit issues that affect established businesses and their owners.';
 
 // Published, non-draft articles, newest first.
 const all = await getCollection('insights', ({ data }) => !data.draft);
@@ -46,9 +46,9 @@ const schema = graph([
   description={description}
   crumbs={crumbs}
   eyebrow="Insights"
-  heading="Practical thinking on tax, ownership and <em>planning.</em>"
+  heading="Practical thinking for <em>business owners.</em>"
   lead={[
-    'Clear analysis of the tax and financial issues that affect business owners, individuals and families.',
+    'Clear analysis of the accountancy, tax, financial-management, funding and exit issues that affect established businesses and their owners.',
     'Each piece is written to help you understand the issue, ask the right questions and recognise when specific advice is needed.',
   ]}
   schema={schema}

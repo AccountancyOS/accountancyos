@@ -1,0 +1,88 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+import CtaBand from './CtaBand.astro';
+import Arrow from './Arrow.astro';
+import { site } from '../site.config.ts';
+import type { Crumb } from '../lib/schema.ts';
+import {
+  organizationNode,
+  webPageNode,
+  breadcrumbNode,
+  graph,
+} from '../lib/schema.ts';
+
+export interface HubCard {
+  label: string;
+  href: string;
+  summary: string;
+}
+
+interface Props {
+  path: string;
+  seoTitle: string;
+  description: string;
+  crumbs: Crumb[];
+  eyebrow: string;
+  heading: string;
+  lead: string[];
+  cards: HubCard[];
+  ctaHeading?: string;
+  ctaCopy?: string;
+}
+
+const {
+  path,
+  seoTitle,
+  description,
+  crumbs,
+  eyebrow,
+  heading,
+  lead,
+  cards,
+  ctaHeading,
+  ctaCopy,
+} = Astro.props;
+
+const schema = graph([
+  organizationNode(),
+  webPageNode({ url: path, name: `${seoTitle} | ${site.name}`, description, type: 'CollectionPage' }),
+  breadcrumbNode(crumbs),
+]);
+---
+
+<ContentLayout
+  title={`${seoTitle} | ${site.name}`}
+  description={description}
+  crumbs={crumbs}
+  eyebrow={eyebrow}
+  heading={heading}
+  lead={lead}
+  schema={schema}
+>
+  <section class="prose-section">
+    <div class="container">
+      <div class="card-grid cols-2">
+        {
+          cards.map((c, i) => (
+            <a class="card" href={c.href}>
+              <span class="num">{String(i + 1).padStart(2, '0')}</span>
+              <h3>{c.label}</h3>
+              <p>{c.summary}</p>
+              <span class="card-link">
+                Explore <Arrow />
+              </span>
+            </a>
+          ))
+        }
+      </div>
+      <slot />
+    </div>
+  </section>
+
+  <CtaBand
+    heading={ctaHeading ?? 'Looking for more from your <em>accountant?</em>'}
+    copy={ctaCopy ?? site.ctaSupport}
+    secondaryLabel="Tell us about your business"
+    secondaryHref="/contact/"
+  />
+</ContentLayout>

@@ -1,0 +1,29 @@
+---
+import HubView from '../../components/HubView.astro';
+import { advisory } from '../../data/pages.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Business advisory', url: '/business-advisory/' },
+];
+const cards = advisory.map((a) => ({
+  label: a.navLabel,
+  href: a.path,
+  summary: a.cardSummary,
+}));
+---
+
+<HubView
+  path="/business-advisory/"
+  seoTitle="Business Advisory — Reporting, Planning and Strategic Support"
+  description="Better information, better planning and senior advice throughout the year — management reporting, dependable ongoing accountancy and support for the decisions that change the business."
+  crumbs={crumbs}
+  eyebrow="Business advisory"
+  heading="Better information, better planning, senior <em>advice.</em>"
+  lead={[
+    'Dependable compliance is the starting point, not the whole relationship. Our advisory work turns reliable records into clearer information, forward planning and senior input on the decisions that matter.',
+  ]}
+  cards={cards}
+  ctaHeading="More than year-end <em>compliance.</em>"
+  ctaCopy="Tell us how your finances are handled today and where visibility or advice is missing."
+/>

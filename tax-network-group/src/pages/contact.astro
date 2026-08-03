@@ -15,7 +15,7 @@ const crumbs = [
 ];
 const title = `Contact ${site.name}`;
 const description =
-  'Contact The Tax Network Group to discuss ongoing tax support, a specific matter, funding, succession or a business exit. Tell us about your affairs.';
+  'Contact Tax Network Group to discuss ongoing accountancy, management reporting, tax planning, funding preparation or exit support for your business.';
 
 const schema = graph([
   organizationNode(),
@@ -29,9 +29,9 @@ const schema = graph([
   description={description}
   crumbs={crumbs}
   eyebrow="Contact"
-  heading="Tell us about your <em>affairs.</em>"
+  heading="Tell us about your <em>business.</em>"
   lead={[
-    'Provide a few details about your situation, what has prompted the enquiry and the support you are looking for.',
+    'Provide a few details about the business, what has prompted the enquiry and the support you are looking for.',
     'We will review the information and respond regarding the most appropriate next step.',
   ]}
   schema={schema}
@@ -41,17 +41,20 @@ const schema = graph([
       <aside class="contact-aside">
         <div class="prose">
           <h2>Who we work with</h2>
-          <p>Our services are designed primarily for:</p>
+          <p>Our ongoing services are designed primarily for:</p>
           <ul>
-            <li>business owners and owner-managed companies</li>
-            <li>consultants, freelancers and the self-employed</li>
-            <li>landlords and property owners</li>
-            <li>individuals and families planning ahead, including for inheritance</li>
-            <li>anyone facing a more complex, one-off tax question</li>
+            <li>established owner-managed businesses</li>
+            <li>founders and growth companies</li>
+            <li>business owners and private clients with complex affairs</li>
+            <li>owners preparing for funding, succession or exit</li>
+            <li>businesses looking to change accountant</li>
           </ul>
-          <p>
-            We take on work where senior, considered advice makes a real difference.
-          </p>
+        </div>
+
+        <div class="callout">
+          <span class="callout-label">A note on suitability and fees</span>
+          <p>{site.pricing.suitabilityLine}</p>
+          <p>{site.pricing.fromLine}</p>
         </div>
 
         <div class="contact-details">
@@ -62,8 +65,8 @@ const schema = graph([
             )}
           </div>
           <div class="cell">
-            <span class="k">Office</span>
-            <span>{site.contact.location}</span>
+            <span class="k">Area served</span>
+            <span>{site.contact.areaServed}</span>
           </div>
           <div class="cell">
             <span class="k">Availability</span>
@@ -72,7 +75,7 @@ const schema = graph([
         </div>
 
         <p class="contact-alt">
-          Prefer to speak first? <a href={site.cta.scheduleUrl}>Book an introductory call</a>
+          Prefer to speak first? <a href={site.cta.primaryUrl}>Book an introductory call</a>
           at a time that suits you.
         </p>
       </aside>
@@ -95,7 +98,7 @@ const schema = graph([
   .contact-aside {
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 28px;
   }
   .contact-details {
     display: flex;

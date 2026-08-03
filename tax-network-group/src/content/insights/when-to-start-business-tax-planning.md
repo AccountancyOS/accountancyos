@@ -5,14 +5,14 @@ summary: >-
   owner-managed company that usually means looking ahead across the year — and
   well before any significant transaction.
 category: business-tax
-author: The Tax Network Group
+author: Tax Network Group
 publishDate: 2026-08-03
 lastReviewed: 2026-08-03
 metaDescription: >-
   When should an owner-managed company start tax planning? A clear, practical
   answer for company owners — with the decisions that reward looking ahead and
   the points in the year that matter most.
-relatedService: limited-company
+relatedService: /tax/business-tax/
 relatedArticles: []
 sources:
   - label: 'GOV.UK — Corporation Tax'
@@ -81,5 +81,5 @@ is to accept a tax cost in exchange for a better outcome.
 ## Where to go next
 
 If you would like a considered view of your company's position and the decisions ahead,
-our [limited company tax advice](/services/limited-company/) is built around exactly this
+our [business tax advice](/tax/business-tax/) is built around exactly this
 kind of forward planning. The simplest next step is usually a short conversation.

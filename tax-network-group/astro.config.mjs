@@ -12,12 +12,9 @@ const SITE = process.env.PUBLIC_SITE_URL || 'https://taxnetworkgroup.uk';
 // URLs that must never appear in the sitemap (noindex / utility / legal).
 const SITEMAP_EXCLUDE = [
   '/404/',
-  '/login/',
-  '/privacy/',
+  '/privacy-policy/',
+  '/cookie-policy/',
   '/terms/',
-  '/regulatory/',
-  '/cookies/',
-  '/enquiry-received/',
 ];
 
 export default defineConfig({

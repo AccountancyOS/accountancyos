@@ -1,0 +1,30 @@
+---
+import HubView from '../../components/HubView.astro';
+import { audiences } from '../../data/pages.ts';
+
+const crumbs = [
+  { name: 'Home', url: '/' },
+  { name: 'Who we help', url: '/who-we-help/' },
+];
+const cards = audiences.map((a) => ({
+  label: a.navLabel,
+  href: a.path,
+  summary: a.cardSummary,
+}));
+---
+
+<HubView
+  path="/who-we-help/"
+  seoTitle="Who We Help — Established Businesses, Founders & Private Clients"
+  description="Accountancy and advisory support organised around client profile and commercial need — established businesses, founders, business owners and private clients, and those changing accountant."
+  crumbs={crumbs}
+  eyebrow="Who we help"
+  heading="Built around what your business is <em>trying to do.</em>"
+  lead={[
+    'Different businesses and owners need different things from an accountant. We organise our work around client profile and commercial need — not industry or postcode.',
+    'Find the description that fits you best, or simply tell us where you are.',
+  ]}
+  cards={cards}
+  ctaHeading="Not sure where you <em>fit?</em>"
+  ctaCopy="Many clients sit across more than one of these. An introductory call is the simplest way to work out what you actually need."
+/>
