@@ -2,10 +2,11 @@
 
 **Raised by:** owner ruling, 2026-08-05.
 **Executor:** Lovable Cloud.
-**Status:** OPEN — nothing in this document has been applied.
+**Status:** DEF-028 APPLIED AND VERIFIED 2026-08-05. Three releases remain.
 
-Three releases are authored, committed, reviewed and waiting. **Production is materially
-broken until the first of them is applied.** They are listed in mandatory apply order.
+**Blocker:** PR #3 (`worktree-def-018-003-cron-and-rpc-repairs`) is not merged, so the executor's checkout does not contain `20260805100000`, `20260805110000` or `20260805160000`. Nothing below can be applied until it is merged to `main`.
+
+Four releases were authored. **DEF-028 is now applied and the portal is unblocked.** The remaining three are listed in mandatory apply order — DEF-019 first, because the DEF-018 evidence gate cannot run without it.
 
 ---
 
@@ -27,55 +28,99 @@ action the DEF-028 escalation.
 
 ---
 
-## 1. DEF-028 — HIGHEST PRIORITY. Apply first.
+## ✅ DEF-028 — APPLIED AND VERIFIED, 2026-08-05
 
-**Release:** `docs/releases/pending/2026-08-03-def-028-portal-provenance-contact-link.json`
-**Migration:** `supabase/migrations/20260803140000_def_028_portal_provenance_contact_link.sql`
-**Authored:** 2026-08-03. **Still not applied as at 2026-08-05.**
+**Applied version `20260805144648`** on project ref `moxpdejnucjjcplleefn` (target confirmed
+before execution). Source sha256 matched the receipt.
 
-### What is broken right now
+Independently confirmed by the reviewing party the same day: the impossible lookup is gone,
+`v_contact := NULL` is in place with the reasoning retained, the `contact_attribution` marker
+is present, and every other responsibility of the trigger survived. Definition hash moved
+`f67d2205` → `fa023bbb`. **The 42703 that broke every portal write since June is closed.**
 
-`stamp_portal_provenance()` resolves the writing contact with:
+5 of 7 expected objects PASS. Two could not be exercised and are recorded honestly rather
+than claimed: the `bank_transactions` UPDATE branch (the trigger provably fired, but
+`sandbox_exec` holds no UPDATE grant on that table, so the branch could not be driven end to
+end) and review gating (only one `portal_visibility_settings` row exists org-wide, it is
+`operational`, and it cannot be flipped without the same missing grant). The receipt
+therefore stays in `pending/` per convention §3. Both are fixture-access limits, not faults.
 
-```sql
-SELECT contact_id INTO v_contact FROM public.portal_access
- WHERE user_id = auth.uid() AND is_active = true
- LIMIT 1;
-```
-
-`portal_access.contact_id` **does not exist**. Every statement that reaches this line raises
-`42703`. The trigger is attached to `invoices`, `bills`, `bank_transactions` and `receipts`,
-and it returns early only for non-portal callers — so:
-
-> **Every portal write to invoices, bills, bank transactions and receipts fails. It has
-> failed since the function was created in `20260608112113`. The client portal has never
-> been able to write.**
-
-This also blocks the portal-capability check in the DEF-001/002 receipt, which is why that
-receipt cannot be completed.
-
-### Confirmation that it is still broken
-
-Live read, 2026-08-05, via `mcp_list_functions`: `stamp_portal_provenance` definition hash is
-**`f67d2205e089b92c6603834d46f467d1`** — unchanged from the value recorded when the defect was
-raised on 2026-08-03 — and the body still contains the impossible lookup verbatim.
-
-### Apply
-
-The migration is self-verifying: a `DO` block asserts the end state before `COMMIT`, including
-that all four trigger attachments survive and remain enabled, so a partial apply aborts.
-
-1. Reproduce first (Gate 6): perform a portal invoice create and record the `42703`.
-2. Apply `20260803140000_def_028_portal_provenance_contact_link.sql`.
-3. Re-run the same portal write and confirm it succeeds.
-4. Run the receipt's `post_publish_verification` block:
-   `deno run -A scripts/verify-post-publish.ts docs/releases/pending/2026-08-03-def-028-portal-provenance-contact-link.json`
-5. Report the executor's applied version so it can be recorded in
-   `docs/audits/unapplied-migrations-baseline.json`.
+**Hash note, resolved.** The executor recorded pre-apply `md5(prosrc) = d230bd4e…` against
+the receipt's `f67d2205` and flagged a possible discrepancy. It is not one — the two hash
+different inputs. `f67d2205` is `md5(pg_get_functiondef(oid))`, which is what
+`mcp_list_functions` returns as `definition_hash` and which covers the full `CREATE FUNCTION`
+text including the signature and `SET search_path`. The executor measured `md5(prosrc)`, the
+body alone. Recording one while instructing the verifier to check the other is a
+documentation defect in the receipt, now corrected. Good catch.
 
 ---
 
-## 2. DEF-018 + DEF-003 — apply second
+## 1. DEF-019 — APPLY FIRST. Read-only, and DEF-018 depends on it.
+
+**Release:** `docs/releases/pending/2026-08-05-def-019-cron-and-delivery-observability.json`
+**Migration:** `supabase/migrations/20260805160000_def_019_cron_and_delivery_observability.sql`
+
+This exists **because of what the DEF-028 apply revealed**: `cron.job_run_details` and
+`vault.decrypted_secrets` are permission-denied to the executor role, and neither is in
+`public`, so the reviewing party cannot read them either. The DEF-018 checks as originally
+written queried those relations directly — **they could never have passed for anyone.**
+
+It adds three read-only `SECURITY DEFINER` projections in `public`, following the existing
+`mcp_list_cron_jobs` pattern. Nothing writes; no existing object is altered.
+
+| Function | Answers |
+|---|---|
+| `mcp_cron_job_health(minutes)` | per-job runs / succeeded / failed / last status, plus `unrecognized_parameter_failures` — the DEF-018 signature as a first-class count |
+| `mcp_http_delivery_health(minutes)` | status-code counts. **This is what separates a delivered call from a 401**, which cron status alone cannot |
+| `mcp_vault_secret_present(name)` | boolean only — the DEF-018 pre-check you could not perform |
+
+After applying, please run and send the raw output of:
+
+```sql
+SELECT public.mcp_vault_secret_present('email_queue_service_role_key');
+SELECT public.mcp_cron_job_health(20);
+```
+
+The first is the DEF-018 prerequisite. The second is the first time the 26,208-failure
+signature has been queryable at all — the six GUC jobs should show non-zero
+`unrecognized_parameter_failures`, which doubles as the pre-apply reproduction for DEF-018.
+
+---
+
+## 2. DEF-028 — done. Retained for the record.
+
+**Release:** `docs/releases/pending/2026-08-03-def-028-portal-provenance-contact-link.json`
+**Migration:** `supabase/migrations/20260803140000_def_028_portal_provenance_contact_link.sql`
+**Applied:** 2026-08-05 as executor version `20260805144648`.
+
+What was broken, for the record: `stamp_portal_provenance()` resolved the writing contact by
+selecting `contact_id` off `public.portal_access`, a column that has never existed. Every
+statement reaching that line raised `42703`, and the trigger is attached to `invoices`,
+`bills`, `bank_transactions` and `receipts`, returning early only for non-portal callers.
+**Every portal write failed, from the function's creation in `20260608112113` until
+2026-08-05.** The client portal could never write.
+
+The executor reproduced it before applying — `ERROR: column "contact_id" does not exist`,
+`PL/pgSQL function stamp_portal_provenance() line 14` — which is what makes the repair
+evidence rather than assertion.
+
+Outstanding from this release, tracked on the receipt:
+
+- `sandbox_exec` cannot UPDATE `bank_transactions` or `portal_visibility_settings`, so two
+  branches of a trigger spanning four tables cannot be verified on LIVE **by the party
+  applying the change**. That is a verification-capability gap and it will recur on every
+  future change to this trigger. Either grant the exec role the narrow UPDATE it needs, or
+  land the Phase 0 §4 fixture work already approved.
+- `bank_transactions` inserts require `bank_account_id NOT NULL`, hit while building a
+  fixture. Worth confirming the portal path always supplies it.
+- Whether `portal_access` should carry a real contact FK is an open product decision. Until
+  it does, `created_by_contact_id` stays NULL on portal writes and the audit trail records
+  `contact_attribution = unresolved_no_portal_contact_link`. Actor attribution is unaffected —
+  `bookkeeping_audit_log.actor_id` still records `auth.uid()`.
+
+---
+
+## 3. DEF-018 + DEF-003 — apply third (after DEF-019)
 
 **Release:** `docs/releases/pending/2026-08-05-def-018-003-cron-guc-repair.json`
 **Migration:** `supabase/migrations/20260805100000_def_018_003_cron_guc_repair.sql`
@@ -102,7 +147,7 @@ DEF-003 half of this release.
 
 ---
 
-## 3. DEF-026 + DEF-027 — apply third
+## 4. DEF-026 + DEF-027 — apply fourth
 
 **Release:** `docs/releases/pending/2026-08-05-def-026-027-bill-status-and-customer-columns.json`
 **Migration:** `supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql`
