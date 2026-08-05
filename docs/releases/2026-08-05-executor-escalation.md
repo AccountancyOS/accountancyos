@@ -120,6 +120,49 @@ Outstanding from this release, tracked on the receipt:
 
 ---
 
+## ⏸ OPEN DECISION — sandbox_exec write access (owner ruling 2026-08-05: settle the premise first)
+
+The executor cannot UPDATE `bank_transactions` or `portal_visibility_settings`, so two
+branches of `stamp_portal_provenance` could not be verified on LIVE (see §2). Its stated
+preference is a narrow production grant on those two tables. **Deferred pending evidence**,
+because the decision rests on a fact neither party has established.
+
+**What is known.** RLS is `enabled` but **not `forced`** on both tables, so the table owner
+bypasses RLS entirely. And `anon` already nominally holds UPDATE, INSERT, DELETE and TRUNCATE
+on `bank_transactions` — Supabase's default table grants. **RLS, not the grant, is the actual
+control on this table.**
+
+**What is not known, and decides it.** Whether `sandbox_exec` is `BYPASSRLS`, or owns these
+tables:
+
+- **If it does** — the grant changes nothing it cannot already do, and the real finding is
+  that an automated execution role already holds unconstrained write access to ledger source
+  data feeding the filing engine. That is a larger issue than the verification gap.
+- **If it does not** — RLS constrains it exactly as it constrains `authenticated`, the two
+  existing `portal_visibility_settings` policies already permit the UPDATE under
+  `user_has_organization_access`, and the grant is routine.
+
+Requested from the executor before any ruling:
+
+```sql
+SELECT rolname, rolsuper, rolbypassrls, rolcanlogin
+  FROM pg_roles WHERE rolname = 'sandbox_exec';
+
+SELECT table_name, privilege_type
+  FROM information_schema.role_table_grants
+ WHERE grantee = 'sandbox_exec'
+   AND table_name IN ('bank_transactions', 'portal_visibility_settings');
+```
+
+**Separate finding, logged regardless of the outcome.** `anon` holding
+UPDATE/INSERT/DELETE/TRUNCATE on `bank_transactions` is the Supabase default and is gated by
+RLS today, but it means RLS is the single point of failure on ledger source data: disable or
+misconfigure one policy and an unauthenticated caller has write access. This is DEF-004
+territory (the wider anon surface, still open) and should be assessed there rather than
+folded into this decision.
+
+---
+
 ## 3. DEF-018 + DEF-003 — apply third (after DEF-019)
 
 **Release:** `docs/releases/pending/2026-08-05-def-018-003-cron-guc-repair.json`
