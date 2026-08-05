@@ -41,8 +41,9 @@
         {
           "id": "casts-restored",
           "object": "Neither canonical body inserts an uncast NULLIF into a uuid column",
-          "result": "pending",
-          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') with include_source, or pg_proc.prosrc: no occurrence of NULLIF(v_line->>'vat_code_id', ''), or NULLIF(v_line->>'account_id', ''), without ::uuid. The migration asserts this itself before COMMIT; confirm independently after apply."
+          "result": "pass",
+          "verify_via": "catalog_functions(name_like 'invoice_draft_safe') with include_source, or pg_proc.prosrc: no occurrence of NULLIF(v_line->>'vat_code_id', ''), or NULLIF(v_line->>'account_id', ''), without ::uuid. The migration asserts this itself before COMMIT; confirm independently after apply.",
+          "evidence": "LIVE 2026-08-05 via catalog_functions(name_like 'create_invoice_draft_safe', include_source=true). The insert into invoice_lines now reads NULLIF(v_line->>'vat_code_id', '')::uuid, NULLIF(v_line->>'account_id', '')::uuid — both casts present. The account_id validation is also live: the body raises 22023 'Invalid line %: account_id is required' and a second 22023 for a value failing the uuid regex, so the repair did not move the failure from 42804 to 23502. Definition hash e989e584148f06e96e33e75f29d1bea1."
         },
         {
           "id": "draft-with-lines-saves",
@@ -72,7 +73,8 @@
           "id": "def-001-002-015-undisturbed",
           "object": "Exactly two signatures; no set_rpc_context; anon still has no EXECUTE; authenticated, service_role and sandbox_exec retain it",
           "result": "pending",
-          "verify_via": "catalog_functions -> exactly 2 invoice-draft rows (14-arg create, 9-arg update). prosrc contains no set_rpc_context. proacl on both: postgres/authenticated/service_role/sandbox_exec, no PUBLIC (=X), no anon. All asserted in-migration; confirm independently, as CREATE OR REPLACE is being relied on to preserve the ACL."
+          "verify_via": "catalog_functions -> exactly 2 invoice-draft rows (14-arg create, 9-arg update). prosrc contains no set_rpc_context. proacl on both: postgres/authenticated/service_role/sandbox_exec, no PUBLIC (=X), no anon. All asserted in-migration; confirm independently, as CREATE OR REPLACE is being relied on to preserve the ACL.",
+          "evidence_partial": "PARTIALLY verified 2026-08-05. CONFIRMED: catalog_functions(name_like 'invoice_draft_safe') returns exactly two rows — the 14-arg create and the 9-arg update — so no overload was reintroduced; and the create body contains PERFORM set_config('app.rpc','1',true) with no reference to set_rpc_context. NOT CONFIRMED: the proacl half (anon absent; authenticated/service_role/sandbox_exec present). The database connector exposes catalog_grants over information_schema.role_table_grants, which covers TABLE privileges only and cannot read function ACLs — the same limitation recorded in the DEF-001 plan entry. This object stays pending until the executor supplies proacl."
         },
         {
           "id": "editor-blocks-the-save-client-side",
@@ -98,11 +100,12 @@
     ]
   },
   "guarded_by": "src/test/regression/def-029-invoice-line-uuid-casts.test.ts — 15 static guards over the migration and both callers, including a check that no default nominal account is introduced and that validation precedes the DELETE in the update path. The uncast-NULLIF detector was run against the LIVE broken bodies and matches all four occurrences, so it demonstrably catches the defect rather than merely passing on the fix.",
-  "live_apply": "NOT APPLIED. Authored 2026-08-03, awaiting the executor.",
+  "live_apply": "APPLIED. Verified live 2026-08-05 by the reviewing party, independently of the executor. The receipt previously read 'NOT APPLIED', which was stale and wrong. The executor applied 20260803120000 under its own version 20260803203957 (committed as supabase/migrations/20260803203957_844d5cc7-2d38-4fcd-a456-1beee52aa27f.sql, which is byte-identical to the authored file bar a trailing newline). Both canonical bodies changed definition hash: create 0f9e8acf -> e989e584, update 99c9bde5 -> d7d6bad7.",
   "open_after_this": [
     "DEF-026 approve_bill_safe writes status 'APPROVED', rejected by bills_status_check. Bill approval broken on LIVE.",
     "DEF-027 create_customer_safe inserts four columns absent from public.customers. Customer creation via the safe RPC broken on LIVE.",
     "DEF-028 stamp_portal_provenance() selects portal_access.contact_id, which does not exist — every portal write to a table carrying that trigger fails 42703. Critical, and it blocks the portal-capability check on the DEF-001/002 receipt.",
     "DEF-030 can_create_invoices requires role >= staff while organization_users_role_check permits only owner/admin/staff, so the capability branch can never refuse a member. Needs an owner ruling: widen the role vocabulary, or delete the dead branch."
-  ]
+  ],
+  "verification_note_2026_08_05": "Reviewed independently of the executor. One of seven expected objects passes and one is partially confirmed. The remaining five are NOT verifiable by the reviewing party: draft-with-lines-saves and update-destroys-nothing-on-a-bad-line require writing real invoice drafts to the production database, which was not authorised; editor-blocks-the-save-client-side requires a frontend publish and a manual UI interaction; and the proacl half of def-001-002-015-undisturbed needs a catalog the connector cannot reach. Per convention section 3 this receipt therefore REMAINS in pending/ and must not be marked applied-verified. The correction that matters is live_apply: the migration IS on LIVE and the invoice-draft regression DEF-029 is closed at the code level."
 }

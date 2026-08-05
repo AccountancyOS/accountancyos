@@ -89,6 +89,42 @@ DEF-004.
 Suite at the time of writing: **719 tests passing, typecheck clean**. (Earlier figures like
 705 are test counts, not commits.)
 
+---
+
+## 2b. Status as at 2026-08-05
+
+Verified against LIVE this morning, independently of the executor. **The receipts were stale
+in both directions** — one defect was recorded as unfixed when it was applied, another as
+awaiting an executor that has not run.
+
+| Defect | Correction |
+|---|---|
+| **DEF-029** | **APPLIED, not pending.** The receipt said `NOT APPLIED`; the executor had in fact applied `20260803120000` as version `20260803203957`. Confirmed by reading the live bodies: both now carry `NULLIF(...)::uuid` on `vat_code_id` and `account_id`, hashes moved `0f9e8acf`→`e989e584` and `99c9bde5`→`d7d6bad7`. Invoice drafting with lines works again. The receipt stays in `pending/` because five of its seven expected objects are behavioural and unverifiable without writing real invoice data to production. |
+| **DEF-028** | **STILL NOT APPLIED.** Live body unchanged at hash `f67d2205`, still running `SELECT contact_id INTO v_contact FROM public.portal_access`. **Every portal write to invoices, bills, bank_transactions and receipts is still failing with `42703`, as it has since June.** The migration has been authored and committed since 2026-08-03 and is waiting on the executor. This is the single highest-value outstanding apply. |
+| **DEF-018 + DEF-003** | **THEY ARE ONE DEFECT.** Confirmed live: exactly the six jobs using `current_setting('app.settings.*')` are the six failing, and the six healthy ones hard-code the URL. `process-email-queue` is absent from `cron.job` entirely — and the migration authored on 2026-07-20 to schedule it (`20260720120000`) was never applied **and carries the same GUC defect**, so applying it would have produced a seventh permanently-failing job. Repaired together in `20260805100000`; that migration supersedes the 2026-07-20 one, which must never be applied. |
+| **DEF-026** | Not a typo — a **half-applied design change**. `20251217171128` deliberately moved `approve_bill_safe` to write `APPROVED`; the constraint was never widened. `record_bill_payment_safe` already accepts `APPROVED`, so the constraint is what is wrong. Repaired in `20260805110000`. Root cause of the eight-month blindness: **`bills` was never in the CHECK-constraint drift registry**, which is the system built to catch exactly this. It is now registered. |
+| **DEF-027** | The four missing columns are **not repaired uniformly**: `billing_address` is decomposed onto the existing address columns (the caller already sends that shape, and an address feeding invoice projections cannot have two roots), `internal_notes` maps to the existing `notes`, and only `company_name` and `default_currency` become new columns. Two further defects found in the same body and repaired: `p_entity_type` was never validated, and **there was no tenancy check on `p_entity_id`** — a member of one organisation could attach a customer to another organisation's client. |
+| **DEF-030** | **HELD, not actioned.** The owner ruled on 2026-08-05 to delete the dead `can_create_invoices` branch, but that ruling predates finding `src/lib/permissions.ts`, which defines a deliberate 3-role model (`owner > admin > staff`) and a full capability matrix. The branch is a no-op *today* only because all three roles are granted the capability — `can_issue_invoices` is already narrower (`owner`/`admin`). Deleting it would remove the server-side enforcement point for a modelled permission and leave enforcement client-side only, and therefore bypassable. Returned to the owner for re-ruling. |
+
+### New findings, 2026-08-05
+
+- **An `OVERDUE` bill cannot be paid.** `record_bill_payment_safe` accepts only
+  `('APPROVED','AWAITING_PAYMENT','PART_PAID')`, but the aged-balance path and the overdue
+  scan can move a bill to `OVERDUE`, after which every payment is refused. Not repaired —
+  it is a state-machine question, not a vocabulary one, and needs a ruling.
+- **`approve_bill_safe` on LIVE has drifted from its own December definition**, losing the
+  `locked_fields` assignment and the richer `audit_log` row that `20251217171128` wrote, and
+  swapping `can_approve_bills` for `user_has_role_at_least(...,'manager')`. Something
+  re-issued it later with *less* behaviour. This is DEF-020/DEF-023 evidence.
+- **The bills UI compared against `'VOID'`**, a spelling retired in `20260703145810`, so the
+  void filter matched nothing and the payment button never hid for a voided bill. Fixed.
+- **Delivery cannot be verified by the reviewing party.** `pg_cron` records a run as
+  succeeded when the *SQL* completes, but `net.http_post` is asynchronous — a job can be
+  "succeeded" while every HTTP call it makes returns 401. `cron.job_run_details` and
+  `net._http_response` are outside the `public` schema and unreadable through the connector.
+  This is further DEF-020 evidence and is delegated explicitly in the DEF-018 receipt rather
+  than claimed.
+
 ### DEF-001 corrected: TEN → EIGHT (confirmed 2026-07-31)
 
 The audit states ten broken function bodies. **The evidenced number is eight.** The
