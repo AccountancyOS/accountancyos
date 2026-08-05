@@ -6,7 +6,6 @@
   "approver": null,
   "summary": "DEF-018 + DEF-003. Repairs the six production cron jobs that resolve their target URL and credential from GUCs that do not exist in this database, and schedules the process-email-queue drain that has never been scheduled. Seven cron job bodies change; no table, column, function, policy, trigger or grant is altered. Queued mail addressed to reserved TLDs is cancelled before the drain starts.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "problem": {
     "defects": "DEF-018 (P1) and DEF-003 (P1).",
     "mechanism": "Six cron jobs build their request from current_setting('app.settings.supabase_url') and current_setting('app.settings.service_role_key'). Neither GUC is defined, so current_setting raises 42704 before net.http_post is reached and the job body never runs.",
@@ -15,7 +14,6 @@
     "def_003_is_the_same_defect": "process-email-queue is declared critical in infra/supabase-manifest.json and is absent from cron.job, so no queued mail has ever been drained on a schedule. A migration to schedule it was authored on 2026-07-20 (20260720120000_schedule_process_email_queue.sql) but never applied — and it uses the identical broken GUC pattern. Applying it as written would have produced a seventh job failing 100% of the time. It is superseded by this release rather than re-applied.",
     "live_confirmation_2026_08_05": "mcp_list_cron_jobs returned 12 jobs. All six named above still contain 'app.settings.' in their command; the six healthy jobs (chaser-tick-every-15min, chaser-trigger-scan-every-6h, dormant-lead-scan-daily, invoice-overdue-scan-daily, truelayer-sync-hourly, truelayer-sync-scheduled) hard-code the project URL and take their credential from a literal or from vault. No job named process-email-queue exists."
   },
-
   "design_decisions": [
     {
       "decision": "Do not set the GUCs at database level.",
@@ -50,9 +48,7 @@
       "rationale": "cron.schedule upserts on jobname, so the six keep their identity and only the command body changes. The post-assertions check each schedule against an expected value, so a repair that quietly altered a cadence would abort."
     }
   ],
-
   "authoring_method": "Job names, schedules and command bodies were read from LIVE via mcp_list_cron_jobs on 2026-08-05 and the repaired bodies were written to match the healthy jobs' proven shape. The URL for each of the six is taken from its own live command, not inferred from the job name — gmail-sync and outlook-sync in particular do not match their job names sync-gmail-emails and sync-outlook-emails.",
-
   "migrations": [
     {
       "path": "supabase/migrations/20260805100000_def_018_003_cron_guc_repair.sql",
@@ -103,7 +99,6 @@
       ]
     }
   ],
-
   "verification_delegated_to_executor": {
     "why": "pg_cron records a run as succeeded when the SQL command completes. net.http_post is asynchronous: it enqueues a request and returns a request_id immediately, so a job can be 'succeeded' in cron.job_run_details while every HTTP call it makes returns 401 or 500. Proving delivery therefore requires reading cron.job_run_details and net._http_response, and neither is in the public schema — the database connector exposes only public, so the reviewing party cannot read either. Claiming this release verified without these checks would be exactly the attestation-dressed-as-verification that DEF-020 and convention 1a warn against.",
     "required_checks": [
@@ -114,7 +109,6 @@
       "Confirm the automation engine resumes: SELECT count(*) FROM public.automation_executions WHERE created_at > <apply time> after an event is raised."
     ]
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
@@ -125,24 +119,94 @@
       "Report the executor's own applied version so it can be recorded in docs/audits/unapplied-migrations-baseline.json."
     ]
   },
-
   "guarded_by": "src/test/regression/def-018-003-cron-guc-repair.test.ts — static guards over the migration, including a detector that matches the live broken pattern (so it catches the defect rather than merely passing on the fix), assertions that all seven jobs are covered, that schedules are preserved exactly, that no secret literal is introduced into git, and that the superseded 20260720120000 is not left applicable.",
-
   "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
-
   "supersedes": "supabase/migrations/20260720120000_schedule_process_email_queue.sql — authored 2026-07-20, never applied, and carrying the same DEF-018 GUC defect. It must not be applied at any point; doing so would re-create process-email-queue with the broken pattern and silently undo the DEF-003 half of this release.",
-
   "follow_up": [
     "Rename the vault secret email_queue_service_role_key to something honest (service_role_key). Not migration-safe; needs a coordinated update of the five jobs that reference it.",
     "DEF-019 remains open and is what would have caught this: 26,208 consecutive cron failures surfaced nowhere. A cron-failure and consecutive-failure alert is the containment step the remediation plan places in Workstream A.",
     "The audit records email_send_log writing a separate 'sent' row one second after a 'pending' row rather than transitioning the record, which means the log cannot be trusted as a delivery record. That is part of DEF-003's original scope and is NOT addressed here — this release schedules the drain; it does not repair the queue's own state machine."
   ],
-
   "open_after_this": [
     "DEF-026 approve_bill_safe writes status 'APPROVED', rejected by bills_status_check (23514). Bill approval broken on LIVE.",
     "DEF-027 create_customer_safe inserts four columns absent from public.customers (42703). Customer creation via the safe RPC broken on LIVE.",
     "DEF-028 stamp_portal_provenance() still selects portal_access.contact_id on LIVE (definition hash f67d2205, confirmed 2026-08-05). Migration 20260803140000 is authored and awaiting the executor; every portal write remains broken until it is applied.",
     "DEF-019 no alerting layer exists.",
     "DEF-016 remains undefined and blocking by declaration."
-  ]
+  ],
+  "post_publish_verification": {
+    "runner": "scripts/verify-post-publish.ts",
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Every check must return pass before this release may move out of pending/ or be marked applied-verified. Owner requirement 2026-08-05: all seven scheduled jobs must be evidenced as RUNNING SUCCESSFULLY, not merely scheduled.",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "why_this_runner": "These checks read cron.job_run_details and net._http_response, which are outside the public schema and therefore unreachable through the database connector the reviewing party uses. This runner connects via managed psql and CAN read them, which is what closes the delivery-verification gap recorded in verification_delegated_to_executor.",
+    "checks": [
+      {
+        "id": "seven-jobs-present",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue')"
+      },
+      {
+        "id": "seven-jobs-active",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND active"
+      },
+      {
+        "id": "no-guc-references-remain",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND command LIKE '%app.settings.%'"
+      },
+      {
+        "id": "all-credentials-from-vault",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND command LIKE '%vault.decrypted_secrets%'"
+      },
+      {
+        "id": "all-seven-ran-successfully",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(DISTINCT j.jobname) FROM cron.job j JOIN cron.job_run_details d ON d.jobid = j.jobid WHERE j.jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND d.start_time > now() - interval '20 minutes' AND d.status = 'succeeded'"
+      },
+      {
+        "id": "no-failed-runs",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM cron.job j JOIN cron.job_run_details d ON d.jobid = j.jobid WHERE j.jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND d.start_time > now() - interval '20 minutes' AND d.status <> 'succeeded'"
+      },
+      {
+        "id": "no-unrecognized-parameter-errors",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM cron.job_run_details WHERE start_time > now() - interval '20 minutes' AND return_message ILIKE '%unrecognized configuration parameter%'"
+      },
+      {
+        "id": "http-calls-are-authorised",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM net._http_response WHERE created > now() - interval '20 minutes' AND status_code IN (401, 403)"
+      },
+      {
+        "id": "http-calls-succeeded",
+        "kind": "count_at_least",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM net._http_response WHERE created > now() - interval '20 minutes' AND status_code BETWEEN 200 AND 299"
+      },
+      {
+        "id": "email-queue-drained",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.email_queue WHERE status = 'pending' AND scheduled_at <= now() - interval '5 minutes'"
+      },
+      {
+        "id": "no-reserved-tld-pending",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.email_queue WHERE status = 'pending' AND (to_email ILIKE '%.test' OR to_email ILIKE '%.example' OR to_email ILIKE '%.invalid' OR to_email ILIKE '%.localhost')"
+      }
+    ]
+  }
 }

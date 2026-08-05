@@ -89,5 +89,43 @@
   },
   "guarded_by": "src/test/regression/def-028-portal-provenance.test.ts — 11 static guards. The lookup detector was run against the LIVE broken body and matches, so it catches the defect rather than merely passing on the fix. Guards also assert the repair is a removal and not a truncation, that no email/name identity matching is introduced, and that the migration touches no trigger or table.",
   "live_apply": "NOT APPLIED. Authored 2026-08-03, awaiting the executor.",
-  "unblocks": "docs/releases/pending/2026-07-31-def-001-002.json — the portal-capability-retained check, recorded there as blocked by DEF-028."
+  "unblocks": "docs/releases/pending/2026-07-31-def-001-002.json — the portal-capability-retained check, recorded there as blocked by DEF-028.",
+  "post_publish_verification": {
+    "runner": "scripts/verify-post-publish.ts",
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Owner requirement 2026-08-05: portal writes must be evidenced as no longer returning 42703.",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "checks": [
+      {
+        "id": "impossible-lookup-removed",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%INTO v_contact FROM%'"
+      },
+      {
+        "id": "function-still-exists",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace"
+      },
+      {
+        "id": "attribution-marker-present",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%contact_attribution%'"
+      },
+      {
+        "id": "all-four-triggers-intact-and-enabled",
+        "kind": "count_equals",
+        "expected": 4,
+        "sql": "SELECT count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE p.proname = 'stamp_portal_provenance' AND NOT t.tgisinternal AND t.tgenabled <> 'D'"
+      },
+      {
+        "id": "no-portal-column-reference-remains",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%portal_access.contact_id%'"
+      }
+    ]
+  }
 }

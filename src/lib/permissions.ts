@@ -87,6 +87,25 @@ export const PERMISSIONS: Record<PermissionName, AppRole[]> = {
   can_access_shared_mailbox: ['owner', 'admin', 'staff'],
   
   // Bookkeeping - Invoices
+  //
+  // DEF-030 — `can_create_invoices` is ALSO enforced server-side, and that enforcement must
+  // not be removed even though it cannot currently refuse anybody.
+  //
+  // `public.can_create_invoices(_user_id, _org_id)` resolves to
+  // `user_has_role_at_least(..., 'staff')`, and `organization_users_role_check` admits only
+  // owner/admin/staff — all three of which satisfy "at least staff". So the branch inside
+  // `create_invoice_draft_safe` / `update_invoice_draft_safe` can never refuse a member of the
+  // organisation today. That is a consequence of this matrix granting the capability to every
+  // role, NOT evidence that the check is redundant.
+  //
+  // Owner ruling 2026-08-05: KEEP the server-side branch as defence in depth. Everything in
+  // this file is advisory — it drives what the UI offers. A caller can invoke the RPC directly
+  // and never touch this code. The database check is the only enforcement that survives that,
+  // so the moment this line narrows (as `can_issue_invoices` below already has, to owner+admin)
+  // the server begins refusing without any further work. Delete the branch and that narrowing
+  // would silently not be enforced.
+  //
+  // Guarded by src/test/regression/def-030-invoice-capability-enforcement.test.ts.
   can_create_invoices: ['owner', 'admin', 'staff'],
   can_edit_invoices: ['owner', 'admin', 'staff'],
   can_issue_invoices: ['owner', 'admin'],
