@@ -106,6 +106,83 @@ awaiting an executor that has not run.
 | **DEF-027** | The four missing columns are **not repaired uniformly**: `billing_address` is decomposed onto the existing address columns (the caller already sends that shape, and an address feeding invoice projections cannot have two roots), `internal_notes` maps to the existing `notes`, and only `company_name` and `default_currency` become new columns. Two further defects found in the same body and repaired: `p_entity_type` was never validated, and **there was no tenancy check on `p_entity_id`** — a member of one organisation could attach a customer to another organisation's client. |
 | **DEF-030** | **HELD, not actioned.** The owner ruled on 2026-08-05 to delete the dead `can_create_invoices` branch, but that ruling predates finding `src/lib/permissions.ts`, which defines a deliberate 3-role model (`owner > admin > staff`) and a full capability matrix. The branch is a no-op *today* only because all three roles are granted the capability — `can_issue_invoices` is already narrower (`owner`/`admin`). Deleting it would remove the server-side enforcement point for a modelled permission and leave enforcement client-side only, and therefore bypassable. Returned to the owner for re-ruling. |
 
+### DEF-031 — `sandbox_exec` bypasses RLS. P1, security.
+
+Established 2026-08-05 by the executor at our request, from `pg_roles`:
+
+| attribute | value |
+|---|---|
+| `rolbypassrls` | **`t`** |
+| `rolcanlogin` | `t` |
+| `rolsuper` | `f` |
+| `rolcreaterole` / `rolcreatedb` | `f` / `f` |
+| member of | none |
+| owns `cron.job_run_details`, `vault.secrets` | no — `supabase_admin` |
+
+**A login role that bypasses RLS is a tenancy bypass.** RLS is the only mechanism enforcing
+the tenant boundary in this database; `rolbypassrls` removes it wholesale for any session
+opened as that role. If those credentials leak, every client record in every organisation is
+readable and writable, and no policy in the schema intervenes. It is not superuser and owns
+neither the cron nor the vault relations, which bounds it — but it does not need to be
+superuser to defeat tenancy.
+
+**This is why the grant request was withdrawn**, correctly and by the executor itself: the
+missing privileges were never the problem. `cron.job_run_details` is not grant-denied at all
+(`PUBLIC` already holds `r` and `d`); the denial was schema `USAGE` on `cron`.
+`vault.decrypted_secrets` is a view with `service_role=rd` and no RLS, so `rolbypassrls` buys
+nothing there — widening it would be a decryption grant on the secret store. The DEF-019
+projections are the right shape for both.
+
+#### What this voids, precisely — and what it does not
+
+The executor's own summary ("every RLS proof in this codebase is silently void") is the right
+instinct but overstates the blast radius. Checked directly:
+
+- **VOID — behavioural checks issued as `sandbox_exec`.** The executor's cross-tenant probes
+  during the DEF-001/002 and DEF-028 verifications returned `42501`, and it has correctly
+  re-read those as proving **grants and in-function `RAISE`s, not RLS**. Any conclusion of the
+  form "role X could not see tenant Y's row" drawn through psql as `sandbox_exec` proves
+  nothing about RLS.
+- **NOT VOID — `scripts/smoke-test.ts` cross-org isolation.** It calls
+  `signInWithPassword` for a real Org A and a real Org B user and reads through PostgREST as
+  `authenticated` with genuine JWTs. `SMOKE_SERVICE_ROLE_KEY` is used only for unrelated
+  introspection checks and is explicitly absent from this path — `rls-cross-org.test.ts`
+  guards exactly that ("no service role"). RLS applies. **This is the actual tenancy proof and
+  it stands.**
+- **NOT VOID — `docs/automation/rls-isolation-evidence.md` §1 and §2.** Those are catalog
+  reads: `relrowsecurity` flags and policy definitions. Catalog visibility is not RLS-filtered,
+  so which role read them is immaterial. The structural evidence — RLS enabled on all 23
+  tables, every non-catalog policy resolving org through `auth.uid()` — stands.
+- **NOT VOID — DEF-015.** That release concerned function `EXECUTE` grants (`proacl`).
+  `rolbypassrls` does not bypass privilege checks, only row-security policies. Unaffected.
+
+So the correction is narrow but worth stating plainly: **tenancy isolation for real users
+remains evidenced.** What is unevidenced is anything concluded about RLS from a
+`sandbox_exec` session, and that is a smaller set than it first appeared.
+
+#### Ruling required
+
+Removing `BYPASSRLS` (`ALTER ROLE sandbox_exec NOBYPASSRLS`) is the obvious remedy and is
+unlikely to impede the executor: DDL and migration application are unaffected by RLS, and the
+verification reads that would become RLS-filtered are the ones currently producing misleading
+evidence. Where a verification genuinely needs to see across tenants, the DEF-019 pattern —
+a narrow `SECURITY DEFINER` projection in `public` — serves it without a standing bypass.
+Owner ruling needed before altering a production role.
+
+### DEF-032 — `PUBLIC` can DELETE `cron.job_run_details`. P2, audit integrity.
+
+Reported alongside DEF-031: the ACL on `cron.job_run_details` is `=rd/supabase_admin`, so
+**any role can delete cron run history.** That table is the audit trail of scheduled
+execution, and it is the evidence base for the DEF-018 release.
+
+This has a direct consequence for our own verification design, and it is recorded rather than
+glossed: the `no-failed-runs` and `no-unrecognized-parameter-errors` checks in the DEF-018
+receipt assert an **absence** over a time window. An absence is not distinguishable from a
+deletion. Those checks are therefore weaker than they read — they cannot detect a history that
+was truncated rather than clean. `all-seven-ran-successfully` and `http-calls-succeeded` assert
+a **presence** and are unaffected, which is why the gate does not rest on the absence checks
+alone. Revoking `DELETE` from `PUBLIC` on that relation would close it.
+
 ### New findings, 2026-08-05
 
 - **An `OVERDUE` bill cannot be paid.** `record_bill_payment_safe` accepts only
