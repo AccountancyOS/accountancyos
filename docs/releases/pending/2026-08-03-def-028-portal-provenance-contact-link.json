@@ -29,45 +29,52 @@
       "expected_objects": [
         {
           "id": "lookup-removed",
-          "result": "pending",
+          "result": "pass",
           "object": "stamp_portal_provenance no longer executes the impossible lookup",
-          "verify_via": "pg_proc.prosrc for stamp_portal_provenance contains no 'INTO v_contact FROM'. Matched on the statement rather than the table name, which still appears in the body comment. Asserted in-migration; confirm independently."
+          "verify_via": "pg_proc.prosrc for stamp_portal_provenance contains no 'INTO v_contact FROM'. Matched on the statement rather than the table name, which still appears in the body comment. Asserted in-migration; confirm independently.",
+          "evidence": "CONFIRMED TWICE, independently. Executor pre-apply reproduction raised: ERROR: column \"contact_id\" does not exist / QUERY: SELECT contact_id FROM public.portal_access ... / CONTEXT: PL/pgSQL function stamp_portal_provenance() line 14. Post-apply the reviewing party read the live body via mcp_list_functions on 2026-08-05: 'INTO v_contact FROM' is absent, 'v_contact := NULL;' is present with the reasoning retained, and definition_hash moved f67d2205 -> fa023bbb."
         },
         {
           "id": "portal-write-succeeds",
-          "result": "pending",
+          "result": "pass",
           "object": "A portal user can create an invoice",
-          "verify_via": "THE PROOF-OF-REPAIR CASE. Reproduce the failure FIRST: as a portal user holding allow_invoice_create, create an invoice and confirm 42703 pre-apply. After apply the same write must succeed, with created_by_portal = true, source = 'portal', and created_by_contact_id NULL. Requires a portal session — the same fixture the DEF-001/002 receipt needs."
+          "verify_via": "THE PROOF-OF-REPAIR CASE. Reproduce the failure FIRST: as a portal user holding allow_invoice_create, create an invoice and confirm 42703 pre-apply. After apply the same write must succeed, with created_by_portal = true, source = 'portal', and created_by_contact_id NULL. Requires a portal session — the same fixture the DEF-001/002 receipt needs.",
+          "evidence": "Executor, in a rolled-back transaction: portal invoice created successfully with created_by_portal=t, source=portal, created_by_contact_id NULL. This is the defect closing — the same write raised 42703 pre-apply."
         },
         {
           "id": "all-four-tables",
-          "result": "pending",
+          "result": "partial",
           "object": "Portal writes work on all four tables carrying the trigger",
-          "verify_via": "Repeat a portal write against bills, receipts and bank_transactions. bank_transactions takes the UPDATE branch (updated_by_portal) rather than the INSERT branch, so it must be exercised separately — it is the one path with different behaviour."
+          "verify_via": "Repeat a portal write against bills, receipts and bank_transactions. bank_transactions takes the UPDATE branch (updated_by_portal) rather than the INSERT branch, so it must be exercised separately — it is the one path with different behaviour.",
+          "evidence": "invoices PASS, bills PASS (created_by_portal=t, source=portal), receipts PASS. bank_transactions NOT exercised end to end: the trigger provably fired — the failing row's DETAIL shows source=portal and updated_by_portal=t — but the insert hit an unrelated bank_account_id NOT NULL violation, and sandbox_exec holds no UPDATE grant on that table, so the UPDATE branch (the only branch that table takes) could not be driven. The trigger firing and setting both columns is strong evidence the branch works; it is not proof."
         },
         {
           "id": "review-gating-still-applies",
-          "result": "pending",
+          "result": "not-exercised",
           "object": "review_status is still forced to pending_review where configured",
-          "verify_via": "With portal_visibility_settings.client_bookkeeping_mode = 'review_required' (or the per-table require_review_* flag set), a portal INSERT must land with review_status = 'pending_review'. This is the responsibility most at risk from a body replacement and must not be assumed from the diff."
+          "verify_via": "With portal_visibility_settings.client_bookkeeping_mode = 'review_required' (or the per-table require_review_* flag set), a portal INSERT must land with review_status = 'pending_review'. This is the responsibility most at risk from a body replacement and must not be assumed from the diff.",
+          "evidence": "Only one portal_visibility_settings row exists org-wide and it is 'operational'. sandbox_exec has no UPDATE on that table, so it could not be flipped to 'review_required' to drive the branch. The executor flagged this rather than claiming it, which is the correct call. Unverified — the review-gating path is untested on LIVE."
         },
         {
           "id": "audit-row-written",
-          "result": "pending",
+          "result": "pass",
           "object": "bookkeeping_audit_log records the write, marked unresolved",
-          "verify_via": "After a portal write, the new bookkeeping_audit_log row must carry actor_id = the portal user, actor_role = 'portal', and metadata.contact_attribution = 'unresolved_no_portal_contact_link'."
+          "verify_via": "After a portal write, the new bookkeeping_audit_log row must carry actor_id = the portal user, actor_role = 'portal', and metadata.contact_attribution = 'unresolved_no_portal_contact_link'.",
+          "evidence": "Executor: bookkeeping_audit_log row written with actor_role=portal and metadata contact_attribution=unresolved_no_portal_contact_link. Independently corroborated by the reviewing party reading the live body, which builds exactly that marker."
         },
         {
           "id": "accountant-writes-unaffected",
-          "result": "pending",
+          "result": "pass",
           "object": "Staff writes still take the early return and are unchanged",
-          "verify_via": "As an organisation member, create an invoice. It must succeed with created_by_portal false and no bookkeeping_audit_log row from this trigger. This path was never broken and must stay that way."
+          "verify_via": "As an organisation member, create an invoice. It must succeed with created_by_portal false and no bookkeeping_audit_log row from this trigger. This path was never broken and must stay that way.",
+          "evidence": "Executor, no JWT claim: created_by_portal=f, source=accountant, no audit row. The early return for non-portal callers is intact."
         },
         {
           "id": "four-triggers-still-enabled",
-          "result": "pending",
+          "result": "pass",
           "object": "All four attachments survive the replace and stay enabled",
-          "verify_via": "pg_trigger: exactly 4 non-internal, non-disabled triggers point at stamp_portal_provenance. Asserted in-migration."
+          "verify_via": "pg_trigger: exactly 4 non-internal, non-disabled triggers point at stamp_portal_provenance. Asserted in-migration.",
+          "evidence": "Executor: 4 non-internal, non-disabled triggers bound to stamp_portal_provenance."
         }
       ],
       "rollback_note": "No rollback script. Reverting reinstates a function that raises 42703 on every portal write — fix-forward only. The prior body is recoverable from 20260608112113 and from live def-hash f67d2205 if ever needed."
@@ -88,6 +95,62 @@
     ]
   },
   "guarded_by": "src/test/regression/def-028-portal-provenance.test.ts — 11 static guards. The lookup detector was run against the LIVE broken body and matches, so it catches the defect rather than merely passing on the fix. Guards also assert the repair is a removal and not a truncation, that no email/name identity matching is introduced, and that the migration touches no trigger or table.",
-  "live_apply": "NOT APPLIED. Authored 2026-08-03, awaiting the executor.",
-  "unblocks": "docs/releases/pending/2026-07-31-def-001-002.json — the portal-capability-retained check, recorded there as blocked by DEF-028."
+  "live_apply": "APPLIED 2026-08-05 to production (project ref moxpdejnucjjcplleefn, pooler host aws-1-eu-north-1.pooler.supabase.com — target confirmed before execution, and confirmed NOT to be vazeqolkxinsjvgzqrgj). Executor applied version 20260805144648 (20260805144648_1b38e9b7-067f-433c-9492-fbb1013d945b.sql). Source sha256 matches this receipt.",
+  "unblocks": "docs/releases/pending/2026-07-31-def-001-002.json — the portal-capability-retained check, recorded there as blocked by DEF-028.",
+  "post_publish_verification": {
+    "runner": "scripts/verify-post-publish.ts",
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Owner requirement 2026-08-05: portal writes must be evidenced as no longer returning 42703.",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "checks": [
+      {
+        "id": "impossible-lookup-removed",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%INTO v_contact FROM%'"
+      },
+      {
+        "id": "function-still-exists",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace"
+      },
+      {
+        "id": "attribution-marker-present",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%contact_attribution%'"
+      },
+      {
+        "id": "all-four-triggers-intact-and-enabled",
+        "kind": "count_equals",
+        "expected": 4,
+        "sql": "SELECT count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE p.proname = 'stamp_portal_provenance' AND NOT t.tgisinternal AND t.tgenabled <> 'D'"
+      },
+      {
+        "id": "no-portal-column-reference-remains",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM pg_proc WHERE proname = 'stamp_portal_provenance' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%portal_access.contact_id%'"
+      }
+    ]
+  },
+  "hash_recording_correction": {
+    "reported": "The executor recorded live pre-apply md5(prosrc) = d230bd4e…, not the f67d2205 this receipt carried, and flagged it as a possible discrepancy.",
+    "resolution": "NOT a discrepancy — the two hash DIFFERENT INPUTS. f67d2205e089b92c6603834d46f467d1 is md5(pg_get_functiondef(oid)), which is what mcp_list_functions returns as `definition_hash` (see 20260722181057). That covers the full CREATE FUNCTION text including the signature, LANGUAGE, SECURITY DEFINER and SET search_path clauses. The executor measured md5(prosrc), which is the function BODY alone. Both are correct measurements of the same broken function, and the executor independently confirmed the broken lookup was present verbatim.",
+    "defect_in_this_receipt": "Recording a pg_get_functiondef hash while instructing the verifier to check prosrc is a documentation defect that manufactures exactly this false alarm. Corrected here, and both values are now stated with their source expression.",
+    "pre_apply": {
+      "definition_hash_md5_functiondef": "f67d2205e089b92c6603834d46f467d1",
+      "body_hash_md5_prosrc": "d230bd4e…"
+    },
+    "post_apply": {
+      "definition_hash_md5_functiondef": "fa023bbb62ffc75590b1de9bd1353db7"
+    }
+  },
+  "verification_status_2026_08_05": "5 of 7 expected objects PASS. One is PARTIAL (bank_transactions UPDATE branch) and one is NOT EXERCISED (review gating). Convention section 3 forbids applied-verified unless every check passes, so this receipt REMAINS in pending/ despite the migration being live and the reported defect being closed. What is settled: the 42703 that broke every portal write since June is gone, confirmed by two parties reading LIVE independently. What is not: two branches that could not be driven because sandbox_exec lacks the UPDATE grants needed to set up their fixtures. Both are fixture-access limitations, not evidence of a fault.",
+  "follow_up_from_verification": [
+    "sandbox_exec cannot UPDATE bank_transactions or portal_visibility_settings, so two branches of a trigger on four tables cannot be verified on LIVE by the party applying the change. That is a verification-capability gap, and it will recur on every future change to this trigger. Either grant the exec role the narrow UPDATE it needs, or provide seeded fixtures for the portal paths — the Phase 0 section 4 fixture work already approved.",
+    "bank_transactions inserts require bank_account_id NOT NULL, which the executor hit while constructing a fixture. Worth confirming the portal path always supplies it.",
+    "Whether portal_access should carry a real contact FK remains an open product decision. Until it does, created_by_contact_id is permanently NULL on portal writes and the audit trail records contact_attribution=unresolved_no_portal_contact_link. Actor attribution is unaffected — bookkeeping_audit_log.actor_id still records auth.uid()."
+  ]
 }

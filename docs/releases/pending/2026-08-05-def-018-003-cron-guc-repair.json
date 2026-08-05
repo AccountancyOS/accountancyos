@@ -1,0 +1,226 @@
+{
+  "release_id": "2026-08-05-def-018-003-cron-guc-repair",
+  "release_kind": "attestation-based",
+  "status": "pending",
+  "declared_at": "2026-08-05T00:00:00Z",
+  "approver": null,
+  "summary": "DEF-018 + DEF-003. Repairs the six production cron jobs that resolve their target URL and credential from GUCs that do not exist in this database, and schedules the process-email-queue drain that has never been scheduled. Seven cron job bodies change; no table, column, function, policy, trigger or grant is altered. Queued mail addressed to reserved TLDs is cancelled before the drain starts.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "defects": "DEF-018 (P1) and DEF-003 (P1).",
+    "mechanism": "Six cron jobs build their request from current_setting('app.settings.supabase_url') and current_setting('app.settings.service_role_key'). Neither GUC is defined, so current_setting raises 42704 before net.http_post is reached and the job body never runs.",
+    "scale": "cron.job_run_details over the audited 7-day window: 26,208 consecutive failures across the six jobs, at a 100% failure rate, surfacing nowhere in the product.",
+    "functional_consequence": "The automation engine does not run at all — process-automation-events and workflow-tick are the only drivers of automation_events -> automation_executions and of automation_workflow_instances. Inbound mailbox sync does not run, so email_messages receives nothing. The HMRC CT poll and delete workers do not run, so submission state is never reconciled back from HMRC.",
+    "def_003_is_the_same_defect": "process-email-queue is declared critical in infra/supabase-manifest.json and is absent from cron.job, so no queued mail has ever been drained on a schedule. A migration to schedule it was authored on 2026-07-20 (20260720120000_schedule_process_email_queue.sql) but never applied — and it uses the identical broken GUC pattern. Applying it as written would have produced a seventh job failing 100% of the time. It is superseded by this release rather than re-applied.",
+    "live_confirmation_2026_08_05": "mcp_list_cron_jobs returned 12 jobs. All six named above still contain 'app.settings.' in their command; the six healthy jobs (chaser-tick-every-15min, chaser-trigger-scan-every-6h, dormant-lead-scan-daily, invoice-overdue-scan-daily, truelayer-sync-hourly, truelayer-sync-scheduled) hard-code the project URL and take their credential from a literal or from vault. No job named process-email-queue exists."
+  },
+  "design_decisions": [
+    {
+      "decision": "Do not set the GUCs at database level.",
+      "rationale": "ALTER DATABASE ... SET app.settings.service_role_key would repair all six jobs without editing them, but it stores a service-role key in pg_db_role_setting in plaintext where any role able to query it can read it, and the literal would have to appear in this migration and therefore in git. Rejected on both counts."
+    },
+    {
+      "decision": "Hard-code the project URL, read the credential from vault.",
+      "rationale": "The project URL is not a secret — it ships inside the frontend bundle and four already-healthy jobs hard-code it. The credential is a secret, so it is read from vault.decrypted_secrets, which is encrypted at rest and never enters git. This is the pattern truelayer-sync-scheduled already uses in production."
+    },
+    {
+      "decision": "Reuse the existing vault secret name email_queue_service_role_key.",
+      "rationale": "It is the established name in this database — referenced by the live truelayer-sync-scheduled job and by four prior migrations. The name is historical and now misleading, since it holds the general service-role key rather than an email-specific one. Renaming a vault secret is not a migration-safe operation and is recorded here as follow-up rather than attempted."
+    },
+    {
+      "decision": "RAISE EXCEPTION on a missing or empty vault secret, where the prior art raises only a WARNING.",
+      "rationale": "20260630221547 and 20260630220537 warn and then schedule the job anyway. That yields a job which runs, records success in cron.job_run_details, and 401s forever — a green signal over a dead path, which is the exact Gate 6 failure mode this programme exists to eliminate. A missing credential must abort the release, not produce six confidently-broken jobs."
+    },
+    {
+      "decision": "Reproduce the failure inside the migration before repairing it.",
+      "rationale": "Verification standard, Gate 6. The precondition block counts how many of the six still carry the GUC pattern and aborts if none does, so the migration cannot silently rewrite six job bodies that were not broken."
+    },
+    {
+      "decision": "Cancel queued mail addressed to reserved TLDs, rather than draining or deleting it.",
+      "rationale": "RFC 2606 / RFC 6761 reserve .test, .example, .invalid and .localhost; mail to them can never be delivered. Draining them produces hard bounces, and hard bounces damage Postmark sender reputation for every real client afterwards. Two such rows exist today, both residue from the 2026-07-27 E2E probe run. This is written as a standing hygiene rule so the same guard protects every future drain from probe residue. It is a status transition and not a delete: the rows stay auditable with an explicit reason recorded in error_message."
+    },
+    {
+      "decision": "Warn on stale due mail but do not refuse on it.",
+      "rationale": "The volume bound (200 due rows, inherited from the superseded migration) is a refusal. Staleness is a NOTICE only, because at authoring time all four due rows are internal or reserved-TLD addresses and refusing would block the release on test data. Verified 2026-08-05: the four pending rows address leon@bluetickaccountants.com, leon5440@hotmail.com and two at accountancyos.test. No third-party client address is queued, so scheduling the drain cannot deliver stale mail to a real client."
+    },
+    {
+      "decision": "Preserve every job name, schedule and jobid.",
+      "rationale": "cron.schedule upserts on jobname, so the six keep their identity and only the command body changes. The post-assertions check each schedule against an expected value, so a repair that quietly altered a cadence would abort."
+    }
+  ],
+  "authoring_method": "Job names, schedules and command bodies were read from LIVE via mcp_list_cron_jobs on 2026-08-05 and the repaired bodies were written to match the healthy jobs' proven shape. The URL for each of the six is taken from its own live command, not inferred from the job name — gmail-sync and outlook-sync in particular do not match their job names sync-gmail-emails and sync-outlook-emails.",
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260805100000_def_018_003_cron_guc_repair.sql",
+      "sha256": "170c0d54d8a738ea89a19627a93a119230b1730a0d47ecf5890bbd8fc0db1668",
+      "expected_objects": [
+        {
+          "id": "guc-references-gone",
+          "object": "None of the seven jobs references app.settings.*",
+          "result": "pending",
+          "verify_via": "catalog_cron / mcp_list_cron_jobs — assert no row among the seven has command LIKE '%app.settings.%'"
+        },
+        {
+          "id": "credential-from-vault",
+          "object": "All seven jobs read their credential from vault.decrypted_secrets",
+          "result": "pending",
+          "verify_via": "catalog_cron — assert command LIKE '%vault.decrypted_secrets%' for each of the seven"
+        },
+        {
+          "id": "email-queue-scheduled",
+          "object": "A job named process-email-queue exists, is active, and runs '* * * * *'",
+          "result": "pending",
+          "verify_via": "catalog_cron — assert the row exists with active = true and schedule = '* * * * *'"
+        },
+        {
+          "id": "schedules-preserved",
+          "object": "The six repaired jobs keep their original cadences (* * * * *, */5, */2, */2, */5, */5)",
+          "result": "pending",
+          "verify_via": "catalog_cron — compare each schedule against the pre-apply values recorded in problem.live_confirmation_2026_08_05"
+        },
+        {
+          "id": "healthy-jobs-untouched",
+          "object": "The six already-healthy jobs are unchanged and the estate totals at least 13 jobs",
+          "result": "pending",
+          "verify_via": "catalog_cron — assert count >= 13 and that the six healthy commands are byte-identical to their pre-apply values"
+        },
+        {
+          "id": "reserved-tld-queue-cleared",
+          "object": "No email_queue row with a reserved-TLD recipient remains pending",
+          "result": "pending",
+          "verify_via": "db_select on email_queue where status = 'pending' — assert no to_email matches %.test / %.example / %.invalid / %.localhost"
+        },
+        {
+          "id": "delivery-actually-happens",
+          "object": "The repaired jobs produce successful HTTP calls, not merely successful SQL",
+          "result": "pending",
+          "verify_via": "EXECUTOR ONLY — see verification_delegated_to_executor below. Not verifiable by the reviewing party."
+        }
+      ]
+    }
+  ],
+  "verification_delegated_to_executor": {
+    "why": "pg_cron records a run as succeeded when the SQL command completes. net.http_post is asynchronous: it enqueues a request and returns a request_id immediately, so a job can be 'succeeded' in cron.job_run_details while every HTTP call it makes returns 401 or 500. Proving delivery therefore requires reading cron.job_run_details and net._http_response, and neither is in the public schema — the database connector exposes only public, so the reviewing party cannot read either. Claiming this release verified without these checks would be exactly the attestation-dressed-as-verification that DEF-020 and convention 1a warn against.",
+    "required_checks": [
+      "SELECT jobname, status, return_message, start_time FROM cron.job_run_details WHERE start_time > now() - interval '15 minutes' ORDER BY start_time DESC — assert the six repaired jobs now appear with status 'succeeded' and no 'unrecognized configuration parameter' message.",
+      "SELECT id, status_code, created FROM net._http_response WHERE created > now() - interval '15 minutes' ORDER BY created DESC — assert 2xx for the repaired jobs' requests. A 401 here means the vault secret is present but not a valid service-role key, which the migration's precondition cannot detect.",
+      "SELECT count(*) FROM public.email_queue WHERE status = 'pending' AND scheduled_at <= now() — assert this drains to 0 within a few minutes of apply.",
+      "SELECT status, sent_at, last_error_code FROM public.email_queue WHERE id IN ('b2d1312c-c0af-47ca-9558-2b7d4b366b22','71dff6e3-adc5-466a-a7aa-1406b872cc98') — the two deliverable rows; assert they transition to sent rather than a second row being written (the audit records email_send_log writing a separate sent row instead of transitioning, which is a distinct open concern).",
+      "Confirm the automation engine resumes: SELECT count(*) FROM public.automation_executions WHERE created_at > <apply time> after an event is raised."
+    ]
+  },
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "steps": [
+      "Confirm the vault secret 'email_queue_service_role_key' exists and holds a current service-role key. The migration aborts if it is absent or empty, but it CANNOT tell whether the value is valid — an invalid key applies cleanly and then 401s on every call.",
+      "Apply 20260805100000_def_018_003_cron_guc_repair.sql. It is self-verifying: preconditions abort before any change if pg_cron/pg_net are absent, if any of the six jobs is missing, or if none of them still carries the defect; post-assertions abort the transaction if any of the seven jobs is missing, inactive, still references app.settings.*, does not read from vault, or has drifted from its expected schedule.",
+      "Reproduce the failure FIRST for the record: SELECT jobname, return_message FROM cron.job_run_details WHERE status = 'failed' AND start_time > now() - interval '10 minutes' — the six should be failing with 'unrecognized configuration parameter \"app.settings.supabase_url\"'.",
+      "After apply, run every check in verification_delegated_to_executor and paste the raw output into this receipt. A bare 'pass' is not acceptable under convention section 6.",
+      "Report the executor's own applied version so it can be recorded in docs/audits/unapplied-migrations-baseline.json."
+    ]
+  },
+  "guarded_by": "src/test/regression/def-018-003-cron-guc-repair.test.ts — static guards over the migration, including a detector that matches the live broken pattern (so it catches the defect rather than merely passing on the fix), assertions that all seven jobs are covered, that schedules are preserved exactly, that no secret literal is introduced into git, and that the superseded 20260720120000 is not left applicable.",
+  "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
+  "supersedes": "supabase/migrations/20260720120000_schedule_process_email_queue.sql — authored 2026-07-20, never applied, and carrying the same DEF-018 GUC defect. It must not be applied at any point; doing so would re-create process-email-queue with the broken pattern and silently undo the DEF-003 half of this release.",
+  "follow_up": [
+    "Rename the vault secret email_queue_service_role_key to something honest (service_role_key). Not migration-safe; needs a coordinated update of the five jobs that reference it.",
+    "DEF-019 remains open and is what would have caught this: 26,208 consecutive cron failures surfaced nowhere. A cron-failure and consecutive-failure alert is the containment step the remediation plan places in Workstream A.",
+    "The audit records email_send_log writing a separate 'sent' row one second after a 'pending' row rather than transitioning the record, which means the log cannot be trusted as a delivery record. That is part of DEF-003's original scope and is NOT addressed here — this release schedules the drain; it does not repair the queue's own state machine."
+  ],
+  "open_after_this": [
+    "DEF-026 approve_bill_safe writes status 'APPROVED', rejected by bills_status_check (23514). Bill approval broken on LIVE.",
+    "DEF-027 create_customer_safe inserts four columns absent from public.customers (42703). Customer creation via the safe RPC broken on LIVE.",
+    "DEF-028 stamp_portal_provenance() still selects portal_access.contact_id on LIVE (definition hash f67d2205, confirmed 2026-08-05). Migration 20260803140000 is authored and awaiting the executor; every portal write remains broken until it is applied.",
+    "DEF-019 no alerting layer exists.",
+    "DEF-016 remains undefined and blocking by declaration."
+  ],
+  "post_publish_verification": {
+    "runner": "scripts/verify-post-publish.ts",
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Every check must return pass before this release may move out of pending/ or be marked applied-verified. Owner requirement 2026-08-05: all seven scheduled jobs must be evidenced as RUNNING SUCCESSFULLY — and as being AUTHORISED — not merely as scheduled.",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "why_this_runner": "cron.job_run_details and net._http_response are outside the public schema and are readable by neither the executor's psql role nor the reviewing party's connector. That is not incidental: it is why 26,208 consecutive cron failures surfaced nowhere. DEF-019's projections make both queryable from public under RLS-safe, secret-redacting wrappers, so these checks can run at all.",
+    "checks": [
+      {
+        "id": "vault-secret-present",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT CASE WHEN public.mcp_vault_secret_present('email_queue_service_role_key') THEN 1 ELSE 0 END"
+      },
+      {
+        "id": "seven-jobs-present",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue')"
+      },
+      {
+        "id": "seven-jobs-active",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND (e->>'active')::boolean"
+      },
+      {
+        "id": "no-guc-references-remain",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND command LIKE '%app.settings.%'"
+      },
+      {
+        "id": "all-credentials-from-vault",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND command LIKE '%vault.decrypted_secrets%'"
+      },
+      {
+        "id": "all-seven-ran-successfully",
+        "kind": "count_equals",
+        "expected": 7,
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND (e->>'succeeded')::int > 0"
+      },
+      {
+        "id": "no-failed-runs",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND (e->>'failed')::int > 0"
+      },
+      {
+        "id": "no-unrecognized-parameter-errors",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE (e->>'unrecognized_parameter_failures')::int > 0"
+      },
+      {
+        "id": "delivery-view-available",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT CASE WHEN (public.mcp_http_delivery_health(20)->>'available')::boolean THEN 1 ELSE 0 END"
+      },
+      {
+        "id": "http-calls-are-authorised",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT (public.mcp_http_delivery_health(20)->>'unauthorized')::int"
+      },
+      {
+        "id": "http-calls-succeeded",
+        "kind": "count_at_least",
+        "expected": 1,
+        "sql": "SELECT (public.mcp_http_delivery_health(20)->>'succeeded_2xx')::int"
+      },
+      {
+        "id": "email-queue-drained",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.email_queue WHERE status = 'pending' AND scheduled_at <= now() - interval '5 minutes'"
+      },
+      {
+        "id": "no-reserved-tld-pending",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM public.email_queue WHERE status = 'pending' AND (to_email ILIKE '%.test' OR to_email ILIKE '%.example' OR to_email ILIKE '%.invalid' OR to_email ILIKE '%.localhost')"
+      }
+    ],
+    "depends_on": "supabase/migrations/20260805160000_def_019_cron_and_delivery_observability.sql MUST be applied BEFORE these checks are run. The executor reported 2026-08-05 that cron.job_run_details and vault.decrypted_secrets are permission-denied to its psql role, and neither is in the public schema, so the original checks — which queried those relations directly — could never have passed for anyone. They now go through the SECURITY DEFINER projections that migration adds. Apply order: DEF-019 (read-only, no behaviour change), then this release.",
+    "known_weakness": "DEF-032: the ACL on cron.job_run_details is '=rd/supabase_admin', so ANY role can DELETE cron run history. Two checks here assert an ABSENCE over a time window — no-failed-runs and no-unrecognized-parameter-errors — and an absence cannot be distinguished from a deletion. They are therefore weaker than they read: they cannot detect a truncated history. This is stated rather than glossed because the gate must not be trusted beyond what it proves. The gate does NOT rest on them alone: all-seven-ran-successfully and http-calls-succeeded assert a PRESENCE, which deletion cannot fake, and both must pass. Revoking DELETE from PUBLIC on that relation would close the weakness."
+  }
+}
