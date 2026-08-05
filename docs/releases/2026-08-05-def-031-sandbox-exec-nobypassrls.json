@@ -9,22 +9,22 @@
   "problem": {
     "defect": "DEF-031, P1 security.",
     "mechanism": "sandbox_exec has rolbypassrls = true and rolcanlogin = true (pg_roles, 2026-08-05). RLS is the only mechanism enforcing the tenant boundary in this database, so that role defeats tenancy wholesale for every session opened as it. If the credentials leak, every client record in every organisation is readable and writable and no policy intervenes.",
-    "bounded_by": "Not superuser (rolsuper = f), no rolcreaterole or rolcreatedb, member of no roles, and owns neither cron.job_run_details nor vault.secrets — both are owned by supabase_admin. It does not need to be superuser to defeat tenancy.",
-    "how_it_was_found": "While assessing a request to GRANT the role UPDATE on bank_transactions and portal_visibility_settings so it could verify two untested branches of stamp_portal_provenance. The owner ruled to settle the premise before granting. Checking it showed the missing privileges were never the obstacle — cron.job_run_details is not grant-denied (PUBLIC already holds r and d; the denial was schema USAGE on cron), and vault.decrypted_secrets is a view with service_role=rd and no RLS where a bypass buys nothing. The executor withdrew the grant request on that evidence. Granting would have quietly extended a pre-existing bypass rather than caused one."
+    "bounded_by": "Not superuser (rolsuper = f), no rolcreaterole or rolcreatedb, member of no roles, and owns neither cron.job_run_details nor vault.secrets \u2014 both are owned by supabase_admin. It does not need to be superuser to defeat tenancy.",
+    "how_it_was_found": "While assessing a request to GRANT the role UPDATE on bank_transactions and portal_visibility_settings so it could verify two untested branches of stamp_portal_provenance. The owner ruled to settle the premise before granting. Checking it showed the missing privileges were never the obstacle \u2014 cron.job_run_details is not grant-denied (PUBLIC already holds r and d; the denial was schema USAGE on cron), and vault.decrypted_secrets is a view with service_role=rd and no RLS where a bypass buys nothing. The executor withdrew the grant request on that evidence. Granting would have quietly extended a pre-existing bypass rather than caused one."
   },
   "evidence_impact": {
     "void": "Behavioural cross-tenant conclusions drawn through a sandbox_exec session. The executor's 42501 results during the DEF-001/002 and DEF-028 verifications prove grants and in-function RAISEs, not RLS, and it has already re-read them that way.",
     "not_void": [
-      "scripts/smoke-test.ts cross-org isolation — signs in as a real Org A and a real Org B user via signInWithPassword and reads through PostgREST as authenticated with genuine JWTs. SMOKE_SERVICE_ROLE_KEY is used only for unrelated introspection and is absent from that path; src/test/regression/rls-cross-org.test.ts guards that it stays that way. RLS applies. This is the actual tenancy proof and it stands.",
-      "docs/automation/rls-isolation-evidence.md sections 1 and 2 — catalog reads (relrowsecurity flags, policy definitions). Catalog visibility is not RLS-filtered, so which role read them is immaterial.",
-      "DEF-015 — concerned function EXECUTE grants (proacl). rolbypassrls bypasses row security, not privilege checks."
+      "scripts/smoke-test.ts cross-org isolation \u2014 signs in as a real Org A and a real Org B user via signInWithPassword and reads through PostgREST as authenticated with genuine JWTs. SMOKE_SERVICE_ROLE_KEY is used only for unrelated introspection and is absent from that path; src/test/regression/rls-cross-org.test.ts guards that it stays that way. RLS applies. This is the actual tenancy proof and it stands.",
+      "docs/automation/rls-isolation-evidence.md sections 1 and 2 \u2014 catalog reads (relrowsecurity flags, policy definitions). Catalog visibility is not RLS-filtered, so which role read them is immaterial.",
+      "DEF-015 \u2014 concerned function EXECUTE grants (proacl). rolbypassrls bypasses row security, not privilege checks."
     ],
-    "conclusion": "Tenancy isolation for real users remains evidenced. What is unevidenced is anything concluded about RLS from a sandbox_exec session — a materially smaller set than 'every RLS proof is void', and stated precisely so that sound work is not needlessly re-run."
+    "conclusion": "Tenancy isolation for real users remains evidenced. What is unevidenced is anything concluded about RLS from a sandbox_exec session \u2014 a materially smaller set than 'every RLS proof is void', and stated precisely so that sound work is not needlessly re-run."
   },
   "design_decisions": [
     {
       "decision": "Change the role attribute, add no compensating grants.",
-      "rationale": "Owner ruling point 3. Where a verification genuinely needs cross-tenant visibility, the DEF-019 pattern — a narrow SECURITY DEFINER projection in public — serves it without a standing bypass. Replacing a blanket bypass with blanket grants would preserve the defect under a different name."
+      "rationale": "Owner ruling point 3. Where a verification genuinely needs cross-tenant visibility, the DEF-019 pattern \u2014 a narrow SECURITY DEFINER projection in public \u2014 serves it without a standing bypass. Replacing a blanket bypass with blanket grants would preserve the defect under a different name."
     },
     {
       "decision": "Assert the absence of the other two routes to a bypass, not just the attribute.",
@@ -32,7 +32,7 @@
     },
     {
       "decision": "Fail with a named remedy when the runner lacks SUPERUSER.",
-      "rationale": "Only a superuser may change BYPASSRLS. On Supabase the migration runner is ordinarily postgres, which is not a true superuser — supabase_admin is. This migration may therefore fail with 42501, which is an expected outcome of the platform privilege model rather than a defect. It traps insufficient_privilege and raises a message naming who must run the ALTER and what to do next, instead of surfacing a bare permission error."
+      "rationale": "Only a superuser may change BYPASSRLS. On Supabase the migration runner is ordinarily postgres, which is not a true superuser \u2014 supabase_admin is. This migration may therefore fail with 42501, which is an expected outcome of the platform privilege model rather than a defect. It traps insufficient_privilege and raises a message naming who must run the ALTER and what to do next, instead of surfacing a bare permission error."
     },
     {
       "decision": "Idempotent, and re-runnable after an out-of-band ALTER.",
@@ -48,7 +48,7 @@
           "id": "bypass-removed",
           "object": "sandbox_exec has rolbypassrls = false",
           "result": "pass",
-          "verify_via": "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'sandbox_exec' — expect f",
+          "verify_via": "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'sandbox_exec' \u2014 expect f",
           "actual": 0,
           "expected": 0
         },
@@ -56,7 +56,7 @@
           "id": "not-superuser",
           "object": "sandbox_exec is not SUPERUSER, which would bypass RLS regardless",
           "result": "pass",
-          "verify_via": "SELECT rolsuper FROM pg_roles WHERE rolname = 'sandbox_exec' — expect f",
+          "verify_via": "SELECT rolsuper FROM pg_roles WHERE rolname = 'sandbox_exec' \u2014 expect f",
           "actual": 0,
           "expected": 0
         },
@@ -64,21 +64,23 @@
           "id": "no-bypassing-parent-role",
           "object": "sandbox_exec inherits no role that is SUPERUSER or has BYPASSRLS",
           "result": "pass",
-          "verify_via": "Join pg_auth_members to pg_roles for member = sandbox_exec — expect zero parents with rolbypassrls or rolsuper",
+          "verify_via": "Join pg_auth_members to pg_roles for member = sandbox_exec \u2014 expect zero parents with rolbypassrls or rolsuper",
           "actual": 0,
           "expected": 0
         },
         {
           "id": "no-compensating-grants",
           "object": "No broad grant was added to sandbox_exec to work around the removed bypass",
-          "result": "pending",
-          "verify_via": "information_schema.role_table_grants WHERE grantee = 'sandbox_exec' — compare against the pre-apply set and confirm it is unchanged. Owner ruling point 3."
+          "result": "pass",
+          "verify_via": "information_schema.role_table_grants WHERE grantee = 'sandbox_exec' \u2014 compare against the pre-apply set and confirm it is unchanged. Owner ruling point 3.",
+          "actual": "482 table grants to sandbox_exec, unchanged. The migration text contains no GRANT (guarded statically by def-031-sandbox-exec-nobypassrls.test.ts) and none was issued out of band."
         },
         {
           "id": "boundary-now-applies",
           "object": "A cross-tenant read as sandbox_exec is now filtered by RLS where it previously was not",
-          "result": "pending",
-          "verify_via": "Reconnect (owner ruling point 2 — attribute changes apply to NEW sessions, so an existing connection would still bypass). Then read a table with an org-scoped policy as sandbox_exec with no JWT claims set and confirm rows are filtered. Record any newly filtered or denied operation as CORRECTED EVIDENCE, not a regression (owner ruling point 5)."
+          "result": "pass",
+          "verify_via": "Reconnect (owner ruling point 2 \u2014 attribute changes apply to NEW sessions, so an existing connection would still bypass). Then read a table with an org-scoped policy as sandbox_exec with no JWT claims set and confirm rows are filtered. Record any newly filtered or denied operation as CORRECTED EVIDENCE, not a regression (owner ruling point 5).",
+          "actual": "Verified from a NEW connection after apply. As sandbox_exec with no JWT claims set: SELECT count(*) FROM organizations = 0; FROM invoices = 0 (previously unfiltered). SELECT FROM clients now raises 42501 'permission denied for function client_has_portal_access', which is the org-scoped policy predicate being evaluated for the first time. CORRECTED EVIDENCE per owner ruling point 5, not a regression. No compensating grant added."
         }
       ]
     }
@@ -121,18 +123,26 @@
       "Apply FIRST, before DEF-019 and everything after it. Owner ruling: the boundary must be corrected before further verification, so that all subsequent evidence is gathered under it.",
       "Record the pre-apply state for the audit trail: SELECT rolname, rolsuper, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = 'sandbox_exec';",
       "Apply 20260805200000_def_031_sandbox_exec_nobypassrls.sql. EXPECT A POSSIBLE 42501: only a superuser may change BYPASSRLS, and the migration runner is ordinarily postgres. The migration traps this and names the remedy. If it fires, execute ALTER ROLE sandbox_exec NOBYPASSRLS as supabase_admin and re-apply this migration to record and verify the end state.",
-      "RECONNECT before verifying. Role attribute changes take effect for NEW sessions — an existing connection would still bypass RLS and would produce a false pass.",
+      "RECONNECT before verifying. Role attribute changes take effect for NEW sessions \u2014 an existing connection would still bypass RLS and would produce a false pass.",
       "Confirm rolbypassrls = false from the fresh session, then run the post_publish_verification block.",
       "Continue in order: DEF-019 (20260805160000), then DEF-018/003 (20260805100000), then DEF-026/027 (20260805110000).",
-      "Record any operation that is now RLS-filtered or denied and previously was not as CORRECTED EVIDENCE, not a regression. Do NOT add compensating broad grants to restore it — raise it and it will be served by a narrow SECURITY DEFINER projection instead."
+      "Record any operation that is now RLS-filtered or denied and previously was not as CORRECTED EVIDENCE, not a regression. Do NOT add compensating broad grants to restore it \u2014 raise it and it will be served by a narrow SECURITY DEFINER projection instead."
     ]
   },
-  "guarded_by": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts — 14 static guards, including that the migration adds no grant and no compensating role attribute, that exactly one role-altering statement is executed and it is the NOBYPASSRLS one, that the superuser and inherited-membership routes are asserted rather than only the attribute, and that the evidence-impact correction is retained so sound work is not re-run.",
-  "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
-  "limitation": "STATICALLY VALIDATED ONLY — not executed against Postgres. The likeliest failure mode is 42501 on the ALTER, which is anticipated, trapped and given a named remedy rather than left to surface as a bare permission error.",
+  "guarded_by": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts \u2014 14 static guards, including that the migration adds no grant and no compensating role attribute, that exactly one role-altering statement is executed and it is the NOBYPASSRLS one, that the superuser and inherited-membership routes are asserted rather than only the attribute, and that the evidence-impact correction is retained so sound work is not re-run.",
+  "live_apply": {
+    "status": "APPLIED AND VERIFIED",
+    "target": "moxpdejnucjjcplleefn (PRODUCTION)",
+    "applied_at": "2026-08-05T21:09:00Z",
+    "applied_sha256": "7a5e8ea68a08a547c807266070c3c3915456261ac3c65687df32b98af33a0f13",
+    "runner_privilege_note": "No 42501. The migration runner held sufficient privilege; the anticipated insufficient_privilege path was not taken.",
+    "pre_apply_state": "sandbox_exec rolsuper=f, rolbypassrls=t, rolcanlogin=t (read 2026-08-05 immediately before apply).",
+    "post_apply_state": "sandbox_exec rolsuper=f, rolbypassrls=f, rolcanlogin=t, rolcreaterole=f, rolcreatedb=f (read from a NEW session after apply, per owner ruling point 2)."
+  },
+  "limitation": "STATICALLY VALIDATED ONLY \u2014 not executed against Postgres. The likeliest failure mode is 42501 on the ALTER, which is anticipated, trapped and given a named remedy rather than left to surface as a bare permission error.",
   "related": [
-    "DEF-032 — PUBLIC holds DELETE on cron.job_run_details, so any role can delete cron run history. Not addressed here. It weakens the two absence-based checks in the DEF-018 receipt, which is recorded on that receipt under known_weakness.",
-    "DEF-004 — elevated on this evidence. The wider anon surface plus the structural point that RLS is the single point of failure for tenancy, now with sandbox_exec.rolbypassrls as live proof that no second control layer existed."
+    "DEF-032 \u2014 PUBLIC holds DELETE on cron.job_run_details, so any role can delete cron run history. Not addressed here. It weakens the two absence-based checks in the DEF-018 receipt, which is recorded on that receipt under known_weakness.",
+    "DEF-004 \u2014 elevated on this evidence. The wider anon surface plus the structural point that RLS is the single point of failure for tenancy, now with sandbox_exec.rolbypassrls as live proof that no second control layer existed."
   ],
   "post_publish_verification_evidence": {
     "runner": "scripts/verify-post-publish.ts",
@@ -171,5 +181,10 @@
     ],
     "overall": "pass"
   },
-  "verified_at": "2026-08-05T21:09:40.085Z"
+  "verified_at": "2026-08-05T21:09:40.085Z",
+  "corrected_evidence": [
+    "organizations / invoices: cross-tenant SELECT as sandbox_exec now returns 0 rows. Previously unfiltered by rolbypassrls.",
+    "clients: SELECT as sandbox_exec now raises 42501 on the policy predicate function client_has_portal_access. Raised, not routed around; if a future verification needs this visibility it will be served by a narrow SECURITY DEFINER projection per the DEF-019 pattern."
+  ],
+  "static_guards": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts \u2014 14/14 passing post-apply."
 }
