@@ -137,21 +137,27 @@
   "post_publish_verification": {
     "runner": "scripts/verify-post-publish.ts",
     "environment": "LIVE",
-    "gate_policy": "Convention section 3. Every check must return pass before this release may move out of pending/ or be marked applied-verified. Owner requirement 2026-08-05: all seven scheduled jobs must be evidenced as RUNNING SUCCESSFULLY, not merely scheduled.",
+    "gate_policy": "Convention section 3. Every check must return pass before this release may move out of pending/ or be marked applied-verified. Owner requirement 2026-08-05: all seven scheduled jobs must be evidenced as RUNNING SUCCESSFULLY — and as being AUTHORISED — not merely as scheduled.",
     "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
-    "why_this_runner": "These checks read cron.job_run_details and net._http_response, which are outside the public schema and therefore unreachable through the database connector the reviewing party uses. This runner connects via managed psql and CAN read them, which is what closes the delivery-verification gap recorded in verification_delegated_to_executor.",
+    "why_this_runner": "cron.job_run_details and net._http_response are outside the public schema and are readable by neither the executor's psql role nor the reviewing party's connector. That is not incidental: it is why 26,208 consecutive cron failures surfaced nowhere. DEF-019's projections make both queryable from public under RLS-safe, secret-redacting wrappers, so these checks can run at all.",
     "checks": [
+      {
+        "id": "vault-secret-present",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT CASE WHEN public.mcp_vault_secret_present('email_queue_service_role_key') THEN 1 ELSE 0 END"
+      },
       {
         "id": "seven-jobs-present",
         "kind": "count_equals",
         "expected": 7,
-        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue')"
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue')"
       },
       {
         "id": "seven-jobs-active",
         "kind": "count_equals",
         "expected": 7,
-        "sql": "SELECT count(*) FROM cron.job WHERE jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND active"
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND (e->>'active')::boolean"
       },
       {
         "id": "no-guc-references-remain",
@@ -169,31 +175,37 @@
         "id": "all-seven-ran-successfully",
         "kind": "count_equals",
         "expected": 7,
-        "sql": "SELECT count(DISTINCT j.jobname) FROM cron.job j JOIN cron.job_run_details d ON d.jobid = j.jobid WHERE j.jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND d.start_time > now() - interval '20 minutes' AND d.status = 'succeeded'"
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND (e->>'succeeded')::int > 0"
       },
       {
         "id": "no-failed-runs",
         "kind": "count_equals",
         "expected": 0,
-        "sql": "SELECT count(*) FROM cron.job j JOIN cron.job_run_details d ON d.jobid = j.jobid WHERE j.jobname IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND d.start_time > now() - interval '20 minutes' AND d.status <> 'succeeded'"
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE e->>'jobname' IN ('hmrc-ct-poll-worker','hmrc-ct-delete-worker','sync-gmail-emails','sync-outlook-emails','process-automation-events','workflow-tick','process-email-queue') AND (e->>'failed')::int > 0"
       },
       {
         "id": "no-unrecognized-parameter-errors",
         "kind": "count_equals",
         "expected": 0,
-        "sql": "SELECT count(*) FROM cron.job_run_details WHERE start_time > now() - interval '20 minutes' AND return_message ILIKE '%unrecognized configuration parameter%'"
+        "sql": "SELECT count(*) FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE (e->>'unrecognized_parameter_failures')::int > 0"
+      },
+      {
+        "id": "delivery-view-available",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT CASE WHEN (public.mcp_http_delivery_health(20)->>'available')::boolean THEN 1 ELSE 0 END"
       },
       {
         "id": "http-calls-are-authorised",
         "kind": "count_equals",
         "expected": 0,
-        "sql": "SELECT count(*) FROM net._http_response WHERE created > now() - interval '20 minutes' AND status_code IN (401, 403)"
+        "sql": "SELECT (public.mcp_http_delivery_health(20)->>'unauthorized')::int"
       },
       {
         "id": "http-calls-succeeded",
         "kind": "count_at_least",
         "expected": 1,
-        "sql": "SELECT count(*) FROM net._http_response WHERE created > now() - interval '20 minutes' AND status_code BETWEEN 200 AND 299"
+        "sql": "SELECT (public.mcp_http_delivery_health(20)->>'succeeded_2xx')::int"
       },
       {
         "id": "email-queue-drained",
@@ -207,6 +219,7 @@
         "expected": 0,
         "sql": "SELECT count(*) FROM public.email_queue WHERE status = 'pending' AND (to_email ILIKE '%.test' OR to_email ILIKE '%.example' OR to_email ILIKE '%.invalid' OR to_email ILIKE '%.localhost')"
       }
-    ]
+    ],
+    "depends_on": "supabase/migrations/20260805160000_def_019_cron_and_delivery_observability.sql MUST be applied BEFORE these checks are run. The executor reported 2026-08-05 that cron.job_run_details and vault.decrypted_secrets are permission-denied to its psql role, and neither is in the public schema, so the original checks — which queried those relations directly — could never have passed for anyone. They now go through the SECURITY DEFINER projections that migration adds. Apply order: DEF-019 (read-only, no behaviour change), then this release."
   }
 }
