@@ -65,7 +65,10 @@ describe("DEF-026/027 patch scope", () => {
   });
 
   it("removes only the assertion predicate line — no functional SQL", () => {
-    const removed = (patch.match(/^-(?!--)(?!-- ).*$/gm) ?? [])
+    const removed = Array.from(
+      patch.matchAll(/^-(?!--)(?!-- ).*$/gm),
+      (match) => match[0],
+    )
       .filter((l) => l.startsWith("-") && !l.startsWith("---"))
       .map((l) => l.slice(1).trim())
       .filter(Boolean);
@@ -80,8 +83,9 @@ describe("DEF-026/027 patch scope", () => {
     expect(patch).toContain("+  IF v_src ~ '\\mbilling_address\\M' OR v_src ~ '\\minternal_notes\\M' THEN");
   });
 
-  it("the on-disk migration is still the un-corrected version pending merge", () => {
+  it("the on-disk migration contains the reviewed boundary correction", () => {
     const sql = readFileSync(MIGRATION_PATH, "utf8");
-    expect(sql).toContain("IF v_src LIKE '%billing_address,%' OR v_src LIKE '%internal_notes%' THEN");
+    expect(sql).toContain("IF v_src ~ '\\mbilling_address\\M' OR v_src ~ '\\minternal_notes\\M' THEN");
+    expect(sql).not.toContain("LIKE '%internal_notes%'");
   });
 });
