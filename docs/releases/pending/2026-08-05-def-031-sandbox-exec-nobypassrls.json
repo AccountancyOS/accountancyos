@@ -6,14 +6,12 @@
   "approver": "leon@bluetickaccountants.com",
   "summary": "DEF-031. Removes BYPASSRLS from the automated login role sandbox_exec, restoring the tenant boundary for every session opened as that role. One role attribute changes. No schema object, grant, policy, table or function is altered.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "problem": {
     "defect": "DEF-031, P1 security.",
     "mechanism": "sandbox_exec has rolbypassrls = true and rolcanlogin = true (pg_roles, 2026-08-05). RLS is the only mechanism enforcing the tenant boundary in this database, so that role defeats tenancy wholesale for every session opened as it. If the credentials leak, every client record in every organisation is readable and writable and no policy intervenes.",
     "bounded_by": "Not superuser (rolsuper = f), no rolcreaterole or rolcreatedb, member of no roles, and owns neither cron.job_run_details nor vault.secrets — both are owned by supabase_admin. It does not need to be superuser to defeat tenancy.",
     "how_it_was_found": "While assessing a request to GRANT the role UPDATE on bank_transactions and portal_visibility_settings so it could verify two untested branches of stamp_portal_provenance. The owner ruled to settle the premise before granting. Checking it showed the missing privileges were never the obstacle — cron.job_run_details is not grant-denied (PUBLIC already holds r and d; the denial was schema USAGE on cron), and vault.decrypted_secrets is a view with service_role=rd and no RLS where a bypass buys nothing. The executor withdrew the grant request on that evidence. Granting would have quietly extended a pre-existing bypass rather than caused one."
   },
-
   "evidence_impact": {
     "void": "Behavioural cross-tenant conclusions drawn through a sandbox_exec session. The executor's 42501 results during the DEF-001/002 and DEF-028 verifications prove grants and in-function RAISEs, not RLS, and it has already re-read them that way.",
     "not_void": [
@@ -23,7 +21,6 @@
     ],
     "conclusion": "Tenancy isolation for real users remains evidenced. What is unevidenced is anything concluded about RLS from a sandbox_exec session — a materially smaller set than 'every RLS proof is void', and stated precisely so that sound work is not needlessly re-run."
   },
-
   "design_decisions": [
     {
       "decision": "Change the role attribute, add no compensating grants.",
@@ -42,7 +39,6 @@
       "rationale": "If the ALTER has to be executed as supabase_admin outside the migration, re-running this file records and verifies the end state as a no-op that still asserts the result. The verification is the durable part; the ALTER is not."
     }
   ],
-
   "migrations": [
     {
       "path": "supabase/migrations/20260805200000_def_031_sandbox_exec_nobypassrls.sql",
@@ -81,7 +77,6 @@
       ]
     }
   ],
-
   "post_publish_verification": {
     "runner": "scripts/verify-post-publish.ts",
     "environment": "LIVE",
@@ -114,7 +109,6 @@
       }
     ]
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
@@ -127,15 +121,48 @@
       "Record any operation that is now RLS-filtered or denied and previously was not as CORRECTED EVIDENCE, not a regression. Do NOT add compensating broad grants to restore it — raise it and it will be served by a narrow SECURITY DEFINER projection instead."
     ]
   },
-
   "guarded_by": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts — 14 static guards, including that the migration adds no grant and no compensating role attribute, that exactly one role-altering statement is executed and it is the NOBYPASSRLS one, that the superuser and inherited-membership routes are asserted rather than only the attribute, and that the evidence-impact correction is retained so sound work is not re-run.",
-
   "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
-
   "limitation": "STATICALLY VALIDATED ONLY — not executed against Postgres. The likeliest failure mode is 42501 on the ALTER, which is anticipated, trapped and given a named remedy rather than left to surface as a bare permission error.",
-
   "related": [
     "DEF-032 — PUBLIC holds DELETE on cron.job_run_details, so any role can delete cron run history. Not addressed here. It weakens the two absence-based checks in the DEF-018 receipt, which is recorded on that receipt under known_weakness.",
     "DEF-004 — elevated on this evidence. The wider anon surface plus the structural point that RLS is the single point of failure for tenancy, now with sandbox_exec.rolbypassrls as live proof that no second control layer existed."
-  ]
+  ],
+  "post_publish_verification_evidence": {
+    "runner": "scripts/verify-post-publish.ts",
+    "verified_at": "2026-08-05T21:09:23.787Z",
+    "environment": "LIVE",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "results": [
+      {
+        "id": "bypass-removed",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": 0,
+        "pass": true
+      },
+      {
+        "id": "role-still-exists",
+        "kind": "count_equals",
+        "expected": 1,
+        "actual": 1,
+        "pass": true
+      },
+      {
+        "id": "not-superuser",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": 0,
+        "pass": true
+      },
+      {
+        "id": "no-bypassing-parent-role",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": 0,
+        "pass": true
+      }
+    ],
+    "overall": "pass"
+  }
 }
