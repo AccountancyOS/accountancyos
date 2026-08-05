@@ -195,14 +195,41 @@ describe("release hygiene", () => {
     update_invoice_draft_safe: "20260803120000_def_029_invoice_line_uuid_casts.sql",
   };
 
+  /**
+   * Ownership is content-addressed, not filename-addressed.
+   *
+   * The executor re-applies our migrations under its own timestamp, so the last file
+   * to define a function is routinely an executor duplicate that sorts after the
+   * migration we authored — e.g. DEF-029's 20260803120000 was re-applied as
+   * 20260803203957_844d5cc7…, which is byte-identical bar a trailing newline.
+   * Pinning this assertion to a filename therefore fails on every faithful re-apply,
+   * which is noise, and it would equally pass a *renamed* file whose contents drifted,
+   * which is the actual risk (DEF-023).
+   *
+   * So: the last definer is accepted when it is the declared owner, OR when it is a
+   * verbatim copy of the declared owner. A later definer whose contents differ is a
+   * genuine unrecorded takeover and still fails.
+   */
+  const normalise = (s: string) => s.replace(/[ \t]+$/gm, "").trimEnd();
+
   it("owns the live body of every function it reissues, or records who took it over", () => {
     const migDir = resolve(root, "supabase/migrations");
     const files = readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort();
     for (const fn of [...REPAIRED, "create_invoice_draft_safe", "update_invoice_draft_safe"]) {
-      const owner = files
-        .filter((f) => new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`).test(readFileSync(resolve(migDir, f), "utf8")))
-        .pop();
-      expect(owner, `${fn} has an unrecorded later definer`).toBe(HANDED_ON[fn] ?? MIG_NAME);
+      const definers = files.filter((f) =>
+        new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`).test(readFileSync(resolve(migDir, f), "utf8")),
+      );
+      const owner = definers.pop();
+      const declared = HANDED_ON[fn] ?? MIG_NAME;
+      if (owner === declared) continue;
+
+      const ownerSrc = normalise(readFileSync(resolve(migDir, owner!), "utf8"));
+      const declaredSrc = normalise(readFileSync(resolve(migDir, declared), "utf8"));
+      expect(
+        ownerSrc,
+        `${fn} has an unrecorded later definer: ${owner} sorts after the declared owner ${declared} and its contents DIFFER. ` +
+          `If the executor re-applied it, the copy must be verbatim; if this is a real handover, record it in HANDED_ON.`,
+      ).toBe(declaredSrc);
     }
   });
 
