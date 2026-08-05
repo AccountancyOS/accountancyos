@@ -67,7 +67,7 @@
   "migrations": [
     {
       "path": "supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql",
-      "sha256": "2cd68a1e9f95ce1aecad15b770968d5a6234bbe1ae3a6ea8996e9c7c10714d9d",
+      "sha256": "edf07b6c8cda151591aede6a765b701670100112274df227582ac8795c9e60f0",
       "expected_objects": [
         {
           "id": "bills-status-widened",

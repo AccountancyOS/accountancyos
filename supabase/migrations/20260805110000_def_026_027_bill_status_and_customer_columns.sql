@@ -323,7 +323,9 @@ BEGIN
   IF v_src IS NULL THEN
     RAISE EXCEPTION 'DEF-027 post-assert failed: create_customer_safe is absent.';
   END IF;
-  IF v_src LIKE '%billing_address,%' OR v_src LIKE '%internal_notes%' THEN
+  -- Identifier-boundary matches reject obsolete standalone column names without
+  -- matching the legitimate p_billing_address / p_internal_notes parameters.
+  IF v_src ~ '\mbilling_address\M' OR v_src ~ '\minternal_notes\M' THEN
     RAISE EXCEPTION 'DEF-027 post-assert failed: the body still names a column that does not exist on public.customers.';
   END IF;
   IF v_src NOT LIKE '%address_line_1%' THEN
