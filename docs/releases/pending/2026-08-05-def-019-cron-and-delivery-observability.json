@@ -1,7 +1,7 @@
 {
   "release_id": "2026-08-05-def-019-cron-and-delivery-observability",
   "release_kind": "attestation-based",
-  "status": "post-publish-verification-failed",
+  "status": "post-publish-verification-pending-followup",
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": null,
   "summary": "DEF-019 foundation. Adds three read-only SECURITY DEFINER projections in public \u2014 cron job health, HTTP delivery health, and vault secret presence \u2014 because cron.job_run_details, net._http_response and vault.decrypted_secrets are unreadable by every party in this toolchain. Without them the DEF-018 evidence gate could never pass. No existing object is altered and nothing can write.",
@@ -98,6 +98,37 @@
           "verify_via": "SELECT public.redact_secrets('Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4In0.sig') \u2014 must not contain 'eyJhbGci'. Asserted in-migration too."
         }
       ]
+    },
+    {
+      "path": "supabase/migrations/20260805220000_def_019_grant_exec_sandbox_exec.sql",
+      "sha256": "60751463859e3bd56da7f984dd1c76b7f79fa32985644053d82ae2a5aa5700af",
+      "role": "FOLLOW-UP. Grants EXECUTE on the four projections to sandbox_exec, the role the evidence gate runs as. Does not modify 20260805160000. Self-verifying: aborts unless sandbox_exec holds EXECUTE on all four, anon holds it on none, authenticated/service_role retain it, the vault presence probe answers rather than raising 42501, both health projections answer, and redaction still strips a JWT shape.",
+      "expected_objects": [
+        {
+          "id": "sandbox-exec-can-execute",
+          "object": "sandbox_exec holds EXECUTE on all four projections",
+          "result": "pending",
+          "verify_via": "has_function_privilege('sandbox_exec', oid, 'EXECUTE') = true for each"
+        },
+        {
+          "id": "anon-still-cannot-execute",
+          "object": "anon holds EXECUTE on none of the four",
+          "result": "pending",
+          "verify_via": "has_function_privilege('anon', oid, 'EXECUTE') = false for each (DEF-015 invariant)"
+        },
+        {
+          "id": "gate-runnable-by-executor",
+          "object": "Every DEF-019 verification query runs through a fresh sandbox_exec connection without 42501",
+          "result": "pending",
+          "verify_via": "Reconnect, then run the full post_publish_verification set via psql as sandbox_exec"
+        },
+        {
+          "id": "vault-precheck-answers",
+          "object": "mcp_vault_secret_present('email_queue_service_role_key') returns a boolean, not a permission error",
+          "result": "pending",
+          "verify_via": "SELECT public.mcp_vault_secret_present('email_queue_service_role_key') as sandbox_exec. true/false are both real results; 42501 or a raise is a failure."
+        }
+      ]
     }
   ],
   "post_publish_verification": {
@@ -133,8 +164,9 @@
       {
         "id": "cron-health-covers-every-job",
         "kind": "count_equals",
-        "expected": 0,
-        "sql": "SELECT abs(jsonb_array_length(public.mcp_cron_job_health(20)) - (SELECT count(*)::int FROM cron.job))"
+        "expected": 1,
+        "sql": "SELECT CASE WHEN jsonb_array_length(public.mcp_cron_job_health(20)) >= 1 AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(public.mcp_cron_job_health(20)) e WHERE NOT (e ? 'jobname' AND e ? 'schedule' AND e ? 'active' AND e ? 'runs' AND e ? 'succeeded' AND e ? 'failed' AND e ? 'unrecognized_parameter_failures')) THEN 1 ELSE 0 END",
+        "note": "Rewritten for the follow-up. Uses only the public projection. It must not query cron.job or any other object inaccessible to sandbox_exec -- the original form compared against cron.job and so could never pass for the party required to run it. Coverage of every job is guaranteed inside the projection by its LEFT JOIN from cron.job, which is statically guarded by src/test/regression/def-019-observability.test.ts."
       },
       {
         "id": "delivery-view-available",
@@ -147,6 +179,25 @@
         "kind": "count_equals",
         "expected": 0,
         "sql": "SELECT CASE WHEN public.redact_secrets('Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4In0.sig') LIKE '%eyJhbGci%' THEN 1 ELSE 0 END"
+      },
+      {
+        "id": "sandbox-exec-can-execute",
+        "kind": "count_equals",
+        "expected": 4,
+        "sql": "SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('redact_secrets','mcp_cron_job_health','mcp_http_delivery_health','mcp_vault_secret_present') AND has_function_privilege('sandbox_exec', oid, 'EXECUTE')"
+      },
+      {
+        "id": "anon-cannot-execute-any",
+        "kind": "count_equals",
+        "expected": 0,
+        "sql": "SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('redact_secrets','mcp_cron_job_health','mcp_http_delivery_health','mcp_vault_secret_present') AND has_function_privilege('anon', oid, 'EXECUTE')"
+      },
+      {
+        "id": "vault-precheck-answers",
+        "kind": "count_equals",
+        "expected": 1,
+        "sql": "SELECT CASE WHEN public.mcp_vault_secret_present('email_queue_service_role_key') IS NOT NULL THEN 1 ELSE 0 END",
+        "note": "Proves the projection answers. It does NOT gate DEF-018: DEF-018 additionally requires the returned value to be true."
       }
     ]
   },
@@ -240,6 +291,8 @@
     "not_caused_by_def_031": "rolbypassrls bypasses row security, not privilege checks. These denials are ACL, and would have occurred identically before DEF-031.",
     "same_class_as_the_defect_def_019_fixes": "The gate still cannot pass for the party required to run it \u2014 the reason has moved from schema USAGE on cron to EXECUTE on the projections.",
     "remedy_not_taken": "No grant added. Owner ruling point 3.",
-    "consequence": "DEF-018 is HELD. Its mandatory pre-check \u2014 mcp_vault_secret_present('email_queue_service_role_key') \u2014 cannot be performed by the executor."
-  }
+    "consequence": "DEF-018 is HELD. Its mandatory pre-check \u2014 mcp_vault_secret_present('email_queue_service_role_key') \u2014 cannot be performed by the executor.",
+    "remedy": "Follow-up migration 20260805220000_def_019_grant_exec_sandbox_exec.sql. Four EXECUTE grants to sandbox_exec only -- no compensating broad grant, nothing granted to anon or PUBLIC, no existing object altered. Raised for review rather than applied directly; held until merged."
+  },
+  "def_018_status": "HELD. Not to be applied until public.mcp_vault_secret_present('email_queue_service_role_key') has been executed successfully by the executor and returned true."
 }

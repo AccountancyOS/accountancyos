@@ -1,7 +1,7 @@
 {
   "release_id": "2026-08-05-def-026-027-bill-status-and-customer-columns",
   "release_kind": "attestation-based",
-  "status": "pending",
+  "status": "apply-failed-rolled-back",
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": null,
   "summary": "DEF-026 + DEF-027. Widens bills_status_check to admit the APPROVED state that approve_bill_safe has written since December 2025, and repairs create_customer_safe, which inserted four columns that do not exist on public.customers. Replaces one CHECK constraint, adds two columns, re-issues one function body. No data is modified and no policy, trigger or index is touched.",
@@ -10,7 +10,7 @@
     "def_026": {
       "defect": "DEF-026, severity critical. Bill approval is broken on LIVE.",
       "mechanism": "approve_bill_safe sets status = 'APPROVED'. bills_status_check permits only ('DRAFT','AWAITING_PAYMENT','PART_PAID','PAID','OVERDUE','VOIDED'), so every approval raises 23514.",
-      "age": "Since 20251217171128. That migration states its own intent in terms: 'Approve bill: No p_user_id, use auth.uid(), set status to APPROVED (not AWAITING_PAYMENT)'. The function was changed and the constraint was not — a half-applied design change, not a typo.",
+      "age": "Since 20251217171128. That migration states its own intent in terms: 'Approve bill: No p_user_id, use auth.uid(), set status to APPROVED (not AWAITING_PAYMENT)'. The function was changed and the constraint was not \u2014 a half-applied design change, not a typo.",
       "corroboration": "The rest of the system already assumes APPROVED exists. record_bill_payment_safe accepts status IN ('APPROVED','AWAITING_PAYMENT','PART_PAID') in both 20251217224432 and the current 20260731210000 body, and 20251217171128 records reverse_bill_payment moving a bill AWAITING_PAYMENT -> APPROVED. Making approve_bill_safe write AWAITING_PAYMENT instead would strand those branches as dead code.",
       "live_confirmation_2026_08_05": "catalog_functions: approve_bill_safe (definition hash b4a2945c) writes 'APPROVED'. The constraint definition in git at 20260703145810 and 20260703195953 permits six values, none of them APPROVED."
     },
@@ -35,7 +35,7 @@
     },
     {
       "decision": "DEF-027: map billing_address onto the existing address columns instead of adding a jsonb column.",
-      "rationale": "The caller (src/lib/customer-safe-service.ts) sends {line1, line2, city, postcode, country} — precisely the shape of the columns the table already has. Adding a jsonb billing_address beside them would give one customer's address two roots. A customer address feeds invoice projections, and under the filing-engine architecture a projection cannot have two sources of truth."
+      "rationale": "The caller (src/lib/customer-safe-service.ts) sends {line1, line2, city, postcode, country} \u2014 precisely the shape of the columns the table already has. Adding a jsonb billing_address beside them would give one customer's address two roots. A customer address feeds invoice projections, and under the filing-engine architecture a projection cannot have two sources of truth."
     },
     {
       "decision": "DEF-027: map internal_notes onto the existing notes column.",
@@ -59,9 +59,9 @@
     }
   ],
   "app_changes": [
-    "src/lib/db-constants/check-constraints.ts — adds BILL_STATUSES and registers bills_status_check.",
-    "src/test/regression/vocabulary-drift.test.ts — frozen expectation for bills_status_check, plus 'VOID' and lowercase spellings recorded as forbidden.",
-    "src/components/bookkeeping/BillsTab.tsx — three corrections. APPROVED was absent from the badge map and the filter, so approved bills would render unstyled and match no filter. The status options now derive from BILL_STATUSES rather than repeating literals. The payment action compared bill.status against 'VOID', a spelling retired in 20260703145810, so the button never hid for a voided bill; it now excludes DRAFT, PAID and VOIDED."
+    "src/lib/db-constants/check-constraints.ts \u2014 adds BILL_STATUSES and registers bills_status_check.",
+    "src/test/regression/vocabulary-drift.test.ts \u2014 frozen expectation for bills_status_check, plus 'VOID' and lowercase spellings recorded as forbidden.",
+    "src/components/bookkeeping/BillsTab.tsx \u2014 three corrections. APPROVED was absent from the badge map and the filter, so approved bills would render unstyled and match no filter. The status options now derive from BILL_STATUSES rather than repeating literals. The payment action compared bill.status against 'VOID', a spelling retired in 20260703145810, so the button never hid for a voided bill; it now excludes DRAFT, PAID and VOIDED."
   ],
   "authoring_method": "Both defective bodies were read from LIVE via catalog_functions on 2026-08-05 (approve_bill_safe b4a2945c, create_customer_safe ad24db0f). create_customer_safe was re-authored rather than patched because the INSERT column list and VALUES list both change shape; the signature is reproduced argument-for-argument from the live definition so the existing caller is unaffected and no overload is created. The constraint's current value set was taken from the last two migrations that define it (20260703145810, 20260703195953), which agree.",
   "migrations": [
@@ -73,7 +73,7 @@
           "id": "bills-status-widened",
           "object": "bills_status_check permits all seven canonical statuses including APPROVED",
           "result": "pending",
-          "verify_via": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'bills_status_check' — assert it names DRAFT, APPROVED, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED and no others"
+          "verify_via": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'bills_status_check' \u2014 assert it names DRAFT, APPROVED, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED and no others"
         },
         {
           "id": "bill-approval-succeeds",
@@ -85,7 +85,7 @@
           "id": "customer-columns-added",
           "object": "customers.company_name and customers.default_currency exist, default_currency NOT NULL DEFAULT 'GBP'",
           "result": "pending",
-          "verify_via": "information_schema.columns for public.customers — assert both present with the stated nullability and default"
+          "verify_via": "information_schema.columns for public.customers \u2014 assert both present with the stated nullability and default"
         },
         {
           "id": "customer-create-succeeds",
@@ -97,19 +97,19 @@
           "id": "no-address-duplication",
           "object": "No billing_address column was added to public.customers",
           "result": "pending",
-          "verify_via": "information_schema.columns — assert billing_address is absent"
+          "verify_via": "information_schema.columns \u2014 assert billing_address is absent"
         },
         {
           "id": "cross-tenant-write-closed",
           "object": "create_customer_safe refuses an entity belonging to another organization",
           "result": "pending",
-          "verify_via": "Call it as a member of org A passing a client id owned by org B — assert 42501 'Entity does not belong to organization'. Pre-apply this call SUCCEEDS, which is the point."
+          "verify_via": "Call it as a member of org A passing a client id owned by org B \u2014 assert 42501 'Entity does not belong to organization'. Pre-apply this call SUCCEEDS, which is the point."
         },
         {
           "id": "single-signature",
-          "object": "Exactly one create_customer_safe signature exists — no overload was introduced",
+          "object": "Exactly one create_customer_safe signature exists \u2014 no overload was introduced",
           "result": "pending",
-          "verify_via": "catalog_functions(name_like 'create_customer_safe') — assert exactly one row, arguments unchanged"
+          "verify_via": "catalog_functions(name_like 'create_customer_safe') \u2014 assert exactly one row, arguments unchanged"
         }
       ]
     }
@@ -117,23 +117,23 @@
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
-      "Reproduce BOTH failures first and record the raw errors — Gate 6. approve_bill_safe on a DRAFT bill must return 23514; create_customer_safe must return 42703.",
+      "Reproduce BOTH failures first and record the raw errors \u2014 Gate 6. approve_bill_safe on a DRAFT bill must return 23514; create_customer_safe must return 42703.",
       "Apply 20260805110000_def_026_027_bill_status_and_customer_columns.sql. Self-verifying: preconditions abort if bills_status_check is absent, if it already permits APPROVED, if any existing bill row falls outside the widened set, if customers is missing a column the mapping targets, or if billing_address unexpectedly exists. Post-assertions abort if the widened constraint, either new column, the address decomposition, the entity_type validation or the cross-tenant check is missing, or if more than one create_customer_safe signature survives.",
       "Re-run both reproductions and confirm they now succeed.",
-      "Verify the cross-tenant refusal explicitly — it is a behaviour change beyond the reported defect and must be seen to work.",
+      "Verify the cross-tenant refusal explicitly \u2014 it is a behaviour change beyond the reported defect and must be seen to work.",
       "Report the executor's applied version so it can be recorded in docs/audits/unapplied-migrations-baseline.json."
     ]
   },
-  "guarded_by": "src/test/regression/def-026-027-bill-status-and-customer-columns.test.ts — 22 static guards over the migration and the app-side vocabulary, including that AWAITING_PAYMENT is not silently dropped, that the retired VOID spelling is not reintroduced, that no rival address column is added, that the signature is unchanged against the real caller, and that the migration modifies no existing data.",
+  "guarded_by": "src/test/regression/def-026-027-bill-status-and-customer-columns.test.ts \u2014 22 static guards over the migration and the app-side vocabulary, including that AWAITING_PAYMENT is not silently dropped, that the retired VOID spelling is not reintroduced, that no rival address column is added, that the signature is unchanged against the real caller, and that the migration modifies no existing data.",
   "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
   "new_findings": [
-    "An OVERDUE bill cannot be paid. record_bill_payment_safe accepts only ('APPROVED','AWAITING_PAYMENT','PART_PAID'), but sync_bill_aged_balance and the overdue scan can move a bill to OVERDUE, after which every payment attempt is refused. The BillsTab payment action still offers the button for OVERDUE, so the failure surfaces as an error rather than a disabled control. NOT fixed here — it is a bill payment state-machine question, not a vocabulary one, and expanding this release to cover it would mix two changes. Logged for a ruling.",
+    "An OVERDUE bill cannot be paid. record_bill_payment_safe accepts only ('APPROVED','AWAITING_PAYMENT','PART_PAID'), but sync_bill_aged_balance and the overdue scan can move a bill to OVERDUE, after which every payment attempt is refused. The BillsTab payment action still offers the button for OVERDUE, so the failure surfaces as an error rather than a disabled control. NOT fixed here \u2014 it is a bill payment state-machine question, not a vocabulary one, and expanding this release to cover it would mix two changes. Logged for a ruling.",
     "approve_bill_safe on LIVE has drifted from its December definition: the live body checks user_has_role_at_least(...,'manager') and omits the locked_fields assignment and the richer audit_log row that 20251217171128 wrote. Something re-issued it later with less behaviour. Not repaired here because this release deliberately does not touch the function, but it is DEF-020/DEF-023 evidence and should be reconciled."
   ],
   "open_after_this": [
-    "DEF-030 can_create_invoices — the branch cannot currently refuse any member, because the product's deliberate 3-role model (owner/admin/staff, src/lib/permissions.ts) grants can_create_invoices to all three. The owner ruled on 2026-08-05 to delete the branch, but that ruling was given before the capability matrix was found. Deleting it would remove the server-side enforcement point for a modelled permission and leave enforcement client-side only and bypassable. Held for re-ruling rather than applied.",
+    "DEF-030 can_create_invoices \u2014 the branch cannot currently refuse any member, because the product's deliberate 3-role model (owner/admin/staff, src/lib/permissions.ts) grants can_create_invoices to all three. The owner ruled on 2026-08-05 to delete the branch, but that ruling was given before the capability matrix was found. Deleting it would remove the server-side enforcement point for a modelled permission and leave enforcement client-side only and bypassable. Held for re-ruling rather than applied.",
     "DEF-028 stamp_portal_provenance still selects portal_access.contact_id on LIVE (hash f67d2205, confirmed 2026-08-05). Migration 20260803140000 is authored and awaiting the executor; every portal write remains broken until applied.",
-    "DEF-018/DEF-003 — migration 20260805100000 authored and awaiting the executor.",
+    "DEF-018/DEF-003 \u2014 migration 20260805100000 authored and awaiting the executor.",
     "DEF-019 no alerting layer exists.",
     "DEF-016 remains undefined and blocking by declaration."
   ],
@@ -198,5 +198,28 @@
         "sql": "SELECT count(*) FROM public.customers c LEFT JOIN public.clients cl ON cl.id = c.client_id LEFT JOIN public.companies co ON co.id = c.company_id WHERE (c.client_id IS NOT NULL AND cl.organization_id <> c.organization_id) OR (c.company_id IS NOT NULL AND co.organization_id <> c.organization_id)"
       }
     ]
+  },
+  "live_apply_attempt": {
+    "target": "moxpdejnucjjcplleefn (PRODUCTION)",
+    "attempted_at": "2026-08-05T21:25:00Z",
+    "source": "supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql",
+    "sha256": "2cd68a1e9f95ce1aecad15b770968d5a6234bbe1ae3a6ea8996e9c7c10714d9d",
+    "applied_verbatim": true,
+    "outcome": "FAILED \u2014 transaction rolled back cleanly. Nothing changed.",
+    "raw_error": "ERROR:  P0001: DEF-027 post-assert failed: the body still names a column that does not exist on public.customers.\nCONTEXT:  PL/pgSQL function inline_code_block line 37 at RAISE",
+    "post_failure_state_verified": [
+      {
+        "query": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='bills_status_check' AND conrelid='public.bills'::regclass",
+        "result": "CHECK ((status = ANY (ARRAY['DRAFT'::text, 'AWAITING_PAYMENT'::text, 'PART_PAID'::text, 'PAID'::text, 'OVERDUE'::text, 'VOIDED'::text])))",
+        "reading": "Unwidened. \u00a72 rolled back. APPROVED still rejected; DEF-026 remains open."
+      },
+      {
+        "query": "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='customers' AND column_name IN ('company_name','default_currency','billing_address')",
+        "result": "0 rows",
+        "reading": "Neither column landed. \u00a74 rolled back. DEF-027 remains open."
+      }
+    ],
+    "diagnosis": "The failing assertion is \u00a76's `IF v_src LIKE '%billing_address,%' OR v_src LIKE '%internal_notes%'`. It reads pg_proc.prosrc, which is the BODY only \u2014 but the body legitimately references the PARAMETER p_internal_notes in the INSERT ... VALUES list. '%internal_notes%' therefore matches 'p_internal_notes' and the assertion fires against a body that is in fact correct. This is a false positive in the assertion, not a defect in the repair: the INSERT column list names only columns that exist. The same trap does not catch billing_address because that test is anchored with a trailing comma.",
+    "not_edited": "The file was NOT modified. Owner instruction: send the error rather than editing. A one-character-class fix (anchoring the internal_notes test the same way as billing_address, or testing the INSERT column list rather than the whole body) belongs on the PR branch and must come back through review."
   }
 }
