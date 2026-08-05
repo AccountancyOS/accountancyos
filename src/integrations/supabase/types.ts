@@ -18984,6 +18984,14 @@ export type Database = {
         Args: { p_lead_id: string; p_reason?: string }
         Returns: undefined
       }
+      mcp_cron_job_health: {
+        Args: { p_window_minutes?: number }
+        Returns: Json
+      }
+      mcp_http_delivery_health: {
+        Args: { p_window_minutes?: number }
+        Returns: Json
+      }
       mcp_list_cron_jobs: { Args: never; Returns: Json }
       mcp_list_functions: {
         Args: { include_source?: boolean; name_like?: string }
@@ -18995,6 +19003,7 @@ export type Database = {
       mcp_list_rls_status: { Args: { table_name?: string }; Returns: Json }
       mcp_list_schema: { Args: never; Returns: Json }
       mcp_list_triggers: { Args: { table_name?: string }; Returns: Json }
+      mcp_vault_secret_present: { Args: { p_name: string }; Returns: boolean }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -19359,6 +19368,7 @@ export type Database = {
         Args: { _snapshot_id: string; _vat_return_id: string }
         Returns: Json
       }
+      redact_secrets: { Args: { p_text: string }; Returns: string }
       regress_filing_status: {
         Args: { p_filing_id: string; p_reason: string }
         Returns: undefined

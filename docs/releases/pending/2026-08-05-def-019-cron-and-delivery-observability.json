@@ -1,19 +1,17 @@
 {
   "release_id": "2026-08-05-def-019-cron-and-delivery-observability",
   "release_kind": "attestation-based",
-  "status": "pending",
+  "status": "post-publish-verification-failed",
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": null,
-  "summary": "DEF-019 foundation. Adds three read-only SECURITY DEFINER projections in public — cron job health, HTTP delivery health, and vault secret presence — because cron.job_run_details, net._http_response and vault.decrypted_secrets are unreadable by every party in this toolchain. Without them the DEF-018 evidence gate could never pass. No existing object is altered and nothing can write.",
+  "summary": "DEF-019 foundation. Adds three read-only SECURITY DEFINER projections in public \u2014 cron job health, HTTP delivery health, and vault secret presence \u2014 because cron.job_run_details, net._http_response and vault.decrypted_secrets are unreadable by every party in this toolchain. Without them the DEF-018 evidence gate could never pass. No existing object is altered and nothing can write.",
   "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
-
   "problem": {
     "trigger": "The executor reported on 2026-08-05, while applying DEF-028, that cron.job_run_details and vault.decrypted_secrets are permission-denied to its psql role. The reviewing party's database connector exposes only the public schema and cannot reach them either.",
-    "consequence_for_this_programme": "The DEF-018 release declared post-apply checks that queried those relations directly. Those checks could never have passed — for anyone. Every delivery check would have errored and been recorded as a failure, and the release would have been permanently un-finalizable. A gate that cannot pass is worth no more than no gate at all, and worse: it looks like control.",
+    "consequence_for_this_programme": "The DEF-018 release declared post-apply checks that queried those relations directly. Those checks could never have passed \u2014 for anyone. Every delivery check would have errored and been recorded as a failure, and the release would have been permanently un-finalizable. A gate that cannot pass is worth no more than no gate at all, and worse: it looks like control.",
     "consequence_for_the_product": "This same inaccessibility is why DEF-018 survived. 26,208 consecutive cron failures over seven days surfaced nowhere in the product, and no party in this toolchain could have looked even if they had thought to, because the table holding the evidence is unreadable by all of them. DEF-019 records that no alerting layer exists; this is its precondition. You cannot alert on what you cannot query.",
     "scope_note": "This is the FOUNDATION for DEF-019, not its closure. It makes the failure surface queryable. It does not add alerting, thresholds, notification routing or a dashboard, and DEF-019 stays open until those exist."
   },
-
   "design_decisions": [
     {
       "decision": "Follow the existing mcp_list_cron_jobs / mcp_list_functions wrapper pattern.",
@@ -29,7 +27,7 @@
     },
     {
       "decision": "mcp_vault_secret_present returns a boolean, never a value.",
-      "rationale": "The executor could not perform the one pre-check DEF-018 depends on — that email_queue_service_role_key exists and is non-empty — because the vault is entirely unreadable to it. Presence is the question; the value is never the answer, so the function is shaped so it cannot be coerced into returning one."
+      "rationale": "The executor could not perform the one pre-check DEF-018 depends on \u2014 that email_queue_service_role_key exists and is non-empty \u2014 because the vault is entirely unreadable to it. Presence is the question; the value is never the answer, so the function is shaped so it cannot be coerced into returning one."
     },
     {
       "decision": "Distinguish 'vault unreadable' from 'secret missing'.",
@@ -41,7 +39,7 @@
     },
     {
       "decision": "LEFT JOIN cron.job_run_details so every job appears even with zero runs.",
-      "rationale": "A job that is scheduled but never firing is the failure mode that matters most, and an inner join would hide it by omission — the row would simply not be there. runs = 0 is visible; an absent row is not."
+      "rationale": "A job that is scheduled but never firing is the failure mode that matters most, and an inner join would hide it by omission \u2014 the row would simply not be there. runs = 0 is visible; an absent row is not."
     },
     {
       "decision": "Surface unrecognized_parameter_failures as its own count.",
@@ -49,10 +47,9 @@
     },
     {
       "decision": "Revoke from PUBLIC and anon on all four functions, and assert it before COMMIT.",
-      "rationale": "DEF-015 closed 90 SECURITY DEFINER functions that were anon-executable because the default PUBLIC grant was never revoked — including one introduced by this programme's own earlier work. The post-assertions check has_function_privilege for anon, authenticated and service_role on every function created here, and check that search_path is pinned (DEF-005), so this release cannot reintroduce either defect."
+      "rationale": "DEF-015 closed 90 SECURITY DEFINER functions that were anon-executable because the default PUBLIC grant was never revoked \u2014 including one introduced by this programme's own earlier work. The post-assertions check has_function_privilege for anon, authenticated and service_role on every function created here, and check that search_path is pinned (DEF-005), so this release cannot reintroduce either defect."
     }
   ],
-
   "migrations": [
     {
       "path": "supabase/migrations/20260805160000_def_019_cron_and_delivery_observability.sql",
@@ -62,7 +59,7 @@
           "id": "four-functions-created",
           "object": "redact_secrets, mcp_cron_job_health, mcp_http_delivery_health and mcp_vault_secret_present all exist in public",
           "result": "pending",
-          "verify_via": "catalog_functions — assert all four present"
+          "verify_via": "catalog_functions \u2014 assert all four present"
         },
         {
           "id": "none-anon-executable",
@@ -74,19 +71,19 @@
           "id": "search-path-pinned",
           "object": "Every SECURITY DEFINER function created here has a pinned search_path",
           "result": "pending",
-          "verify_via": "catalog_functions — assert search_path is non-null on each (DEF-005)"
+          "verify_via": "catalog_functions \u2014 assert search_path is non-null on each (DEF-005)"
         },
         {
           "id": "cron-health-answers",
           "object": "mcp_cron_job_health(20) returns one row per cron job, including jobs with zero runs",
           "result": "pending",
-          "verify_via": "SELECT jsonb_array_length(public.mcp_cron_job_health(20)) — expect it to equal the count from cron.job (13 after DEF-018 applies, 12 before)"
+          "verify_via": "SELECT jsonb_array_length(public.mcp_cron_job_health(20)) \u2014 expect it to equal the count from cron.job (13 after DEF-018 applies, 12 before)"
         },
         {
           "id": "delivery-health-answers",
           "object": "mcp_http_delivery_health(20) reports available = true",
           "result": "pending",
-          "verify_via": "SELECT public.mcp_http_delivery_health(20)->>'available' — expect true. If false, net._http_response is named differently in this pg_net version and the DEF-018 delivery checks cannot run."
+          "verify_via": "SELECT public.mcp_http_delivery_health(20)->>'available' \u2014 expect true. If false, net._http_response is named differently in this pg_net version and the DEF-018 delivery checks cannot run."
         },
         {
           "id": "vault-presence-answers",
@@ -98,12 +95,11 @@
           "id": "redaction-works",
           "object": "redact_secrets strips a JWT-shaped string",
           "result": "pending",
-          "verify_via": "SELECT public.redact_secrets('Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4In0.sig') — must not contain 'eyJhbGci'. Asserted in-migration too."
+          "verify_via": "SELECT public.redact_secrets('Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4In0.sig') \u2014 must not contain 'eyJhbGci'. Asserted in-migration too."
         }
       ]
     }
   ],
-
   "post_publish_verification": {
     "runner": "scripts/verify-post-publish.ts",
     "environment": "LIVE",
@@ -154,21 +150,96 @@
       }
     ]
   },
-
   "apply_instructions": {
     "executor": "Lovable Cloud",
     "steps": [
       "Apply FIRST, before 20260805100000 (DEF-018). It is read-only, alters no existing object, and the DEF-018 evidence gate depends on the projections it adds.",
       "Apply 20260805160000_def_019_cron_and_delivery_observability.sql. Self-verifying: post-assertions abort if any function is missing, if anon holds EXECUTE on any of them, if authenticated or service_role lack it, if a SECURITY DEFINER function has no pinned search_path, if either health function fails to answer, or if the JWT redaction does not strip a real JWT shape.",
-      "Immediately run: SELECT public.mcp_vault_secret_present('email_queue_service_role_key'); — this is the DEF-018 prerequisite you could not previously check. Report the result before applying DEF-018.",
-      "Run: SELECT public.mcp_cron_job_health(20); and paste the raw output. This is the first time the 26,208-failure signature has been queryable, and the six GUC jobs should show non-zero unrecognized_parameter_failures until DEF-018 is applied — which is itself the pre-apply reproduction for that release.",
+      "Immediately run: SELECT public.mcp_vault_secret_present('email_queue_service_role_key'); \u2014 this is the DEF-018 prerequisite you could not previously check. Report the result before applying DEF-018.",
+      "Run: SELECT public.mcp_cron_job_health(20); and paste the raw output. This is the first time the 26,208-failure signature has been queryable, and the six GUC jobs should show non-zero unrecognized_parameter_failures until DEF-018 is applied \u2014 which is itself the pre-apply reproduction for that release.",
       "Report the executor's applied version so it can be recorded in docs/audits/unapplied-migrations-baseline.json."
     ]
   },
-
-  "guarded_by": "src/test/regression/def-019-observability.test.ts — static guards over the migration, including that no function returns response content or headers, that all four revoke anon, that redaction is asserted in-migration rather than merely defined, and that the cron projection uses a LEFT JOIN so a never-firing job is visible rather than absent.",
-
-  "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
-
-  "limitation": "STATICALLY VALIDATED ONLY — this migration has not been executed against Postgres. It is wrapped in a single transaction and will roll back cleanly on error. The `net._http_response` reference is guarded by to_regclass and executed dynamically, so a pg_net version that names the relation differently degrades to available=false rather than failing the migration."
+  "guarded_by": "src/test/regression/def-019-observability.test.ts \u2014 static guards over the migration, including that no function returns response content or headers, that all four revoke anon, that redaction is asserted in-migration rather than merely defined, and that the cron projection uses a LEFT JOIN so a never-firing job is visible rather than absent.",
+  "live_apply": {
+    "status": "APPLIED \u2014 verification gate NOT green",
+    "target": "moxpdejnucjjcplleefn (PRODUCTION)",
+    "applied_at": "2026-08-05T21:12:00Z",
+    "applied_sha256": "1e6d08546e7e7dc87d0085203ef2b009919b4f83e5a4ad2edb20b91c2defdaf7",
+    "note": "All four functions created; the migration's own post-assertion block PERFORMed mcp_cron_job_health(20) and mcp_http_delivery_health(20) successfully before COMMIT, so both answer when called by a role that holds EXECUTE. mcp_vault_secret_present was NOT exercised by the post-assertions and remains unproven."
+  },
+  "limitation": "STATICALLY VALIDATED ONLY \u2014 this migration has not been executed against Postgres. It is wrapped in a single transaction and will roll back cleanly on error. The `net._http_response` reference is guarded by to_regclass and executed dynamically, so a pg_net version that names the relation differently degrades to available=false rather than failing the migration.",
+  "post_publish_verification_evidence": {
+    "runner": "scripts/verify-post-publish.ts",
+    "verified_at": "2026-08-05T21:13:40.955Z",
+    "environment": "LIVE",
+    "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
+    "results": [
+      {
+        "id": "four-functions-created",
+        "kind": "count_equals",
+        "expected": 4,
+        "actual": 4,
+        "pass": true
+      },
+      {
+        "id": "none-anon-executable",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": 0,
+        "pass": true
+      },
+      {
+        "id": "authenticated-can-execute",
+        "kind": "count_equals",
+        "expected": 4,
+        "actual": 4,
+        "pass": true
+      },
+      {
+        "id": "search-path-pinned",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": 0,
+        "pass": true
+      },
+      {
+        "id": "cron-health-covers-every-job",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  permission denied for schema cron\nLINE 1: ...cron_job_health(20)) - (SELECT count(*)::int FROM cron.job))\n                                                             ^"
+      },
+      {
+        "id": "delivery-view-available",
+        "kind": "count_equals",
+        "expected": 1,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  permission denied for function mcp_http_delivery_health"
+      },
+      {
+        "id": "redaction-works",
+        "kind": "count_equals",
+        "expected": 0,
+        "actual": null,
+        "pass": false,
+        "error": "Error: psql exit 1: ERROR:  permission denied for function redact_secrets"
+      }
+    ],
+    "overall": "fail"
+  },
+  "executor_blocker": {
+    "summary": "The three behavioural checks cannot be run by the executor. EXECUTE was granted to authenticated and service_role only; neither of the executor's two routes into this database holds it.",
+    "routes_tried": [
+      "psql \u2014 connects as sandbox_exec. 42501 permission denied for function redact_secrets / mcp_http_delivery_health, and 42501 permission denied for schema cron on the raw cron.job side of cron-health-covers-every-job. SET ROLE authenticated is also denied.",
+      "managed database connector \u2014 connects as supabase_read_only_user. Same 42501.",
+      "PostgREST as a real authenticated user \u2014 no usable test credential; portal-b-qa@accountancyos.test sign-in failed."
+    ],
+    "not_caused_by_def_031": "rolbypassrls bypasses row security, not privilege checks. These denials are ACL, and would have occurred identically before DEF-031.",
+    "same_class_as_the_defect_def_019_fixes": "The gate still cannot pass for the party required to run it \u2014 the reason has moved from schema USAGE on cron to EXECUTE on the projections.",
+    "remedy_not_taken": "No grant added. Owner ruling point 3.",
+    "consequence": "DEF-018 is HELD. Its mandatory pre-check \u2014 mcp_vault_secret_present('email_queue_service_role_key') \u2014 cannot be performed by the executor."
+  }
 }
