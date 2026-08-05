@@ -1,0 +1,30 @@
+Subject: [DEF-026/027] Correct false-positive post-assertion (identifier-boundary match)
+
+Logically separate from the DEF-019 follow-up. No functional SQL changes:
+only the DEF-027 post-assertion predicate is corrected. The broad
+%internal_notes% substring check matched the legitimate parameter name
+p_internal_notes in prosrc, trapping a correct repair. Replaced with
+PostgreSQL identifier-boundary regexes (\m ... \M), which reject a
+standalone internal_notes / billing_address column reference but do not
+match p_internal_notes / p_billing_address ('_' is a word character, so
+the substring inside them does not begin at an identifier boundary).
+
+--- a/supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql
++++ b/supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql
+@@ -323,9 +323,13 @@
+   IF v_src IS NULL THEN
+     RAISE EXCEPTION 'DEF-027 post-assert failed: create_customer_safe is absent.';
+   END IF;
+-  IF v_src LIKE '%billing_address,%' OR v_src LIKE '%internal_notes%' THEN
+-    RAISE EXCEPTION 'DEF-027 post-assert failed: the body still names a column that does not exist on public.customers.';
+-  END IF;
++  -- Identifier-boundary match (\m ... \M). A standalone `billing_address` or
++  -- `internal_notes` column reference is rejected; the legitimate parameters
++  -- `p_billing_address` / `p_internal_notes` are NOT matched, because `_` is a
++  -- word character, so the substring inside them does not start at a boundary.
++  IF v_src ~ '\mbilling_address\M' OR v_src ~ '\minternal_notes\M' THEN
++    RAISE EXCEPTION 'DEF-027 post-assert failed: the body still names a column that does not exist on public.customers.';
++  END IF;
+   IF v_src NOT LIKE '%address_line_1%' THEN
+     RAISE EXCEPTION 'DEF-027 post-assert failed: the billing address is no longer decomposed onto the canonical columns.';
+   END IF;
