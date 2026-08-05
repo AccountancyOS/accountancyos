@@ -1,7 +1,7 @@
 {
   "release_id": "2026-08-05-def-031-sandbox-exec-nobypassrls",
   "release_kind": "attestation-based",
-  "status": "pending",
+  "status": "applied-verified",
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": "leon@bluetickaccountants.com",
   "summary": "DEF-031. Removes BYPASSRLS from the automated login role sandbox_exec, restoring the tenant boundary for every session opened as that role. One role attribute changes. No schema object, grant, policy, table or function is altered.",
@@ -47,20 +47,26 @@
         {
           "id": "bypass-removed",
           "object": "sandbox_exec has rolbypassrls = false",
-          "result": "pending",
-          "verify_via": "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'sandbox_exec' — expect f"
+          "result": "pass",
+          "verify_via": "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'sandbox_exec' — expect f",
+          "actual": 0,
+          "expected": 0
         },
         {
           "id": "not-superuser",
           "object": "sandbox_exec is not SUPERUSER, which would bypass RLS regardless",
-          "result": "pending",
-          "verify_via": "SELECT rolsuper FROM pg_roles WHERE rolname = 'sandbox_exec' — expect f"
+          "result": "pass",
+          "verify_via": "SELECT rolsuper FROM pg_roles WHERE rolname = 'sandbox_exec' — expect f",
+          "actual": 0,
+          "expected": 0
         },
         {
           "id": "no-bypassing-parent-role",
           "object": "sandbox_exec inherits no role that is SUPERUSER or has BYPASSRLS",
-          "result": "pending",
-          "verify_via": "Join pg_auth_members to pg_roles for member = sandbox_exec — expect zero parents with rolbypassrls or rolsuper"
+          "result": "pass",
+          "verify_via": "Join pg_auth_members to pg_roles for member = sandbox_exec — expect zero parents with rolbypassrls or rolsuper",
+          "actual": 0,
+          "expected": 0
         },
         {
           "id": "no-compensating-grants",
@@ -130,7 +136,7 @@
   ],
   "post_publish_verification_evidence": {
     "runner": "scripts/verify-post-publish.ts",
-    "verified_at": "2026-08-05T21:09:23.787Z",
+    "verified_at": "2026-08-05T21:09:40.085Z",
     "environment": "LIVE",
     "org_id": "a857a12c-a125-41de-bb45-9eb556d5b467",
     "results": [
@@ -164,5 +170,6 @@
       }
     ],
     "overall": "pass"
-  }
+  },
+  "verified_at": "2026-08-05T21:09:40.085Z"
 }
