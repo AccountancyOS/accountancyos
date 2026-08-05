@@ -52,7 +52,22 @@ const EXPECTED_CONSTRAINT_VALUES: Record<string, string[]> = {
   leads_pipeline_stage_check: ["new", "qualified", "proposal_sent", "chasing", "won", "lost"],
   email_queue_context_check: ["quote", "onboarding", "engagement", "job", "invoice", "system", "general"],
   email_queue_status_check: ["pending", "sent", "failed", "cancelled"],
+  // 'APPROVED' added by 20260805110000_def_026_027… — approve_bill_safe has written it since
+  // 20251217171128 while the constraint rejected it, so every bill approval failed with 23514.
+  // Bills were not in this registry, which is why the drift went unseen for eight months.
+  bills_status_check: [
+    "DRAFT", "APPROVED", "AWAITING_PAYMENT", "PART_PAID", "PAID", "OVERDUE", "VOIDED",
+  ],
 };
+
+/**
+ * Constraints whose canonical values are UPPER_SNAKE rather than lower_snake.
+ *
+ * The bookkeeping document tables were created with uppercase statuses
+ * (20251205112122) while the practice-management tables use lowercase. Both are
+ * settled; the point of recording it here is that a vocabulary must not MIX the two.
+ */
+const UPPER_SNAKE_CONSTRAINTS = new Set(["bills_status_check"]);
 
 /** Legacy/retired values that must never reappear in a canonical set. */
 const FORBIDDEN: Record<string, string[]> = {
@@ -63,6 +78,9 @@ const FORBIDDEN: Record<string, string[]> = {
   chk_filing_status: ["ready_for_approval", "queued", "submitting", "submission_failed"],
   email_queue_context_check: ["chase", "filing", "ad-hoc", "portal"],
   email_queue_status_check: ["queued", "draft"],
+  // 'VOID' was the original 20251205112122 spelling, replaced by 'VOIDED' in 20260703145810.
+  // The bills UI was still filtering on VOID until DEF-026, so the Void filter matched nothing.
+  bills_status_check: ["VOID", "void", "draft", "approved"],
 };
 
 describe("vocabulary drift registry (SSOT)", () => {
@@ -111,8 +129,16 @@ describe("vocabulary drift registry (SSOT)", () => {
         }
       });
 
-      it("values are lowercase snake_case tokens", () => {
-        for (const v of entry.values) expect(v).toMatch(/^[a-z][a-z0-9_]*$/);
+      it("values follow this constraint's case convention, consistently", () => {
+        // Two conventions exist in this database and both are deliberate: bookkeeping
+        // document statuses are UPPER_SNAKE (bills, invoices — see 20251205112122), and
+        // everything else is lower_snake. The rule is not "lowercase everywhere", it is
+        // "one convention per vocabulary, never mixed" — a vocabulary that mixes the two
+        // is how 'VOID' and 'void' both end up being compared against in app code.
+        const pattern = UPPER_SNAKE_CONSTRAINTS.has(entry.constraint)
+          ? /^[A-Z][A-Z0-9_]*$/
+          : /^[a-z][a-z0-9_]*$/;
+        for (const v of entry.values) expect(v, `${entry.constraint}: ${v}`).toMatch(pattern);
       });
     });
   }

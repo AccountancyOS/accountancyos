@@ -28,18 +28,34 @@ import RecordBillPaymentDialog from "./RecordBillPaymentDialog";
 import { BookkeepingEmptyState } from "./BookkeepingEmptyState";
 
 import type { BookkeepingEntity } from "./EntitySelector";
+import { BILL_STATUSES } from "@/lib/db-constants/check-constraints";
 
 interface BillsTabProps {
   entity: BookkeepingEntity | null;
 }
 
-const statusColors: Record<string, string> = {
+// Mirrors BILL_STATUSES / bills_status_check. Two corrections from DEF-026: APPROVED was
+// missing entirely (approve_bill_safe has written it since December 2025), and the void state
+// is VOIDED — 'VOID' was the original spelling, replaced in 20260703145810, so the filter and
+// badge below had been matching nothing.
+const statusColors: Record<(typeof BILL_STATUSES)[number], string> = {
   DRAFT: "secondary",
+  APPROVED: "default",
   AWAITING_PAYMENT: "default",
   PART_PAID: "outline",
   PAID: "default",
   OVERDUE: "destructive",
-  VOID: "secondary",
+  VOIDED: "secondary",
+};
+
+const statusLabels: Record<(typeof BILL_STATUSES)[number], string> = {
+  DRAFT: "Draft",
+  APPROVED: "Approved",
+  AWAITING_PAYMENT: "Awaiting Payment",
+  PART_PAID: "Part Paid",
+  PAID: "Paid",
+  OVERDUE: "Overdue",
+  VOIDED: "Voided",
 };
 
 export default function BillsTab({ entity }: BillsTabProps) {
@@ -149,12 +165,11 @@ export default function BillsTab({ entity }: BillsTabProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="DRAFT">Draft</SelectItem>
-              <SelectItem value="AWAITING_PAYMENT">Awaiting Payment</SelectItem>
-              <SelectItem value="PART_PAID">Part Paid</SelectItem>
-              <SelectItem value="PAID">Paid</SelectItem>
-              <SelectItem value="OVERDUE">Overdue</SelectItem>
-              <SelectItem value="VOID">Void</SelectItem>
+              {BILL_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {statusLabels[s]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={supplierFilter} onValueChange={setSupplierFilter}>
@@ -242,7 +257,14 @@ export default function BillsTab({ entity }: BillsTabProps) {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {bill.status !== "PAID" && bill.status !== "VOID" && (
+                      {/*
+                        DEF-026: this compared against "VOID", which the constraint stopped
+                        permitting in 20260703145810 — so the button never hid for a voided
+                        bill. DRAFT is excluded too: record_bill_payment_safe accepts only
+                        APPROVED / AWAITING_PAYMENT / PART_PAID, so offering payment on an
+                        unapproved bill could only ever fail.
+                      */}
+                      {!["DRAFT", "PAID", "VOIDED"].includes(bill.status) && (
                         <Button
                           variant="ghost"
                           size="icon"

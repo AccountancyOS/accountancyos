@@ -143,6 +143,30 @@ export const EMAIL_QUEUE_CONTEXTS = [
 /** email_queue.status — email_queue_status_check. */
 export const EMAIL_QUEUE_STATUSES = ["pending", "sent", "failed", "cancelled"] as const;
 
+/**
+ * bills.status — bills_status_check.
+ *
+ * DRAFT -> APPROVED -> (payment) -> PART_PAID -> PAID, or -> OVERDUE; any non-draft -> VOIDED.
+ *
+ * APPROVED was added by 20260805110000 (DEF-026). approve_bill_safe had written it since
+ * December 2025 while the constraint still rejected it, so every bill approval failed with
+ * 23514 — a half-applied design change that this registry did not cover and therefore could
+ * not catch. AWAITING_PAYMENT is the pre-December name for the same approved-unpaid state and
+ * is retained: existing rows may hold it and every payment path treats the two as equivalent.
+ *
+ * Note VOIDED, not VOID. The original 20251205112122 constraint said VOID; 20260703145810
+ * replaced it with VOIDED. The bills UI was still filtering on VOID until DEF-026.
+ */
+export const BILL_STATUSES = [
+  "DRAFT",
+  "APPROVED",
+  "AWAITING_PAYMENT",
+  "PART_PAID",
+  "PAID",
+  "OVERDUE",
+  "VOIDED",
+] as const;
+
 export interface CheckConstraintVocab {
   /** Table the constraint lives on. */
   table: string;
@@ -178,4 +202,5 @@ export const CHECK_CONSTRAINT_REGISTRY: readonly CheckConstraintVocab[] = [
   { table: "leads", column: "pipeline_stage", constraint: "leads_pipeline_stage_check", values: LEAD_PIPELINE_STAGES },
   { table: "email_queue", column: "context", constraint: "email_queue_context_check", values: EMAIL_QUEUE_CONTEXTS },
   { table: "email_queue", column: "status", constraint: "email_queue_status_check", values: EMAIL_QUEUE_STATUSES },
+  { table: "bills", column: "status", constraint: "bills_status_check", values: BILL_STATUSES },
 ] as const;

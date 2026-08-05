@@ -193,6 +193,11 @@ describe("release hygiene", () => {
   const HANDED_ON: Record<string, string> = {
     create_invoice_draft_safe: "20260803120000_def_029_invoice_line_uuid_casts.sql",
     update_invoice_draft_safe: "20260803120000_def_029_invoice_line_uuid_casts.sql",
+    // DEF-027 (20260805110000) took over create_customer_safe to repair the four columns
+    // it inserted that do not exist on public.customers. This family's context repair is
+    // preserved there — the PERFORM set_config('app.rpc', ...) line is still the first
+    // statement of the body.
+    create_customer_safe: "20260805110000_def_026_027_bill_status_and_customer_columns.sql",
   };
 
   /**
