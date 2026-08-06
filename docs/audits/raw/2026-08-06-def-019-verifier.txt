@@ -1,0 +1,219 @@
+SELECT current_user, rolbypassrls FROM pg_roles WHERE rolname = current_user;
+ current_user | rolbypassrls 
+--------------+--------------
+ sandbox_exec | t
+(1 row)
+
+SELECT p.oid::regprocedure::text AS fn,
+       has_function_privilege('sandbox_exec', p.oid, 'EXECUTE') AS sandbox_exec,
+       has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+       has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role
+FROM pg_proc p
+WHERE p.pronamespace='public'::regnamespace
+  AND p.proname IN ('redact_secrets','mcp_cron_job_health','mcp_http_delivery_health','mcp_vault_secret_present')
+ORDER BY 1;
+                fn                 | sandbox_exec | anon | authenticated | service_role 
+-----------------------------------+--------------+------+---------------+--------------
+ mcp_cron_job_health(integer)      | t            | f    | t             | t
+ mcp_http_delivery_health(integer) | t            | f    | t             | t
+ mcp_vault_secret_present(text)    | t            | f    | t             | t
+ redact_secrets(text)              | t            | f    | t             | t
+(4 rows)
+
+SELECT jsonb_pretty(public.mcp_cron_job_health(20));
+                                              jsonb_pretty                                               
+---------------------------------------------------------------------------------------------------------
+ [                                                                                                      +
+     {                                                                                                  +
+         "runs": 2,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 0,                                                                                   +
+         "jobname": "chaser-tick-every-15min",                                                          +
+         "schedule": "*/15 * * * *",                                                                    +
+         "succeeded": 2,                                                                                +
+         "last_run_at": "2026-08-06T08:30:03.959994+00:00",                                             +
+         "last_status": "succeeded",                                                                    +
+         "last_message": "1 row",                                                                       +
+         "unrecognized_parameter_failures": 0                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 0,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 0,                                                                                   +
+         "jobname": "chaser-trigger-scan-every-6h",                                                     +
+         "schedule": "0 */6 * * *",                                                                     +
+         "succeeded": 0,                                                                                +
+         "last_run_at": null,                                                                           +
+         "last_status": null,                                                                           +
+         "last_message": null,                                                                          +
+         "unrecognized_parameter_failures": 0                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 0,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 0,                                                                                   +
+         "jobname": "dormant-lead-scan-daily",                                                          +
+         "schedule": "0 2 * * *",                                                                       +
+         "succeeded": 0,                                                                                +
+         "last_run_at": null,                                                                           +
+         "last_status": null,                                                                           +
+         "last_message": null,                                                                          +
+         "unrecognized_parameter_failures": 0                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 4,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 4,                                                                                   +
+         "jobname": "hmrc-ct-delete-worker",                                                            +
+         "schedule": "*/5 * * * *",                                                                     +
+         "succeeded": 0,                                                                                +
+         "last_run_at": "2026-08-06T08:30:03.967552+00:00",                                             +
+         "last_status": "failed",                                                                       +
+         "last_message": "ERROR:  unrecognized configuration parameter \"app.settings.supabase_url\"\n",+
+         "unrecognized_parameter_failures": 4                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 20,                                                                                    +
+         "active": true,                                                                                +
+         "failed": 20,                                                                                  +
+         "jobname": "hmrc-ct-poll-worker",                                                              +
+         "schedule": "* * * * *",                                                                       +
+         "succeeded": 0,                                                                                +
+         "last_run_at": "2026-08-06T08:31:01.141984+00:00",                                             +
+         "last_status": "failed",                                                                       +
+         "last_message": "ERROR:  unrecognized configuration parameter \"app.settings.supabase_url\"\n",+
+         "unrecognized_parameter_failures": 20                                                          +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 0,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 0,                                                                                   +
+         "jobname": "invoice-overdue-scan-daily",                                                       +
+         "schedule": "0 6 * * *",                                                                       +
+         "succeeded": 0,                                                                                +
+         "last_run_at": null,                                                                           +
+         "last_status": null,                                                                           +
+         "last_message": null,                                                                          +
+         "unrecognized_parameter_failures": 0                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 4,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 4,                                                                                   +
+         "jobname": "process-automation-events",                                                        +
+         "schedule": "*/5 * * * *",                                                                     +
+         "succeeded": 0,                                                                                +
+         "last_run_at": "2026-08-06T08:30:03.958697+00:00",                                             +
+         "last_status": "failed",                                                                       +
+         "last_message": "ERROR:  unrecognized configuration parameter \"app.settings.supabase_url\"\n",+
+         "unrecognized_parameter_failures": 4                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 10,                                                                                    +
+         "active": true,                                                                                +
+         "failed": 10,                                                                                  +
+         "jobname": "sync-gmail-emails",                                                                +
+         "schedule": "*/2 * * * *",                                                                     +
+         "succeeded": 0,                                                                                +
+         "last_run_at": "2026-08-06T08:30:03.961225+00:00",                                             +
+         "last_status": "failed",                                                                       +
+         "last_message": "ERROR:  unrecognized configuration parameter \"app.settings.supabase_url\"\n",+
+         "unrecognized_parameter_failures": 10                                                          +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 10,                                                                                    +
+         "active": true,                                                                                +
+         "failed": 10,                                                                                  +
+         "jobname": "sync-outlook-emails",                                                              +
+         "schedule": "*/2 * * * *",                                                                     +
+         "succeeded": 0,                                                                                +
+         "last_run_at": "2026-08-06T08:30:04.049092+00:00",                                             +
+         "last_status": "failed",                                                                       +
+         "last_message": "ERROR:  unrecognized configuration parameter \"app.settings.supabase_url\"\n",+
+         "unrecognized_parameter_failures": 10                                                          +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 0,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 0,                                                                                   +
+         "jobname": "truelayer-sync-hourly",                                                            +
+         "schedule": "7 * * * *",                                                                       +
+         "succeeded": 0,                                                                                +
+         "last_run_at": null,                                                                           +
+         "last_status": null,                                                                           +
+         "last_message": null,                                                                          +
+         "unrecognized_parameter_failures": 0                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 1,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 0,                                                                                   +
+         "jobname": "truelayer-sync-scheduled",                                                         +
+         "schedule": "*/30 * * * *",                                                                    +
+         "succeeded": 1,                                                                                +
+         "last_run_at": "2026-08-06T08:30:04.030895+00:00",                                             +
+         "last_status": "succeeded",                                                                    +
+         "last_message": "1 row",                                                                       +
+         "unrecognized_parameter_failures": 0                                                           +
+     },                                                                                                 +
+     {                                                                                                  +
+         "runs": 4,                                                                                     +
+         "active": true,                                                                                +
+         "failed": 4,                                                                                   +
+         "jobname": "workflow-tick",                                                                    +
+         "schedule": "*/5 * * * *",                                                                     +
+         "succeeded": 0,                                                                                +
+         "last_run_at": "2026-08-06T08:30:03.955981+00:00",                                             +
+         "last_status": "failed",                                                                       +
+         "last_message": "ERROR:  unrecognized configuration parameter \"app.settings.supabase_url\"\n",+
+         "unrecognized_parameter_failures": 4                                                           +
+     }                                                                                                  +
+ ]
+(1 row)
+
+SELECT jsonb_pretty(public.mcp_http_delivery_health(20));
+                        jsonb_pretty                        
+------------------------------------------------------------
+ {                                                         +
+     "total": 3,                                           +
+     "available": true,                                    +
+     "timed_out": 0,                                       +
+     "no_response": 0,                                     +
+     "client_error": 3,                                    +
+     "server_error": 0,                                    +
+     "unauthorized": 3,                                    +
+     "sample_errors": [                                    +
+         {                                                 +
+             "error": null,                                +
+             "created": "2026-08-06T08:30:03.981988+00:00",+
+             "status_code": 401                            +
+         },                                                +
+         {                                                 +
+             "error": null,                                +
+             "created": "2026-08-06T08:30:03.981988+00:00",+
+             "status_code": 401                            +
+         },                                                +
+         {                                                 +
+             "error": null,                                +
+             "created": "2026-08-06T08:15:02.188611+00:00",+
+             "status_code": 401                            +
+         }                                                 +
+     ],                                                    +
+     "succeeded_2xx": 0,                                   +
+     "window_minutes": 20                                  +
+ }
+(1 row)
+
+SELECT public.redact_secrets('Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4In0.sig') AS redacted;
+     redacted      
+-------------------
+ Bearer [REDACTED]
+(1 row)
+
+SELECT public.mcp_vault_secret_present('email_queue_service_role_key') AS vault_precheck;
+ vault_precheck 
+----------------
+ t
+(1 row)
+
