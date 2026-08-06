@@ -1,0 +1,34 @@
+DEF-031 RECURRENCE — raw evidence, 2026-08-06 (production moxpdejnucjjcplleefn)
+
+[1] PRE-ALTER state (fresh psql connection, session_user = sandbox_exec)
+    oid=161547 | rolname=sandbox_exec | rolsuper=f | rolbypassrls=t | rolcanlogin=t
+                | rolcreaterole=f | rolcreatedb=f | rolvaliduntil=NULL
+    memberships (pg_auth_members, member=sandbox_exec): NONE (zero rows)
+    current_user=sandbox_exec  session_user=sandbox_exec
+
+[2] REPAIR
+    Migration re-applied via Lovable Cloud executor: DEF-031 re-apply
+    (identical effect to supabase/migrations/20260805200000_def_031_sandbox_exec_nobypassrls.sql)
+    Statement executed: ALTER ROLE sandbox_exec NOBYPASSRLS
+    No GRANT, no policy, no schema object touched. No 42501 — runner held privilege.
+
+[3] POST-ALTER state (NEW connection, opened after commit)
+    oid=161547 | sandbox_exec | super=false | bypassrls=false | login=true
+    bypassing/superuser parent roles: 0
+    SELECT count(*) FROM organizations  ->  0   (RLS filtering active, no JWT claims set)
+
+[4] OID COMPARISON — the recurrence mechanism
+    2026-08-05 post-apply oid : 161547
+    2026-08-06 pre-apply  oid : 161547   (UNCHANGED)
+    The role was NOT dropped and recreated. It is being ALTERed in place by an
+    out-of-band actor. A drop/recreate would have produced a new OID.
+
+[5] REPROVISIONING SOURCE SEARCH
+    rg over the whole checkout for CREATE ROLE / ALTER ROLE / BYPASSRLS / CREATEROLE:
+      - Only hits are the DEF-031 migration (and its executor-applied copy
+        20260805210851_...sql) and its regression test.
+      - No provisioning script, seed, edge function or CI workflow in Git creates or
+        alters sandbox_exec.
+    CONCLUSION: the reprovisioning source is Lovable Cloud platform automation, outside
+    Git and outside this repository's control. It cannot be removed from here.
+    DEF-031 therefore remains OPEN as recurring drift.

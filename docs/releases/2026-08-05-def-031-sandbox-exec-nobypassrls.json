@@ -1,7 +1,26 @@
 {
   "release_id": "2026-08-05-def-031-sandbox-exec-nobypassrls",
   "release_kind": "attestation-based",
-  "status": "applied-verified",
+  "status": "open-recurring-drift",
+  "closure_policy": "Owner ruling 2026-08-06: DEF-031 is NOT closed and must NOT be marked verified until the out-of-band reprovisioning source is identified and removed. The repair is re-applicable containment, not a fix. No compensating privileges may be granted in the meantime.",
+  "recurrence_log": [
+    {
+      "observed_at": "2026-08-06T11:40:00Z",
+      "finding": "sandbox_exec rolbypassrls = true again, 14 hours after the 2026-08-05 repair was applied and verified from a fresh session.",
+      "oid_before": 161547,
+      "oid_after_repair": 161547,
+      "oid_on_2026_08_05_after_repair": 161547,
+      "mechanism": "OID UNCHANGED across the recurrence, so the role is being ALTERed in place, not dropped and recreated.",
+      "source_search": "rg over the entire checkout for CREATE ROLE / ALTER ROLE / BYPASSRLS / CREATEROLE returns only the DEF-031 migration, its executor-applied copy 20260805210851, and its regression test. No provisioning script, seed, migration, edge function or CI workflow in Git creates or alters sandbox_exec. The reprovisioning source is Lovable Cloud platform automation, outside Git and outside this repository's control.",
+      "repair": "ALTER ROLE sandbox_exec NOBYPASSRLS re-applied 2026-08-06 via the Lovable Cloud executor, effect-identical to 20260805200000. No 42501. No grants added.",
+      "post_repair_state": "NEW connection: oid=161547, rolsuper=false, rolbypassrls=false, rolcanlogin=true, bypassing parent roles = 0, SELECT count(*) FROM organizations = 0 (RLS filtering active).",
+      "raw_evidence": "docs/audits/raw/2026-08-06-def-031-recurrence.txt"
+    }
+  ],
+  "evidence_rules": [
+    "No sandbox_exec session may be treated as RLS evidence unless that SAME fresh session first confirms rolbypassrls = false. Enforced fail-closed by scripts/precheck-rls-boundary.ts, which scripts/verify-post-publish.ts now calls before reading anything.",
+    "Durable cross-tenant RLS evidence comes from real authenticated fixture users via scripts/smoke-test.ts (signInWithPassword, no service role; guarded by src/test/regression/rls-cross-org.test.ts), not from sandbox_exec."
+  ],
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": "leon@bluetickaccountants.com",
   "summary": "DEF-031. Removes BYPASSRLS from the automated login role sandbox_exec, restoring the tenant boundary for every session opened as that role. One role attribute changes. No schema object, grant, policy, table or function is altered.",
@@ -131,7 +150,7 @@
   },
   "guarded_by": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts \u2014 14 static guards, including that the migration adds no grant and no compensating role attribute, that exactly one role-altering statement is executed and it is the NOBYPASSRLS one, that the superuser and inherited-membership routes are asserted rather than only the attribute, and that the evidence-impact correction is retained so sound work is not re-run.",
   "live_apply": {
-    "status": "APPLIED AND VERIFIED",
+    "status": "APPLIED; VERIFIED AT THE TIME; SUBSEQUENTLY REVERTED OUT OF BAND (see recurrence_log)",
     "target": "moxpdejnucjjcplleefn (PRODUCTION)",
     "applied_at": "2026-08-05T21:09:00Z",
     "applied_sha256": "7a5e8ea68a08a547c807266070c3c3915456261ac3c65687df32b98af33a0f13",
