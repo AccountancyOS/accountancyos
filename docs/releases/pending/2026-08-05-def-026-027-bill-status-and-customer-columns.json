@@ -72,14 +72,16 @@
         {
           "id": "bills-status-widened",
           "object": "bills_status_check permits all seven canonical statuses including APPROVED",
-          "result": "pending",
-          "verify_via": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'bills_status_check' — assert it names DRAFT, APPROVED, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED and no others"
+          "result": "pending-disputed",
+          "verify_via": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'bills_status_check' — assert it names DRAFT, APPROVED, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED and no others",
+          "note": "Cannot be accepted on the executor report alone. The named constraint was confirmed widened, but a second constraint on the same column would make that insufficient. See open_question_2026_08_06."
         },
         {
           "id": "bill-approval-succeeds",
           "object": "approve_bill_safe completes on a DRAFT bill instead of raising 23514",
-          "result": "pending",
-          "verify_via": "Reproduce first: call approve_bill_safe on a DRAFT bill pre-apply and confirm 23514. Post-apply, call it again inside a rolled-back transaction and confirm success:true with the bill at APPROVED."
+          "result": "pending-disputed",
+          "verify_via": "Reproduce first: call approve_bill_safe on a DRAFT bill pre-apply and confirm 23514. Post-apply, call it again inside a rolled-back transaction and confirm success:true with the bill at APPROVED.",
+          "note": "Cannot be accepted on the executor report alone. The named constraint was confirmed widened, but a second constraint on the same column would make that insufficient. See open_question_2026_08_06."
         },
         {
           "id": "customer-columns-added",
@@ -125,7 +127,7 @@
     ]
   },
   "guarded_by": "src/test/regression/def-026-027-bill-status-and-customer-columns.test.ts — 22 static guards over the migration and the app-side vocabulary, including that AWAITING_PAYMENT is not silently dropped, that the retired VOID spelling is not reintroduced, that no rival address column is added, that the signature is unchanged against the real caller, and that the migration modifies no existing data.",
-  "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
+  "live_apply": "APPLIED by the executor 2026-08-05. STATUS DOWNGRADED by owner ruling 2026-08-06 from 'repaired' to APPLIED, VERIFICATION PENDING. The executor confirmed the named constraint this migration widened (bills_status_check now admits APPROVED) but did NOT enumerate every constraint affecting bills.status. A clean apply of this migration does not prove bill approval works.",
   "new_findings": [
     "An OVERDUE bill cannot be paid. record_bill_payment_safe accepts only ('APPROVED','AWAITING_PAYMENT','PART_PAID'), but sync_bill_aged_balance and the overdue scan can move a bill to OVERDUE, after which every payment attempt is refused. The BillsTab payment action still offers the button for OVERDUE, so the failure surfaces as an error rather than a disabled control. NOT fixed here — it is a bill payment state-machine question, not a vocabulary one, and expanding this release to cover it would mix two changes. Logged for a ruling.",
     "approve_bill_safe on LIVE has drifted from its December definition: the live body checks user_has_role_at_least(...,'manager') and omits the locked_fields assignment and the richer audit_log row that 20251217171128 wrote. Something re-issued it later with less behaviour. Not repaired here because this release deliberately does not touch the function, but it is DEF-020/DEF-023 evidence and should be reconciled."
@@ -198,5 +200,14 @@
         "sql": "SELECT count(*) FROM public.customers c LEFT JOIN public.clients cl ON cl.id = c.client_id LEFT JOIN public.companies co ON co.id = c.company_id WHERE (c.client_id IS NOT NULL AND cl.organization_id <> c.organization_id) OR (c.company_id IS NOT NULL AND co.organization_id <> c.organization_id)"
       }
     ]
+  },
+  "open_question_2026_08_06": {
+    "concern": "A static CHECK-constraint sweep reports that bills.status may carry TWO check constraints — bills_status_check (uppercase vocabulary) and chk_bills_status (lowercase vocabulary, added by 20251218231226 under a NEW NAME without dropping the existing one). Postgres ANDs check constraints, so if both are live the satisfiable set is their INTERSECTION, which is EMPTY. bills would be structurally unwritable and this migration would be a FALSE GREEN — applied cleanly, fixed nothing.",
+    "why_not_yet_accepted": "It contradicts git. Migration 20260703195953 (July, LATER than the December migration that added the legacy constraints) explicitly drops chk_bills_status and chk_invoices_status — 'Drop legacy lowercase status CHECK constraints that predate the canonical vocabulary.' If the sweep's live reading is correct, then 20260703195953 was never applied, which is a significant git-versus-live drift finding in its own right (DEF-020/DEF-023).",
+    "what_would_settle_it": "A read of pg_constraint for every contype='c' constraint on bills/invoices/filings whose definition mentions status. Requested from the executor 2026-08-06.",
+    "ledger_caveat": "The obvious second check — whether 20260703195953 appears in supabase_migrations.schema_migrations — is NOT usable. Convention section 1a records that relation as unreadable by BOTH parties. An error from that query is expected and is NOT evidence the migration did not run. An object-level proxy was requested instead: 20260703195953 also backfilled bookkeeping_accounts.account_subtype, so the presence of TRADE_DEBTORS/TRADE_CREDITORS on control accounts indicates it ran.",
+    "explicitly_not_evidence": "bills, invoices and filings reportedly holding zero rows in production is CORROBORATION, not proof. Owner ruling 2026-08-06: infer nothing from it.",
+    "standing_instruction": "No further bill/invoice/filing status changes, and DEF-026/027 must NOT be reapplied, while this is open.",
+    "if_confirmed": "A corrective migration is required that drops the obsolete constraint, with explicit pre-assertions reproducing the empty-intersection state and post-assertions proving a canonical status value is now writable. Widening one constraint while another forbids the same value is what produced this."
   }
 }
