@@ -65,6 +65,18 @@ Therefore:
   on 60 of 62 functions, git-versus-LIVE migration identity cannot presently be reconciled by
   either party. It is a governance gap, not a paperwork one.
 
+## 1b. How the executor is instructed (binding from 2026-08-06)
+
+Claude is the main developer. Lovable is a **production executor only** — invoked when
+something must be applied to or read from production, with a bounded instruction stating
+main commit, target project, exact migration filename, expected SHA-256, permitted actions,
+prohibited actions, required raw output and stop conditions.
+
+**The executor does not design.** It must not redesign a fix, edit a migration, author SQL or
+improvise around a failure. It stops and reports; the correction comes through git.
+
+Full template and rationale: `docs/releases/executor-instruction-contract.md`.
+
 ## 2. A "release" is a unit
 
 A release is a set of artifacts that ship together, tied to **one merged commit SHA**, with a
