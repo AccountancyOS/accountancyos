@@ -121,3 +121,37 @@ SELECT count(*) AS pending_reserved_tld FROM public.email_queue WHERE status='pe
                     0
 (1 row)
 
+           jobname            | last_status | guc_fail 
+------------------------------+-------------+----------
+ chaser-tick-every-15min      |             |        0
+ chaser-trigger-scan-every-6h |             |        0
+ dormant-lead-scan-daily      |             |        0
+ hmrc-ct-delete-worker        | succeeded   |        0
+ hmrc-ct-poll-worker          | succeeded   |        0
+ invoice-overdue-scan-daily   |             |        0
+ process-automation-events    | succeeded   |        0
+ process-email-queue          | succeeded   |        0
+ sync-gmail-emails            | succeeded   |        0
+ sync-outlook-emails          | succeeded   |        0
+ truelayer-sync-hourly        |             |        0
+ truelayer-sync-scheduled     |             |        0
+ workflow-tick                | succeeded   |        0
+(13 rows)
+
+      jsonb_pretty       
+-------------------------
+ {                      +
+     "total": 9,        +
+     "available": true, +
+     "timed_out": 0,    +
+     "no_response": 0,  +
+     "client_error": 0, +
+     "server_error": 0, +
+     "unauthorized": 0, +
+     "sample_errors": [ +
+     ],                 +
+     "succeeded_2xx": 9,+
+     "window_minutes": 2+
+ }
+(1 row)
+
