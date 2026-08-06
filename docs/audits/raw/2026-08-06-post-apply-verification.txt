@@ -1,0 +1,123 @@
+SELECT current_user, rolbypassrls FROM pg_roles WHERE rolname=current_user;
+ current_user | rolbypassrls 
+--------------+--------------
+ sandbox_exec | t
+(1 row)
+
+SELECT jsonb_pretty(jsonb_agg(j)) FROM (SELECT x->>'jobname' jobname, x->>'schedule' sched, (x->>'active')::bool active, x->>'last_status' last_status, (x->>'unrecognized_parameter_failures')::int guc_fail FROM jsonb_array_elements(public.mcp_cron_job_health(5)) x) j;
+                    jsonb_pretty                    
+----------------------------------------------------
+ [                                                 +
+     {                                             +
+         "sched": "*/15 * * * *",                  +
+         "active": true,                           +
+         "jobname": "chaser-tick-every-15min",     +
+         "guc_fail": 0,                            +
+         "last_status": "succeeded"                +
+     },                                            +
+     {                                             +
+         "sched": "0 */6 * * *",                   +
+         "active": true,                           +
+         "jobname": "chaser-trigger-scan-every-6h",+
+         "guc_fail": 0,                            +
+         "last_status": null                       +
+     },                                            +
+     {                                             +
+         "sched": "0 2 * * *",                     +
+         "active": true,                           +
+         "jobname": "dormant-lead-scan-daily",     +
+         "guc_fail": 0,                            +
+         "last_status": null                       +
+     },                                            +
+     {                                             +
+         "sched": "*/5 * * * *",                   +
+         "active": true,                           +
+         "jobname": "hmrc-ct-delete-worker",       +
+         "guc_fail": 1,                            +
+         "last_status": "failed"                   +
+     },                                            +
+     {                                             +
+         "sched": "* * * * *",                     +
+         "active": true,                           +
+         "jobname": "hmrc-ct-poll-worker",         +
+         "guc_fail": 4,                            +
+         "last_status": "succeeded"                +
+     },                                            +
+     {                                             +
+         "sched": "0 6 * * *",                     +
+         "active": true,                           +
+         "jobname": "invoice-overdue-scan-daily",  +
+         "guc_fail": 0,                            +
+         "last_status": null                       +
+     },                                            +
+     {                                             +
+         "sched": "*/5 * * * *",                   +
+         "active": true,                           +
+         "jobname": "process-automation-events",   +
+         "guc_fail": 1,                            +
+         "last_status": "failed"                   +
+     },                                            +
+     {                                             +
+         "sched": "* * * * *",                     +
+         "active": true,                           +
+         "jobname": "process-email-queue",         +
+         "guc_fail": 0,                            +
+         "last_status": "succeeded"                +
+     },                                            +
+     {                                             +
+         "sched": "*/2 * * * *",                   +
+         "active": true,                           +
+         "jobname": "sync-gmail-emails",           +
+         "guc_fail": 2,                            +
+         "last_status": "failed"                   +
+     },                                            +
+     {                                             +
+         "sched": "*/2 * * * *",                   +
+         "active": true,                           +
+         "jobname": "sync-outlook-emails",         +
+         "guc_fail": 2,                            +
+         "last_status": "failed"                   +
+     },                                            +
+     {                                             +
+         "sched": "7 * * * *",                     +
+         "active": true,                           +
+         "jobname": "truelayer-sync-hourly",       +
+         "guc_fail": 0,                            +
+         "last_status": null                       +
+     },                                            +
+     {                                             +
+         "sched": "*/30 * * * *",                  +
+         "active": true,                           +
+         "jobname": "truelayer-sync-scheduled",    +
+         "guc_fail": 0,                            +
+         "last_status": "succeeded"                +
+     },                                            +
+     {                                             +
+         "sched": "*/5 * * * *",                   +
+         "active": true,                           +
+         "jobname": "workflow-tick",               +
+         "guc_fail": 1,                            +
+         "last_status": "failed"                   +
+     }                                             +
+ ]
+(1 row)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='bills_status_check';
+                                                                    pg_get_constraintdef                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'AWAITING_PAYMENT'::text, 'PART_PAID'::text, 'PAID'::text, 'OVERDUE'::text, 'VOIDED'::text])))
+(1 row)
+
+SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='customers' AND column_name IN ('company_name','default_currency');
+   column_name    | data_type | column_default 
+------------------+-----------+----------------
+ company_name     | text      | 
+ default_currency | text      | 'GBP'::text
+(2 rows)
+
+SELECT count(*) AS pending_reserved_tld FROM public.email_queue WHERE status='pending' AND (to_email ILIKE '%.test' OR to_email ILIKE '%.example' OR to_email ILIKE '%.invalid' OR to_email ILIKE '%.localhost');
+ pending_reserved_tld 
+----------------------
+                    0
+(1 row)
+
