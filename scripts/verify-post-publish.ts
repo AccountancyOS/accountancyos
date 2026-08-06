@@ -24,6 +24,7 @@
 // managed access the exec sandbox exposes for LIVE reads).
 
 import { dirname, basename, join } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { assertRlsBoundary } from "./precheck-rls-boundary.ts";
 
 type Check = {
   id: string;
@@ -62,6 +63,18 @@ for (const k of ["PGHOST", "PGUSER", "PGPASSWORD", "PGDATABASE"]) {
     console.error(`Missing required env: ${k}. Aborting — this verifier must run against LIVE via managed psql.`);
     Deno.exit(2);
   }
+}
+
+// DEF-031 fail-closed pre-check (owner ruling 2026-08-06). The connection role has been
+// observed reverting to BYPASSRLS out of band, which would silently turn every check in
+// this run into non-evidence. Confirm the boundary in THIS session before reading anything.
+let boundary: Awaited<ReturnType<typeof assertRlsBoundary>>;
+try {
+  boundary = await assertRlsBoundary();
+  console.log(`DEF-031 pre-check PASS: ${boundary.role} oid=${boundary.oid} bypassrls=false`);
+} catch (e) {
+  console.error(String(e instanceof Error ? e.message : e));
+  Deno.exit(3);
 }
 
 const raw = await Deno.readTextFile(path);
