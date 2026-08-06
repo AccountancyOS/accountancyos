@@ -15,6 +15,15 @@
       "repair": "ALTER ROLE sandbox_exec NOBYPASSRLS re-applied 2026-08-06 via the Lovable Cloud executor, effect-identical to 20260805200000. No 42501. No grants added.",
       "post_repair_state": "NEW connection: oid=161547, rolsuper=false, rolbypassrls=false, rolcanlogin=true, bypassing parent roles = 0, SELECT count(*) FROM organizations = 0 (RLS filtering active).",
       "raw_evidence": "docs/audits/raw/2026-08-06-def-031-recurrence.txt"
+    },
+    {
+      "observed_at": "2026-08-06T12:23:21.791673+00:00",
+      "oid": 161547,
+      "rolbypassrls": true,
+      "rolsuper": false,
+      "rolcanlogin": true,
+      "note": "Third occurrence, <4h after a verified-clean state. Same OID -> altered in place. Direct ALTER from sandbox_exec session refused (permission denied to alter role).",
+      "repair_state": "NOT repaired in this observation; escalated to platform."
     }
   ],
   "evidence_rules": [
@@ -205,5 +214,6 @@
     "organizations / invoices: cross-tenant SELECT as sandbox_exec now returns 0 rows. Previously unfiltered by rolbypassrls.",
     "clients: SELECT as sandbox_exec now raises 42501 on the policy predicate function client_has_portal_access. Raised, not routed around; if a future verification needs this visibility it will be served by a narrow SECURITY DEFINER projection per the DEF-019 pattern."
   ],
-  "static_guards": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts \u2014 14/14 passing post-apply."
+  "static_guards": "src/test/regression/def-031-sandbox-exec-nobypassrls.test.ts \u2014 14/14 passing post-apply.",
+  "platform_escalation": "docs/audits/2026-08-06-def-031-platform-escalation.md"
 }
