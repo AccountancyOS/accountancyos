@@ -6441,9 +6441,11 @@ export type Database = {
           city: string | null
           client_id: string | null
           company_id: string | null
+          company_name: string | null
           country: string | null
           created_at: string | null
           default_account_id: string | null
+          default_currency: string
           default_vat_code_id: string | null
           email: string | null
           id: string
@@ -6463,9 +6465,11 @@ export type Database = {
           city?: string | null
           client_id?: string | null
           company_id?: string | null
+          company_name?: string | null
           country?: string | null
           created_at?: string | null
           default_account_id?: string | null
+          default_currency?: string
           default_vat_code_id?: string | null
           email?: string | null
           id?: string
@@ -6485,9 +6489,11 @@ export type Database = {
           city?: string | null
           client_id?: string | null
           company_id?: string | null
+          company_name?: string | null
           country?: string | null
           created_at?: string | null
           default_account_id?: string | null
+          default_currency?: string
           default_vat_code_id?: string | null
           email?: string | null
           id?: string
