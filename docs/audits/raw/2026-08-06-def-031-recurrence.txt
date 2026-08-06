@@ -32,3 +32,23 @@ DEF-031 RECURRENCE — raw evidence, 2026-08-06 (production moxpdejnucjjcplleefn
     CONCLUSION: the reprovisioning source is Lovable Cloud platform automation, outside
     Git and outside this repository's control. It cannot be removed from here.
     DEF-031 therefore remains OPEN as recurring drift.
+
+[6] THIRD OCCURRENCE — 2026-08-06 12:23:21 UTC (fresh psql session)
+    oid=161547 | sandbox_exec | rolsuper=f | rolbypassrls=t | rolcanlogin=t
+    This is AFTER the 2026-08-06 morning repair recorded in [2]-[3] above, which had
+    been verified from a new connection as rolbypassrls=false.
+    OID unchanged (161547) for the third consecutive observation -> altered in place.
+    Elapsed between verified-clean state and observed reversion: < 4 hours.
+
+[7] DIRECT REPAIR ATTEMPT FROM SANDBOX SESSION — REFUSED
+    ALTER ROLE sandbox_exec NOBYPASSRLS
+    ERROR: permission denied to alter role
+    DETAIL: Only roles with the CREATEROLE attribute and the ADMIN option on role
+            "sandbox_exec" may alter this role.
+    i.e. the reverting actor holds privileges that the executor session does not.
+    Repair is only possible through the Lovable Cloud migration executor.
+
+[8] REPOSITORY SEARCH (re-run 2026-08-06 12:2x UTC)
+    rg over supabase/ scripts/ src/ .github/ for CREATE ROLE | BYPASSRLS | CREATEROLE:
+    every hit is a DEF-031 repair migration, its regression test, or the fail-closed
+    pre-check. No CREATE ROLE statement for sandbox_exec exists anywhere in Git.
