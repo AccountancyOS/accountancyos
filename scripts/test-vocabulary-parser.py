@@ -138,6 +138,59 @@ FIXTURES = [
         {"fx": {"id"}},
         None,
     ),
+    # ---- compound CHECKs: a membership test as one TERM of a rule is not a vocabulary -----
+    (
+        "a compound CHECK over status and another column is a RULE, not a vocabulary",
+        # Found by writing exactly this on transport_jobs (DEF-036). Scanning for `IN (` read
+        # the two arms as rival vocabularies, intersected them to nothing, and reported a
+        # well-formed column as self-contradicting. A false contradiction is expensive in a
+        # report whose entire value is that the count is zero.
+        """CREATE TABLE fx (
+             id uuid, status TEXT, completed_at timestamptz,
+             CONSTRAINT fx_completion CHECK (
+               (status IN ('completed','failed') AND completed_at IS NOT NULL)
+               OR (status IN ('queued','processing') AND completed_at IS NULL)
+             )
+           );""",
+        {"fx": {"id", "status", "completed_at"}},
+        [],                       # no vocabulary declared — the rule constrains a relationship
+    ),
+    (
+        "several status predicates inside one consistency expression declare no vocabulary",
+        """CREATE TABLE fx (
+             id uuid, status TEXT, claimed_at timestamptz, completed_at timestamptz,
+             CONSTRAINT fx_consistent CHECK (
+               (status = 'processing' AND claimed_at IS NOT NULL)
+               OR (status IN ('queued') AND claimed_at IS NULL)
+               OR (status IN ('completed','failed','cancelled') AND completed_at IS NOT NULL)
+             )
+           );""",
+        {"fx": {"id", "status", "claimed_at", "completed_at"}},
+        [],
+    ),
+    (
+        "a single-column membership CHECK IS a vocabulary, compound handling notwithstanding",
+        # The other half of the pair. If the compound fix were too eager it would suppress
+        # real vocabularies, and the whole registry would silently empty out.
+        """CREATE TABLE fx (
+             id uuid,
+             status TEXT NOT NULL DEFAULT 'queued'
+               CHECK (status IN ('queued','processing','completed'))
+           );""",
+        {"fx": {"id", "status"}},
+        [("fx", "status", ("completed", "processing", "queued"))],
+    ),
+    (
+        "a genuine intersection contradiction is still reported",
+        # The DEF-034 shape, kept adjacent to the compound fixtures on purpose: the fix must
+        # suppress FALSE contradictions without suppressing true ones. Here two independent
+        # single-column vocabularies really do conflict — only 'b' satisfies both.
+        """CREATE TABLE fx (id uuid, status TEXT);
+           ALTER TABLE fx ADD CONSTRAINT fx_old CHECK (status IN ('a','b'));
+           ALTER TABLE fx ADD CONSTRAINT fx_new CHECK (status IN ('b','c'));""",
+        {"fx": {"id", "status"}},
+        [("fx", "status", ("a", "b")), ("fx", "status", ("b", "c"))],
+    ),
     (
         "two live constraints on one column are both retained, so the intersection is real",
         # The DEF-034 shape. If either were dropped by the parser the contradiction would

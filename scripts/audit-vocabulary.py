@@ -43,6 +43,56 @@ CHECK_IN = re.compile(
 CONSTRAINT_NAME = re.compile(r"CONSTRAINT\s+(\w+)\s+CHECK", re.I)
 LITERAL = re.compile(r"'([^']*)'")
 
+CHECK_KW = re.compile(r"\bCHECK\s*\(", re.I)
+
+# A CHECK declares a VOCABULARY only when membership is its ENTIRE expression.
+#
+# The distinction matters because a same-row consistency rule legitimately contains a
+# membership test as one of its terms:
+#
+#   CHECK ((status IN ('completed','failed') AND completed_at IS NOT NULL)
+#       OR (status IN ('queued','processing')  AND completed_at IS NULL))
+#
+# That constrains the RELATIONSHIP between two columns. It does not say which values `status`
+# may hold. Reading its embedded lists as two rival vocabularies intersects them to nothing and
+# reports a perfectly well-formed column as self-contradicting — a false contradiction, in a
+# report whose entire value is that the count is zero.
+#
+# Matching the whole expression rather than scanning for `IN (` is what separates the two.
+# Anchored at both ends: any extra term, of any kind, means this is a rule and not a vocabulary.
+VOCAB_EXPR = re.compile(
+    r"""^\s*\(*\s*
+        (\w+)                                   # the column
+        \s*(?:::\s*\w+\s*)?\s*                  # optional cast
+        (?:
+            IN\s*\(\s*(?P<in>[^()]*?)\s*\)      # IN ('a','b')
+          |
+            =\s*ANY\s*\(\s*\(?\s*ARRAY\s*\[     # = ANY (ARRAY['a','b'])
+              (?P<arr>[^\]]*?)
+            \]\s*(?:::\s*[\w\s\[\]]+?\s*)?\)?\s*\)
+        )
+        \s*\)*\s*$""",
+    re.I | re.X,
+)
+
+
+def check_expressions(text):
+    """Yield the full inner expression of every CHECK in `text`, parens balanced."""
+    for m in CHECK_KW.finditer(text):
+        expr = body_of(text, m.end() - 1)
+        if expr:
+            yield expr
+
+
+def vocabulary_from_check(expr):
+    """(column, [values]) when this CHECK is purely a membership test; None when it is a rule."""
+    m = VOCAB_EXPR.match(expr.strip())
+    if not m:
+        return None
+    body = m.group("in") if m.group("in") is not None else m.group("arr")
+    values = sorted(set(LITERAL.findall(body or "")))
+    return (m.group(1), values) if values else None
+
 
 def strip_comments(sql):
     """
@@ -192,14 +242,15 @@ def replay():
                     if head_token.upper() not in ("CONSTRAINT", "PRIMARY", "FOREIGN",
                                                   "UNIQUE", "CHECK", "EXCLUDE"):
                         tables[table].add(head_token.strip('"'))
-                    for c in CHECK_IN.finditer(part):
-                        allowed = sorted(set(LITERAL.findall(c.group(2))))
-                        if not allowed:
-                            continue
+                    for expr in check_expressions(part):
+                        vocab = vocabulary_from_check(expr)
+                        if not vocab:
+                            continue          # a rule, not a vocabulary
+                        col, allowed = vocab
                         nm = CONSTRAINT_NAME.search(part)
-                        name = nm.group(1) if nm else f"{table}_{c.group(1)}_check"
+                        name = nm.group(1) if nm else f"{table}_{col}_check"
                         live[(table, name)] = {"table": table, "constraint": name,
-                                               "column": c.group(1), "allowed": allowed,
+                                               "column": col, "allowed": allowed,
                                                "migration": fn}
             else:
                 table, rest = m.group(1), m.group(2)
@@ -210,14 +261,15 @@ def replay():
                 # Drops first: an ALTER that drops and re-adds the same name is a redefinition.
                 for c in DROP_CONSTRAINT.finditer(rest):
                     live.pop((table, c.group(1)), None)
-                for c in CHECK_IN.finditer(rest):
-                    allowed = sorted(set(LITERAL.findall(c.group(2))))
-                    if not allowed:
-                        continue
+                for expr in check_expressions(rest):
+                    vocab = vocabulary_from_check(expr)
+                    if not vocab:
+                        continue              # a rule, not a vocabulary
+                    col, allowed = vocab
                     nm = CONSTRAINT_NAME.search(rest)
-                    name = nm.group(1) if nm else f"{table}_{c.group(1)}_check"
+                    name = nm.group(1) if nm else f"{table}_{col}_check"
                     live[(table, name)] = {"table": table, "constraint": name,
-                                           "column": c.group(1), "allowed": allowed,
+                                           "column": col, "allowed": allowed,
                                            "migration": fn}
 
     return tables, list(live.values())

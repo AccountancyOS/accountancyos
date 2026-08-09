@@ -176,6 +176,13 @@ describe("vocabulary — the parser's known blind spots stay closed", () => {
       "auto name",
       "= ANY (ARRAY",
       "two live constraints on one column",
+      // Compound-CHECK handling. The pair matters more than either half: the fix must
+      // suppress FALSE contradictions without suppressing true vocabularies, and deleting
+      // either fixture would let the parser drift back in one direction unnoticed.
+      "is a RULE, not a vocabulary",
+      "several status predicates inside one consistency expression",
+      "IS a vocabulary, compound handling notwithstanding",
+      "a genuine intersection contradiction is still reported",
     ]) {
       expect(src, `fixture removed: ${anchor}`).toContain(anchor);
     }
