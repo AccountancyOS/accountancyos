@@ -46,21 +46,26 @@ const KNOWN_SCHEMA_CONTRADICTIONS: readonly string[] = [
 ];
 
 const KNOWN_LITERAL_VIOLATIONS = [
-  // filings.status — blocked on a ruling. Dropping `valid_status` (DEF-034) did NOT legalise
-  // these: they belong to `chk_filings_status`, a THIRD filing vocabulary dropped on
-  // 2026-06-20. `queued` in particular likely belongs on `filing_queue.status`, since writing
-  // submission state onto the filing record conflates the projection with the HMRC transport
-  // layer, which the architecture forbids.
-  "approve_filing_safe: filings.status = 'approved_by_client'",
-  "queue_filing_for_submission: filings.status = 'queued'",
+  // Five entries were removed by DEF-035 (20260809140000), which repaired the callers whose
+  // correct value was not in question: not_started -> blank, medium -> normal,
+  // not_started -> todo, approved_by_client -> approved, and the deletion of the duplicate
+  // filings.status = 'queued' write. Owner ruling 2026-08-09: queue and HMRC transport state
+  // live on filing_queue.status, never on the filing.
+  //
+  // These four remain because each needs a ruling on what the state machine MEANS.
+  //
+  // regress_filing_status may want `ready_for_review` or `awaiting_approval` — internal review
+  // and client approval are arguably different states, and picking wrong encodes a wrong answer
+  // into the workflow.
   "regress_filing_status: filings.status = 'ready_for_approval'",
-  // jobs.* — the job vocabulary moved from a generic lifecycle (not_started/in_progress) to
-  // workflow stages (records_requested/accountant_review/...). These callers were never
-  // migrated. Which stage each generic state maps to is a workflow decision.
-  "create_job_from_template: jobs.status = 'not_started'",
+  // A questionnaire submission is the client returning records, which suggests
+  // `records_received` — but trigger_records_request is the paired function and the loop should
+  // be ruled on as a whole.
   "process_questionnaire_submission: jobs.status = 'in_progress'",
-  "create_job_from_template: jobs.priority = 'medium'",
-  "create_job_from_template: job_tasks.status = 'not_started'",
+  // `canonical_spine_v1` is a provenance VERSION, not a source kind, and
+  // tg_job_canonical_generate_deadlines READS it to decide whether to generate deadlines — so
+  // renaming it to `scheduled` would silently change trigger behaviour. Proposed remedy is to
+  // split the version onto its own column.
   "lifecycle_generate_jobs_for_service: jobs.automation_source = 'canonical_spine_v1'",
   // on_cgt_disposal_date_changed is broken in four ways and only this one is a rename. It
   // also writes deadlines.title (the column is `name`) and status = 'upcoming', and before

@@ -1,0 +1,147 @@
+{
+  "release_id": "2026-08-09-def-035-status-literal-repairs",
+  "release_kind": "attestation-based",
+  "status": "declared-not-applied",
+  "declared_at": "2026-08-09T00:00:00Z",
+  "approver": "leon@bluetickaccountants.com",
+  "summary": "DEF-035. Five status literals that no CHECK constraint permits, in three functions. Every one raises 23514 on every call today, so none of these paths has ever succeeded. Three function bodies re-issued. No vocabulary widened, no schema change, no data modified.",
+  "convention_reference": "docs/releases/production-release-convention.md + docs/releases/executor-instruction-contract.md",
+
+  "behaviour_preservation_argument": "No statement that currently succeeds can behave differently after this migration, because none of the repaired statements currently succeeds. Each raises 23514 unconditionally. The change moves code from always-fails to works. This is a stronger guarantee than 'low risk' and is the reason these five were separated from the other four violations, which need rulings on what the state machine means.",
+
+  "repairs": [
+    {
+      "id": 1,
+      "function": "create_job_from_template",
+      "source": "20251203235853_3b2f34de:141",
+      "was": "jobs.status = 'not_started'",
+      "now": "'blank'",
+      "why": "The jobs vocabulary moved from a generic lifecycle to workflow stages in 20260217105419 and this caller was never migrated. 'blank' has been the table DEFAULT since 20260408203205:8 and is the value all seven application-code job creators write."
+    },
+    {
+      "id": 2,
+      "function": "create_job_from_template",
+      "source": "20251203235853_3b2f34de:149",
+      "was": "jobs.priority = 'medium'",
+      "now": "'normal'",
+      "why": "jobs_priority_check has permitted low/normal/high/critical since 20251126133923 and has never been altered. 'medium' belongs to no vocabulary in this schema. 'normal' is what every other creator writes.",
+      "related_app_code": "src/components/cosec/CompanyCoSecJobsTab.tsx:121 writes the same illegal literal from TypeScript. Not fixed here — this migration is SQL-only. Tracked in the app-surface baseline."
+    },
+    {
+      "id": 3,
+      "function": "create_job_from_template",
+      "source": "20251203235853_3b2f34de:176",
+      "was": "job_tasks.status = 'not_started'",
+      "now": "'todo'",
+      "why": "job_tasks_status_check (todo/doing/done/blocked) has never been altered. 'todo' is the same 'not yet started' concept and is what job-template-engine.ts:773 writes."
+    },
+    {
+      "id": 4,
+      "function": "approve_filing_safe",
+      "source": "20251209001148_bb47431b:268 and :276",
+      "was": "filings.status = 'approved_by_client'",
+      "now": "'approved'",
+      "why": "'approved' is the canonical member of chk_filing_status. 'approved_by_client' belongs to chk_filings_status, a filing vocabulary DROPPED on 2026-06-20.",
+      "note": "TWO occurrences change: the UPDATE and the audit-log row recording the new value. Changing only the UPDATE would leave the audit trail asserting a value that was never written — worse than the original defect, because it would look correct."
+    },
+    {
+      "id": 5,
+      "function": "queue_filing_for_submission",
+      "source": "20251214185814_7f7d3557:230",
+      "was": "filings.status = 'queued'",
+      "now": "THE WRITE IS DELETED",
+      "why": "Not a rename. Owner ruling 2026-08-09: queue and HMRC transport state belong on filing_queue.status, never on the filing — the HMRC layer must never own figures of record. The function ALREADY inserts filing_queue with status 'queued' correctly at :219; the filings UPDATE duplicated that fact in a column whose vocabulary forbids it.",
+      "visible_consequence": "Because the illegal UPDATE aborted the transaction, the filing_queue INSERT was rolled back with it. This is why NO filing_queue row has ever existed and the CT submission pipeline has never had work to find. Repairing this makes queue rows appear for the first time."
+    }
+  ],
+
+  "design_decisions": [
+    "No vocabulary is widened. Every replacement is a value the relevant constraint already permits — asserted in the PRECONDITIONS before any body is rewritten, and asserted again afterwards that no constraint gained the bad value. Widening a vocabulary to accommodate a caller is how the DEF-034 contradictions came to exist.",
+    "Repair #5 is a deletion, not a substitution. There is no legal filings.status value meaning 'queued for transport', and there should not be one.",
+    "Bodies EXTRACTED from their defining migrations and edited against asserted anchors; each substitution had to match an exact expected count (2 for approve_filing_safe) or the generator aborted. Nothing was retyped."
+  ],
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260809140000_def_035_status_literal_repairs.sql",
+      "sha256": "5b58f22204bb63c6bd441fcd6876fc7a18f2ec531bc98c102ae039e62db1f03d",
+      "lines": 489,
+      "reissues_functions": ["create_job_from_template", "approve_filing_safe", "queue_filing_for_submission"]
+    }
+  ],
+
+  "guarded_by": "src/test/regression/def-035-status-literal-repairs.test.ts (14 tests). The class is enforced by src/test/regression/vocabulary-registry.test.ts, whose KNOWN_LITERAL_VIOLATIONS baseline drops from 9 entries to 4 with this change.",
+
+  "limitation": "STATICALLY VALIDATED ONLY — not executed against Postgres. Bodies extracted from GIT, not LIVE. Two functions are known to exist on production in no migration (email_queue_dispatch, email_queue_wake), so git and live are known to diverge. Before applying, the three live bodies must be diffed against these; on any divergence this migration is redeclared rather than applied.",
+
+  "pre_apply_requirement": {
+    "step": "Diff the three LIVE function bodies against the three declared here.",
+    "sql": "SELECT proname, md5(prosrc) FROM pg_proc WHERE proname IN ('create_job_from_template','approve_filing_safe','queue_filing_for_submission') AND pronamespace='public'::regnamespace ORDER BY proname;",
+    "note": "md5(prosrc), the body only — NOT md5(pg_get_functiondef(oid)), which includes signature and options. A previous release lost time to that mismatch.",
+    "on_divergence": "Redeclare. Do not apply."
+  },
+
+  "post_publish_verification": {
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Every check must pass before this release may move out of pending.",
+    "checks": [
+      {
+        "id": "literals-replaced",
+        "sql": "SELECT proname, prosrc LIKE '%not_started%' AS has_not_started, prosrc LIKE '%''medium''%' AS has_medium, prosrc LIKE '%approved_by_client%' AS has_abc FROM pg_proc WHERE proname IN ('create_job_from_template','approve_filing_safe') AND pronamespace='public'::regnamespace;",
+        "expect": "all three boolean columns false on every row"
+      },
+      {
+        "id": "queue-function-no-longer-touches-filings",
+        "sql": "SELECT prosrc LIKE '%UPDATE public.filings%' AS touches_filings, prosrc LIKE '%INSERT INTO public.filing_queue%' AS enqueues FROM pg_proc WHERE proname='queue_filing_for_submission' AND pronamespace='public'::regnamespace;",
+        "expect": "touches_filings false, enqueues true"
+      },
+      {
+        "id": "no-vocabulary-widened",
+        "sql": "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conname IN ('chk_jobs_status','jobs_priority_check','job_tasks_status_check','chk_filing_status');",
+        "expect": "none contains not_started, medium, approved_by_client or queued"
+      },
+      {
+        "id": "no-overload",
+        "sql": "SELECT proname, count(*) FROM pg_proc WHERE proname IN ('create_job_from_template','approve_filing_safe','queue_filing_for_submission') AND pronamespace='public'::regnamespace GROUP BY proname;",
+        "expect": "each count = 1"
+      },
+      {
+        "id": "behavioural-a-queue-row-can-now-exist",
+        "note": "The only check that proves the pipeline changed rather than the schema. UI success is not delivery (Gate 6).",
+        "sql": "SELECT public.queue_filing_for_submission(<approved_filing_id>, 'CT600_HMRC', <user_id>); SELECT id, status, filing_id FROM public.filing_queue ORDER BY created_at DESC LIMIT 1;",
+        "expect": "one row, status = 'queued'. Before this migration the function raised 23514 and no row was created."
+      }
+    ]
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "target_production_project": "moxpdejnucjjcplleefn",
+    "exact_migration_filename": "20260809140000_def_035_status_literal_repairs.sql",
+    "expected_sha256": "5b58f22204bb63c6bd441fcd6876fc7a18f2ec531bc98c102ae039e62db1f03d",
+    "permitted_actions": [
+      "Run the pre_apply_requirement diff and return raw output.",
+      "Apply that exact migration verbatim, only if the diff matches."
+    ],
+    "prohibited_actions": [
+      "No code or documentation changes",
+      "No edits to the migration",
+      "Do not widen any CHECK constraint to admit not_started, medium, approved_by_client or queued",
+      "No other migrations",
+      "No grants, roles or schema changes"
+    ],
+    "required_raw_output": "The pre-apply md5 diff, then every post_publish_verification check, as raw output.",
+    "stop_conditions": [
+      "The SHA-256 differs from the expected value",
+      "Any live function body diverges from the one declared here",
+      "Any precondition RAISE EXCEPTION fires",
+      "The Cloud executor returns 42501"
+    ]
+  },
+
+  "does_not_fix": {
+    "ct_pipeline": "This migration makes filing_queue rows possible for the first time, but the CT pollers still cannot find them: both select .eq('status','pending'), a value filing_queue_status_check forbids. The poll and delete INSERTs additionally omit the NOT NULL snapshot_hash, write a non-existent metadata column, use the illegal filing_type 'CT600_HMRC_DELETE', and check no errors. That recovery is a separate coherent change and must not be attempted one literal at a time.",
+    "remaining_literal_violations": "regress_filing_status ('ready_for_approval'), process_questionnaire_submission ('in_progress'), lifecycle_generate_jobs_for_service ('canonical_spine_v1'), on_cgt_disposal_date_changed ('filing'). Each needs a ruling on what the state machine means.",
+    "app_code": "CompanyCoSecJobsTab.tsx:121 writes jobs.priority = 'medium' from TypeScript. Tracked in the app-surface baseline, not fixed by a SQL migration."
+  }
+}
