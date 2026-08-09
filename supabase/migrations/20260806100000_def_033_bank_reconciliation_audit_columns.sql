@@ -51,8 +51,33 @@
 -- redeclared rather than applied. The post-assertions below catch a wrong END state but cannot
 -- detect that a body was silently reverted to an older revision.
 --
--- SCOPE. Two nullable columns added, four function bodies re-issued. No constraint, policy,
--- trigger, index or grant is altered. No data is modified or backfilled.
+-- THE SECOND DEFECT IN revalue_bank_account_fx, added 2026-08-09. That function writes TWO
+-- broken statements, not one. One line before the audit-log INSERT it runs
+-- `INSERT INTO public.journals (... source_type, source_id ...)`, and `journals` has neither
+-- column. Repairing only the audit-log write would have left FX revaluation failing exactly
+-- as before, one statement earlier — a fix that passes its own post-assertions and changes
+-- nothing observable. The pair is added in §2b, mirroring `ledger_entries`, which has carried
+-- `source_type`/`source_id` since 20251127012417 for precisely this purpose.
+--
+-- This was missed on the first pass because the phantom-column sweep reports per (function,
+-- table) pair, and the eye went to the four bookkeeping_audit_log rows. It surfaced only when
+-- the sweep was re-run AGAINST THIS MIGRATION and still reported the function as defective.
+-- That is the argument for keeping the detector in the loop rather than trusting the repair.
+--
+-- SCOPE. Four nullable columns added across two tables (bookkeeping_audit_log.client_id,
+-- .company_id; journals.source_type, .source_id), three indexes, four function bodies
+-- re-issued. No constraint, policy, trigger or grant is altered. No data is modified or
+-- backfilled.
+--
+-- RELATED, DELIBERATELY NOT FIXED HERE. Two other functions write phantom columns to
+-- `journals`, and both are mapping decisions rather than missing columns:
+--   `reverse_journal` writes `journals.status`, but journals records posting state as the
+--     boolean `is_posted`. Whether journals gain a status vocabulary or the function uses
+--     `is_posted` is a design decision.
+--   `revert_bank_rule_application` writes `reversal_reason`, `reversed_at`, `reversed_by`,
+--     while journals already has `is_reversed`, `reverse_date`, `reversal_date` and
+--     `reverses_journal_id`. That is four rival spellings of one concept and needs a ruling,
+--     not another column.
 -- =====================================================================================
 
 BEGIN;
@@ -100,6 +125,26 @@ BEGIN
     RAISE EXCEPTION 'DEF-033 precondition failed: bookkeeping_audit_log.client_id already exists — refusing to re-apply.';
   END IF;
 
+  -- The SECOND defect in revalue_bank_account_fx: journals has no provenance pair, so the
+  -- journal INSERT fails even once the audit-log write is repaired.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'journals' AND column_name = 'source_type'
+  ) THEN
+    RAISE EXCEPTION 'DEF-033 precondition failed: journals.source_type already exists — refusing to re-apply.';
+  END IF;
+
+  -- The pattern being mirrored must itself still exist, or the justification is gone.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ledger_entries' AND column_name = 'source_type'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ledger_entries' AND column_name = 'source_id'
+  ) THEN
+    RAISE EXCEPTION 'DEF-033 precondition failed: ledger_entries.source_type/source_id is missing. journals is being given a provenance pair to MATCH that one; without it there is no canonical shape to copy.';
+  END IF;
+
   -- All four functions must exist. If one has been renamed or dropped out of band, the repair
   -- set is wrong and a silent partial fix is worse than none.
   FOREACH v_col IN ARRAY ARRAY['start_bank_reconciliation','complete_bank_reconciliation','reopen_bank_reconciliation','revalue_bank_account_fx'] LOOP
@@ -134,6 +179,43 @@ CREATE INDEX IF NOT EXISTS bookkeeping_audit_log_client_idx
   ON public.bookkeeping_audit_log (client_id, created_at DESC) WHERE client_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS bookkeeping_audit_log_company_idx
   ON public.bookkeeping_audit_log (company_id, created_at DESC) WHERE company_id IS NOT NULL;
+
+-- -------------------------------------------------------------------------------------
+-- §2b  Give journals the provenance pair it is already written as having.
+-- -------------------------------------------------------------------------------------
+-- `revalue_bank_account_fx` writes TWO broken statements, not one. Repairing only the
+-- audit-log INSERT would leave FX revaluation still failing, one line earlier, at
+-- `INSERT INTO public.journals (... source_type, source_id ...)`. Neither column exists.
+--
+-- This is NOT a new invention. `ledger_entries` has carried exactly this pair since
+-- 20251127012417 — `source_type TEXT` (MANUAL, JOURNAL, BANK_FEED, INVOICE, RULE, IMPORT,
+-- ADJUSTMENT) and `source_id UUID` — as the record of which subsystem originated a row.
+-- `journals` is the header for those very entries and was simply never given the same pair.
+-- Adding it copies an established shape rather than proposing a new one.
+--
+-- Nullable, unlike the `ledger_entries` original: that column is NOT NULL because it was
+-- there from the first row, whereas every existing journal predates this and has no source.
+-- NOT NULL would fail on every one of them. No default is set either — defaulting to
+-- 'MANUAL' would assert a provenance for rows whose provenance is simply unrecorded.
+--
+-- No CHECK constraint is added, deliberately. `ledger_entries.source_type` documents its
+-- vocabulary in a comment and constrains nothing, and inventing a constraint here would put
+-- two different rules on one concept — the exact split this programme exists to close. When
+-- that vocabulary is ruled on, both columns get the same constraint in the same migration.
+
+ALTER TABLE public.journals
+  ADD COLUMN IF NOT EXISTS source_type text,
+  ADD COLUMN IF NOT EXISTS source_id   uuid;
+
+COMMENT ON COLUMN public.journals.source_type IS
+  'Subsystem that originated this journal, mirroring ledger_entries.source_type: MANUAL, JOURNAL, BANK_FEED, INVOICE, RULE, IMPORT, ADJUSTMENT, FX_REVALUATION. Nullable; not backfilled. DEF-033.';
+COMMENT ON COLUMN public.journals.source_id IS
+  'Identifier of the originating record, mirroring ledger_entries.source_id. Interpretation depends on source_type; no FK, since the target table varies. Nullable; not backfilled. DEF-033.';
+
+-- "Show me every journal this bank account generated" is the question the pair exists to
+-- answer, and it table-scans a ledger that only grows without an index.
+CREATE INDEX IF NOT EXISTS journals_source_idx
+  ON public.journals (source_type, source_id) WHERE source_type IS NOT NULL;
 
 -- -------------------------------------------------------------------------------------
 -- §3  Re-issue the four bodies. Extracted and anchor-edited; only the INSERT list changed.
@@ -580,6 +662,39 @@ BEGIN
   WHERE proname = 'revalue_bank_account_fx' AND pronamespace = 'public'::regnamespace LIMIT 1;
   IF v_src LIKE '%payload%' THEN
     RAISE EXCEPTION 'DEF-033 post-assert failed: revalue_bank_account_fx still writes payload.';
+  END IF;
+
+  -- The journals provenance pair landed, nullable, so the FX journal INSERT can succeed.
+  -- Without this the audit-log repair above is cosmetic: the function still fails one
+  -- statement earlier and no FX revaluation posts.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='journals'
+      AND column_name='source_type' AND is_nullable='YES'
+  ) THEN
+    RAISE EXCEPTION 'DEF-033 post-assert failed: journals.source_type is absent or NOT NULL.';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='journals'
+      AND column_name='source_id' AND is_nullable='YES'
+  ) THEN
+    RAISE EXCEPTION 'DEF-033 post-assert failed: journals.source_id is absent or NOT NULL.';
+  END IF;
+
+  -- No default was set. A default would assert a provenance for rows that have none.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='journals'
+      AND column_name IN ('source_type','source_id') AND column_default IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'DEF-033 post-assert failed: journals.source_type/source_id has a DEFAULT — provenance must be recorded, not assumed.';
+  END IF;
+
+  -- And the function must genuinely still write them; a body that quietly dropped the
+  -- provenance columns would satisfy every check above while losing the audit trail.
+  IF v_src NOT LIKE '%source_type%' OR v_src NOT LIKE '%source_id%' THEN
+    RAISE EXCEPTION 'DEF-033 post-assert failed: revalue_bank_account_fx no longer writes journals.source_type/source_id.';
   END IF;
 
   -- Exactly one signature each — no overload was introduced (the DEF-002 failure mode).

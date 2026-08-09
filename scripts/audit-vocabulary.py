@@ -44,6 +44,48 @@ CONSTRAINT_NAME = re.compile(r"CONSTRAINT\s+(\w+)\s+CHECK", re.I)
 LITERAL = re.compile(r"'([^']*)'")
 
 
+def strip_comments(sql):
+    """
+    Remove `--` line comments and `/* */` blocks, but NEVER inside a string literal.
+
+    Stripping only comments that start a line is not enough: a trailing comment such as
+    `journal_type TEXT DEFAULT 'MANUAL', -- MANUAL, REVERSING, YEAR_END` survives, and the
+    CREATE TABLE splitter then reads `MANUAL`, `REVERSING` and `YEAR_END` as column names.
+    Inflated column sets do not create false "missing column" findings — they do the more
+    dangerous thing and MASK real ones.
+
+    Naively stripping every `--` would corrupt any literal containing one, so this scans.
+    """
+    out, i, n = [], 0, len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "'":
+            out.append(ch)
+            i += 1
+            while i < n:
+                out.append(sql[i])
+                if sql[i] == "'":
+                    if i + 1 < n and sql[i + 1] == "'":   # escaped quote
+                        out.append(sql[i + 1])
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "-" and i + 1 < n and sql[i + 1] == "-":
+            while i < n and sql[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and sql[i + 1] == "*":
+            end = sql.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def split_top_level(s):
     """Split a CREATE TABLE body on commas that are not inside parentheses."""
     out, depth, cur = [], 0, []
@@ -95,8 +137,9 @@ def replay():
 
     for fn in files:
         src = open(os.path.join(MIG_DIR, fn), encoding="utf8", errors="replace").read()
-        # Strip line comments so commented-out DDL is never replayed.
-        src = re.sub(r"^\s*--.*$", "", src, flags=re.M)
+        # Strip comments so commented-out DDL is never replayed and trailing comments never
+        # leak into a CREATE TABLE column list.
+        src = strip_comments(src)
 
         # Build a position-ordered event list so a drop-then-re-add in one file resolves
         # the way Postgres would rather than the way the regexes happen to be ordered.

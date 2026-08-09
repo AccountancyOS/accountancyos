@@ -68,6 +68,31 @@ describe("DEF-033 — the repair", () => {
     expect(CODE).not.toMatch(/ADD COLUMN IF NOT EXISTS (client|company)_id[^,;]*NOT NULL/);
   });
 
+  it("also repairs the SECOND broken statement in revalue_bank_account_fx", () => {
+    // That function writes two broken statements. Repairing only the audit-log INSERT would
+    // leave FX revaluation failing one line earlier, at the journals INSERT — a fix that
+    // passes its own post-assertions and changes nothing observable.
+    expect(CODE).toMatch(/ALTER TABLE public\.journals/);
+    expect(CODE).toMatch(/ADD COLUMN IF NOT EXISTS source_type\s+text/);
+    expect(CODE).toMatch(/ADD COLUMN IF NOT EXISTS source_id\s+uuid/);
+  });
+
+  it("makes the journals provenance pair nullable and undefaulted", () => {
+    // NOT NULL would fail on every existing journal; a DEFAULT would assert a provenance for
+    // rows whose provenance is simply unrecorded.
+    expect(CODE).not.toMatch(/ADD COLUMN IF NOT EXISTS source_(type|id)[^,;]*NOT NULL/);
+    expect(CODE).not.toMatch(/ADD COLUMN IF NOT EXISTS source_(type|id)[^,;]*DEFAULT/i);
+  });
+
+  it("mirrors ledger_entries rather than inventing a provenance shape", () => {
+    // ledger_entries has carried source_type/source_id since 20251127012417. Copying it is
+    // why this is not a new invention; the migration asserts that original still exists.
+    expect(CODE).toMatch(/ledger_entries/);
+    // No rival CHECK: constraining one of the pair and not the other is the split this
+    // programme exists to close.
+    expect(CODE).not.toMatch(/CHECK\s*\(\s*source_type/i);
+  });
+
   it("does not backfill — inventing a client dimension would fabricate audit history", () => {
     expect(CODE).not.toMatch(/UPDATE public\.bookkeeping_audit_log/i);
   });
@@ -114,6 +139,21 @@ describe("DEF-033 — reproduces before repairing, and asserts after", () => {
 
   it("asserts the mapping was not bypassed by adding the phantom columns", () => {
     expect(POST).toMatch(/the mapping was bypassed/);
+  });
+
+  it("refuses to re-apply if the journals provenance pair already exists", () => {
+    expect(PRE).toMatch(/journals\.source_type already exists/);
+  });
+
+  it("aborts if the ledger_entries pattern it copies has gone", () => {
+    expect(PRE).toMatch(/there is no canonical shape to copy/);
+  });
+
+  it("asserts the journals pair landed nullable, undefaulted, and still written", () => {
+    expect(POST).toMatch(/journals\.source_type is absent or NOT NULL/);
+    expect(POST).toMatch(/journals\.source_id is absent or NOT NULL/);
+    expect(POST).toMatch(/provenance must be recorded, not assumed/);
+    expect(POST).toMatch(/no longer writes journals\.source_type\/source_id/);
   });
 
   it("asserts exactly one signature each — no overload (the DEF-002 failure mode)", () => {
