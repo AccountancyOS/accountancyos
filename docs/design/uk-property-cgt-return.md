@@ -682,8 +682,19 @@ Under the standing rule I will not widen a vocabulary without a ruling, so the o
    cannot distinguish "we concluded none was due" from "someone cancelled this", which is exactly
    the distinction an inspector would ask about.
 
-**Recommendation: option 1.** The evidence lives on `cgt_property_returns` either way, but the
-deadline itself should say what happened. This is the last CGT decision outstanding.
+**Owner ruling 2026-08-09: option 1 — add `not_required`.** The evidence lives on
+`cgt_property_returns` either way, but the deadline itself must say what happened.
+
+Implementation follows the DEF-034 discipline without exception: the replacement constraint and
+the `DROP CONSTRAINT` of the one it supersedes go in the **same migration**. Both live
+contradictions this programme repaired came from adding a vocabulary and leaving its predecessor
+in place, and `deadlines.status` is the very column that carried one of them.
+
+`not_required` is deliberately generic rather than CGT-specific. Every conditional statutory
+obligation in the product has the same shape — an obligation that may turn out not to arise —
+and none of them should reach for `cancelled`.
+
+**This was the last CGT design decision. The design is now settled and ready to implement.**
 
 ---
 
