@@ -87,9 +87,33 @@ def strip_comments(sql):
 
 
 def split_top_level(s):
-    """Split a CREATE TABLE body on commas that are not inside parentheses."""
-    out, depth, cur = [], 0, []
-    for ch in s:
+    """
+    Split a CREATE TABLE body on commas that are not inside parentheses OR string literals.
+
+    The quote tracking matters: a column defined as
+    `days jsonb DEFAULT '["mon","friday"]'::jsonb` contains a top-level-looking comma inside
+    the literal, and splitting on it yields a fragment whose head token becomes a column named
+    `friday"]'::JSONB`. As with the comment bug, a spurious extra column never creates a false
+    finding — it silently masks a real one.
+    """
+    out, depth, cur, inq, i = [], 0, [], False, 0
+    while i < len(s):
+        ch = s[i]
+        if inq:
+            cur.append(ch)
+            if ch == "'":
+                if i + 1 < len(s) and s[i + 1] == "'":   # escaped quote
+                    cur.append(s[i + 1])
+                    i += 2
+                    continue
+                inq = False
+            i += 1
+            continue
+        if ch == "'":
+            inq = True
+            cur.append(ch)
+            i += 1
+            continue
         if ch == "(":
             depth += 1
         elif ch == ")":
@@ -99,6 +123,7 @@ def split_top_level(s):
             cur = []
         else:
             cur.append(ch)
+        i += 1
     out.append("".join(cur))
     return out
 
@@ -158,10 +183,15 @@ def replay():
                     part = part.strip()
                     if not part:
                         continue
-                    head = part.split()[0].upper() if part.split() else ""
-                    if head not in ("CONSTRAINT", "PRIMARY", "FOREIGN",
-                                    "UNIQUE", "CHECK", "EXCLUDE"):
-                        tables[table].add(part.split()[0].strip('"'))
+                    # Split the head token on "(" as well as whitespace: a table-level
+                    # constraint may be written `UNIQUE(client_id)` with no space, which a
+                    # whitespace-only split reads as a column literally named
+                    # "UNIQUE(client_id)". Again: an inflated column set masks real phantom
+                    # columns rather than inventing false ones, so it fails silently.
+                    head_token = re.split(r"[\s(]", part.strip(), 1)[0]
+                    if head_token.upper() not in ("CONSTRAINT", "PRIMARY", "FOREIGN",
+                                                  "UNIQUE", "CHECK", "EXCLUDE"):
+                        tables[table].add(head_token.strip('"'))
                     for c in CHECK_IN.finditer(part):
                         allowed = sorted(set(LITERAL.findall(c.group(2))))
                         if not allowed:
