@@ -991,9 +991,9 @@ export const DB_CHECK_VOCABULARIES: readonly DbColumnVocabulary[] = [
     table: "filing_artefacts",
     column: "artefact_type",
     constraints: [
-      { name: "filing_artefacts_artefact_type_check", values: ["CH_ACCOUNTS_XML", "CT600_XML", "IXBRL_ACCOUNTS", "IXBRL_CT_COMPUTATION", "PDF_ACCOUNTS", "PDF_CT_COMPUTATION"], migration: "20251214183122_29b44e21-74c0-421f-b785-5a9464f9df28.sql" },
+      { name: "filing_artefacts_artefact_type_check", values: ["CH_ACCOUNTS_XML", "CT600_XML", "HMRC_CT600_DELETE_REQUEST_XML", "HMRC_CT600_DELETE_RESPONSE_XML", "HMRC_CT600_FINAL_RESPONSE_XML", "HMRC_CT600_POLL_REQUEST_XML", "HMRC_CT600_POLL_RESPONSE_XML", "HMRC_CT600_SUBMIT_ACK_XML", "HMRC_CT600_SUBMIT_REQUEST_XML", "IXBRL_ACCOUNTS", "IXBRL_CT_COMPUTATION", "PDF_ACCOUNTS", "PDF_CT_COMPUTATION"], migration: "20260809160000_def_036_transport_jobs.sql" },
     ],
-    allowed: ["CH_ACCOUNTS_XML", "CT600_XML", "IXBRL_ACCOUNTS", "IXBRL_CT_COMPUTATION", "PDF_ACCOUNTS", "PDF_CT_COMPUTATION"],
+    allowed: ["CH_ACCOUNTS_XML", "CT600_XML", "HMRC_CT600_DELETE_REQUEST_XML", "HMRC_CT600_DELETE_RESPONSE_XML", "HMRC_CT600_FINAL_RESPONSE_XML", "HMRC_CT600_POLL_REQUEST_XML", "HMRC_CT600_POLL_RESPONSE_XML", "HMRC_CT600_SUBMIT_ACK_XML", "HMRC_CT600_SUBMIT_REQUEST_XML", "IXBRL_ACCOUNTS", "IXBRL_CT_COMPUTATION", "PDF_ACCOUNTS", "PDF_CT_COMPUTATION"],
     unreachable: [],
   },
   {
@@ -1642,6 +1642,33 @@ export const DB_CHECK_VOCABULARIES: readonly DbColumnVocabulary[] = [
       { name: "templates_type_check", values: ["automation", "checklist", "email", "job", "questionnaire", "task", "workpaper"], migration: "20251126132937_90e0abe2-d57b-4e6c-9762-d3898629dd48.sql" },
     ],
     allowed: ["automation", "checklist", "email", "job", "questionnaire", "task", "workpaper"],
+    unreachable: [],
+  },
+  {
+    table: "transport_jobs",
+    column: "channel",
+    constraints: [
+      { name: "transport_jobs_channel_check", values: ["ch", "hmrc_ct", "hmrc_vat"], migration: "20260809160000_def_036_transport_jobs.sql" },
+    ],
+    allowed: ["ch", "hmrc_ct", "hmrc_vat"],
+    unreachable: [],
+  },
+  {
+    table: "transport_jobs",
+    column: "operation",
+    constraints: [
+      { name: "transport_jobs_operation_check", values: ["delete", "poll"], migration: "20260809160000_def_036_transport_jobs.sql" },
+    ],
+    allowed: ["delete", "poll"],
+    unreachable: [],
+  },
+  {
+    table: "transport_jobs",
+    column: "status",
+    constraints: [
+      { name: "transport_jobs_status_check", values: ["cancelled", "completed", "failed", "processing", "queued"], migration: "20260809160000_def_036_transport_jobs.sql" },
+    ],
+    allowed: ["cancelled", "completed", "failed", "processing", "queued"],
     unreachable: [],
   },
   {
