@@ -43,11 +43,127 @@ CHECK_IN = re.compile(
 CONSTRAINT_NAME = re.compile(r"CONSTRAINT\s+(\w+)\s+CHECK", re.I)
 LITERAL = re.compile(r"'([^']*)'")
 
+CHECK_KW = re.compile(r"\bCHECK\s*\(", re.I)
+
+# A CHECK declares a VOCABULARY only when membership is its ENTIRE expression.
+#
+# The distinction matters because a same-row consistency rule legitimately contains a
+# membership test as one of its terms:
+#
+#   CHECK ((status IN ('completed','failed') AND completed_at IS NOT NULL)
+#       OR (status IN ('queued','processing')  AND completed_at IS NULL))
+#
+# That constrains the RELATIONSHIP between two columns. It does not say which values `status`
+# may hold. Reading its embedded lists as two rival vocabularies intersects them to nothing and
+# reports a perfectly well-formed column as self-contradicting — a false contradiction, in a
+# report whose entire value is that the count is zero.
+#
+# Matching the whole expression rather than scanning for `IN (` is what separates the two.
+# Anchored at both ends: any extra term, of any kind, means this is a rule and not a vocabulary.
+VOCAB_EXPR = re.compile(
+    r"""^\s*\(*\s*
+        (\w+)                                   # the column
+        \s*(?:::\s*\w+\s*)?\s*                  # optional cast
+        (?:
+            IN\s*\(\s*(?P<in>[^()]*?)\s*\)      # IN ('a','b')
+          |
+            =\s*ANY\s*\(\s*\(?\s*ARRAY\s*\[     # = ANY (ARRAY['a','b'])
+              (?P<arr>[^\]]*?)
+            \]\s*(?:::\s*[\w\s\[\]]+?\s*)?\)?\s*\)
+        )
+        \s*\)*\s*$""",
+    re.I | re.X,
+)
+
+
+def check_expressions(text):
+    """Yield the full inner expression of every CHECK in `text`, parens balanced."""
+    for m in CHECK_KW.finditer(text):
+        expr = body_of(text, m.end() - 1)
+        if expr:
+            yield expr
+
+
+def vocabulary_from_check(expr):
+    """(column, [values]) when this CHECK is purely a membership test; None when it is a rule."""
+    m = VOCAB_EXPR.match(expr.strip())
+    if not m:
+        return None
+    body = m.group("in") if m.group("in") is not None else m.group("arr")
+    values = sorted(set(LITERAL.findall(body or "")))
+    return (m.group(1), values) if values else None
+
+
+def strip_comments(sql):
+    """
+    Remove `--` line comments and `/* */` blocks, but NEVER inside a string literal.
+
+    Stripping only comments that start a line is not enough: a trailing comment such as
+    `journal_type TEXT DEFAULT 'MANUAL', -- MANUAL, REVERSING, YEAR_END` survives, and the
+    CREATE TABLE splitter then reads `MANUAL`, `REVERSING` and `YEAR_END` as column names.
+    Inflated column sets do not create false "missing column" findings — they do the more
+    dangerous thing and MASK real ones.
+
+    Naively stripping every `--` would corrupt any literal containing one, so this scans.
+    """
+    out, i, n = [], 0, len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "'":
+            out.append(ch)
+            i += 1
+            while i < n:
+                out.append(sql[i])
+                if sql[i] == "'":
+                    if i + 1 < n and sql[i + 1] == "'":   # escaped quote
+                        out.append(sql[i + 1])
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "-" and i + 1 < n and sql[i + 1] == "-":
+            while i < n and sql[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and sql[i + 1] == "*":
+            end = sql.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 
 def split_top_level(s):
-    """Split a CREATE TABLE body on commas that are not inside parentheses."""
-    out, depth, cur = [], 0, []
-    for ch in s:
+    """
+    Split a CREATE TABLE body on commas that are not inside parentheses OR string literals.
+
+    The quote tracking matters: a column defined as
+    `days jsonb DEFAULT '["mon","friday"]'::jsonb` contains a top-level-looking comma inside
+    the literal, and splitting on it yields a fragment whose head token becomes a column named
+    `friday"]'::JSONB`. As with the comment bug, a spurious extra column never creates a false
+    finding — it silently masks a real one.
+    """
+    out, depth, cur, inq, i = [], 0, [], False, 0
+    while i < len(s):
+        ch = s[i]
+        if inq:
+            cur.append(ch)
+            if ch == "'":
+                if i + 1 < len(s) and s[i + 1] == "'":   # escaped quote
+                    cur.append(s[i + 1])
+                    i += 2
+                    continue
+                inq = False
+            i += 1
+            continue
+        if ch == "'":
+            inq = True
+            cur.append(ch)
+            i += 1
+            continue
         if ch == "(":
             depth += 1
         elif ch == ")":
@@ -57,6 +173,7 @@ def split_top_level(s):
             cur = []
         else:
             cur.append(ch)
+        i += 1
     out.append("".join(cur))
     return out
 
@@ -95,8 +212,9 @@ def replay():
 
     for fn in files:
         src = open(os.path.join(MIG_DIR, fn), encoding="utf8", errors="replace").read()
-        # Strip line comments so commented-out DDL is never replayed.
-        src = re.sub(r"^\s*--.*$", "", src, flags=re.M)
+        # Strip comments so commented-out DDL is never replayed and trailing comments never
+        # leak into a CREATE TABLE column list.
+        src = strip_comments(src)
 
         # Build a position-ordered event list so a drop-then-re-add in one file resolves
         # the way Postgres would rather than the way the regexes happen to be ordered.
@@ -115,18 +233,24 @@ def replay():
                     part = part.strip()
                     if not part:
                         continue
-                    head = part.split()[0].upper() if part.split() else ""
-                    if head not in ("CONSTRAINT", "PRIMARY", "FOREIGN",
-                                    "UNIQUE", "CHECK", "EXCLUDE"):
-                        tables[table].add(part.split()[0].strip('"'))
-                    for c in CHECK_IN.finditer(part):
-                        allowed = sorted(set(LITERAL.findall(c.group(2))))
-                        if not allowed:
-                            continue
+                    # Split the head token on "(" as well as whitespace: a table-level
+                    # constraint may be written `UNIQUE(client_id)` with no space, which a
+                    # whitespace-only split reads as a column literally named
+                    # "UNIQUE(client_id)". Again: an inflated column set masks real phantom
+                    # columns rather than inventing false ones, so it fails silently.
+                    head_token = re.split(r"[\s(]", part.strip(), 1)[0]
+                    if head_token.upper() not in ("CONSTRAINT", "PRIMARY", "FOREIGN",
+                                                  "UNIQUE", "CHECK", "EXCLUDE"):
+                        tables[table].add(head_token.strip('"'))
+                    for expr in check_expressions(part):
+                        vocab = vocabulary_from_check(expr)
+                        if not vocab:
+                            continue          # a rule, not a vocabulary
+                        col, allowed = vocab
                         nm = CONSTRAINT_NAME.search(part)
-                        name = nm.group(1) if nm else f"{table}_{c.group(1)}_check"
+                        name = nm.group(1) if nm else f"{table}_{col}_check"
                         live[(table, name)] = {"table": table, "constraint": name,
-                                               "column": c.group(1), "allowed": allowed,
+                                               "column": col, "allowed": allowed,
                                                "migration": fn}
             else:
                 table, rest = m.group(1), m.group(2)
@@ -137,14 +261,15 @@ def replay():
                 # Drops first: an ALTER that drops and re-adds the same name is a redefinition.
                 for c in DROP_CONSTRAINT.finditer(rest):
                     live.pop((table, c.group(1)), None)
-                for c in CHECK_IN.finditer(rest):
-                    allowed = sorted(set(LITERAL.findall(c.group(2))))
-                    if not allowed:
-                        continue
+                for expr in check_expressions(rest):
+                    vocab = vocabulary_from_check(expr)
+                    if not vocab:
+                        continue              # a rule, not a vocabulary
+                    col, allowed = vocab
                     nm = CONSTRAINT_NAME.search(rest)
-                    name = nm.group(1) if nm else f"{table}_{c.group(1)}_check"
+                    name = nm.group(1) if nm else f"{table}_{col}_check"
                     live[(table, name)] = {"table": table, "constraint": name,
-                                           "column": c.group(1), "allowed": allowed,
+                                           "column": col, "allowed": allowed,
                                            "migration": fn}
 
     return tables, list(live.values())

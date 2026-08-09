@@ -1,9 +1,15 @@
 -- =====================================================================================
 -- DEF-036 — transport_jobs: give HMRC follow-up work a table whose shape fits it.
 -- =====================================================================================
--- PART 1 OF 2. This migration is PURELY ADDITIVE and changes no existing behaviour. The CT
--- pipeline does NOT work after applying it. Part 2 rewrites hmrc-ct-submit, hmrc-ct-poll and
--- hmrc-ct-delete to produce and consume these rows. Until that lands, nothing reads this table.
+-- NOT ADDITIVE, AND NOT RELEASABLE ALONE. An earlier draft of this header called the migration
+-- "purely additive". That was wrong: §7 DROPS and REPLACES filing_artefacts_artefact_type_check.
+-- Adding a table does not make the whole migration additive, and describing it that way would
+-- have understated what an operator was being asked to apply.
+--
+-- This migration is one internal stage of the CT recovery and MUST NOT be applied on its own.
+-- Applying it alone would give the database an unused transport subsystem and an altered
+-- artefact vocabulary with no application cutover behind either. It ships when the producers,
+-- consumers, tests, deployment controls and cutover ship — as one releasable change.
 --
 -- THE DEFECT THIS ADDRESSES IS A CATEGORY ERROR, NOT A SET OF TYPOS. `filing_queue` carries
 -- `snapshot_hash NOT NULL`, `approval_id` and a snapshot-derived idempotency key — the
@@ -74,10 +80,19 @@ CREATE TABLE public.transport_jobs (
   filing_submission_id uuid NOT NULL REFERENCES public.filing_submissions(id) ON DELETE CASCADE,
   filing_id            uuid NOT NULL REFERENCES public.filings(id) ON DELETE CASCADE,
 
-  -- HMRC's handle on the submission. NOT NULL by design: today hmrc-ct-poll:363 handles a
-  -- missing correlation id by marking the job failed, which is a state that cannot arise if
-  -- the column requires one.
-  correlation_id       text NOT NULL,
+  -- INTERNAL identity, established BEFORE any external call. Deterministic, derived only from
+  -- facts known at enqueue time: '<operation>:<filing_submission_id>'. This is the primary
+  -- idempotency guarantee precisely because it does not depend on anything HMRC has told us.
+  idempotency_key      text NOT NULL,
+
+  -- EXTERNAL identity. HMRC's handle, and NULLABLE because it does not exist until an
+  -- acknowledgement comes back. An earlier draft made this NOT NULL and keyed idempotency on
+  -- (correlation_id, operation), which was wrong in the most dangerous direction: the window
+  -- before acknowledgement is exactly when a duplicate submission can be issued, and a key
+  -- that does not exist yet cannot prevent one. Postgres also permits multiple NULLs in a
+  -- UNIQUE constraint, so that key would have silently stopped constraining anything the
+  -- moment the column was made nullable to accommodate reality.
+  correlation_id       text,
 
   -- `operation` and `channel` are SEPARATE. filing_type = 'CT600_HMRC_DELETE' conflated "what
   -- kind of filing" with "what operation"; splitting them is what stops that recurring.
@@ -94,6 +109,9 @@ CREATE TABLE public.transport_jobs (
   max_attempts         integer NOT NULL DEFAULT 100 CHECK (max_attempts > 0),
   next_attempt_at      timestamptz NOT NULL DEFAULT now(),
   claimed_at           timestamptz,
+  -- Lease identity. Without it, "who is holding this job" is unanswerable and a stale-claim
+  -- sweep cannot distinguish a crashed worker from a slow one.
+  claimed_by           text,
   last_attempt_at      timestamptz,
   completed_at         timestamptz,
 
@@ -111,24 +129,74 @@ CREATE TABLE public.transport_jobs (
   created_at           timestamptz NOT NULL DEFAULT now(),
   updated_at           timestamptz NOT NULL DEFAULT now(),
 
-  -- IDEMPOTENCY. One live job per operation per correlation id. A retried acknowledgement
-  -- cannot create a second poll job, and a re-delivered response cannot create a second delete
-  -- job. This is enforced by the database rather than by the caller remembering to check.
-  CONSTRAINT transport_jobs_idempotent UNIQUE (correlation_id, operation),
-
-  -- Two further invariants are enforced by a TRIGGER below rather than by CHECK constraints:
-  --   * a completed/failed/cancelled job must record when it finished, and a live one must not;
-  --   * only a claimed job may be `processing`, so no row sits in `processing` without a lease.
+  -- IDEMPOTENCY, in three layers, none of which can be evaded by a NULL.
   --
-  -- They are triggers deliberately. Written as CHECKs they would read
-  -- `CHECK (status IN ('completed','failed','cancelled') AND completed_at IS NOT NULL) OR ...`,
-  -- and the vocabulary generator would parse that embedded `status IN (...)` as a VOCABULARY
-  -- rather than as a relationship between two columns — intersecting the arms to nothing and
-  -- reporting this column as self-contradicting when it is perfectly well formed. A false
-  -- contradiction in that report is expensive: the whole point of it is that the count is zero.
-  -- The invariant is worth keeping; the parser confusion is not.
+  -- 1. The internal key. Non-null, deterministic, known before the first external call.
+  CONSTRAINT transport_jobs_idempotency_key_uniq UNIQUE (idempotency_key),
+  --
+  -- 2. THE INVARIANT THAT MATTERS: at most one transport job per operation per immutable
+  --    filing submission version. Both columns are NOT NULL, so unlike a correlation-based key
+  --    there is no NULL through which a duplicate can pass. Two concurrent requests to enqueue
+  --    a poll for the same submission produce one row and one 23505 — the loser learns it lost
+  --    rather than issuing a second call to HMRC.
+  CONSTRAINT transport_jobs_one_per_submission_operation
+    UNIQUE (filing_submission_id, operation),
+  --
+  -- 3. The external key, enforced only once it exists. A partial index rather than a
+  --    constraint, because the column is legitimately NULL before acknowledgement and a plain
+  --    UNIQUE would permit unlimited NULL rows.
+  --    (Created below as transport_jobs_correlation_uniq — a partial index cannot be a
+  --     table constraint.)
+
+  -- Same-row consistency rules, declarative. A CHECK is preferable to a trigger here: it is
+  -- visible to schema tooling, enforced uniformly by every write path including bulk loads and
+  -- direct SQL, and cannot be disabled per-session the way a trigger can.
+  --
+  -- These embed `status IN (...)` as one TERM of a rule. That is not a vocabulary declaration,
+  -- and the vocabulary generator now understands the difference by matching the whole check
+  -- expression rather than scanning for `IN (`. The schema is written the way the schema should
+  -- be written; the parser was corrected to read it.
+
+  -- A finished job must record when it finished; a live one must not claim to have.
+  CONSTRAINT transport_jobs_completion_consistent CHECK (
+    (status IN ('completed','failed','cancelled') AND completed_at IS NOT NULL)
+    OR (status IN ('queued','processing') AND completed_at IS NULL)
+  ),
+
+  -- Only a claimed job may be `processing`. A row in `processing` with no lease cannot be
+  -- recovered by the stale-claim sweep, which keys on claimed_at — that is how a job strands
+  -- forever with no error.
+  CONSTRAINT transport_jobs_processing_is_claimed CHECK (
+    status <> 'processing' OR claimed_at IS NOT NULL
+  ),
+
   CONSTRAINT transport_jobs_max_attempts_sane CHECK (attempts <= max_attempts + 1)
 );
+
+-- The external key, enforced only where it exists. See layer 3 above.
+CREATE UNIQUE INDEX transport_jobs_correlation_uniq
+  ON public.transport_jobs (correlation_id, operation)
+  WHERE correlation_id IS NOT NULL;
+
+-- The internal key is DERIVED, not supplied, so a caller cannot weaken it by passing something
+-- non-deterministic. Two enqueues of the same operation for the same submission version compute
+-- the same key by construction.
+ALTER TABLE public.transport_jobs
+  ALTER COLUMN idempotency_key SET DEFAULT NULL;
+
+CREATE OR REPLACE FUNCTION public.transport_jobs_derive_idempotency_key()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.idempotency_key := NEW.operation || ':' || NEW.filing_submission_id::text;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER transport_jobs_derive_key
+  BEFORE INSERT ON public.transport_jobs
+  FOR EACH ROW EXECUTE FUNCTION public.transport_jobs_derive_idempotency_key();
 
 COMMENT ON TABLE public.transport_jobs IS
   'HMRC follow-up work (poll, delete). Worker execution state only — never filing state and never HMRC submission state. See docs/design/ct-transport-recovery.md. DEF-036.';
@@ -150,35 +218,6 @@ CREATE INDEX transport_jobs_claimed_idx
 CREATE INDEX transport_jobs_submission_idx
   ON public.transport_jobs (filing_submission_id);
 
-
--- Invariants that would confuse the vocabulary parser if written as CHECK constraints.
--- Enforced for real, at the same moment a CHECK would fire.
-CREATE OR REPLACE FUNCTION public.transport_jobs_enforce_invariants()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  IF NEW.status IN ('completed','failed','cancelled') AND NEW.completed_at IS NULL THEN
-    RAISE EXCEPTION 'transport_jobs: a % job must record completed_at.', NEW.status
-      USING ERRCODE = 'check_violation';
-  END IF;
-  IF NEW.status IN ('queued','processing') AND NEW.completed_at IS NOT NULL THEN
-    RAISE EXCEPTION 'transport_jobs: a % job must not have completed_at set.', NEW.status
-      USING ERRCODE = 'check_violation';
-  END IF;
-  -- A row in `processing` with no lease cannot be recovered by the stale-claim sweep, which
-  -- keys on claimed_at. That is how a job strands forever with no error.
-  IF NEW.status = 'processing' AND NEW.claimed_at IS NULL THEN
-    RAISE EXCEPTION 'transport_jobs: a processing job must hold a claim (claimed_at).'
-      USING ERRCODE = 'check_violation';
-  END IF;
-  RETURN NEW;
-END $$;
-
-CREATE TRIGGER transport_jobs_invariants
-  BEFORE INSERT OR UPDATE ON public.transport_jobs
-  FOR EACH ROW EXECUTE FUNCTION public.transport_jobs_enforce_invariants();
 
 -- -------------------------------------------------------------------------------------
 -- §2  RLS — org-scoped, matching filing_queue.
@@ -207,7 +246,8 @@ CREATE POLICY transport_jobs_org_access ON public.transport_jobs
 
 CREATE OR REPLACE FUNCTION public.claim_transport_job(
   p_job_id       uuid,
-  p_stale_before timestamptz
+  p_stale_before timestamptz,
+  p_worker_id    text DEFAULT NULL
 )
 RETURNS SETOF public.transport_jobs
 LANGUAGE sql
@@ -217,6 +257,7 @@ AS $$
   UPDATE public.transport_jobs
      SET status          = 'processing',
          claimed_at      = now(),
+         claimed_by      = COALESCE(p_worker_id, 'unknown'),
          last_attempt_at = now(),
          attempts        = attempts + 1,
          updated_at      = now()
@@ -227,7 +268,7 @@ AS $$
   RETURNING *;
 $$;
 
-COMMENT ON FUNCTION public.claim_transport_job(uuid, timestamptz) IS
+COMMENT ON FUNCTION public.claim_transport_job(uuid, timestamptz, text) IS
   'Atomically claim one transport job. Returns zero rows if another worker won, if the job is not due, or if a live claim is held. Never raises for a lost race — losing is the normal case. DEF-036.';
 
 -- -------------------------------------------------------------------------------------
@@ -261,6 +302,13 @@ BEGIN
   IF v_job.id IS NULL THEN
     RAISE EXCEPTION 'release_transport_job: no such job %', p_job_id;
   END IF;
+  -- Worker authority. These functions are SECURITY DEFINER and bypass RLS, so EXECUTE is
+  -- granted to service_role only; this is the second gate, in case a grant is ever widened.
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'release_transport_job: worker-only function.'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
   IF v_job.status <> 'processing' THEN
     RAISE EXCEPTION 'release_transport_job: job % is %, not processing. Releasing a job you do not hold would clear another worker''s claim.', p_job_id, v_job.status;
   END IF;
@@ -374,9 +422,17 @@ RETURNS TABLE (
   stale_claims     bigint
 )
 LANGUAGE sql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+  -- TENANCY. This is SECURITY DEFINER, so RLS on transport_jobs does NOT apply and the filter
+  -- must be explicit. An earlier draft omitted it and aggregated every organisation's jobs for
+  -- any authenticated caller — a cross-tenant leak introduced by the very function meant to
+  -- make the pipeline observable.
+  --
+  -- COUNTS ONLY. No correlation_id, no error_message, no metadata, no filing or client
+  -- identifiers. "How much work is stuck" is answerable without exposing what the work is.
   SELECT t.channel, t.operation, t.status,
          count(*),
          min(t.created_at),
@@ -384,13 +440,17 @@ AS $$
          count(*) FILTER (WHERE t.status = 'processing'
                             AND t.claimed_at < now() - interval '10 minutes')
     FROM public.transport_jobs t
+   WHERE t.organization_id IN (
+           SELECT ou.organization_id FROM public.organization_users ou
+            WHERE ou.user_id = auth.uid()
+         )
    GROUP BY t.channel, t.operation, t.status;
 $$;
 
 REVOKE ALL ON FUNCTION public.mcp_transport_job_health() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mcp_transport_job_health() TO authenticated, service_role;
-REVOKE ALL ON FUNCTION public.claim_transport_job(uuid, timestamptz) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.claim_transport_job(uuid, timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.claim_transport_job(uuid, timestamptz, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.claim_transport_job(uuid, timestamptz, text) TO service_role;
 REVOKE ALL ON FUNCTION public.release_transport_job(uuid, text, text, text, integer, jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.release_transport_job(uuid, text, text, text, integer, jsonb) TO service_role;
 REVOKE ALL ON FUNCTION public.recover_stale_transport_jobs(timestamptz) FROM PUBLIC, anon;
@@ -437,8 +497,24 @@ BEGIN
     RAISE EXCEPTION 'DEF-036 post-assert failed: transport_jobs.status DEFAULT is not queued. Producer and consumer must share one literal.';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='transport_jobs_idempotent') THEN
-    RAISE EXCEPTION 'DEF-036 post-assert failed: the idempotency constraint is missing — a retried acknowledgement could create a second poll job.';
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname='transport_jobs_one_per_submission_operation') THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: the per-submission idempotency invariant is missing — two jobs could submit the same immutable filing submission version.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                 WHERE conname='transport_jobs_idempotency_key_uniq') THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: the internal idempotency key is not unique.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                 WHERE schemaname='public' AND indexname='transport_jobs_correlation_uniq') THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: the partial correlation index is missing.';
+  END IF;
+  -- correlation_id MUST remain nullable. A NOT NULL here would force callers to invent a value
+  -- before HMRC supplies one, which is how a fake correlation enters the audit trail.
+  IF (SELECT is_nullable FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='transport_jobs'
+        AND column_name='correlation_id') <> 'YES' THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: correlation_id is NOT NULL. It does not exist until acknowledgement.';
   END IF;
 
   FOR i IN 1..1 LOOP
@@ -486,6 +562,30 @@ BEGIN
       WHERE conname='filing_artefacts_artefact_type_check')
      NOT LIKE '%HMRC_CT600_SUBMIT_REQUEST_XML%' THEN
     RAISE EXCEPTION 'DEF-036 post-assert failed: artefact_type still rejects the HMRC transport types.';
+  END IF;
+
+  -- The observability projection must filter by organisation. It is SECURITY DEFINER, so
+  -- omitting the filter leaks every tenant's queue depth to any authenticated caller.
+  IF (SELECT prosrc FROM pg_proc
+      WHERE proname='mcp_transport_job_health' AND pronamespace='public'::regnamespace)
+     NOT LIKE '%organization_users%' THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: mcp_transport_job_health does not filter by organisation.';
+  END IF;
+  -- ...and must not expose payload or external identifiers.
+  IF (SELECT prosrc FROM pg_proc
+      WHERE proname='mcp_transport_job_health' AND pronamespace='public'::regnamespace)
+     LIKE '%correlation_id%' THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: mcp_transport_job_health exposes correlation ids.';
+  END IF;
+  -- Every SECURITY DEFINER function here must pin search_path.
+  IF EXISTS (
+    SELECT 1 FROM pg_proc
+     WHERE pronamespace='public'::regnamespace AND prosecdef
+       AND proname IN ('claim_transport_job','release_transport_job',
+                       'recover_stale_transport_jobs','mcp_transport_job_health')
+       AND (proconfig IS NULL OR NOT (proconfig::text LIKE '%search_path%'))
+  ) THEN
+    RAISE EXCEPTION 'DEF-036 post-assert failed: a SECURITY DEFINER function has no pinned search_path.';
   END IF;
 
   RAISE NOTICE 'DEF-036 post-assertions passed: transport_jobs created with atomic claim, lease recovery, bounded retry and idempotency; filing_queue untouched; artefact vocabulary corrected.';
