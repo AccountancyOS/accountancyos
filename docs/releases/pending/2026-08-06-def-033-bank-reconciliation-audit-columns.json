@@ -1,0 +1,140 @@
+{
+  "release_id": "2026-08-06-def-033-bank-reconciliation-audit-columns",
+  "release_kind": "attestation-based",
+  "status": "declared-not-applied",
+  "declared_at": "2026-08-06T00:00:00Z",
+  "widened_at": "2026-08-09T00:00:00Z",
+  "approver": "leon@bluetickaccountants.com",
+  "summary": "DEF-033. Bank reconciliation has never worked. Four functions write columns that do not exist, so every call raises 42703 and the whole statement rolls back. Adds four nullable columns across two tables and re-issues the four bodies. No data is modified or backfilled.",
+  "convention_reference": "docs/releases/production-release-convention.md + docs/releases/executor-instruction-contract.md",
+
+  "problem": {
+    "defect": "start_bank_reconciliation, complete_bank_reconciliation, reopen_bank_reconciliation and revalue_bank_account_fx all close with an INSERT into public.bookkeeping_audit_log naming client_id, company_id and performed_by (revalue_bank_account_fx also names payload). That table has none of them.",
+    "consequence": "No bank reconciliation has ever been started, completed or reopened, and no FX revaluation has ever been posted.",
+    "confirmed_against_live": "2026-08-05/06 — SELECT performed_by FROM bookkeeping_audit_log and SELECT client_id FROM bookkeeping_audit_log both return 'column does not exist'. Not inferred from git.",
+    "how_found": "Statically, by scripts/audit-phantom-columns.py. Not by execution — invisible to runtime probing because an earlier error masked it. Bank reconciliation appears nowhere in the launch-readiness defect register.",
+    "second_defect": "Added 2026-08-09. revalue_bank_account_fx writes TWO broken statements, not one. One line before the audit-log INSERT it runs INSERT INTO public.journals (... source_type, source_id ...), and journals has neither column. Repairing only the audit-log write would have left FX revaluation failing exactly as before, one statement earlier — a fix that passes its own post-assertions and changes nothing observable.",
+    "how_the_second_was_found": "The sweep was re-run AGAINST THIS MIGRATION and still reported the function as defective. That is the argument for keeping the detector in the loop rather than trusting the repair."
+  },
+
+  "design_decisions": [
+    "The repair is not uniform. Four phantom names, three treatments: performed_by MAPPED to the existing actor_id; payload MAPPED to the existing metadata; client_id and company_id ADDED because they are genuinely absent and genuinely distinct.",
+    "performed_by -> actor_id, payload -> metadata: the table already has the canonical columns and stamp_portal_provenance already writes actor_id. Adding rivals beside them would give one concept two columns and no rule for which wins.",
+    "client_id/company_id added: the audit log is scoped only by organization_id, so 'show me everything done on client X' cannot be answered — entity_id does not resolve for a reconciliation, whose entity is the reconciliation itself. A practice audit trail must be answerable by client.",
+    "journals.source_type/source_id added mirroring ledger_entries, which has carried exactly this pair since 20251127012417 (MANUAL, JOURNAL, BANK_FEED, INVOICE, RULE, IMPORT, ADJUSTMENT). journals is the header for those entries and was never given the same pair. This copies an established shape rather than proposing a new one, and the migration asserts the original still exists.",
+    "All four added columns are NULLABLE and NOT backfilled. Existing rows genuinely have no client dimension and no recorded provenance; inventing one would fabricate audit history.",
+    "No DEFAULT on journals.source_type — defaulting to 'MANUAL' would assert a provenance for rows whose provenance is simply unrecorded.",
+    "No CHECK constraint on journals.source_type. ledger_entries.source_type documents its vocabulary in a comment and constrains nothing; adding a constraint to only one of the pair would put two different rules on one concept. When that vocabulary is ruled on, both get the same constraint in the same migration.",
+    "Indexed: filtering an audit log by client, and finding every journal a bank account generated, are the questions these columns exist to answer, and both table-scan a log that only grows."
+  ],
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260806100000_def_033_bank_reconciliation_audit_columns.sql",
+      "sha256": "61be121fe9380fef5978e77173844c85224d71de6a71b7b3e242fb65cbd90f37",
+      "adds_columns": [
+        "bookkeeping_audit_log.client_id (uuid, nullable, FK clients)",
+        "bookkeeping_audit_log.company_id (uuid, nullable, FK companies)",
+        "journals.source_type (text, nullable, no default, no CHECK)",
+        "journals.source_id (uuid, nullable, no FK — target table varies by source_type)"
+      ],
+      "adds_indexes": [
+        "bookkeeping_audit_log_client_idx",
+        "bookkeeping_audit_log_company_idx",
+        "journals_source_idx"
+      ],
+      "reissues_functions": [
+        "start_bank_reconciliation",
+        "complete_bank_reconciliation",
+        "reopen_bank_reconciliation",
+        "revalue_bank_account_fx"
+      ]
+    }
+  ],
+
+  "authoring_method": "The four bodies were EXTRACTED from their defining migrations (20260609103337, 20260609113058) and edited programmatically against asserted anchors — each substitution had to match exactly once or the generator aborted. Nothing was retyped. This follows the rule the DEF-029 receipt set after that regression: never re-author a large body by hand.",
+
+  "guarded_by": "src/test/regression/def-033-bank-reconciliation-audit-columns.test.ts (23 tests), static over the migration. The class is additionally enforced by scripts/audit-phantom-columns.py, asserted live by the same test file.",
+
+  "limitation": "STATICALLY VALIDATED ONLY — this migration has not been executed against Postgres. The four bodies were extracted from GIT, not from LIVE, because the database connector was unavailable at authoring time. Two functions are already known to exist on production in no migration (email_queue_dispatch, email_queue_wake), so git and live are known to diverge. BEFORE APPLYING, the four live bodies must be diffed against the four here; if any differs, this migration is redeclared rather than applied. The post-assertions catch a wrong END state but cannot detect that a body was silently reverted to an older revision.",
+
+  "pre_apply_requirement": {
+    "step": "Diff the four LIVE function bodies against the four in this migration before applying.",
+    "sql": "SELECT proname, md5(prosrc) FROM pg_proc WHERE proname IN ('start_bank_reconciliation','complete_bank_reconciliation','reopen_bank_reconciliation','revalue_bank_account_fx') AND pronamespace='public'::regnamespace ORDER BY proname;",
+    "note": "Units matter. This is md5(prosrc), the body only — NOT md5(pg_get_functiondef(oid)), which includes the signature and options. A previous release lost time to that mismatch.",
+    "on_divergence": "Redeclare this migration against the live bodies. Do not apply."
+  },
+
+  "post_publish_verification": {
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Every check must pass before this release may move out of pending.",
+    "checks": [
+      {
+        "id": "audit-log-columns-added-nullable",
+        "sql": "SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='bookkeeping_audit_log' AND column_name IN ('client_id','company_id');",
+        "expect": "two rows, both is_nullable = YES"
+      },
+      {
+        "id": "no-phantom-column-was-created-as-a-shortcut",
+        "sql": "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='bookkeeping_audit_log' AND column_name IN ('performed_by','payload');",
+        "expect": "zero rows — their presence would mean the mapping was bypassed"
+      },
+      {
+        "id": "journals-provenance-pair-added",
+        "sql": "SELECT column_name, is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='journals' AND column_name IN ('source_type','source_id');",
+        "expect": "two rows, both is_nullable = YES, both column_default NULL"
+      },
+      {
+        "id": "bodies-repaired",
+        "sql": "SELECT proname, prosrc LIKE '%performed_by%' AS has_performed_by, prosrc LIKE '%actor_id%' AS has_actor_id FROM pg_proc WHERE proname IN ('start_bank_reconciliation','complete_bank_reconciliation','reopen_bank_reconciliation','revalue_bank_account_fx') AND pronamespace='public'::regnamespace;",
+        "expect": "four rows, has_performed_by false and has_actor_id true for every one"
+      },
+      {
+        "id": "fx-body-repaired-both-ways",
+        "sql": "SELECT prosrc LIKE '%payload%' AS has_payload, prosrc LIKE '%source_type%' AS has_source_type FROM pg_proc WHERE proname='revalue_bank_account_fx' AND pronamespace='public'::regnamespace;",
+        "expect": "has_payload false, has_source_type true"
+      },
+      {
+        "id": "no-overload",
+        "sql": "SELECT proname, count(*) FROM pg_proc WHERE proname IN ('start_bank_reconciliation','complete_bank_reconciliation','reopen_bank_reconciliation','revalue_bank_account_fx') AND pronamespace='public'::regnamespace GROUP BY proname;",
+        "expect": "each count = 1 (the DEF-002 failure mode)"
+      },
+      {
+        "id": "behavioural-a-reconciliation-can-now-be-started",
+        "note": "The only check that proves the feature works rather than that the schema changed. UI success is not delivery (Gate 6).",
+        "sql": "SELECT public.start_bank_reconciliation(<bank_account_id>, <statement_start>, <statement_end>, <closing_balance>);",
+        "expect": "returns a reconciliation id; a row appears in public.reconciliations and in public.bookkeeping_audit_log with actor_id set"
+      }
+    ]
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "target_production_project": "moxpdejnucjjcplleefn",
+    "exact_migration_filename": "20260806100000_def_033_bank_reconciliation_audit_columns.sql",
+    "expected_sha256": "61be121fe9380fef5978e77173844c85224d71de6a71b7b3e242fb65cbd90f37",
+    "permitted_actions": [
+      "Run the pre_apply_requirement diff and return raw output.",
+      "Apply that exact migration verbatim, only if the diff matches."
+    ],
+    "prohibited_actions": [
+      "No code or documentation changes",
+      "No edits to the migration",
+      "No additional grants, roles or schema changes",
+      "No other migrations",
+      "Do not add performed_by or payload columns as a shortcut"
+    ],
+    "required_raw_output": "The pre-apply md5 diff, then every post_publish_verification check, as raw output.",
+    "stop_conditions": [
+      "The SHA-256 differs from the expected value",
+      "Any live function body diverges from the one declared here",
+      "Any precondition RAISE EXCEPTION fires",
+      "The Cloud executor returns 42501"
+    ]
+  },
+
+  "explicitly_out_of_scope": {
+    "reverse_journal": "Writes journals.status, but journals records posting state as the boolean is_posted. Whether journals gain a status vocabulary or the function uses is_posted is a design decision. HELD FOR A RULING.",
+    "revert_bank_rule_application": "Writes reversal_reason, reversed_at, reversed_by, while journals already has is_reversed, reverse_date, reversal_date and reverses_journal_id. Four rival spellings of one concept; needs a ruling, not another column. HELD FOR A RULING."
+  }
+}
