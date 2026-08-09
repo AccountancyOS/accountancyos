@@ -44,8 +44,13 @@ A single `disposal_date` field cannot express this. If it holds completion, the 
 the wrong SA year. If it holds exchange, the statutory 60-day deadline is wrong — and that one
 carries a penalty.
 
-Roughly one in six residential transactions exchanges and completes either side of 5 April, so
-this is not an edge case.
+**How often this happens is not quantified here.** An earlier draft of this document asserted
+"roughly one in six residential transactions", which was unsupported and has been removed. Any
+transaction exchanging in late March and completing in April is affected; the exchange-to-
+completion gap is typically a few weeks, so the affected share is small but not negligible. If a
+figure is needed to justify the work, it should come from the firm's own transaction data, not
+from an estimate. The correctness argument does not depend on frequency: a single straddling
+disposal filed into the wrong tax year is a wrong return.
 
 ### 1.4 Recommendation
 
@@ -146,8 +151,9 @@ no special-casing.
 | `exchange_date` | date | ✔ | s28(1) — drives the tax year |
 | `completion_date` | date | ✔ | FA 2019 Sch 2 — drives the 60-day deadline |
 | `is_conditional_contract` | bool | ✔ | default false |
-| `condition_satisfied_date` | date | if conditional | s28(2) — **overrides** exchange for the tax year |
-| `disposal_tax_year` | text | ✔ | Stored, e.g. `2025-26`. Derived on write, not at query time — the 6 April boundary makes this a constant filter. |
+| `condition_satisfied_date` | date | if conditional | s28(2) condition-precedent satisfaction |
+| `statutory_disposal_date` | date | ✔ | **GENERATED, not entered.** See §3.3. |
+| `disposal_tax_year` | text | ✔ | **GENERATED from `statutory_disposal_date`.** Not independently editable. See §3.3. |
 | **Property snapshot (immutable once finalised)** | | | |
 | `property_address_line1` … `property_postcode` | text | ✔ | Structured, not one blob — HMRC requires them separately |
 | `property_uprn` | text | | Where known |
@@ -180,6 +186,72 @@ no special-casing.
 
 **No UNIQUE constraint on any business field.** The only unique key is `job_id`, which is the
 job's own identity. Two identical disposals are two jobs, by design.
+
+### 3.3 The tax year cannot be allowed to disagree with the legal facts
+
+Owner ruling: `disposal_tax_year` must not be an independently editable fact stored merely
+because it joins conveniently. It is a *conclusion*, and a stored conclusion that can drift from
+its premises is how a gain ends up on the wrong return with nothing failing.
+
+**Both derived fields are generated columns, so drift is not merely discouraged — it is
+unrepresentable.**
+
+```sql
+-- The statutory disposal date. TCGA 1992 s28(1) for the ordinary case; s28(2) where the
+-- contract is conditional. There is no third rule, so there is no third branch.
+statutory_disposal_date date GENERATED ALWAYS AS (
+  CASE WHEN is_conditional_contract THEN condition_satisfied_date
+       ELSE exchange_date END
+) STORED,
+
+-- The UK tax year containing that date. The 6 April boundary, expressed once.
+disposal_tax_year text GENERATED ALWAYS AS (
+  CASE
+    WHEN <statutory date> IS NULL THEN NULL
+    WHEN EXTRACT(MONTH FROM d) > 4
+      OR (EXTRACT(MONTH FROM d) = 4 AND EXTRACT(DAY FROM d) >= 6)
+    THEN to_char(d, 'YYYY') || '-' || to_char(d + interval '1 year', 'YY')
+    ELSE to_char(d - interval '1 year', 'YYYY') || '-' || to_char(d, 'YY')
+  END
+) STORED,
+```
+
+Generated columns are indexable, so the join key requirement is met with no separate fact to
+keep in step. Nothing can write `disposal_tax_year` directly — Postgres rejects the attempt.
+
+Two supporting constraints:
+
+```sql
+-- A conditional contract must say when the condition was satisfied; an unconditional one
+-- must not pretend it had one.
+CONSTRAINT cgt_conditional_date_present CHECK (
+  (is_conditional_contract AND condition_satisfied_date IS NOT NULL)
+  OR (NOT is_conditional_contract AND condition_satisfied_date IS NULL)
+),
+-- A condition cannot be satisfied before the contract exists.
+CONSTRAINT cgt_condition_after_exchange CHECK (
+  condition_satisfied_date IS NULL OR exchange_date IS NULL
+  OR condition_satisfied_date >= exchange_date
+)
+```
+
+The Self Assessment link is then validated against `disposal_tax_year`, which is validated
+against the legal facts by construction. There is one path from contract to return.
+
+### 3.4 UI: default to unconditional, and warn
+
+The conditional-contract branch is legally narrow and easy to over-claim. An ordinary
+contractual obligation — a seller agreeing to fix a defect, a buyer arranging finance — is **not**
+a condition precedent. Getting this wrong moves the disposal into the wrong tax year.
+
+- The form defaults to **unconditional**. `condition_satisfied_date` is not rendered at all
+  until "conditional contract" is selected.
+- Selecting it reveals an inline warning: *"A condition precedent suspends the contract until it
+  is met. Ordinary obligations such as repairs, finance or vacant possession are usually not
+  conditions precedent. If in doubt, treat the contract as unconditional and take advice — this
+  choice changes which tax year the gain falls in."*
+- Selecting it sets `conditional_treatment_confirmed_by` and `..._at`. The choice is a
+  professional judgement and is recorded as one.
 
 ---
 
@@ -217,27 +289,69 @@ Generated by an explicit function called from job creation, **not by a trigger o
 table**. The existing `on_cgt_disposal_date_changed` trigger fires on
 `client_detail_cgt.disposal_date` and is retired entirely (§6).
 
-### 4.2 Workpaper — one instance, two jobs
+### 4.2 Workpaper — one instance, one owner, many references
 
-`workpaper_instances.job_id` is a single FK, so a workpaper belongs to one job. Your requirement
-is one source of truth surfaced in two places, which that column cannot express.
+Owner ruling: **reuse `workpaper_instances.job_id` as the owning job.** An earlier draft proposed
+an `owner`/`referenced` role on the link table, which would have created a second way to express
+ownership competing with the FK that already expresses it — the same "one concept, two homes"
+failure this whole programme exists to close. Withdrawn.
 
-**Proposal: `workpaper_instance_links`**
+**Ownership is `workpaper_instances.job_id`. It is `NOT NULL`, so every workpaper has exactly one
+owner, guaranteed by the column, not by an index.** That is the point you made about partial
+unique indexes: they guarantee *at most one*, never *exactly one*. A `NOT NULL` FK guarantees
+exactly one and needs no index to do it.
 
-| Field | Notes |
-|---|---|
-| `workpaper_instance_id` | FK |
-| `job_id` | FK |
-| `role` | `owner` \| `referenced` — exactly one `owner` per instance, enforced by a partial unique index |
-| `linked_at`, `linked_by` | audit |
-| `link_reason` | e.g. `cgt_disposal_in_sa_year` |
+**References only:**
 
-The CGT job holds the `owner` link. The SA job holds a `referenced` link. **There is one row in
-`workpaper_instances`.** Both jobs open the same record; an edit from either surface is the same
-edit, and the existing `field_values` / audit trail covers it with no synchronisation logic —
-because there is nothing to synchronise.
+```
+workpaper_instance_references
+  workpaper_instance_id  uuid NOT NULL REFERENCES workpaper_instances(id) ON DELETE CASCADE
+  referencing_job_id     uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE
+  reference_reason       text NOT NULL      -- e.g. 'cgt_disposal_in_sa_year'
+  linked_at, linked_by
+  PRIMARY KEY (workpaper_instance_id, referencing_job_id)
 
-`workpaper_instances.job_id` stays as the owner pointer for backward compatibility.
+  CONSTRAINT reference_is_not_ownership CHECK (...)   -- see below
+```
+
+Three properties fall out:
+
+1. **A reference cannot masquerade as ownership.** The table has no role column and no way to
+   express one. Ownership lives in exactly one place.
+2. **The owning job cannot also reference its own workpaper** — enforced by a trigger asserting
+   `referencing_job_id <> (SELECT job_id FROM workpaper_instances WHERE id = ...)`. A CHECK
+   cannot subquery, so this is a constraint trigger.
+3. **Removing a reference can never delete the workpaper.** `ON DELETE CASCADE` runs from
+   `workpaper_instances` *to* the reference row, never the reverse. Deleting a reference row is a
+   plain `DELETE` on this table and touches nothing else. The only route to deleting a workpaper
+   is deleting its owning job.
+
+So: the CGT job **owns** the CGT workpaper via `workpaper_instances.job_id`. The relevant SA job
+**references** it. There is **one workpaper row and one audit history** — an edit from either
+surface is the same edit, so there is no synchronisation logic, because there is nothing to
+synchronise.
+
+`jobs.workpaper_instance_id` (the reverse pointer) stays as-is for the owning job only. It is not
+set on referencing jobs — that would be a second ownership claim.
+
+### 4.2.1 Access control
+
+**A reference must not widen access.** Visibility of a workpaper is determined by the
+organisation and client on the workpaper itself, exactly as today:
+
+- `workpaper_instances` already carries `organization_id` and `client_id`. RLS continues to
+  evaluate against those columns and **not** against the reference table.
+- A reference row therefore cannot grant a user sight of a workpaper they could not already see.
+  If the SA job and the CGT job belong to the same client — which they must, since the SA link is
+  derived from that client's disposal — the question does not arise; but the policy must not
+  depend on that holding.
+- Creating a reference requires write access to the **referencing** job and read access to the
+  workpaper. It does not confer write access to the workpaper; that follows the workpaper's own
+  policy.
+- A cross-client or cross-organisation reference is rejected outright by a constraint trigger
+  comparing `organization_id`/`client_id` on both sides.
+
+The rule stated plainly: **a link records a relationship; it never grants a permission.**
 
 ### 4.3 Self Assessment integration
 
@@ -277,24 +391,74 @@ is why the reference fields must be on the disposal record rather than only in a
 
 ---
 
-## 5. Amendment and correction
+## 5. Amendment and correction — a product decision, not a schema one
 
-The snapshot is immutable **from the point of filing**, not from creation.
+Two things are **not** in question, whichever option is chosen:
 
-| State | Rule |
+- The submitted return is immutable once filed. `snapshot_locked_at`, `snapshot_locked_by` and
+  `snapshot_hash` are set at submission and the figures become read-only.
+- Every amended submission gets its **own** version row: its own figures, calculation, evidence,
+  HMRC response and audit trail. Nothing overwrites a filed submission.
+
+What *is* in question is whether the accountant sees one case or several. An earlier draft
+assumed a new job per amendment; that was an assumption, not a conclusion, and is withdrawn
+pending your decision.
+
+### Option 1 — one enduring disposal job, versioned submissions *(recommended)*
+
+`cgt_property_returns` keeps the current figures. A child table `cgt_return_submissions` holds
+one row per submission — `version`, `submission_type` (`original` | `amendment`),
+`submitted_at`, `figures` snapshot, `snapshot_hash`, `hmrc_property_return_reference`,
+`hmrc_response`, `submitted_by`, `amendment_reason`.
+
+| Dimension | Consequence |
 |---|---|
-| Job open, not filed | Fields freely editable. `snapshot_locked_at` NULL. Editing the completion date **recomputes the deadline**; editing the exchange date **may move the SA year**, which re-evaluates the SA link and warns if it moves the gain out of a year already filed. |
-| Filed | `snapshot_locked_at` set, `snapshot_hash` computed. The row becomes read-only. |
-| Amendment needed | A **new CGT job** is created with `source_job_id` pointing at the original, carrying `amendment_of_job_id` and `amendment_reason`. The original is never mutated. |
+| **UX** | One case per property. "Amend return" opens v2 in place; history is a version list. The accountant's mental model — *one disposal, one case* — matches the screen. |
+| **Billing** | Amendment work is billed against the existing job. If a separately commissioned amendment needs its own fee, it is a billable item on the job, which the schema already supports. |
+| **Task assignment** | Assignee, tags and watchers persist. No re-assignment, no dropped context. |
+| **Deadlines** | The original 60-day deadline stays satisfied. An amendment does not create a second statutory deadline, because there isn't one — this is the strongest argument for Option 1. A new job would invite a new deadline that does not legally exist. |
+| **Workpapers** | The workpaper stays owned by the one job, so the SA reference never needs re-pointing. Under Option 2 the SA job would reference the *original* job's workpaper while the live figures moved to a new job — an active trap. |
+| **HMRC references** | Original and amendment references sit on their own version rows, correctly distinguished. |
+| **Reporting** | "How many CGT disposals this year" counts jobs and is right. Under Option 2 it double-counts unless every query filters amendments. |
+| **Audit** | Complete and linear: one case, N versions, each immutable. |
 
-This matches how amendments already work elsewhere in the product
-(`amended-filing-service.ts` creates a new filing referencing the original) and it is the only
-model that keeps "what did we file, and on what figures" answerable. HMRC's own 60-day service
-supports amending a return; the amendment job carries the same
-`hmrc_property_return_reference` so both sides reconcile.
+### Option 2 — a new linked job per amendment
 
-Corrections *before* filing are ordinary edits with the existing audit trail. Corrections
-*after* filing are amendments. There is no third case.
+Mirrors `amended-filing-service.ts`, which creates a new filing referencing the original.
+
+| Dimension | Consequence |
+|---|---|
+| **UX** | A property disposal amended twice shows as three jobs in the client's list. The accountant must know which is current. |
+| **Billing** | Natural fit *if* the amendment is separately commissioned and separately billed. |
+| **Task assignment** | Amendment can be assigned to someone else outright, with its own workflow status. |
+| **Deadlines** | Risk: a job of this service type is expected to carry a 60-day deadline, and there is no second statutory deadline to carry. Needs a suppression rule. |
+| **Workpapers** | Either re-point the SA reference or leave it on the superseded job. Both are wrong in some case. |
+| **Reporting** | Disposal counts need amendment filtering everywhere. |
+| **Audit** | Complete, but the chain is across jobs rather than within one. |
+
+### Recommendation — Option 1, with a named exception
+
+**Option 1.** The deciding argument is the deadline: an amendment creates no new statutory
+obligation, and a model that spawns a job which *looks like* it should carry a 60-day deadline is
+inviting a false one. The workpaper/SA re-pointing problem is a close second — under Option 2 the
+Self Assessment return would reference a superseded job's workpaper while the live figures lived
+elsewhere.
+
+This matches your stated preference. The named exception: where an amendment is **separately
+commissioned and separately billed** — a client returns months later and instructs the firm to
+revisit a filed return — that is genuinely new work, and a new job linked via `source_job_id` is
+right. That is a commercial trigger, chosen deliberately, not the default path for correcting a
+figure.
+
+Note this diverges from `amended-filing-service.ts`. That is intentional: an amended CT600 or set
+of accounts *is* a fresh statutory filing with its own obligations, whereas an amended 60-day CGT
+return is a correction to one that has already been made.
+
+### Corrections before filing
+
+Ordinary edits under the existing audit trail. Editing the completion date recomputes the
+deadline; editing the exchange date may move the SA year, which re-evaluates the SA link and
+warns if the gain would leave a year already filed.
 
 ---
 
@@ -356,10 +520,57 @@ revisiting, and the count is the first thing to confirm.
 **Step 3 — backfill.** For each existing row with a non-null `disposal_date`, create one CGT job
 plus one `cgt_property_returns` row. `UNIQUE(client_id)` guarantees 1:1, so this is mechanical.
 
-**`exchange_date` is unknown for historical rows.** It cannot be invented — that would fabricate
-a tax year. Backfilled rows get `exchange_date = NULL` with `requires_date_review = true`, and
-appear in a review queue. This is the one place the new NOT NULL rule is relaxed, and only for
-rows that predate it.
+**`exchange_date` is unknown for historical rows and must never be inferred.** Copying
+`completion_date` into it would fabricate a statutory disposal date and therefore a tax year —
+the single most damaging thing this migration could do, and it would be invisible afterwards
+because the result looks like ordinary data.
+
+Five rules govern the backfill:
+
+1. **Never infer.** No default, no copy from completion, no interpolation. `exchange_date` is
+   `NULL` where it is unknown, and the migration contains no statement that could set it.
+
+2. **An unresolved row cannot reach Self Assessment.** `statutory_disposal_date` is generated
+   from `exchange_date`, so it is `NULL` too, and `disposal_tax_year` is `NULL` in turn. The SA
+   attachment routine joins on `disposal_tax_year`, so **a row with no exchange date cannot
+   match any Self Assessment year** — it is excluded by the data, not by a flag someone might
+   forget to check. A guard makes the intent explicit rather than incidental:
+   ```sql
+   CONSTRAINT sa_link_requires_statutory_date CHECK (
+     linked_sa_job_id IS NULL OR statutory_disposal_date IS NOT NULL
+   )
+   ```
+
+3. **Surface the review operationally, not as a hidden boolean.** A `requires_date_review` flag
+   nobody queries is not a control. Instead each unresolved row gets a real **`deadlines` row**:
+   `deadline_code = 'CGT_DATE_REVIEW'`, `deadline_type = 'internal'`, owned and dated, appearing
+   in the ordinary deadline list and chaser flow. It is closed by supplying the exchange date.
+   The work is visible in the tool the firm already uses, alongside everything else.
+
+4. **Preserve the legacy value and its provenance.** The original row is not discarded:
+   ```
+   legacy_source_table       text     -- 'client_detail_cgt'
+   legacy_source_row_id      uuid
+   legacy_disposal_date      date     -- the ORIGINAL single overloaded value, verbatim
+   legacy_property_address   text     -- the original unparsed blob
+   migrated_at, migrated_by
+   ```
+   `legacy_disposal_date` is retained precisely because we do **not** know whether whoever
+   entered it meant exchange or completion. Recording it unaltered lets the reviewer see what was
+   actually stored rather than our interpretation of it. Address parsing is likewise
+   non-destructive — the blob is kept beside the structured columns.
+
+5. **Report before rollout.** These counts are produced and reviewed *before* any migration runs,
+   not after:
+   - total `client_detail_cgt` rows;
+   - rows with a non-null `disposal_date` (the rows that become jobs);
+   - **distinct clients affected**, with names, for the review queue;
+   - rows whose `disposal_date` falls within 60 days of today — these may have a **live statutory
+     deadline** and are the ones to handle first;
+   - rows whose `property_address` does not parse into structured lines.
+
+   I cannot run these; the database connector is unavailable to me. They are the first executor
+   step and the migration is not scheduled until they are read.
 
 **Step 4 — retire the trigger.** Drop `trg_cgt_deadline` and
 `on_cgt_disposal_date_changed` entirely. It is broken four ways (§ the state-machine audit) and
@@ -370,25 +581,109 @@ verified, in a **separate later migration**, so the two are independently revers
 
 ---
 
-## 9. The remaining CGT design decision
+## 9. "No tax due" — legal edge cases, states and controls
 
-One decision left, and it is genuinely yours because it is a policy question about liability, not
-a schema question.
+Your provisional direction is sound and I recommend adopting it. It is also, on the law below,
+the only safe one: the obligation for a UK resident genuinely depends on the computed figures, so
+any model that decides at creation time decides on information it does not yet have.
 
-**When a UK-resident client's disposal produces no CGT liability — fully covered by Private
-Residence Relief, or below the annual exempt amount — should the system create the 60-day
-deadline anyway?**
+### 9.1 The legal position
 
-No return is legally due in that case (unlike a non-resident, who must report every UK land
-disposal regardless). But the determination depends on figures that are often not final when the
-job is created, and the penalty for getting it wrong sits with the practice.
+| Case | 60-day return required? |
+|---|---|
+| **UK resident, UK residential property, CGT payable** | **Yes** — within 60 days of completion. |
+| **UK resident, UK residential property, no CGT payable** (full PPR, covered by annual exempt amount, or an allowable loss) | **No.** The obligation is conditional on there being tax to pay. |
+| **UK resident, UK *non-residential* property** | **No.** The 60-day regime covers residential property only for UK residents. |
+| **Non-UK resident, any UK land — residential *or* non-residential** | **Yes, always.** Reportable regardless of whether tax is due, and regardless of whether the disposal produced a gain, a nil result or a loss. Extended from residential to all UK land on 6 April 2019. |
+| **Non-resident already within Self Assessment** | Return still due within 60 days; the *payment* may be deferred to the normal SA due date. Deadline and payment are separate obligations. |
+| **Mixed-use property** | Apportioned. The residential element can trigger the obligation on its own. |
+| **Trustees and personal representatives** | Within scope on the same basis. |
+| **Joint owners** | Each owner reports their own share separately — so a jointly owned disposal is one CGT job **per client**, not one job with two clients. |
 
-The trade-off is: create the deadline and let a human waive it, and the deadline list fills with
-items that were never due (and `waived` is not currently a legal `deadlines.status` — it existed
-only in the constraint DEF-034 retired). Or suppress it and rely on the figures being right early.
+The asymmetry is the whole design problem: **residence status determines whether the obligation
+is conditional at all.** For a non-resident it is unconditional and known at creation. For a UK
+resident it depends on a computation that may take weeks.
 
-I'll put this to you as a separate decision once you've reviewed the design above, along with
-the two vocabulary/state-machine rulings and the ownership model still outstanding.
+> Confirm against current HMRC guidance before implementation. The structural rules above are
+> long-standing and I am confident in them; the annual exempt amount and rates change at Budgets
+> and no figure is proposed here.
+
+### 9.2 The three states
+
+A new field on `cgt_property_returns`, `lower_snake` per the standing rule:
+
+```
+filing_obligation  text NOT NULL DEFAULT 'assessing'
+  CHECK (filing_obligation IN ('assessing','required','not_required'))
+```
+
+| State | Meaning | Set by | Deadline shown |
+|---|---|---|---|
+| `assessing` | Obligation not yet determined. **Default for UK residents.** | Job creation | **Yes** — dated `completion_date + 60`, `deadline_type = 'internal'`, labelled *"Potential 60-day CGT deadline — obligation under assessment"* |
+| `required` | Statutory obligation confirmed. | Automatic for non-residents at creation; explicit for residents once the computation shows tax due | **Yes** — same date, promoted to `deadline_type = 'statutory'`, `filing_body = 'HMRC'` |
+| `not_required` | Concluded no return is due. | Explicit accountant action only | **Yes, closed** — never deleted |
+
+**The date is identical in all three states.** Only its legal character changes. That is the
+point of your direction: the firm sees the date from the moment the job exists, so it cannot be
+missed while liability is being assessed, and no calculation reaching nil can make it disappear.
+
+**Non-residents skip `assessing` entirely** — `filing_obligation` is set to `required` at
+creation, because the obligation does not depend on the figures.
+
+### 9.3 Controls on `not_required`
+
+Concluding no return is due is a professional judgement with a penalty behind it. It is recorded
+as one, and all five are `NOT NULL` when the state is entered:
+
+```
+not_required_reason        text     -- vocabulary, see below
+not_required_narrative     text     -- free text: why, in the reviewer's words
+not_required_evidence      jsonb    -- computation reference, workpaper version, PPR basis
+not_required_reviewed_by   uuid     -- a person, not a service account
+not_required_reviewed_at   timestamptz
+
+CONSTRAINT not_required_is_fully_evidenced CHECK (
+  filing_obligation <> 'not_required' OR (
+    not_required_reason IS NOT NULL AND not_required_narrative IS NOT NULL
+    AND not_required_reviewed_by IS NOT NULL AND not_required_reviewed_at IS NOT NULL
+  )
+)
+```
+
+Reason vocabulary: `full_ppr_relief`, `covered_by_annual_exempt_amount`, `allowable_loss`,
+`non_residential_uk_resident`, `no_disposal_occurred`, `other` (narrative mandatory).
+
+A further guard: **`not_required` is unreachable for a non-resident**, because for them the
+obligation does not depend on the outcome.
+
+```sql
+CONSTRAINT non_resident_must_report CHECK (
+  taxpayer_residence_status <> 'non_resident' OR filing_obligation <> 'not_required'
+)
+```
+
+Transitions: `assessing → required`, `assessing → not_required`, and `not_required → required`
+(reopened if figures change). **`required → not_required` is blocked once a return has been
+filed** — you cannot un-owe a return you have already made; that is an amendment.
+
+### 9.4 The one thing this needs from you
+
+Closing the deadline requires a status meaning *"closed because no obligation arose"*.
+`deadlines.status` permits `pending, in_progress, completed, filed, overdue, cancelled` — none of
+which says this. `completed` asserts work was done; `cancelled` reads as an administrative
+error and is the same word used when a job is abandoned.
+
+Under the standing rule I will not widen a vocabulary without a ruling, so the options are:
+
+1. **Add `not_required`** to `deadlines.status` — precise, and reusable for every other
+   conditional obligation in the product. Requires the DEF-034 discipline: replace the constraint
+   and drop the old one in the same migration.
+2. **Use `cancelled`** plus the evidence fields above — no schema change, but the deadline list
+   cannot distinguish "we concluded none was due" from "someone cancelled this", which is exactly
+   the distinction an inspector would ask about.
+
+**Recommendation: option 1.** The evidence lives on `cgt_property_returns` either way, but the
+deadline itself should say what happened. This is the last CGT decision outstanding.
 
 ---
 
