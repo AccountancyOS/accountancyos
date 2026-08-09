@@ -39,17 +39,18 @@ const root = resolve(__dirname, "../../../");
  * Removing an entry here is the definition of done for the corresponding repair.
  * Adding one requires an owner ruling. See docs/audits/2026-08-09-vocabulary-audit.md.
  */
-const KNOWN_SCHEMA_CONTRADICTIONS = [
-  // Both are the same shape: a November-2025 constraint that was never dropped when its
-  // replacement landed, so Postgres enforces both and the difference is unwritable.
-  "deadlines.status",
-  "filings.status",
-] as const;
+const KNOWN_SCHEMA_CONTRADICTIONS: readonly string[] = [
+  // Both repaired by DEF-034 (20260809120000). Baseline deliberately left empty rather than
+  // deleted: a self-contradicting column is the defect that produced this whole class, so an
+  // empty list that is actively asserted is worth more than no list.
+];
 
 const KNOWN_LITERAL_VIOLATIONS = [
-  // filings.status — blocked on the filing-vocabulary ruling. `queued` in particular may
-  // belong on filing_queue.status rather than filings.status; writing submission state onto
-  // the filing record conflates the projection with the HMRC transport layer.
+  // filings.status — blocked on a ruling. Dropping `valid_status` (DEF-034) did NOT legalise
+  // these: they belong to `chk_filings_status`, a THIRD filing vocabulary dropped on
+  // 2026-06-20. `queued` in particular likely belongs on `filing_queue.status`, since writing
+  // submission state onto the filing record conflates the projection with the HMRC transport
+  // layer, which the architecture forbids.
   "approve_filing_safe: filings.status = 'approved_by_client'",
   "queue_filing_for_submission: filings.status = 'queued'",
   "regress_filing_status: filings.status = 'ready_for_approval'",
@@ -61,20 +62,24 @@ const KNOWN_LITERAL_VIOLATIONS = [
   "create_job_from_template: jobs.priority = 'medium'",
   "create_job_from_template: job_tasks.status = 'not_started'",
   "lifecycle_generate_jobs_for_service: jobs.automation_source = 'canonical_spine_v1'",
-  // Straightforward renames, held only so the whole class lands under one ruling.
-  "lifecycle_accept_portal_invitation: portal_access.status = 'revoked_by_system'",
-  "lifecycle_generate_deadlines_for_job: client_tasks.status = 'pending'",
-  "lifecycle_generate_deadlines_for_job: client_tasks.visibility = 'internal'",
-  "lifecycle_generate_deadlines_for_job: deadlines.status = 'open'",
+  // on_cgt_disposal_date_changed is broken in four ways and only this one is a rename. It
+  // also writes deadlines.title (the column is `name`) and status = 'upcoming', and before
+  // either it specifies ON CONFLICT on four columns that carry no unique index anywhere in
+  // the migration history — so it raises 42P10 first. Adding that index would assert a client
+  // may hold only one CGT deadline ever, which is wrong: disposals span tax years. The
+  // conflict target is a design error, not a typo. Held for a ruling.
   "on_cgt_disposal_date_changed: deadlines.deadline_type = 'filing'",
 ] as const;
 
-/** Registry entries that offer values the schema rejects — all downstream of the above. */
-const KNOWN_REGISTRY_DIVERGENCE = new Set([
-  "filings.status",
-  "deadlines.status",
-  "email_queue.status",
-]);
+/**
+ * Registry entries that offer values the schema rejects.
+ *
+ * `email_queue.status` is the last one: check-constraints.ts declares `cancelled` writable,
+ * which no live constraint permits, and omits `draft`, `queued` and `ignored`, which they do.
+ * Unlike the others this is not downstream of a schema contradiction — the registry is simply
+ * wrong — but correcting it means deciding whether the queue needs a `cancelled` state at all.
+ */
+const KNOWN_REGISTRY_DIVERGENCE = new Set(["email_queue.status"]);
 
 describe("vocabulary registry — generated from the schema", () => {
   it("is regenerable and current", () => {

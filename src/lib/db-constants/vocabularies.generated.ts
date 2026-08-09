@@ -703,11 +703,10 @@ export const DB_CHECK_VOCABULARIES: readonly DbColumnVocabulary[] = [
     table: "deadlines",
     column: "status",
     constraints: [
-      { name: "chk_deadlines_status", values: ["cancelled", "complete", "due", "overdue", "pending", "upcoming", "waived"], migration: "20251218231226_28c8ce3c-37b7-4d2a-ac32-42b7f38931bc.sql" },
       { name: "deadlines_status_check", values: ["cancelled", "completed", "filed", "in_progress", "overdue", "pending"], migration: "20251127002312_aa391640-7e71-48d4-8f60-7721fa83c3e8.sql" },
     ],
-    allowed: ["cancelled", "overdue", "pending"],
-    unreachable: ["complete", "completed", "due", "filed", "in_progress", "upcoming", "waived"],
+    allowed: ["cancelled", "completed", "filed", "in_progress", "overdue", "pending"],
+    unreachable: [],
   },
   {
     table: "email_messages",
@@ -1047,10 +1046,9 @@ export const DB_CHECK_VOCABULARIES: readonly DbColumnVocabulary[] = [
     column: "status",
     constraints: [
       { name: "chk_filing_status", values: ["accepted", "approved", "awaiting_approval", "client_changes_requested", "draft", "filed", "in_progress", "not_started", "ready_for_review", "ready_to_file", "rejected", "sent_to_client", "submitted"], migration: "20260620150856_c734e7f6-c637-4964-87bc-36dcc04cf02f.sql" },
-      { name: "valid_status", values: ["approved", "awaiting_approval", "draft", "filed", "ready_to_file", "rejected"], migration: "20251127004529_905ab965-6694-4319-be9d-ea8aa1f7d13d.sql" },
     ],
-    allowed: ["approved", "awaiting_approval", "draft", "filed", "ready_to_file", "rejected"],
-    unreachable: ["accepted", "client_changes_requested", "in_progress", "not_started", "ready_for_review", "sent_to_client", "submitted"],
+    allowed: ["accepted", "approved", "awaiting_approval", "client_changes_requested", "draft", "filed", "in_progress", "not_started", "ready_for_review", "ready_to_file", "rejected", "sent_to_client", "submitted"],
+    unreachable: [],
   },
   {
     table: "fixed_asset_transactions",
