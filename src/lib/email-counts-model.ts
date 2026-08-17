@@ -16,6 +16,8 @@ export interface EmailCounts {
   /** The 'queued' tab is status IN (queued, pending); the badge folds them together to match. */
   queued: number;
   failed: number;
+  /** Cancelled rows are real (email_queue_status_check allows them) and need their own tab. */
+  cancelled: number;
 }
 
 export function deriveEmailCounts(rows: EmailStatusRow[] | null | undefined): EmailCounts {
@@ -25,5 +27,6 @@ export function deriveEmailCounts(rows: EmailStatusRow[] | null | undefined): Em
     draft: list.filter((r) => r.status === "draft").length,
     queued: list.filter((r) => r.status === "queued" || r.status === "pending").length,
     failed: list.filter((r) => r.status === "failed").length,
+    cancelled: list.filter((r) => r.status === "cancelled").length,
   };
 }
