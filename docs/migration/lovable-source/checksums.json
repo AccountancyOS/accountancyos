@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-08-17",
+  "algorithm": "sha256",
+  "note": "Hashes of every file in this evidence pack except checksums.json itself. Regenerated after the Lovable-export findings were folded into README.md, drift-report.md and manual-settings.md.",
+  "files": {
+    "README.md": "346bd028ea280e0fc59c85e02e7b15da339862083ade526e2ca5af4f1cb0a8a9",
+    "data-summary.json": "114c907a16c5381cc3ec79025a15875fbf974abfd9ba8f10864fcd36ecc8015f",
+    "drift-report.md": "e57efb36ab0dc478dc9acf9c6b56f1bb485a78f2afc3484873449c8da7242a0a",
+    "live-inventory.json": "a4dfde45b60839e822164df3bd6888d3050abb8011642d20dc09c02483cb5e17",
+    "live-schema.sql": "3c2fc00f8bf8f2f1f805d2ae3eac4e9ece8bc04af624a95062160fa9352d70f9",
+    "manual-settings.md": "e07c20c8bf320f298bb1b608ea1fd95b09edce34734f93da25b844fb103bfb66"
+  }
+}
