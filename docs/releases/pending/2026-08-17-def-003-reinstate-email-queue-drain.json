@@ -79,7 +79,7 @@
   "frontend_publish_required": false,
   "frontend_publish_note": "No src/ runtime change. The manifest and the new regression test affect CI and the smoke script only, not the shipped bundle.",
   "known_verification_gaps": [
-    "mcp_cron_job_health timed out when called on 2026-08-17 (statement timeout via db_rpc), so the DEF-019 cron projection could not be used as a second reading and catalog_cron was used instead. Worth investigating separately — a health projection that cannot be queried is not observability.",
+    "mcp_cron_job_health is UNUSABLE on production. Called 2026-08-17 via db_rpc it returns 'canceling statement due to statement timeout' at the default 20-minute window AND at p_window_minutes=1. Since narrowing the window does not help, there is no usable index on cron.job_run_details.start_time and every call seq-scans the entire run history — which, at twelve jobs several of which run every minute, is very large. The DEF-019 cron projection therefore cannot be used to detect cron drift, which is the one thing it exists for; catalog_cron was used for this release instead. A fix needs an index on cron.job_run_details, a relation owned by supabase_admin and not by us, or a rewrite that reaches the run history through an already-indexed column. Neither is designed here. This should be raised as its own defect against DEF-019.",
     "cron.job_run_details remains deletable by PUBLIC (DEF-032 sibling finding), so any absence-based check over run history is weaker than it reads."
   ],
   "open_questions": [
