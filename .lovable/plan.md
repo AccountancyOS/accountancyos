@@ -1,38 +1,25 @@
-# Apply DEF-001 + DEF-002 (one atomic migration)
+# Fix: Emails Tab Crashes With "Cannot read properties of undefined (reading 'icon')"
 
-Claude's branch (5c76747) is in the working tree and verified against LIVE. Nothing has been applied. This plan covers the apply, the privilege check first, and the honest scope of what can and cannot be verified today.
+## What Is Happening
 
-## Pre-apply checks already done
+The Emails page crashes for your organisation because two of your queued emails have the status `cancelled`, and the page has no badge definition for that status.
 
-- `supabase/migrations/20260731210000_def_001_002_rpc_context_and_invoice_draft.sql` is present and its SHA-256 is `aee9c160b5594b2748db7434c8397d22fd7e13100803204e1d04ba6cdf4830f5` — byte-identical to the receipt.
-- Live signature inventory re-run: the four invoice-draft overloads exist exactly as the matrix records them (13-arg date create, 14-arg text create, 8-arg date update, 8-arg text update). The three signatures the migration drops all exist; the two it replaces in place have parameter names identical to the migration's, so `CREATE OR REPLACE` will not fail with a parameter-rename error.
-- Only application code calls these RPCs (`src/lib/invoice-draft-service.ts`, `src/pages/OpsHealth.tsx`). No edge function calls them, so no function redeploy is coupled to this migration.
-- Confirmed the service's update payload sends `p_notes`, which no current live candidate accepts — consistent with the reported resolution failure.
+Confirmed against production:
+- `email_queue` currently holds `sent` (12), `cancelled` (2), `pending` (1).
+- The page loads every non-`sent` row, so the two `cancelled` rows are rendered.
+- `src/pages/Emails.tsx` looks up `statusConfig[status]`, which only defines `draft`, `queued`, `pending`, `failed`, `ignored`. For `cancelled` the lookup returns `undefined`, and the next line reads `.icon` off it — the exact error in the screenshot.
 
-## Apply sequence
+The page's own status vocabulary has drifted from the database. Per `docs/email-system.md`, the valid `email_queue` statuses are `pending`, `sent`, `failed`, `cancelled` — `draft`, `queued` and `ignored` are not real queue statuses.
 
-1. Apply the migration as a single unit through the Lovable migration flow. It is not split; DEF-001 and DEF-002 must not exist half-fixed.
-2. Verify the privilege change first, as the receipt requires: for all ten affected signatures confirm `proacl` no longer contains PUBLIC (`=X/postgres`) or `anon`, still contains `authenticated`, `service_role` and `sandbox_exec`, and `proowner` is `postgres`.
-3. Sweep every public function body for `set_rpc_context` and confirm zero matches (was 8).
-4. Confirm exactly two invoice-draft candidates remain: create with 14 arguments, update with 9.
-5. Confirm the eight repaired bodies have new definition hashes, replacing `de32451b / 3803ae13 / dbe752a5 / 1ef6b7fc / 75551314 / cc7973c4 / 2dbb0171 / 1ca6a433`.
-6. Record both the authored version (`20260731210000`) and the executor version in the receipt, then move it out of `pending/`.
-7. Refresh `docs/audits/unapplied-migrations-baseline.json`.
+## The Fix
 
-## What will be verified now vs deferred
+1. Align the status vocabulary in `src/pages/Emails.tsx` with the database check constraint: add `cancelled` (and keep the legacy labels so historic rows still render), so every status the queue can hold has a label, badge variant and icon.
+2. Make the lookup fail-safe: fall back to a neutral badge showing the raw status instead of crashing when an unknown status appears. A vocabulary drift should never take the whole page down.
+3. Apply the same fallback to the tab-count derivation so an unknown status is counted under "All" rather than silently dropped.
+4. Show a "Cancelled" filter tab so cancelled emails are visible and explainable rather than mixed into "All" with no way to isolate them.
 
-Verifiable immediately from the catalogue, without fixtures: privileges, ownership, zero helper references, candidate uniqueness, changed body hashes.
+## Technical Notes
 
-Deferred as post-apply behavioural checks in the receipt, because they need the Staff/Admin and second-tenant fixtures approved in Phase 0 §4 and the current tenant has no invoices after the wipe: portal create/edit, the `can_create_invoices` refusal on update, cross-tenant entity and customer rejection, line preservation on a failed update, and the four payload resolutions end to end. These will be reported as not executed rather than simulated.
-
-## Points flagged for the record
-
-- The `can_create_invoices` tightening on update is a deliberate behaviour change, not a repair. A member without that capability could edit drafts before and cannot after. It is the most likely thing to be reported as a regression.
-- Revoking PUBLIC and anon changes the anon-caller response from `{"success":false,"error":"Not authenticated"}` to a hard permission denied. `sandbox_exec` is untouched.
-- The rollback is intentionally not fully automatic and reinstates the outage; it stays outside `supabase/migrations/`.
-- `app.rpc` is now written by eighteen functions and read by none. Deciding whether to restore the RPC write guard or strip the flag is a separate security-architecture task, not taken as a side effect here.
-- `update_bill_draft_safe` is inlined on LIVE though git never had it that way — recorded as DEF-020 drift, not acted on.
-
-## Not in this change
-
-No application code, no edge-function deploy, no frontend publish. The 19 regression guards are static and already pass on the branch.
+- Files touched: `src/pages/Emails.tsx` (status config + safe lookup + tab), `src/lib/email-counts-model.ts` (add `cancelled` to the derived counts).
+- No database, RLS or migration changes — the data is valid; the UI is wrong.
+- Regression coverage: extend `src/test/regression/email-counts-model.test.ts` and add a small guard asserting every status in the live `email_queue_status_check` constraint set has an entry in the page's status config, so this drift cannot recur silently.
