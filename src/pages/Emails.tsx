@@ -496,6 +496,9 @@ export default function Emails() {
                   <TabsTrigger value="failed" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                     Failed ({counts.failed})
                   </TabsTrigger>
+                  <TabsTrigger value="cancelled" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+                    Cancelled ({counts.cancelled})
+                  </TabsTrigger>
                 </TabsList>
               </div>
 

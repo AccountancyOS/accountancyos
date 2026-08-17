@@ -22,6 +22,7 @@ describe("deriveEmailCounts", () => {
     expect(c.all).toBe(6); // every non-sent row, incl. cancelled/ignored
     expect(c.draft).toBe(1);
     expect(c.failed).toBe(1);
+    expect(c.cancelled).toBe(1);
   });
 
   it("folds pending into queued (they are one tab)", () => {
@@ -33,11 +34,11 @@ describe("deriveEmailCounts", () => {
     // The whole point: counts come from the unfiltered list, so viewing only 'failed' rows in the
     // table must not collapse the other badges. Same input -> same counts regardless of active tab.
     const failedOnly = [{ status: "failed" }];
-    expect(deriveEmailCounts(failedOnly)).toEqual({ all: 1, draft: 0, queued: 0, failed: 1 });
+    expect(deriveEmailCounts(failedOnly)).toEqual({ all: 1, draft: 0, queued: 0, failed: 1, cancelled: 0 });
   });
 
   it("is zero-safe for an empty or missing list", () => {
-    expect(deriveEmailCounts([])).toEqual({ all: 0, draft: 0, queued: 0, failed: 0 });
-    expect(deriveEmailCounts(undefined)).toEqual({ all: 0, draft: 0, queued: 0, failed: 0 });
+    expect(deriveEmailCounts([])).toEqual({ all: 0, draft: 0, queued: 0, failed: 0, cancelled: 0 });
+    expect(deriveEmailCounts(undefined)).toEqual({ all: 0, draft: 0, queued: 0, failed: 0, cancelled: 0 });
   });
 });
