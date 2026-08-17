@@ -1,6 +1,6 @@
 {
   "snapshotDate": "2026-08-05",
-  "note": "Regenerate after every migration approval. See docs/audits/unapplied-migrations.md.",
+  "note": "Regenerate after every migration approval. See docs/audits/unapplied-migrations.md. Entries listed in executorAppliedDuplicates below were APPENDED after the 2026-08-05 snapshot and were NOT read from supabase_migrations.schema_migrations — that relation is unreadable by both parties (convention §1a). Their provenance and the object-level evidence for each are recorded there.",
   "appliedVersions": [
     "20251125162929",
     "20251125162944",
@@ -404,7 +404,69 @@
     "20260803203957",
     "20260805144648",
     "20260805210851",
-    "20260805211212"
+    "20260805211212",
+    "20260806083026",
+    "20260806083238",
+    "20260806083329",
+    "20260806114404",
+    "20260806162406"
   ],
-  "refreshedAt": "2026-08-05T21:25:00Z"
+  "refreshedAt": "2026-08-05T21:25:00Z",
+  "lastAppendedAt": "2026-08-17",
+  "executorAppliedDuplicates": {
+    "why_this_block_exists": "Lovable re-timestamps and re-authors every migration it applies, writing an 'applied duplicate' file into supabase/migrations/ under its own applied version. Those duplicates originate no new intent: each carries an intent that is already governed by a release receipt. Per the receipt gate's contract (src/test/regression/migration-release-receipt-gate.test.ts) an APPLIED migration is governed by this applied-versions baseline, not by a second receipt of its own — writing a rival receipt for a duplicate would create two receipts, and two verification statuses, for one change.",
+    "evidence_standard": "Convention §1a: a schema_migrations row is not evidence and cannot be read by anyone here. Each entry below therefore states OBJECT-LEVEL evidence, or states plainly that there is none. An entry with no object evidence is recorded as provenance only and must not be read as verification.",
+    "entries": [
+      {
+        "version": "20260806083026",
+        "file": "supabase/migrations/20260806083026_0388ae7e-cf94-445d-ad42-9de8dd8c044e.sql",
+        "sha256": "4b84afc76bcfd682d9ef13b9e98216b291edc5f3199eec5d04c5034c17999aa9",
+        "duplicate_of": "supabase/migrations/20260805220000_def_019_grant_exec_sandbox_exec.sql",
+        "fidelity": "VERBATIM. Byte-identical bar a missing trailing newline.",
+        "governing_receipt": "docs/releases/pending/2026-08-05-def-019-cron-and-delivery-observability.json",
+        "object_evidence": "docs/audits/raw/2026-08-06-def-019-verifier.txt — has_function_privilege('sandbox_exec', …, 'EXECUTE') = t on all four of mcp_cron_job_health(integer), mcp_http_delivery_health(integer), mcp_vault_secret_present(text), redact_secrets(text); anon = f on all four (DEF-015 invariant intact); authenticated and service_role = t on all four.",
+        "verification": "APPLIED AND OBJECT-VERIFIED."
+      },
+      {
+        "version": "20260806083238",
+        "file": "supabase/migrations/20260806083238_6ee3f190-8613-4bba-8b81-a401393c53fa.sql",
+        "sha256": "af527aa87617baa1b2a1c5ce2960499f181a0f659516e19ae31d741aeb11ab01",
+        "duplicate_of": "supabase/migrations/20260805100000_def_018_003_cron_guc_repair.sql",
+        "fidelity": "RE-AUTHORED. Executable content is identical statement for statement (verified by diffing both files with comment and blank lines stripped: zero differences). The executor removed the 69-line rationale header and the inline commentary; it changed no SQL.",
+        "governing_receipt": "docs/releases/pending/2026-08-05-def-018-003-cron-guc-repair.json",
+        "object_evidence": "docs/audits/raw/2026-08-06-post-apply-verification.txt — 13 cron jobs, every one with unrecognized_parameter_failures = 0, including a process-email-queue job at '* * * * *' with last_status 'succeeded'.",
+        "verification": "APPLIED AND OBJECT-VERIFIED ON 2026-08-06. PARTLY REVERTED SINCE: a live catalog_cron read on 2026-08-17 returns 12 active jobs and process-email-queue is NOT among them. The DEF-018 (GUC) half remains in effect; the DEF-003 (email drain) half does not. See the governing receipt."
+      },
+      {
+        "version": "20260806083329",
+        "file": "supabase/migrations/20260806083329_92ddc200-e321-4931-a954-0d248d5b7d6b.sql",
+        "sha256": "5c131d435c0b8852d6f630772409f2bd03c39691fdba780eba6e8f339e5ee138",
+        "duplicate_of": "supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql",
+        "fidelity": "RE-AUTHORED. Executable content identical statement for statement (comment-stripped diff: zero differences); the executor removed the commentary only.",
+        "governing_receipt": "docs/releases/pending/2026-08-05-def-026-027-bill-status-and-customer-columns.json",
+        "object_evidence": "docs/audits/raw/2026-08-06-post-apply-verification.txt — pg_get_constraintdef for bills_status_check names all seven canonical statuses including APPROVED; information_schema.columns shows customers.company_name (text) and customers.default_currency (text, default 'GBP'::text). Re-confirmed live on 2026-08-17: both columns present.",
+        "verification": "APPLIED AND OBJECT-VERIFIED. This is the successful re-apply of the migration whose 2026-08-05 attempt failed and rolled back."
+      },
+      {
+        "version": "20260806114404",
+        "file": "supabase/migrations/20260806114404_ca6dfb58-afb7-48fa-98f7-22d9cd327340.sql",
+        "sha256": "a85ef1774d3b4eaa9e2ed4c221d8ae1847c3ec5ae6bb49784d3e916b05940366",
+        "duplicate_of": "supabase/migrations/20260805200000_def_031_sandbox_exec_nobypassrls.sql",
+        "fidelity": "RE-AUTHORED AND ABRIDGED. Same single effect (ALTER ROLE sandbox_exec NOBYPASSRLS) and the same three post-assertions (rolbypassrls false, not superuser, no bypassing parent role), with the rationale header replaced by a five-line recurrence note. It is already named as an executor-applied copy of the DEF-031 repair in docs/audits/2026-08-06-def-031-platform-escalation.md §4.",
+        "governing_receipt": "docs/releases/2026-08-05-def-031-sandbox-exec-nobypassrls.json",
+        "object_evidence": "docs/audits/raw/2026-08-06-def-031-recurrence.txt §[2]-[3] — re-applied 2026-08-06 ~11:4x; post-alter state read from a NEW connection: oid=161547, bypassrls=false, superuser=false, 0 bypassing parent roles, SELECT count(*) FROM organizations = 0 (RLS filtering active).",
+        "verification": "APPLIED AND OBJECT-VERIFIED AT THE TIME. Effect subsequently reverted out of band at 2026-08-06T12:23:21Z (§[6] of the same raw file). DEF-031 remains open recurring drift; this entry records that the file ran, not that the boundary holds."
+      },
+      {
+        "version": "20260806162406",
+        "file": "supabase/migrations/20260806162406_f170d4dd-0dd9-4b16-af55-20f09d0a0a08.sql",
+        "sha256": "c0bfbdb24f0480940dbacd909572594688b974cb86bf59b30b76f3fcf83533e5",
+        "duplicate_of": "supabase/migrations/20260805200000_def_031_sandbox_exec_nobypassrls.sql",
+        "fidelity": "VERBATIM. Byte-identical bar a missing trailing newline.",
+        "governing_receipt": "docs/releases/2026-08-05-def-031-sandbox-exec-nobypassrls.json",
+        "object_evidence": "NONE IN THIS REPOSITORY. No raw capture, receipt entry or audit note records a DEF-031 observation, repair or post-state at or after 2026-08-06T16:24Z. The DEF-031 recurrence_log stops at the 12:23:21Z reversion, and the platform-escalation document (written ~12:2x) lists only 20260805210851 and 20260806114404 as executor copies, so this file post-dates it.",
+        "verification": "PROVENANCE ONLY — UNVERIFIED. The executor wrote this file under applied version 20260806162406, which is how it records an apply; that is provenance, not evidence, and no object-level check corroborates it. It implies a fourth DEF-031 repair (and therefore a fourth out-of-band reversion preceding it) that is absent from the DEF-031 recurrence_log. Recorded as an open gap, not as a pass."
+      }
+    ]
+  }
 }

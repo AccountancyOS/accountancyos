@@ -63,6 +63,11 @@ describe("Supabase manifest invariants", () => {
     const names = manifest.cronJobs.map((c) => c.name);
     expect(names).toContain("process-email-queue");
     expect(names).toContain("workflow-tick");
-    expect(names).toContain("sla-check");
+    // Was `sla-check` until 2026-08-17. No such job exists on production and no migration
+    // has ever scheduled one, so this assertion pinned the manifest to a fiction — part of
+    // why five of its eight entries could name non-existent jobs without anything failing.
+    // Replaced with jobs confirmed live by a catalog_cron read on 2026-08-17.
+    expect(names).toContain("process-automation-events");
+    expect(names).toContain("sync-gmail-emails");
   });
 });

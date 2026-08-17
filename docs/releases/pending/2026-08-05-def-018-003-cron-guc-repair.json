@@ -1,7 +1,20 @@
 {
   "release_id": "2026-08-05-def-018-003-cron-guc-repair",
   "release_kind": "attestation-based",
-  "status": "pending",
+  "status": "applied-def-018-verified-def-003-not-in-effect",
+  "status_history": [
+    { "at": "2026-08-05", "status": "pending", "reason": "Authored; executor had not yet applied it." },
+    { "at": "2026-08-17", "status": "applied-def-018-verified-def-003-not-in-effect", "reason": "Correction. The receipt still read 'pending' and its checks still read 'pending' after the release had in fact been applied on 2026-08-06 — and, more seriously, after half of it had ceased to be in effect. The record was stale in both directions. See correction_2026_08_17." }
+  ],
+  "stays_pending_because": "Convention §3. Two expected objects are FAILING against live (email-queue-scheduled, healthy-jobs-untouched). A receipt may not be marked applied-verified nor leave docs/releases/pending/ until every expected-object check passes. Blocked is not passed and a check that passed in the past is not a check that passes.",
+  "correction_2026_08_17": {
+    "summary": "DEF-018 is genuinely fixed and stays fixed. DEF-003 is NOT in effect. The two halves of this release must be read separately from here on.",
+    "def_018_verified": "Every cron job now resolves its credential from vault.decrypted_secrets and there are zero app.settings.* references anywhere in the estate. Confirmed live 2026-08-17 via the Lovable DB connector catalog_cron, and corroborated by docs/audits/raw/2026-08-06-post-apply-verification.txt (all jobs unrecognized_parameter_failures = 0).",
+    "def_003_not_in_effect": "catalog_cron on 2026-08-17 returns exactly 12 active cron jobs and process-email-queue is NOT among them. The email-queue drain this release schedules is therefore not running.",
+    "what_the_2026_08_06_evidence_showed": "docs/audits/raw/2026-08-06-post-apply-verification.txt captured 13 jobs INCLUDING process-email-queue at '* * * * *', active, last_status 'succeeded', unrecognized_parameter_failures = 0. The job existed and had run successfully on 2026-08-06. It is absent on 2026-08-17.",
+    "conclusion_recorded_not_explained": "Both observations are recorded as observed. This receipt does not assert a cause for the disappearance; no evidence in this repository establishes one, and inventing one would be exactly the attestation-dressed-as-verification this convention exists to prevent. It is an open question, logged in open_after_this.",
+    "note_on_the_migration_text": "Both 20260805100000 and the executor's applied copy 20260806083238 schedule process-email-queue and assert an estate of at least 13 jobs before COMMIT. Those assertions passed on 2026-08-06 — the transaction committed. They are not true of live today."
+  },
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": null,
   "summary": "DEF-018 + DEF-003. Repairs the six production cron jobs that resolve their target URL and credential from GUCs that do not exist in this database, and schedules the process-email-queue drain that has never been scheduled. Seven cron job bodies change; no table, column, function, policy, trigger or grant is altered. Queued mail addressed to reserved TLDs is cancelled before the drain starts.",
@@ -53,48 +66,73 @@
     {
       "path": "supabase/migrations/20260805100000_def_018_003_cron_guc_repair.sql",
       "sha256": "170c0d54d8a738ea89a19627a93a119230b1730a0d47ecf5890bbd8fc0db1668",
+      "executor_applied": {
+        "applied_version": "20260806083238",
+        "applied_file": "supabase/migrations/20260806083238_6ee3f190-8613-4bba-8b81-a401393c53fa.sql",
+        "applied_sha256": "af527aa87617baa1b2a1c5ce2960499f181a0f659516e19ae31d741aeb11ab01",
+        "fidelity": "RE-AUTHORED, EFFECT-IDENTICAL. Diffing the two files with comments and blank lines stripped yields zero differences: every statement is the same. The executor dropped the 69-line rationale header and the inline commentary and changed no SQL.",
+        "governed_by": "The applied-versions baseline, docs/audits/unapplied-migrations-baseline.json — see executorAppliedDuplicates. Per the receipt gate's contract an executor duplicate is governed by the baseline and does not take a rival receipt of its own; this receipt remains the single receipt for the change."
+      },
       "expected_objects": [
         {
           "id": "guc-references-gone",
           "object": "None of the seven jobs references app.settings.*",
-          "result": "pending",
-          "verify_via": "catalog_cron / mcp_list_cron_jobs — assert no row among the seven has command LIKE '%app.settings.%'"
+          "result": "pass",
+          "verify_via": "catalog_cron / mcp_list_cron_jobs — assert no row among the seven has command LIKE '%app.settings.%'",
+          "actual": "2026-08-06 (docs/audits/raw/2026-08-06-post-apply-verification.txt): all 13 jobs report unrecognized_parameter_failures = 0, where the pre-apply capture in docs/audits/raw/2026-08-06-def-019-verifier.txt showed six jobs failing 100% with 'ERROR: unrecognized configuration parameter \"app.settings.supabase_url\"' (hmrc-ct-poll-worker 20/20, sync-gmail-emails 10/10, sync-outlook-emails 10/10, hmrc-ct-delete-worker 4/4, process-automation-events 4/4, workflow-tick 4/4). 2026-08-17 live via catalog_cron: zero app.settings.* references across the estate.",
+          "verified_at": "2026-08-17"
         },
         {
           "id": "credential-from-vault",
           "object": "All seven jobs read their credential from vault.decrypted_secrets",
-          "result": "pending",
-          "verify_via": "catalog_cron — assert command LIKE '%vault.decrypted_secrets%' for each of the seven"
+          "result": "partial",
+          "verify_via": "catalog_cron — assert command LIKE '%vault.decrypted_secrets%' for each of the seven",
+          "actual": "2026-08-17 live via catalog_cron: every cron job present reads its credential from vault.decrypted_secrets. But only six of the seven jobs this release covers are present — process-email-queue is absent, so the seventh cannot be checked at all.",
+          "reading": "PASS for the six repaired jobs. NOT SATISFIED as written, because the set of seven does not exist. Recorded as partial rather than pass; the shortfall is the DEF-003 half, tracked by email-queue-scheduled below.",
+          "verified_at": "2026-08-17"
         },
         {
           "id": "email-queue-scheduled",
           "object": "A job named process-email-queue exists, is active, and runs '* * * * *'",
-          "result": "pending",
-          "verify_via": "catalog_cron — assert the row exists with active = true and schedule = '* * * * *'"
+          "result": "fail",
+          "verify_via": "catalog_cron — assert the row exists with active = true and schedule = '* * * * *'",
+          "actual": "2026-08-17 live via catalog_cron: exactly 12 active cron jobs, and process-email-queue is NOT among them. On 2026-08-06 it WAS present — docs/audits/raw/2026-08-06-post-apply-verification.txt records it at schedule '* * * * *', active true, last_status 'succeeded', unrecognized_parameter_failures 0.",
+          "reading": "The DEF-003 half of this release is not in effect. It was in effect on 2026-08-06 and is not now. No evidence in this repository establishes why, and none is asserted here.",
+          "verified_at": "2026-08-17"
         },
         {
           "id": "schedules-preserved",
           "object": "The six repaired jobs keep their original cadences (* * * * *, */5, */2, */2, */5, */5)",
-          "result": "pending",
-          "verify_via": "catalog_cron — compare each schedule against the pre-apply values recorded in problem.live_confirmation_2026_08_05"
+          "result": "pass",
+          "verify_via": "catalog_cron — compare each schedule against the pre-apply values recorded in problem.live_confirmation_2026_08_05",
+          "actual": "2026-08-06 (docs/audits/raw/2026-08-06-post-apply-verification.txt): hmrc-ct-poll-worker '* * * * *', hmrc-ct-delete-worker '*/5 * * * *', sync-gmail-emails '*/2 * * * *', sync-outlook-emails '*/2 * * * *', process-automation-events '*/5 * * * *', workflow-tick '*/5 * * * *' — each identical to its pre-apply cadence, all active.",
+          "verified_at": "2026-08-06"
         },
         {
           "id": "healthy-jobs-untouched",
           "object": "The six already-healthy jobs are unchanged and the estate totals at least 13 jobs",
-          "result": "pending",
-          "verify_via": "catalog_cron — assert count >= 13 and that the six healthy commands are byte-identical to their pre-apply values"
+          "result": "fail",
+          "verify_via": "catalog_cron — assert count >= 13 and that the six healthy commands are byte-identical to their pre-apply values",
+          "actual": "2026-08-17 live via catalog_cron: 12 active jobs. The >= 13 clause fails. On 2026-08-06 the estate was 13 and the six healthy jobs (chaser-tick-every-15min, chaser-trigger-scan-every-6h, dormant-lead-scan-daily, invoice-overdue-scan-daily, truelayer-sync-hourly, truelayer-sync-scheduled) were all present and active with their original cadences.",
+          "reading": "Fails on the count clause only, and for the same reason as email-queue-scheduled: the seventh job is gone. The six healthy jobs are undisturbed. Byte-identity of the six healthy commands against their pre-apply values has NOT been re-checked and is unverified.",
+          "verified_at": "2026-08-17"
         },
         {
           "id": "reserved-tld-queue-cleared",
           "object": "No email_queue row with a reserved-TLD recipient remains pending",
-          "result": "pending",
-          "verify_via": "db_select on email_queue where status = 'pending' — assert no to_email matches %.test / %.example / %.invalid / %.localhost"
+          "result": "pass",
+          "verify_via": "db_select on email_queue where status = 'pending' — assert no to_email matches %.test / %.example / %.invalid / %.localhost",
+          "actual": "2026-08-06 (docs/audits/raw/2026-08-06-post-apply-verification.txt): SELECT count(*) … pending_reserved_tld = 0.",
+          "verified_at": "2026-08-06"
         },
         {
           "id": "delivery-actually-happens",
           "object": "The repaired jobs produce successful HTTP calls, not merely successful SQL",
-          "result": "pending",
-          "verify_via": "EXECUTOR ONLY — see verification_delegated_to_executor below. Not verifiable by the reviewing party."
+          "result": "pass-at-2026-08-06-not-since-re-verified",
+          "verify_via": "EXECUTOR ONLY — see verification_delegated_to_executor below. Not verifiable by the reviewing party.",
+          "actual": "2026-08-06 (docs/audits/raw/2026-08-06-post-apply-verification.txt), mcp_http_delivery_health over a 2-minute window: {available: true, total: 9, succeeded_2xx: 9, unauthorized: 0, client_error: 0, server_error: 0, timed_out: 0, no_response: 0}. Contrast the pre-apply 20-minute window in docs/audits/raw/2026-08-06-def-019-verifier.txt: {total: 3, succeeded_2xx: 0, unauthorized: 3}. Real 2xx delivery, not merely successful SQL.",
+          "reading": "Evidenced for a 2-minute window on 2026-08-06 only. Not re-run since, and the estate has changed since, so this is not a current statement about live.",
+          "verified_at": "2026-08-06"
         }
       ]
     }
@@ -120,7 +158,14 @@
     ]
   },
   "guarded_by": "src/test/regression/def-018-003-cron-guc-repair.test.ts — static guards over the migration, including a detector that matches the live broken pattern (so it catches the defect rather than merely passing on the fix), assertions that all seven jobs are covered, that schedules are preserved exactly, that no secret literal is introduced into git, and that the superseded 20260720120000 is not left applicable.",
-  "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
+  "live_apply": {
+    "status": "APPLIED 2026-08-06 — DEF-018 half in effect and verified; DEF-003 half applied, verified on the day, and NOT in effect on 2026-08-17.",
+    "target": "moxpdejnucjjcplleefn (PRODUCTION)",
+    "applied_version": "20260806083238",
+    "applied_file": "supabase/migrations/20260806083238_6ee3f190-8613-4bba-8b81-a401393c53fa.sql",
+    "commit_implies_assertions_passed": "The migration is a single BEGIN…COMMIT whose post-assertion block RAISEs EXCEPTION if any of the seven jobs is missing, inactive, still references app.settings.*, does not read from vault, or has drifted from its expected schedule. It committed — the objects it creates are live — so every one of those assertions held at commit time, including the presence of process-email-queue.",
+    "superseded_by_observation": "Not a statement about live today. See correction_2026_08_17."
+  },
   "supersedes": "supabase/migrations/20260720120000_schedule_process_email_queue.sql — authored 2026-07-20, never applied, and carrying the same DEF-018 GUC defect. It must not be applied at any point; doing so would re-create process-email-queue with the broken pattern and silently undo the DEF-003 half of this release.",
   "follow_up": [
     "Rename the vault secret email_queue_service_role_key to something honest (service_role_key). Not migration-safe; needs a coordinated update of the five jobs that reference it.",
@@ -128,8 +173,9 @@
     "The audit records email_send_log writing a separate 'sent' row one second after a 'pending' row rather than transitioning the record, which means the log cannot be trusted as a delivery record. That is part of DEF-003's original scope and is NOT addressed here — this release schedules the drain; it does not repair the queue's own state machine."
   ],
   "open_after_this": [
-    "DEF-026 approve_bill_safe writes status 'APPROVED', rejected by bills_status_check (23514). Bill approval broken on LIVE.",
-    "DEF-027 create_customer_safe inserts four columns absent from public.customers (42703). Customer creation via the safe RPC broken on LIVE.",
+    "OPEN — DEF-003 REGRESSED. process-email-queue was scheduled, active and running successfully on 2026-08-06 and is absent from the 12 active jobs read live on 2026-08-17. Outbound mail is not being drained on a schedule. The cause is not established by any evidence in this repository. Re-applying this migration would re-create the job but would not address whatever removed it; establish the cause before re-applying, or the same disappearance recurs unobserved. This is the DEF-031 pattern (a repair reverted out of band) appearing on a second object, and the two should be assessed together.",
+    "DEF-026 approve_bill_safe writes status 'APPROVED', rejected by bills_status_check (23514). Bill approval broken on LIVE. — CLOSED 2026-08-06: constraint widened, see docs/releases/pending/2026-08-05-def-026-027-bill-status-and-customer-columns.json.",
+    "DEF-027 create_customer_safe inserts four columns absent from public.customers (42703). Customer creation via the safe RPC broken on LIVE. — CLOSED 2026-08-06 on the structural half, see the DEF-026/027 receipt.",
     "DEF-028 stamp_portal_provenance() still selects portal_access.contact_id on LIVE (definition hash f67d2205, confirmed 2026-08-05). Migration 20260803140000 is authored and awaiting the executor; every portal write remains broken until it is applied.",
     "DEF-019 no alerting layer exists.",
     "DEF-016 remains undefined and blocking by declaration."

@@ -211,11 +211,24 @@ describe("release hygiene", () => {
    * which is noise, and it would equally pass a *renamed* file whose contents drifted,
    * which is the actual risk (DEF-023).
    *
-   * So: the last definer is accepted when it is the declared owner, OR when it is a
-   * verbatim copy of the declared owner. A later definer whose contents differ is a
+   * So: the last definer is accepted when it is the declared owner, OR when it is an
+   * effect-identical copy of the declared owner. A later definer whose contents differ is a
    * genuine unrecorded takeover and still fails.
+   *
+   * "Effect-identical", not "verbatim" — corrected 2026-08-17. This comparison was
+   * byte-based, which modelled the executor as reproducing our files exactly. It does not:
+   * its re-applied copy of DEF-026/027 (20260806083329) is SQL-identical to 20260805110000
+   * but strips the comments, so a byte comparison failed on a faithful re-apply. Comments
+   * cannot change behaviour, so comparing executable SQL guards the real risk — body drift,
+   * DEF-023 — without failing on the executor's normal output.
    */
-  const normalise = (s: string) => s.replace(/[ \t]+$/gm, "").trimEnd();
+  const normalise = (s: string) =>
+    s
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*--.*$/gm, "")
+      .replace(/[ \t]+$/gm, "")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
 
   it("owns the live body of every function it reissues, or records who took it over", () => {
     const migDir = resolve(root, "supabase/migrations");

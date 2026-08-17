@@ -102,6 +102,15 @@
     {
       "path": "supabase/migrations/20260805220000_def_019_grant_exec_sandbox_exec.sql",
       "sha256": "60751463859e3bd56da7f984dd1c76b7f79fa32985644053d82ae2a5aa5700af",
+      "executor_applied": {
+        "applied_version": "20260806083026",
+        "applied_file": "supabase/migrations/20260806083026_0388ae7e-cf94-445d-ad42-9de8dd8c044e.sql",
+        "applied_sha256": "4b84afc76bcfd682d9ef13b9e98216b291edc5f3199eec5d04c5034c17999aa9",
+        "fidelity": "VERBATIM. Byte-identical to the receipted file bar a missing trailing newline.",
+        "governed_by": "The applied-versions baseline, docs/audits/unapplied-migrations-baseline.json — see executorAppliedDuplicates. This receipt remains the single receipt for the change.",
+        "object_evidence": "docs/audits/raw/2026-08-06-def-019-verifier.txt — has_function_privilege for sandbox_exec is t on all four projections; anon is f on all four; authenticated and service_role are t on all four. The four grants landed and the DEF-015 invariant is intact.",
+        "unblocks": "The executor_blocker recorded below. As sandbox_exec on 2026-08-06 the gate could then run: mcp_cron_job_health(20) and mcp_http_delivery_health(20) both answered, redact_secrets('Bearer eyJhbGci…') returned 'Bearer [REDACTED]', and mcp_vault_secret_present('email_queue_service_role_key') returned t — the DEF-018 prerequisite, previously unprovable by any party."
+      },
       "role": "FOLLOW-UP. Grants EXECUTE on the four projections to sandbox_exec, the role the evidence gate runs as. Does not modify 20260805160000. Self-verifying: aborts unless sandbox_exec holds EXECUTE on all four, anon holds it on none, authenticated/service_role retain it, the vault presence probe answers rather than raising 42501, both health projections answer, and redaction still strips a JWT shape.",
       "expected_objects": [
         {

@@ -1,7 +1,23 @@
 {
   "release_id": "2026-08-05-def-026-027-bill-status-and-customer-columns",
   "release_kind": "attestation-based",
-  "status": "apply-failed-rolled-back",
+  "status": "applied-structurally-verified-behavioural-checks-outstanding",
+  "status_history": [
+    { "at": "2026-08-05", "status": "pending", "reason": "Authored, awaiting the executor." },
+    { "at": "2026-08-05T21:25:00Z", "status": "apply-failed-rolled-back", "reason": "The DEF-027 post-assert fired on a false positive — an unanchored '%internal_notes%' LIKE test matched the legitimate parameter p_internal_notes. Transaction rolled back cleanly; nothing changed. See live_apply_attempt." },
+    { "at": "2026-08-17", "status": "applied-structurally-verified-behavioural-checks-outstanding", "reason": "CORRECTION. The receipt still read apply-failed-rolled-back eleven days after the release was in fact successfully re-applied on 2026-08-06. The assertion was anchored (\\\\m…\\\\M identifier boundaries) and the migration re-applied and committed. See re_apply_2026_08_06." }
+  ],
+  "stays_pending_because": "Convention §3. The structural objects are verified, but three expected objects are behavioural — bill-approval-succeeds, customer-create-succeeds and cross-tenant-write-closed — and no behavioural evidence for them exists in this repository. A receipt may not be marked applied-verified nor leave docs/releases/pending/ until every expected-object check passes, and an unrun check is not a passing one.",
+  "re_apply_2026_08_06": {
+    "outcome": "SUCCEEDED. Applied and committed.",
+    "target": "moxpdejnucjjcplleefn (PRODUCTION)",
+    "applied_version": "20260806083329",
+    "applied_file": "supabase/migrations/20260806083329_92ddc200-e321-4931-a954-0d248d5b7d6b.sql",
+    "applied_sha256": "5c131d435c0b8852d6f630772409f2bd03c39691fdba780eba6e8f339e5ee138",
+    "what_changed_since_the_failed_attempt": "The false-positive assertion identified in live_apply_attempt.diagnosis was anchored to identifier boundaries: the body test is now `IF v_src ~ '\\\\mbilling_address\\\\M' OR v_src ~ '\\\\minternal_notes\\\\M'`, which no longer matches the parameter p_internal_notes. That is the only substantive change; the receipted file 20260805110000 carries it and its sha256 in this receipt (edf07b6c…) is the post-fix value, which is why the checksum gate passes against the file on disk.",
+    "object_evidence": "docs/audits/raw/2026-08-06-post-apply-verification.txt — pg_get_constraintdef(bills_status_check) = CHECK ((status = ANY (ARRAY['DRAFT','APPROVED','AWAITING_PAYMENT','PART_PAID','PAID','OVERDUE','VOIDED']))); information_schema.columns for public.customers returns company_name (text, no default) and default_currency (text, default 'GBP'::text). Re-confirmed live on 2026-08-17: both columns present.",
+    "commit_implies_assertions_passed": "The migration is a single BEGIN…COMMIT. Its preconditions abort if bills_status_check is absent, if it already permits APPROVED, if any bill row falls outside the widened set, if customers lacks any column the mapping targets, or if customers.billing_address already exists. Its post-assertions abort if the widened constraint or either new column is missing, if the function body still names billing_address or internal_notes as identifiers, if the address is no longer decomposed onto address_line_1, if the cross-tenant entity check or the entity_type validation is missing, or if more than one create_customer_safe signature survives. The constraint and both columns are live, so the transaction committed, so every one of those held at commit time. That chain — not a ledger row — is what the structural results below rest on."
+  },
   "declared_at": "2026-08-05T00:00:00Z",
   "approver": null,
   "summary": "DEF-026 + DEF-027. Widens bills_status_check to admit the APPROVED state that approve_bill_safe has written since December 2025, and repairs create_customer_safe, which inserted four columns that do not exist on public.customers. Replaces one CHECK constraint, adds two columns, re-issues one function body. No data is modified and no policy, trigger or index is touched.",
@@ -68,48 +84,69 @@
     {
       "path": "supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql",
       "sha256": "edf07b6c8cda151591aede6a765b701670100112274df227582ac8795c9e60f0",
+      "executor_applied": {
+        "applied_version": "20260806083329",
+        "applied_file": "supabase/migrations/20260806083329_92ddc200-e321-4931-a954-0d248d5b7d6b.sql",
+        "applied_sha256": "5c131d435c0b8852d6f630772409f2bd03c39691fdba780eba6e8f339e5ee138",
+        "fidelity": "RE-AUTHORED, EFFECT-IDENTICAL. Diffing the two files with comments and blank lines stripped yields zero differences; the executor removed commentary only and changed no SQL.",
+        "governed_by": "The applied-versions baseline, docs/audits/unapplied-migrations-baseline.json \u2014 see executorAppliedDuplicates. This receipt remains the single receipt for the change."
+      },
       "expected_objects": [
         {
           "id": "bills-status-widened",
           "object": "bills_status_check permits all seven canonical statuses including APPROVED",
-          "result": "pending",
-          "verify_via": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'bills_status_check' \u2014 assert it names DRAFT, APPROVED, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED and no others"
+          "result": "pass",
+          "verify_via": "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'bills_status_check' \u2014 assert it names DRAFT, APPROVED, AWAITING_PAYMENT, PART_PAID, PAID, OVERDUE, VOIDED and no others",
+          "actual": "docs/audits/raw/2026-08-06-post-apply-verification.txt: CHECK ((status = ANY (ARRAY['DRAFT'::text, 'APPROVED'::text, 'AWAITING_PAYMENT'::text, 'PART_PAID'::text, 'PAID'::text, 'OVERDUE'::text, 'VOIDED'::text]))) \u2014 exactly the seven, no others. Compare the post-rollback capture on 2026-08-05, which lacked APPROVED.",
+          "verified_at": "2026-08-06"
         },
         {
           "id": "bill-approval-succeeds",
           "object": "approve_bill_safe completes on a DRAFT bill instead of raising 23514",
           "result": "pending",
-          "verify_via": "Reproduce first: call approve_bill_safe on a DRAFT bill pre-apply and confirm 23514. Post-apply, call it again inside a rolled-back transaction and confirm success:true with the bill at APPROVED."
+          "verify_via": "Reproduce first: call approve_bill_safe on a DRAFT bill pre-apply and confirm 23514. Post-apply, call it again inside a rolled-back transaction and confirm success:true with the bill at APPROVED.",
+          "why_still_pending": "BEHAVIOURAL. No call to approve_bill_safe is recorded in any raw capture in this repository, before or after the re-apply. The widened constraint (above) is a necessary condition and is evidenced; the RPC completing is not, and must not be inferred from it \u2014 the same receipt's new_findings record that the live approve_bill_safe body has drifted from its December definition, so its behaviour is exactly the thing not to assume."
         },
         {
           "id": "customer-columns-added",
           "object": "customers.company_name and customers.default_currency exist, default_currency NOT NULL DEFAULT 'GBP'",
-          "result": "pending",
-          "verify_via": "information_schema.columns for public.customers \u2014 assert both present with the stated nullability and default"
+          "result": "pass",
+          "verify_via": "information_schema.columns for public.customers \u2014 assert both present with the stated nullability and default",
+          "actual": "docs/audits/raw/2026-08-06-post-apply-verification.txt: company_name | text | (no default); default_currency | text | 'GBP'::text. Re-confirmed live 2026-08-17 via the Lovable DB connector: both columns exist.",
+          "nullability_evidence": "The 2026-08-06 capture selected column_name, data_type and column_default only \u2014 is_nullable was NOT read, so NOT NULL is not evidenced by catalog observation. It is evidenced by the DDL plus the commit: the migration issues ADD COLUMN IF NOT EXISTS default_currency text NOT NULL DEFAULT 'GBP', the column did not exist beforehand (the 2026-08-05 post-rollback capture returned 0 rows for it, so IF NOT EXISTS could not have skipped it), and the transaction committed. Stated so the weaker link is visible; a direct is_nullable read would settle it outright.",
+          "verified_at": "2026-08-17"
         },
         {
           "id": "customer-create-succeeds",
           "object": "create_customer_safe inserts only columns that exist and returns success",
-          "result": "pending",
-          "verify_via": "Reproduce first: call create_customer_safe pre-apply and confirm 42703. Post-apply, call it in a rolled-back transaction with a billing address and confirm the address lands decomposed across address_line_1/city/postcode/country."
+          "result": "partial",
+          "verify_via": "Reproduce first: call create_customer_safe pre-apply and confirm 42703. Post-apply, call it in a rolled-back transaction with a billing address and confirm the address lands decomposed across address_line_1/city/postcode/country.",
+          "actual": "STRUCTURAL HALF PASSES. The migration's post-assertions read pg_proc.prosrc and abort unless the body names neither billing_address nor internal_notes as an identifier and does decompose onto address_line_1. It committed, so both held. The four non-existent columns are therefore gone from the INSERT, which is the 42703 cause.",
+          "why_still_partial": "BEHAVIOURAL HALF UNVERIFIED. No invocation of create_customer_safe \u2014 pre-apply reproduction or post-apply call \u2014 is recorded anywhere in this repository. That the body no longer names a missing column is strong evidence it will not raise 42703; it is not the same as having called it and seen success:true with the address landing decomposed."
         },
         {
           "id": "no-address-duplication",
           "object": "No billing_address column was added to public.customers",
-          "result": "pending",
-          "verify_via": "information_schema.columns \u2014 assert billing_address is absent"
+          "result": "pass",
+          "verify_via": "information_schema.columns \u2014 assert billing_address is absent",
+          "actual": "Two independent grounds. (1) The migration's DEF-027 precondition RAISEs if customers.billing_address exists, and it committed, so the column was absent immediately before the ALTER. (2) The only ALTER TABLE public.customers in the file adds exactly company_name and default_currency. No statement in the file creates billing_address.",
+          "verified_at": "2026-08-06"
         },
         {
           "id": "cross-tenant-write-closed",
           "object": "create_customer_safe refuses an entity belonging to another organization",
-          "result": "pending",
-          "verify_via": "Call it as a member of org A passing a client id owned by org B \u2014 assert 42501 'Entity does not belong to organization'. Pre-apply this call SUCCEEDS, which is the point."
+          "result": "partial",
+          "verify_via": "Call it as a member of org A passing a client id owned by org B \u2014 assert 42501 'Entity does not belong to organization'. Pre-apply this call SUCCEEDS, which is the point.",
+          "actual": "STRUCTURAL: the migration's post-assertion aborts unless prosrc contains 'Entity does not belong to organization', and it committed, so the check is present in the live body.",
+          "why_still_partial": "BEHAVIOURAL AND DELIBERATELY NOT INFERRED. The check being present in the body is not proof that the cross-tenant call is refused; only the call is. This is the one behaviour change that goes beyond the reported defect and the apply instructions require it to be seen to work. It has not been. Note additionally that the executor's route into this database is sandbox_exec, whose RLS bypass recurs (DEF-031), so a cross-tenant result obtained through that session would prove the in-function RAISE and not RLS \u2014 the DEF-031 receipt's evidence_rules govern how such a result may be recorded."
         },
         {
           "id": "single-signature",
           "object": "Exactly one create_customer_safe signature exists \u2014 no overload was introduced",
-          "result": "pending",
-          "verify_via": "catalog_functions(name_like 'create_customer_safe') \u2014 assert exactly one row, arguments unchanged"
+          "result": "pass",
+          "verify_via": "catalog_functions(name_like 'create_customer_safe') \u2014 assert exactly one row, arguments unchanged",
+          "actual": "The migration's final post-assertion counts pg_proc rows for create_customer_safe in public and RAISEs unless the count is exactly 1. It committed, so exactly one signature existed at commit time. Not independently re-read from the catalog since.",
+          "verified_at": "2026-08-06"
         }
       ]
     }
@@ -125,7 +162,12 @@
     ]
   },
   "guarded_by": "src/test/regression/def-026-027-bill-status-and-customer-columns.test.ts \u2014 22 static guards over the migration and the app-side vocabulary, including that AWAITING_PAYMENT is not silently dropped, that the retired VOID spelling is not reintroduced, that no rival address column is added, that the signature is unchanged against the real caller, and that the migration modifies no existing data.",
-  "live_apply": "NOT APPLIED. Authored 2026-08-05, awaiting the executor.",
+  "live_apply": {
+    "status": "APPLIED 2026-08-06 AND STRUCTURALLY VERIFIED. The 2026-08-05 attempt failed and rolled back; see live_apply_attempt below for that, and re_apply_2026_08_06 above for the successful re-apply.",
+    "target": "moxpdejnucjjcplleefn (PRODUCTION)",
+    "applied_version": "20260806083329",
+    "outstanding": "Three behavioural checks — bill-approval-succeeds, customer-create-succeeds, cross-tenant-write-closed — remain unrun. This receipt stays in pending/ until they pass."
+  },
   "new_findings": [
     "An OVERDUE bill cannot be paid. record_bill_payment_safe accepts only ('APPROVED','AWAITING_PAYMENT','PART_PAID'), but sync_bill_aged_balance and the overdue scan can move a bill to OVERDUE, after which every payment attempt is refused. The BillsTab payment action still offers the button for OVERDUE, so the failure surfaces as an error rather than a disabled control. NOT fixed here \u2014 it is a bill payment state-machine question, not a vocabulary one, and expanding this release to cover it would mix two changes. Logged for a ruling.",
     "approve_bill_safe on LIVE has drifted from its December definition: the live body checks user_has_role_at_least(...,'manager') and omits the locked_fields assignment and the richer audit_log row that 20251217171128 wrote. Something re-issued it later with less behaviour. Not repaired here because this release deliberately does not touch the function, but it is DEF-020/DEF-023 evidence and should be reconciled."
@@ -133,7 +175,7 @@
   "open_after_this": [
     "DEF-030 can_create_invoices \u2014 the branch cannot currently refuse any member, because the product's deliberate 3-role model (owner/admin/staff, src/lib/permissions.ts) grants can_create_invoices to all three. The owner ruled on 2026-08-05 to delete the branch, but that ruling was given before the capability matrix was found. Deleting it would remove the server-side enforcement point for a modelled permission and leave enforcement client-side only and bypassable. Held for re-ruling rather than applied.",
     "DEF-028 stamp_portal_provenance still selects portal_access.contact_id on LIVE (hash f67d2205, confirmed 2026-08-05). Migration 20260803140000 is authored and awaiting the executor; every portal write remains broken until applied.",
-    "DEF-018/DEF-003 \u2014 migration 20260805100000 authored and awaiting the executor.",
+    "DEF-018/DEF-003 \u2014 migration 20260805100000 applied 2026-08-06 as executor version 20260806083238. DEF-018 verified fixed. DEF-003 NOT in effect: process-email-queue was present and running on 2026-08-06 and is absent from the 12 active cron jobs read live on 2026-08-17. See docs/releases/pending/2026-08-05-def-018-003-cron-guc-repair.json.",
     "DEF-019 no alerting layer exists.",
     "DEF-016 remains undefined and blocking by declaration."
   ],
@@ -200,6 +242,7 @@
     ]
   },
   "live_apply_attempt": {
+    "superseded_by": "re_apply_2026_08_06. This block is the historical record of the FAILED 2026-08-05 attempt and is retained deliberately — the false-positive assertion it diagnoses is the reason the anchored form exists. It is not the current state of the release.",
     "target": "moxpdejnucjjcplleefn (PRODUCTION)",
     "attempted_at": "2026-08-05T21:25:00Z",
     "source": "supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql",

@@ -26,6 +26,40 @@
       "repair_state": "NOT repaired in this observation; escalated to platform."
     }
   ],
+  "executor_applied_copies": {
+    "why_recorded_here": "Lovable re-timestamps and re-authors every migration it applies. Each copy below is an executor duplicate of the receipted repair 20260805200000 and originates no new intent, so it is governed by the applied-versions baseline (docs/audits/unapplied-migrations-baseline.json, executorAppliedDuplicates) rather than by a rival receipt. This receipt stays the single receipt for DEF-031; the copies are recorded here so the git-to-live mapping is not lost (convention §4).",
+    "copies": [
+      {
+        "applied_version": "20260805210851",
+        "applied_file": "supabase/migrations/20260805210851_092dcacf-b730-40ab-b8be-5099eca09207.sql",
+        "note": "The 2026-08-05 apply, already referenced in recurrence_log[0].source_search and in the platform-escalation document §4."
+      },
+      {
+        "applied_version": "20260806114404",
+        "applied_file": "supabase/migrations/20260806114404_ca6dfb58-afb7-48fa-98f7-22d9cd327340.sql",
+        "applied_sha256": "a85ef1774d3b4eaa9e2ed4c221d8ae1847c3ec5ae6bb49784d3e916b05940366",
+        "fidelity": "RE-AUTHORED AND ABRIDGED. Same single effect (ALTER ROLE sandbox_exec NOBYPASSRLS) and the same three post-assertions — rolbypassrls false, not superuser, no bypassing parent role.",
+        "corresponds_to": "recurrence_log[0] — the 2026-08-06 ~11:4x repair.",
+        "object_evidence": "docs/audits/raw/2026-08-06-def-031-recurrence.txt §[3]: post-alter state from a NEW connection, oid=161547, bypassrls=false, superuser=false, 0 bypassing parents, SELECT count(*) FROM organizations = 0.",
+        "verification": "APPLIED AND OBJECT-VERIFIED AT THE TIME. Effect reverted out of band at 12:23:21Z, recurrence_log[1]."
+      },
+      {
+        "applied_version": "20260806162406",
+        "applied_file": "supabase/migrations/20260806162406_f170d4dd-0dd9-4b16-af55-20f09d0a0a08.sql",
+        "applied_sha256": "c0bfbdb24f0480940dbacd909572594688b974cb86bf59b30b76f3fcf83533e5",
+        "fidelity": "VERBATIM. Byte-identical to 20260805200000 bar a missing trailing newline.",
+        "corresponds_to": "NOTHING IN recurrence_log. This is an open gap — see unlogged_fourth_repair below.",
+        "object_evidence": "NONE. No raw capture, receipt entry or audit note in this repository records a DEF-031 observation, repair or post-state at or after 2026-08-06T16:24Z.",
+        "verification": "PROVENANCE ONLY — UNVERIFIED. Recorded as an open gap, not as a pass."
+      }
+    ],
+    "unlogged_fourth_repair": {
+      "observation": "A verbatim copy of the DEF-031 repair exists at executor applied version 20260806162406 — roughly four hours after the 12:23:21Z reversion recorded as recurrence_log[1], and after docs/audits/2026-08-06-def-031-platform-escalation.md was written (its §4 lists only 20260805210851 and 20260806114404 as executor copies, so it predates this file).",
+      "what_this_means_for_the_record": "The recurrence_log and the escalation timeline both stop at the third occurrence. If this file ran, there was a fourth repair — and, since the repair is a no-op unless rolbypassrls is true, a fourth out-of-band reversion preceding it. Neither is logged. The escalation to the platform team therefore understates the recurrence count and the exposure window.",
+      "not_asserted": "Whether the file ran, what the pre-state was, and whether the boundary held afterwards are all unestablished. No pre- or post-state was captured. This entry records the gap; it does not fill it.",
+      "action": "Capture rolbypassrls for oid 161547 from a fresh session, add the observation to recurrence_log, and correct the occurrence count in §2 of the escalation document before it is next sent to the platform team."
+    }
+  },
   "evidence_rules": [
     "No sandbox_exec session may be treated as RLS evidence unless that SAME fresh session first confirms rolbypassrls = false. Enforced fail-closed by scripts/precheck-rls-boundary.ts, which scripts/verify-post-publish.ts now calls before reading anything.",
     "Durable cross-tenant RLS evidence comes from real authenticated fixture users via scripts/smoke-test.ts (signInWithPassword, no service role; guarded by src/test/regression/rls-cross-org.test.ts), not from sandbox_exec."
