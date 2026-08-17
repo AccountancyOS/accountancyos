@@ -10,10 +10,12 @@
 --     process-automation-events    sync-gmail-emails              sync-outlook-emails
 --     truelayer-sync-hourly        truelayer-sync-scheduled       workflow-tick
 --
--- Nothing enqueued into `public.email_queue` is drained. The queue currently has zero
--- `pending` rows, so the failure is LATENT rather than visible — which is precisely the
--- Gate 6 pattern this programme exists to eliminate. The next enqueue sits forever and
--- the product reports nothing.
+-- Nothing enqueued into `public.email_queue` is drained. The executor's unrestricted count
+-- on the same day reports sent=12, cancelled=2, `pending=1` — so at least one message is
+-- already stranded and cannot be delivered while no drain is scheduled. (A `pending` filter
+-- through the database connector returned zero rows; that view is RLS-scoped to the
+-- signed-in user and is the narrower of the two readings.) Nothing in the product reports
+-- any of this, which is precisely the Gate 6 pattern this programme exists to eliminate.
 --
 -- WHY THIS IS A REGRESSION, NOT AN UNAPPLIED MIGRATION. `20260806083238` (the executor's
 -- re-authored copy of `20260805100000`) both schedules this job AND post-asserts

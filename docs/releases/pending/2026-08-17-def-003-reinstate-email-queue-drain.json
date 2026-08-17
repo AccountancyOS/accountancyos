@@ -11,7 +11,7 @@
     "evidence": "Direct read of `cron.job` on production (moxpdejnucjjcplleefn) via the Lovable database connector `catalog_cron`, 2026-08-17: exactly TWELVE active jobs — chaser-tick-every-15min, chaser-trigger-scan-every-6h, dormant-lead-scan-daily, hmrc-ct-delete-worker, hmrc-ct-poll-worker, invoice-overdue-scan-daily, process-automation-events, sync-gmail-emails, sync-outlook-emails, truelayer-sync-hourly, truelayer-sync-scheduled, workflow-tick. `process-email-queue` is not among them.",
     "why_this_is_a_regression_not_an_unapplied_migration": "20260806083238 (the executor's re-authored copy of 20260805100000) schedules this job AND post-asserts `(SELECT count(*) FROM cron.job) >= 13` inside its own transaction; it cannot have committed without the job existing. Independent corroboration that it did commit: the live command text of hmrc-ct-poll-worker is byte-identical to the text that migration writes, vault lookup included. So the job existed on 2026-08-06 and was removed between then and 2026-08-17.",
     "out_of_band": "No migration in this repository unschedules it after 2026-08-06 — a search for `unschedule` across supabase/migrations/ returns nothing later dated. The removal happened outside Git. This is the FOURTH recorded disappearance of this specific job (20260620165236, 20260624101545, and the absence repaired by 20260805100000 precede it) and is DEF-020/DEF-031-class production drift.",
-    "latency_note": "public.email_queue currently holds ZERO rows with status 'pending' (live query, 2026-08-17), so the failure is latent rather than visible. That is the Gate 6 pattern, not an argument that it is harmless: the next enqueue sits forever and the product reports nothing."
+    "queue_state": "Two readings, taken 2026-08-17, that disagree because of RLS scope — both recorded rather than reconciled away. Through the database connector (which acts as the signed-in user) a status='pending' filter returned ZERO rows. The executor's unrestricted production count, recorded the same day in .lovable/plan.md, reports sent=12, cancelled=2, pending=1. The connector's narrower view is explained by RLS; the executor's is authoritative on volume. So there IS at least one message stranded in the queue that cannot be delivered while no drain is scheduled — the defect is active, not merely latent. Independent of which count is right, the drain is absent and the next enqueue sits forever with nothing in the product reporting it."
   },
   "blast_radius_analysis": {
     "schema": "None. The migration issues one cron.schedule() call. It creates, alters and drops no function, table, view, trigger, policy, index or grant — asserted in CI by src/test/regression/def-003-email-queue-drain.test.ts.",
@@ -34,7 +34,7 @@
   "migrations": [
     {
       "path": "supabase/migrations/20260817100000_def_003_reinstate_email_queue_drain.sql",
-      "sha256": "90e178c438b8e8f95e5a9683ab1748be5930e871063342f58af198494806cb6e",
+      "sha256": "1f81096c513fc0bce7a2ffa379012dcd086b5c915d10d9270ed631d754411d3a",
       "self_verifying": true,
       "self_verifying_note": "Single transaction. Preconditions abort if pg_cron or pg_net is absent, if the vault secret is missing or empty, or if any job still references app.settings.*. Post-assertions abort unless the job exists, is active, has schedule '* * * * *', reads from vault, targets the right function, and total job count is >= 13. A partial apply cannot commit.",
       "expected_objects": [
