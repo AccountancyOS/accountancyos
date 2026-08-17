@@ -136,7 +136,11 @@ and DEF-031 exists precisely because platform automation kept restoring `BYPASSR
 **These tokens must be rotated on migration, never copied.** They are stored in plaintext in a
 catalog table.
 
-### 5.2 Four cron jobs return 401 on every run — live defect, not migration drift [LIVE]
+### 5.2 P1 — INFRASTRUCTURE DRIFT: four cron jobs return 401 on every run [LIVE]
+
+**Classification: P1 infrastructure drift.** Two chaser jobs and two TrueLayer jobs. Recorded
+here as evidence; **not repaired** — this exercise is read-only and the Lovable backend was not
+changed.
 
 `mcp_http_delivery_health(240)` on 2026-08-17: **844 calls, 814 succeeded, 29 unauthorized,
 0 server errors.** The 29 attribute exactly by cadence and count:
@@ -172,12 +176,42 @@ carry the same literal-anon-key pattern but fall outside any window that could b
 1440-minute request returned only 1,171 rows total against 844 in the preceding four hours,
 showing `net._http_response` retention truncates well short of a day.
 
-### 5.3 A literal anon key in the frontend build config [GIT]
+### 5.3 P1 — Provider tokens are stored in plaintext [GIT + LIVE]
+
+**This corrects an earlier claim in this pack.** An earlier draft stated that `ENCRYPTION_KEY`
+protects mailbox and bank tokens. **That was wrong.** Verified 2026-08-17:
+
+| Integration | Token storage | Encrypted? |
+|---|---|---|
+| HMRC | via `ENCRYPTION_KEY` in `hmrc-callback`, `hmrc-vat-obligations`, `_shared/hmrc-auth` | **yes** (AES, key from env) |
+| Gmail | `connected_mailboxes.access_token` / `.refresh_token` | **NO — plaintext** |
+| Outlook | `connected_mailboxes.access_token` / `.refresh_token` | **NO — plaintext** |
+| TrueLayer | `bank_connections.access_token` / `.refresh_token` | **NO — plaintext** |
+
+`grep -l encrypt` across `gmail-*`, `outlook-*` and `truelayer-*` returns **nothing** —
+`gmail-exchange/index.ts:133-134,161-162`, `outlook-exchange/index.ts:125-126,151-152` and
+`truelayer-callback/index.ts:170` write the raw token straight into the row. Both columns exist
+on the live tables (confirmed in the live capture).
+
+`ENCRYPTION_KEY` therefore protects **HMRC credentials only**. Mailbox and bank tokens are
+protected by RLS alone — a live bank and mailbox access token is readable by anything that can
+read those rows.
+
+**A second weakness in the same code:** all three HMRC call sites declare
+`Deno.env.get('ENCRYPTION_KEY') || 'default-dev-key-change-in-production'` and then
+`.padEnd(32,'0').slice(0,32)`. If the variable is unset, HMRC tokens are encrypted with a
+**hard-coded constant that is published in this repository**, and any supplied key is silently
+truncated or zero-padded to 32 bytes. Whether the variable is actually set on the source project
+is **[UNVERIFIED]** — Edge Function environment is not readable from here.
+
+Not repaired. Recorded for the target build.
+
+### 5.4 A literal anon key in the frontend build config [GIT]
 
 `vite.config.ts:7` hard-codes the legacy project ref with an anon-key fallback on line 8. The
 value is not reproduced here. It must be replaced, not carried across.
 
-### 5.4 The connector's own reach is a security-relevant limit
+### 5.5 The connector's own reach is a security-relevant limit
 
 `pg_constraint` is unreadable, so **no CHECK or FOREIGN KEY constraint anywhere in this database
 was verified live.** Every constraint in `live-schema.sql` is absent, not merely unvalidated.
@@ -247,11 +281,33 @@ Of 528 migrations [GIT]:
 | References `sandbox_exec` | 11 | Grants or role changes |
 | Creates or alters a role | 4 | All `ALTER ROLE sandbox_exec … NOBYPASSRLS`; the role is never created in git, so all four fail on a clean project |
 
-**Recommendation: do not replay history.** Build the target from a privileged schema dump of the
-source, taken once, reviewed, and committed as a single baseline migration. Replaying 528
-migrations reproduces every defect this programme has spent a month repairing — including
-DEF-032's three overlapping constraints, which were *created* by exactly this
-add-another-constraint-under-a-new-name pattern.
+**RECOMMENDATION: ONE REVIEWED CANONICAL BASELINE. Do not replay the 528 migrations.**
+
+Build the target from a single schema baseline, derived from the official Lovable database
+export, **reviewed by a human**, and committed as one canonical migration. Then start the
+target's migration history from that baseline.
+
+Reasons, in order of weight:
+
+1. **Replaying history reproduces the defects.** DEF-032's three overlapping CHECK constraints
+   on `filings.status` were *created* by exactly the pattern these migrations contain — each
+   "replace the status constraint" migration added a constraint under a slightly different name
+   instead of replacing, and `valid_status` from the original `CREATE TABLE` was never dropped by
+   any of them. Replaying reproduces all three, and the transition trigger on top.
+2. **Four to seven migrations cannot execute at all.** `ALTER ROLE sandbox_exec` appears in
+   migrations that never create the role.
+3. **Thirteen carry hard-coded legacy project URLs** that would point the new project's cron jobs
+   at the old backend.
+4. **473 of 528 have executor-generated filenames**, so the history is not a designed sequence —
+   it is an append-only log of what one tool happened to run.
+5. The five out-of-git cron jobs and the true storage bucket set are missing from history anyway,
+   so a replay is not even complete.
+
+`migration-manifest.json` in this directory lists all 528 files with SHA-256, per-file flags and
+the count reconciliation, so the decision can be audited rather than taken on trust.
+
+The 528 files should be **retained in the repository as history**, not deleted — they are the
+provenance record for every constraint the baseline contains.
 
 ---
 
@@ -281,8 +337,20 @@ add-another-constraint-under-a-new-name pattern.
 
    Lovable states there is **no one-click transfer** from Cloud to Supabase, so every step here
    is manual and must be scripted and verified.
-2. **Baseline strategy** — single reviewed schema dump (recommended, §8) versus replaying 528
-   migrations.
+2. ~~**Baseline strategy**~~ — **DECIDED 2026-08-17: one reviewed canonical baseline.** The 528
+   migrations are retained as history and are not replayed. See §8.
+
+2a. **`ENCRYPTION_KEY` — DECIDED 2026-08-17: ROTATE.** A new key is generated for London and
+   existing test integrations are re-authorised. Per the correction in §5.3 the blast radius is
+   **narrower than first stated**: `ENCRYPTION_KEY` protects **HMRC tokens only**, so rotation
+   forces HMRC re-authorisation and nothing else. Gmail, Outlook and TrueLayer tokens are stored
+   in plaintext and are unaffected by the key — though they are being re-authorised regardless,
+   since no token rows are being restored.
+
+   Two things to carry into the target build rather than copy across: the
+   `|| 'default-dev-key-change-in-production'` fallback must be removed so a missing key fails
+   closed instead of encrypting with a published constant, and the `padEnd(32).slice(0,32)`
+   key derivation should be replaced with a proper KDF.
 3. **Storage buckets** — which set is real: the manifest's four, or the ten git references?
 4. **Email provider** — what replaces Lovable Email, and does the auth send-email hook move with
    it?

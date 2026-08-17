@@ -1,13 +1,21 @@
 {
   "generatedAt": "2026-08-17",
   "algorithm": "sha256",
-  "note": "Hashes of every file in this evidence pack except checksums.json itself. Regenerated after the Lovable-export findings were folded into README.md, drift-report.md and manual-settings.md.",
+  "note": "Hashes of every file in this evidence pack except checksums.json itself.",
+  "sourceBackupVerified": {
+    "file": "accountancyos_260817.backup",
+    "sha256": "28420b17557249e92fa61cf685d0f84da432e64208a275c67e212a99d13c5321",
+    "bytes": 39202869,
+    "verifiedBy": "independent shasum -a 256 on 2026-08-17; matches the owner-supplied digest exactly",
+    "note": "The official Lovable export is inspected SEPARATELY and is NOT the source of anything in this pack. No export-derived schema was committed here, and every area unreachable through the read-only connector remains marked unavailable. The export is not stored in this repository."
+  },
   "files": {
-    "README.md": "346bd028ea280e0fc59c85e02e7b15da339862083ade526e2ca5af4f1cb0a8a9",
+    "README.md": "1f5dc38d7974c516df05b8622fc152403c6894628e5777b5070941ee7f12f73e",
     "data-summary.json": "114c907a16c5381cc3ec79025a15875fbf974abfd9ba8f10864fcd36ecc8015f",
-    "drift-report.md": "e57efb36ab0dc478dc9acf9c6b56f1bb485a78f2afc3484873449c8da7242a0a",
+    "drift-report.md": "a689ec7e2e929de4bcc96ac0dd8ccdac83c23705f544d7b60ff1722b5528d864",
     "live-inventory.json": "a4dfde45b60839e822164df3bd6888d3050abb8011642d20dc09c02483cb5e17",
     "live-schema.sql": "3c2fc00f8bf8f2f1f805d2ae3eac4e9ece8bc04af624a95062160fa9352d70f9",
-    "manual-settings.md": "e07c20c8bf320f298bb1b608ea1fd95b09edce34734f93da25b844fb103bfb66"
+    "manual-settings.md": "ca4ea666732dfab006781e7d6542314ab53b0292c6e75a6fab57f74907df05d9",
+    "migration-manifest.json": "8acee26d8043014670ebe532aa2453454f3e802789dd656b38f4464172a916e6"
   }
 }

@@ -58,7 +58,34 @@ value was modified.
 | `drift-report.md` | Live-versus-Git discrepancies, Lovable-only infrastructure, security-relevant differences, migrations that cannot be replayed, and the decisions the owner must make. |
 | `manual-settings.md` | Everything that cannot be reconstructed from schema SQL: Auth config, OAuth registrations, Stripe webhooks, Vault and Edge Function secret names, storage, project settings. |
 | `data-summary.json` | Counts only. No record contents, no personal data. |
+| `migration-manifest.json` | All 528 migration files with SHA-256, per-file flags, and the 526-vs-528 count reconciliation. |
 | `checksums.json` | SHA-256 of every file above. |
+
+## Migration count — 526 vs 528, reconciled
+
+The brief cites 526 migrations; this repository holds **528**. The difference is exactly the two
+files added on 2026-08-17:
+
+- `20260817100000_def_003_reinstate_email_queue_drain.sql` — the DEF-003 email-drain repair
+- `20260817101105_2b35a278-52ee-44db-a7a2-bd3895d927bc.sql` — the executor's verbatim applied
+  duplicate of it
+
+526 + 2 = 528. No migration was deleted, renamed or rewritten. Every file is listed with its
+SHA-256 in `migration-manifest.json` so the count is auditable rather than asserted.
+
+Flag totals across all 528: 473 executor-generated filenames · 17 schedule cron · 13 reference
+the legacy project ref · 11 reference `sandbox_exec` · 7 match `CREATE|ALTER ROLE` (a textual
+match that includes prose and comments; the agent-verified count of actual executable role
+statements is 4, all `ALTER ROLE sandbox_exec … NOBYPASSRLS`).
+
+## Correction issued in this pack
+
+An earlier draft of `manual-settings.md` claimed `ENCRYPTION_KEY` is the at-rest key for stored
+provider tokens generally, and that rotating it would break mailbox and bank connections. **That
+was wrong and is corrected** in `drift-report.md` §5.3 and `manual-settings.md` §6:
+`ENCRYPTION_KEY` protects **HMRC tokens only**; Gmail, Outlook and TrueLayer tokens are stored
+**in plaintext**. The correction narrows the impact of the ROTATE decision and surfaces a
+plaintext-token finding that the original claim had concealed.
 
 ## What was inventoried
 
@@ -129,12 +156,22 @@ Until that export exists, absence of an object from this pack means *not readabl
 
 Recorded because they were discovered here, **not repaired** — this was a read-only exercise:
 
-1. **Four of thirteen cron jobs return 401 on every run**, so the chaser engine does not run and
-   bank feeds do not sync. Evidence and attribution in `drift-report.md` §5.2.
+1. **P1 infrastructure drift — four of thirteen cron jobs return 401 on every run**: the two
+   chaser jobs (`chaser-tick-every-15min`, `chaser-trigger-scan-every-6h`) and the two TrueLayer
+   jobs (`truelayer-sync-scheduled`, `truelayer-sync-hourly`). The chaser engine does not run and
+   bank feeds do not sync, while `pg_cron` reports all four "succeeded". Evidence and attribution
+   in `drift-report.md` §5.2.
 2. **Vault secret `CRON_SECRET` does not exist**, yet live job `truelayer-sync-hourly` reads that
    exact name for its `x-cron-secret` header.
 3. **Five cron jobs carry a literal anon JWT in plaintext** in `cron.job.command`. Those tokens
    must be rotated on migration, not copied.
+4. **Gmail, Outlook and TrueLayer access and refresh tokens are stored in plaintext** in
+   `connected_mailboxes` and `bank_connections`, protected by RLS alone. Only HMRC tokens are
+   encrypted. See `drift-report.md` §5.3.
+5. **`ENCRYPTION_KEY` falls back to a constant published in this repository** if the variable is
+   unset, and derives its key by zero-padding or truncating to 32 bytes.
+
+None of these was repaired. **The Lovable backend was not changed.**
 
 ## Repository test state at capture
 

@@ -122,12 +122,38 @@ than copy** anything marked below.
 - **App config** (6): `ALLOWED_ORIGINS`, `APP_PUBLIC_URL`, `APP_URL`, `ENCRYPTION_KEY`, `PORTAL_PUBLIC_URL`, `PORTAL_SEED_SECRET`
 - **Cron worker** (1): `CRON_SECRET`
 
-### `ENCRYPTION_KEY` is special and dangerous
+### `ENCRYPTION_KEY` — DECISION: **ROTATE** (owner, 2026-08-17)
 
-It is the at-rest encryption key for stored provider tokens. **If it changes, every token
-encrypted under the old key becomes undecryptable.** Whether it is carried across or rotated
-determines whether mailbox and bank connections survive the migration or must all be
-re-authorised. This is an owner decision and should be made before, not during, cutover.
+A new key is generated for London; existing test integrations are re-authorised.
+
+**Correction to an earlier draft of this document.** It stated that `ENCRYPTION_KEY` is the
+at-rest key for stored provider tokens generally, and that rotating it would break mailbox and
+bank connections. **That was wrong.** Verified against the repository on 2026-08-17:
+
+| Integration | Where the token is stored | Encrypted by `ENCRYPTION_KEY`? |
+|---|---|---|
+| HMRC | `hmrc-callback`, `hmrc-vat-obligations`, `_shared/hmrc-auth` | **Yes** — the only three call sites |
+| Gmail | `connected_mailboxes.access_token` / `.refresh_token` | **No — plaintext** |
+| Outlook | `connected_mailboxes.access_token` / `.refresh_token` | **No — plaintext** |
+| TrueLayer | `bank_connections.access_token` / `.refresh_token` | **No — plaintext** |
+
+`grep -l encrypt` across `gmail-*`, `outlook-*` and `truelayer-*` returns nothing; those
+functions write raw tokens (`gmail-exchange/index.ts:133-134,161-162`,
+`outlook-exchange/index.ts:125-126,151-152`, `truelayer-callback/index.ts:170`). Both columns
+exist on the live tables.
+
+**So rotation forces HMRC re-authorisation only.** Mailbox and bank tokens are unaffected by the
+key — they are protected by RLS alone — and are being re-authorised anyway because no token rows
+are restored.
+
+**Two defects to fix in the target build, not to carry across** (recorded, not repaired):
+- All three HMRC call sites use `Deno.env.get('ENCRYPTION_KEY') || 'default-dev-key-change-in-production'`.
+  With the variable unset, HMRC tokens are encrypted with a constant published in this
+  repository. Whether it is set on the source is **[UNVERIFIED]** — Edge Function environment is
+  not readable from here. The fallback must be removed so a missing key fails closed.
+- The key is used as `padEnd(32,'0').slice(0,32)`, silently zero-padding a short key and
+  truncating a long one. Replace with a proper KDF.
+- Storing mailbox and bank tokens in plaintext is itself worth a decision for the target.
 
 ### Manifest secret drift
 
