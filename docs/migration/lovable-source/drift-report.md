@@ -193,6 +193,15 @@ protects mailbox and bank tokens. **That was wrong.** Verified 2026-08-17:
 `truelayer-callback/index.ts:170` write the raw token straight into the row. Both columns exist
 on the live tables (confirmed in the live capture).
 
+**Scope correction, 2026-08-17.** An earlier revision of this section cited those three call
+sites and thereby understated the surface. **Eleven functions** reference these token columns —
+`gmail-callback`, `gmail-exchange`, `gmail-send`, `gmail-sync`, `outlook-callback`,
+`outlook-exchange`, `outlook-send`, `outlook-sync`, `truelayer-callback`, `truelayer-sync`,
+`truelayer-sync-scheduled` — across roughly 40 referencing lines, covering both the write side
+and the refresh/read side. The security finding is unchanged, but the **remediation cost is
+not**: encrypting these at rest is an eleven-function change, not a three-file one, because
+every reader must decrypt as well. That is why it is an owner decision rather than a tidy-up.
+
 `ENCRYPTION_KEY` therefore protects **HMRC credentials only**. Mailbox and bank tokens are
 protected by RLS alone — a live bank and mailbox access token is readable by anything that can
 read those rows.

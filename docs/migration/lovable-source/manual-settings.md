@@ -142,6 +142,14 @@ functions write raw tokens (`gmail-exchange/index.ts:133-134,161-162`,
 `outlook-exchange/index.ts:125-126,151-152`, `truelayer-callback/index.ts:170`). Both columns
 exist on the live tables.
 
+**Scope correction, 2026-08-17.** Those three call sites understate the surface. **Eleven
+functions** touch these token columns across roughly 40 lines — `gmail-callback`,
+`gmail-exchange`, `gmail-send`, `gmail-sync`, `outlook-callback`, `outlook-exchange`,
+`outlook-send`, `outlook-sync`, `truelayer-callback`, `truelayer-sync`,
+`truelayer-sync-scheduled` — covering both writes and the refresh/read path. Encrypting at rest
+is therefore an eleven-function change, since every reader must decrypt too. Planned, not
+actioned: see `docs/superpowers/plans/2026-08-17-credential-security.md` §2.
+
 **So rotation forces HMRC re-authorisation only.** Mailbox and bank tokens are unaffected by the
 key — they are protected by RLS alone — and are being re-authorised anyway because no token rows
 are restored.
