@@ -55,7 +55,7 @@ import {
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
 
-type EmailStatus = "draft" | "queued" | "pending" | "failed" | "ignored";
+type EmailStatus = "draft" | "queued" | "pending" | "failed" | "ignored" | "cancelled" | "sent";
 
 interface QueuedEmail {
   id: string;
@@ -76,13 +76,36 @@ interface QueuedEmail {
   companies: { company_name: string } | null;
 }
 
-const statusConfig: Record<EmailStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Mail }> = {
+type StatusConfigEntry = {
+  label: string;
+  variant: "default" | "secondary" | "destructive" | "outline";
+  icon: typeof Mail;
+};
+
+const statusConfig: Record<EmailStatus, StatusConfigEntry> = {
   draft: { label: "Draft", variant: "outline", icon: Pencil },
   queued: { label: "Queued", variant: "secondary", icon: Clock },
   pending: { label: "Pending", variant: "secondary", icon: Clock },
   failed: { label: "Failed", variant: "destructive", icon: XCircle },
   ignored: { label: "Ignored", variant: "outline", icon: Eye },
+  cancelled: { label: "Cancelled", variant: "outline", icon: XCircle },
+  sent: { label: "Sent", variant: "default", icon: Send },
 };
+
+/**
+ * Never index statusConfig directly. A status present in the DB but missing here (vocabulary drift)
+ * previously produced `undefined.icon` and crashed the whole Emails page.
+ */
+function getStatusConfig(status: string | null | undefined): StatusConfigEntry {
+  const key = (status ?? "") as EmailStatus;
+  return (
+    statusConfig[key] ?? {
+      label: status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown",
+      variant: "outline" as const,
+      icon: Mail,
+    }
+  );
+}
 
 const contextLabels: Record<string, string> = {
   quote: "Quote",
@@ -507,8 +530,7 @@ export default function Emails() {
                     </TableHeader>
                     <TableBody>
                       {emails.map((email) => {
-                        const status = (email.status as EmailStatus) || "queued";
-                        const config = statusConfig[status];
+                        const config = getStatusConfig(email.status);
                         const StatusIcon = config.icon;
                         
                         return (
