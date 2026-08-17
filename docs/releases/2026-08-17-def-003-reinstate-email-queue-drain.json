@@ -1,0 +1,99 @@
+{
+  "release_id": "2026-08-17-def-003-reinstate-email-queue-drain",
+  "release_kind": "migration",
+  "status": "live_verified",
+  "declared_at": "2026-08-17T00:00:00Z",
+  "approver": "owner (chat approval, 2026-08-17 \u2014 'close the launch gates')",
+  "summary": "DEF-003, reopened. Reinstates the `process-email-queue` pg_cron job, which is absent from production as of 2026-08-17 despite having been scheduled on 2026-08-06 by a migration whose own post-assert proved it present at commit. Schedules exactly one job; alters no function, table, constraint, policy or grant. Ships with a manifest reconciliation and a CI guard, because the detector that should have caught this was checking mostly wrong job names.",
+  "convention_reference": "docs/releases/production-release-convention.md + Database migration release contract (CLAUDE.md)",
+  "problem": {
+    "context": "`public.email_queue` is drained by the `process-email-queue` edge function, invoked on a schedule by pg_cron. With no scheduled job nothing drains the queue: proposals, engagement letters, portal invites and password resets enqueue and are never sent. Nothing in the product surfaces this.",
+    "evidence": "Direct read of `cron.job` on production (moxpdejnucjjcplleefn) via the Lovable database connector `catalog_cron`, 2026-08-17: exactly TWELVE active jobs \u2014 chaser-tick-every-15min, chaser-trigger-scan-every-6h, dormant-lead-scan-daily, hmrc-ct-delete-worker, hmrc-ct-poll-worker, invoice-overdue-scan-daily, process-automation-events, sync-gmail-emails, sync-outlook-emails, truelayer-sync-hourly, truelayer-sync-scheduled, workflow-tick. `process-email-queue` is not among them.",
+    "why_this_is_a_regression_not_an_unapplied_migration": "20260806083238 (the executor's re-authored copy of 20260805100000) schedules this job AND post-asserts `(SELECT count(*) FROM cron.job) >= 13` inside its own transaction; it cannot have committed without the job existing. Independent corroboration that it did commit: the live command text of hmrc-ct-poll-worker is byte-identical to the text that migration writes, vault lookup included. So the job existed on 2026-08-06 and was removed between then and 2026-08-17.",
+    "out_of_band": "No migration in this repository unschedules it after 2026-08-06 \u2014 a search for `unschedule` across supabase/migrations/ returns nothing later dated. The removal happened outside Git. This is the FOURTH recorded disappearance of this specific job (20260620165236, 20260624101545, and the absence repaired by 20260805100000 precede it) and is DEF-020/DEF-031-class production drift.",
+    "queue_state": "Corrected 2026-08-17 after apply. I originally recorded a zero-pending read from the database connector and attributed the disagreement with the executor's pending=1 count to RLS scoping. That explanation was wrong. The stranded row (1f5dc700-35d3-481f-b911-0ed9bf791c67, 'Proposal Q-26-0003' to dale@bluetickaccountants.com) was created at 2026-08-17T08:50:27Z, roughly five minutes AFTER my read. It was a timing difference, not a permissions one. The substance is unaffected: a real message was enqueued while no drain existed and would have sat indefinitely."
+  },
+  "blast_radius_analysis": {
+    "schema": "None. The migration issues one cron.schedule() call. It creates, alters and drops no function, table, view, trigger, policy, index or grant \u2014 asserted in CI by src/test/regression/def-003-email-queue-drain.test.ts.",
+    "other_cron_jobs": "Untouched. cron.schedule() upserts on jobname, so the twelve existing jobs keep their jobids, commands and schedules. The migration additionally refuses to apply if any job has reacquired the DEF-018 `app.settings.*` GUC pattern, so it cannot mask a regression of that defect.",
+    "double_send": "Not possible at a one-minute cadence. The worker's atomic claim (20260706144830) means overlapping runs cannot claim the same queued row twice.",
+    "credential": "The job reads `email_queue_service_role_key` from vault.decrypted_secrets at run time, matching the eleven other vault-credentialled jobs. No credential is embedded in the migration \u2014 asserted in CI.",
+    "residual_risk": "The reinstated job can be removed out of band again by whatever removed it. This release does not and cannot prevent that; it makes the next occurrence DETECTABLE rather than silent (see detection_shipped_alongside). Identifying and stopping the remover is unresolved and is tracked with DEF-020."
+  },
+  "detection_shipped_alongside": {
+    "finding": "scripts/smoke-test.ts::checkCronJobs already fails a run when a job marked `critical` in infra/supabase-manifest.json is missing, and process-email-queue was already marked critical. The detector was correct and had simply not been run since the job vanished.",
+    "manifest_defect": "The REST of that manifest was wrong. Of its eight entries, five named jobs that do not exist under those names on production (chaser-tick vs live chaser-tick-every-15min; dormant-lead-scan vs dormant-lead-scan-daily; invoice-overdue-scan vs invoice-overdue-scan-daily; sla-check and session-cleanup exist nowhere), and seven live jobs were absent from it entirely. A detector checking wrong names is not a detector, and the permanent false 'NOT scheduled' noise trains the real signal out.",
+    "action": "infra/supabase-manifest.json cronJobs reconciled against the live estate: all 13 expected jobs listed with their real names and real cron expressions. process-email-queue keeps critical:true. Criticality of the other twelve deliberately left as-is \u2014 raising it changes when a deploy is blocked and is an owner decision, flagged in open_questions.",
+    "ci_guard": "src/test/regression/def-003-email-queue-drain.test.ts (12 assertions) pins the migration's safety properties and keeps the manifest and the migrations describing the same estate."
+  },
+  "new_finding": {
+    "id": "cron-jobs-scheduled-outside-git",
+    "severity": "DEF-020 evidence",
+    "detail": "Five production cron jobs are scheduled by NO migration in this repository: chaser-tick-every-15min, chaser-trigger-scan-every-6h, dormant-lead-scan-daily, invoice-overdue-scan-daily, truelayer-sync-hourly. Established by comparing the live catalog_cron read against every cron.schedule(...) call in supabase/migrations/. If this database were rebuilt from migrations alone these five would not exist, and chaser sends, dormant-lead scanning, overdue-invoice scanning and the hourly TrueLayer sync would silently not run. Recorded as an explicit shrinking allow-list in the CI guard, with a second test that fails if an entry is left there after a migration starts scheduling it. Not repaired here \u2014 authoring five job definitions is outside this increment's scope."
+  },
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260817100000_def_003_reinstate_email_queue_drain.sql",
+      "sha256": "1f81096c513fc0bce7a2ffa379012dcd086b5c915d10d9270ed631d754411d3a",
+      "self_verifying": true,
+      "self_verifying_note": "Single transaction. Preconditions abort if pg_cron or pg_net is absent, if the vault secret is missing or empty, or if any job still references app.settings.*. Post-assertions abort unless the job exists, is active, has schedule '* * * * *', reads from vault, targets the right function, and total job count is >= 13. A partial apply cannot commit.",
+      "expected_objects": [
+        {
+          "id": "drain-scheduled-and-active",
+          "object": "cron.job contains process-email-queue, active, schedule '* * * * *'",
+          "result": "pass",
+          "verify_via": "SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'process-email-queue'; \u2014 or catalog_cron via the database connector, which is how the absence was found.",
+          "evidence": "catalog_cron read 2026-08-17 post-apply: jobid 86, jobname 'process-email-queue', active=true, schedule '* * * * *', command reads its credential from vault.decrypted_secrets and targets functions/v1/process-email-queue."
+        },
+        {
+          "id": "job-count-restored",
+          "object": "cron.job holds at least 13 jobs; the twelve pre-existing ones are unchanged",
+          "result": "pass",
+          "verify_via": "SELECT count(*) FROM cron.job; expect >= 13. Then confirm the twelve names observed 2026-08-17 are all still present with unchanged schedules.",
+          "evidence": "catalog_cron returns 13 jobs. All twelve observed on 2026-08-17 pre-apply are still present with unchanged jobids and schedules (2,3,4,5,6,7,10,11,15,19,36,37); process-email-queue is the thirteenth at jobid 86. Nothing was displaced."
+        },
+        {
+          "id": "def-018-not-regressed",
+          "object": "No cron job command references app.settings.*",
+          "result": "pass",
+          "verify_via": "SELECT count(*) FROM cron.job WHERE command LIKE '%app.settings.%'; expect 0. The migration asserts this as a PRECONDITION, so a non-zero count aborts the apply rather than hiding it.",
+          "evidence": "Zero of the 13 live job commands contain 'app.settings.'. Eleven read from vault.decrypted_secrets; the remaining two carry a hard-coded anon apikey, which is their pre-existing shape and is not the DEF-018 defect."
+        },
+        {
+          "id": "queue-actually-drains",
+          "object": "A row enqueued into public.email_queue transitions out of 'pending' within a few minutes",
+          "result": "pass",
+          "verify_via": "GATE 6 \u2014 REPRODUCE THE FAILURE FIRST. Before applying, enqueue a message (or send a real proposal to an address you control) and confirm it remains 'pending' indefinitely \u2014 that is the defect. Apply, wait 2-3 minutes, and confirm the SAME row transitions to 'sent' and arrives. A schedule row proves the job exists; only this proves email is delivered. This is the check that closes DEF-003.",
+          "evidence": "GATE 6 SATISFIED ON THE ORIGINAL FIXTURE. email_queue row 1f5dc700-35d3-481f-b911-0ed9bf791c67 ('Proposal Q-26-0003 from Blue Tick Accountants & Tax Advisers LLP' to dale@bluetickaccountants.com) was created 2026-08-17T08:50:27Z and sat pending while no drain was scheduled. Post-apply it reads status='sent', sent_at=2026-08-17T10:12:07Z. The job was created at 10:11:05Z, so the previously stranded message was delivered on the drain's FIRST scheduled run, ~62s later. This is the same row that evidenced the defect, not a new probe."
+        },
+        {
+          "id": "worker-authenticates",
+          "object": "The scheduled call reaches process-email-queue and is authorised, not 401",
+          "result": "pass",
+          "verify_via": "pg_cron records a run as succeeded when the SQL completes; net.http_post is asynchronous, so a job can be 'succeeded' while every HTTP call it makes returns 401. Confirm via the DEF-019 projection mcp_http_delivery_health, or by the queue row actually transitioning in the previous check. Do not read a green cron run as proof of delivery.",
+          "evidence": "Established by the transition above rather than by a green cron run, which would prove nothing: pg_cron marks a run succeeded when the SQL completes even if net.http_post returns 401. A row moving to status='sent' with a populated sent_at can only happen if process-email-queue was reached, authorised, and executed."
+        }
+      ],
+      "executor_applied_version": "20260817101105_2b35a278-52ee-44db-a7a2-bd3895d927bc.sql",
+      "executor_copy_fidelity": "Verbatim bar a trailing newline. Diffed against the authored original with comments and blank lines stripped: the only difference is the absent final newline. Governed by this receipt via the convention's applied-escape; no separate receipt.",
+      "applied_at": "2026-08-17T10:11:05Z",
+      "apply_evidence": "Owner applied the SQL verbatim as one transaction after verifying sha256 1f81096c513fc0bce7a2ffa379012dcd086b5c915d10d9270ed631d754411d3a. cron.schedule returned jobid 86 and the transaction committed, which means every precondition and post-assertion in the migration passed inside it. All checks below were then re-verified INDEPENDENTLY against live via the database connector, not inferred from the commit."
+    }
+  ],
+  "frontend_publish_required": false,
+  "frontend_publish_note": "No src/ runtime change. The manifest and the new regression test affect CI and the smoke script only, not the shipped bundle.",
+  "known_verification_gaps": [
+    "mcp_cron_job_health is UNUSABLE on production. Called 2026-08-17 via db_rpc it returns 'canceling statement due to statement timeout' at the default 20-minute window AND at p_window_minutes=1. Since narrowing the window does not help, there is no usable index on cron.job_run_details.start_time and every call seq-scans the entire run history \u2014 which, at twelve jobs several of which run every minute, is very large. The DEF-019 cron projection therefore cannot be used to detect cron drift, which is the one thing it exists for; catalog_cron was used for this release instead. A fix needs an index on cron.job_run_details, a relation owned by supabase_admin and not by us, or a rewrite that reaches the run history through an already-indexed column. Neither is designed here. This should be raised as its own defect against DEF-019.",
+    "cron.job_run_details remains deletable by PUBLIC (DEF-032 sibling finding), so any absence-based check over run history is weaker than it reads."
+  ],
+  "open_questions": [
+    "Criticality of the other twelve cron jobs in infra/supabase-manifest.json. The 2026-07-27 audit describes the automation engine (process-automation-events, workflow-tick), inbound mailbox sync (sync-gmail-emails, sync-outlook-emails) and HMRC CT reconciliation (hmrc-ct-poll-worker, hmrc-ct-delete-worker) as silently dead when their jobs fail \u2014 which is the definition of critical. Marking them so would block a deploy when any is missing. Left unchanged pending an owner ruling, because it tightens a release gate.",
+    "What removed process-email-queue from cron.job between 2026-08-06 and 2026-08-17. Unresolved; same out-of-band mutation class as DEF-031."
+  ],
+  "closes": "DEF-003. Both halves of the 2026-08-05 cron release are now in effect: DEF-018 (GUC repair) was already verified, and DEF-003 (the email drain) is verified here structurally and behaviourally.",
+  "still_open_after_this": [
+    "What removed process-email-queue from cron.job between 2026-08-06 and 2026-08-17 is still unknown. This release restores the job; it does not prevent a fifth disappearance. The detection path (scripts/smoke-test.ts + the reconciled manifest) is what would now catch it, and it must actually be run.",
+    "mcp_cron_job_health remains unusable (statement timeout at any window), so DEF-019's cron projection still cannot detect this class of drift. Raised as its own defect against DEF-019.",
+    "Five live cron jobs are still scheduled by no migration in this repository (see new_finding)."
+  ]
+}
