@@ -111,6 +111,51 @@ modified SQL. Nothing was ever half-applied — `apply_migration` is transaction
    than through `psql -f` — must be in INSERT form. Worth knowing before anyone tries to move
    real data.
 
+## 4a. Edge Functions — 60 deployed
+
+All 60 deployable functions are deployed and ACTIVE at version 1. **`mcp` is deliberately
+excluded** — it is generated build output and Lovable-specific, with no role on London.
+
+`verify_jwt` was set from `supabase/config.toml` (54 declared there). The 6 absent from it —
+`automation-dry-run`, `clone-workpaper-template`, `gdpr-data-deletion`, `gdpr-data-export`,
+`portal-qa-probe`, `seed-portal-test-users` — were deployed `true`, which matches the platform
+default they previously ran under, so behaviour is unchanged.
+
+### Three deployment findings
+
+1. **`_shared` imports need a nested layout.** The platform roots uploaded files under `source/`,
+   so `../_shared/…` escapes the upload tree and the bundle fails with `Module not found`. The
+   fix is to upload the entrypoint as `<name>/index.ts` with `_shared/` alongside. Six agents hit
+   this independently and all converged on the same solution; no source was modified. Affects
+   `truelayer-auth`, `truelayer-callback`, `truelayer-sync`, `truelayer-sync-scheduled`,
+   `sla-check`, `session-cleanup`, `hmrc-vat-submit`, `auth-email-hook`.
+2. **Transitive `_shared` dependencies are easy to miss.** The dependency scan only read
+   `index.ts`, so it missed that `_shared/hmrc-auth.ts` itself imports `_shared/logging.ts`.
+   `hmrc-vat-submit` failed to bundle until that second file was included.
+3. **A transcription corruption occurred and was caught.** One agent emitted `8&&` instead of
+   `&&`; the bundler rejected it and it redeployed from source. This is the reason for §4b.
+
+## 4b. Deployed source verified against the repo
+
+Deploying by transcribing source through a tool argument carries a real risk: **a bundler catches
+syntax corruption but not semantic corruption.** A mistyped URL, numeric constant or string
+literal would deploy cleanly and fail only in production. So every deployed function was fetched
+back with `get_edge_function` and diffed against its repo source (trailing whitespace normalised;
+nothing else), with byte and line counts compared to catch truncation.
+
+**Result: no drift found.** Every function checked is identical to the repo, including the
+largest (`generate-filing-pdf`, 51,674 bytes) and those carrying constant tables.
+
+A methodological caveat worth recording: having an agent *retype* fetched source into a file is
+itself a transcription step, and two agents reported small byte deltas that proved to be their
+own retyping artefacts rather than deployment drift. The stronger route — used for the largest
+and most sensitive files — is mechanical extraction from the saved tool result with no retyping
+in the loop.
+
+**Not yet byte-verified:** the six `_shared/email-templates/*.tsx` files bundled with
+`auth-email-hook`. Only its `index.ts` was compared. Those templates are the content of every
+branded auth email, so they warrant the same check before the email path is trusted.
+
 ## 5. Known deviations — action required
 
 **`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` could not be applied.** The connection is
@@ -135,7 +180,9 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON F
 
 - **No cron jobs scheduled.** `london-cron.sql` is authored but requires the two Vault secrets
   (`cron_service_role_key`, `cron_shared_secret`) first, and it refuses to apply without them.
-- **No secrets set**, no Auth configuration, no Edge Functions deployed.
+- **No secrets set** and no Auth configuration. The 60 deployed functions therefore cannot work
+  yet — that is expected, not a defect. See `SECRETS.md` for the 31 that must be set (three more
+  are injected by Supabase automatically and must NOT be set by hand).
 - **No users, no tenant data.** The seed carries product reference data only.
 - **The legacy project is untouched and still live.** Nothing has been cut over.
 
