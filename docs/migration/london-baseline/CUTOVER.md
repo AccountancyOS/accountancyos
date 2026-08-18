@@ -27,9 +27,28 @@ anyone needs to log in**, and the current email path dies with Lovable.
 ## 1. Prepare the London project
 
 1. Create the project (London region).
-2. Enable extensions: **`pg_cron`, `pg_net`, `pgcrypto`, `uuid-ossp`**. The baseline declares
-   these; `pgmq`, `supabase_vault` and `pg_stat_statements` are platform-managed.
-3. Do **not** create any role. In particular **never create `sandbox_exec`** — it carried
+2. Enable extensions: **`pg_cron`, `pg_net`, `pgcrypto`, `uuid-ossp`** — and **`pgmq`**, see below.
+
+   **The baseline must NOT create extensions.** Corrected 2026-08-18: re-issuing
+   `CREATE EXTENSION IF NOT EXISTS pg_cron` on a project that already has it makes Supabase's
+   `after-create.sql` platform hook fail with `2BP01: dependent privileges exist`, aborting the
+   whole migration. The baseline now only *asserts* the four extensions exist.
+
+3. **`pgmq` is required and is easy to miss.** Five baseline functions depend on it —
+   `enqueue_email`, `read_email_batch`, `delete_email`, `move_to_dlq`, `email_queue_dispatch` —
+   and they address two queues **by name**: `pgmq.q_auth_emails` and `pgmq.q_transactional_emails`.
+
+   So after enabling the extension, create both queues:
+   ```sql
+   SELECT pgmq.create('auth_emails');
+   SELECT pgmq.create('transactional_emails');
+   ```
+
+   This matters more than it looks. PL/pgSQL bodies are not validated at creation, so all five
+   functions install perfectly against a project with no `pgmq` — and then fail at runtime. The
+   entire outbound email path would be broken while every structural check passed. That is the
+   Gate 6 pattern this programme keeps meeting.
+4. Do **not** create any role. In particular **never create `sandbox_exec`** — it carried
    `BYPASSRLS` on the legacy project and was restored out of band three times (DEF-031).
 
 ## 2. Apply the schema — in this order
@@ -38,7 +57,18 @@ anyone needs to log in**, and the current email path dies with Lovable.
 |---|---|---|---|
 | 1 | `london-baseline.sql` | `5894380726c5e41d…` | 226 tables, 370 functions, 688 policies, 622 FKs, 257 CHECKs |
 | 2 | `london-storage.sql` | `107524646da822b3…` | 9 buckets + 36 policies, self-verifying |
-| 3 | `london-cron.sql` | `5d289828064d5e72…` | 12 jobs — **do §3 and §4 first** |
+| 3 | `london-seed.sql` | see checksums | 14 reference tables, 232 rows. Product reference data only — no tenant data |
+| 4 | `london-cron.sql` | `5d289828064d5e72…` | 12 jobs — **do §3 and §4 first** |
+
+### Reference data is NOT optional
+
+The baseline is schema-only, so it creates 14 reference tables empty: `canonical_services`,
+`canonical_job_templates`, `canonical_deadline_rules`, `automation_trigger_contracts`,
+`template_merge_fields`, `chaser_message_templates`, `data_requirements`, the three tax
+`*_rate_tables`, and the automation workflow library. Without `london-seed.sql` the product has
+no service catalogue, no deadline rules and no tax rates. Every one of those 14 tables was
+verified to have no `organization_id`/`client_id`/`user_id` column, so the seed carries no
+tenant data.
 
 Before applying the baseline, substitute the **2** `__LONDON_PROJECT_URL__` placeholders in
 `email_queue_dispatch()` and `email_queue_wake()`. Afterwards confirm none survive:
@@ -132,7 +162,19 @@ four cron jobs 401'd for weeks.
    returns 401 — that is how four legacy jobs stayed broken and invisible.
 3. **Email** — an enqueued row reaching `sent` and arriving.
 4. **Storage** — an upload and a signed download per bucket; confirm only `branding` is public.
-5. **Roles** — `SELECT rolname FROM pg_roles WHERE rolbypassrls AND rolcanlogin;` returns nothing.
+5. **Roles** — no *non-platform* role may hold `BYPASSRLS`:
+   ```sql
+   SELECT rolname FROM pg_roles
+    WHERE rolbypassrls AND rolcanlogin
+      AND rolname NOT IN ('postgres','supabase_admin','supabase_etl_admin','supabase_read_only_user');
+   ```
+   Must return nothing, and `sandbox_exec` must not exist.
+
+   **Corrected 2026-08-18.** This check previously demanded that *no* login role hold
+   `BYPASSRLS`. That is wrong: a stock Supabase project ships four that do — `postgres`,
+   `supabase_admin`, `supabase_etl_admin`, `supabase_read_only_user` — so the original check
+   fails on a perfectly healthy project. The real DEF-031 concern was always an *application*
+   role holding the bypass, not the platform's own.
 6. **The core journey** — lead → proposal → accept → engagement letter → onboarding → client.
 
 ## 8. Only then: retire Lovable
