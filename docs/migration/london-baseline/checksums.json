@@ -1,8 +1,9 @@
 {
   "generatedAt": "2026-08-18",
   "algorithm": "sha256",
-  "note": "London build artefacts. Apply order: london-baseline.sql, london-storage.sql, london-seed.sql, london-cron.sql.",
+  "note": "London build artefacts. APPLIED.md records what was actually applied and verified on 2026-08-18.",
   "files": {
+    "APPLIED.md": "27fee4b0b67e86651b3a7c53c32a6e69fde56045d8a95329b6217c816775a165",
     "CUTOVER.md": "5a83f4c522c5038cdd092f1affdc3263646e2770ed5e1eaae871902309bac8f8",
     "README.md": "f29fc8f9299cb117d1a0cdfcb5938d75ab5aeafda6fc4be817bcf346f1fe526d",
     "build-baseline.py": "6f341d3b96ae3e1c9ed8f0c238959ac6b7e9b43939e1e8e4876938bf6f512637",
@@ -11,7 +12,7 @@
     "build-storage.py": "dd0b0a2047fd7ccb9c1bb4bbe49d8689ab6a98ab624646d41b937ab5d47043a9",
     "london-baseline.sql": "5894380726c5e41debf421164ab826f02a3f44ccc849eb13cb7cac3d37406d1e",
     "london-cron.sql": "5d289828064d5e7269ac12ae256d5d3293d488f19d1916e02bbda14f4bb7aeed",
-    "london-seed.sql": "b17d8e28f36e17d08255945e002cc1e0047c73276b56fffe8a076ab357611c8e",
+    "london-seed.sql": "4132e53ed67e31150044cc356f400a9e7cf853dcc4e0fff2ee40c2a46b44cc40",
     "london-storage.sql": "107524646da822b30cc26ddcd098e13792fc8eed1a43f74bb602159e73ad45c9"
   }
 }
