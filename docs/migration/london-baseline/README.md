@@ -60,8 +60,7 @@ Also included: 4 extensions (`pg_cron`, `pg_net`, `pgcrypto`, `uuid-ossp`), 6 de
   re-declaring them fights the platform.
 - **Role `sandbox_exec`.** A Lovable platform artefact that carried `BYPASSRLS` and was restored
   out of band three times (DEF-031). It must never exist on London.
-- **pg_cron jobs.** They embed credentials and environment URLs. Authored separately,
-  credential-free, only after the Vault secret exists.
+- **pg_cron jobs** — now authored fresh and shipped separately as `london-cron.sql` (below).
 - **Storage buckets** — now resolved and shipped separately as `london-storage.sql` (below).
 
 ### Surgical edits — 256 ACL blocks
@@ -161,8 +160,9 @@ this export needs a zstd-capable `pg_restore`, or they will silently get schema 
 The baseline is the schema. It is not the system.
 
 1. **Extensions** — `pg_cron` and `pg_net` must be enabled on the project before any cron work.
-2. **Vault secret** for the cron worker, created **before** any job that reads it is scheduled.
-3. **Cron jobs** — 13 of them, authored fresh and credential-free.
+2. **Two Vault secrets** — `cron_service_role_key` and `cron_shared_secret` — created **before**
+   `london-cron.sql` is applied. It refuses to apply without them.
+3. ~~Cron jobs~~ — AUTHORED, apply `london-cron.sql` third.
 4. ~~Storage buckets~~ — RESOLVED, apply `london-storage.sql` after the baseline.
 5. **Auth configuration** — site URL, redirect allow-list, providers, hooks, email settings.
    None of it is in the schema; see `docs/migration/lovable-source/manual-settings.md` §1.
@@ -185,3 +185,67 @@ Favour behavioural proof over catalog inspection:
   marks a run succeeded when the SQL completes even if the HTTP call 401s. That is how four jobs
   went unnoticed on the legacy project.
 - The placeholder query above returning zero rows.
+
+---
+
+## `london-cron.sql` — 12 jobs, authored fresh
+
+Apply **third**, after the baseline and storage, and only once both Vault secrets exist.
+sha256 `5d289828064d5e7269ac12ae256d5d3293d488f19d1916e02bbda14f4bb7aeed`.
+
+Nothing is copied from the legacy estate, because the legacy estate was broken:
+
+- **Four of thirteen jobs returned 401 on every run** (measured 2026-08-17: 844 HTTP calls,
+  814 succeeded, 29 unauthorized). The chaser engine did not run and bank feeds did not sync.
+  Nothing surfaced it — `pg_cron` marks a run "succeeded" when the SQL completes even if the
+  HTTP call is rejected.
+- **Five jobs embedded a literal anon JWT** in plaintext in `cron.job.command`.
+- **Five jobs existed in no migration**, so a rebuild from git would have lost them silently.
+- One job read a Vault secret (`CRON_SECRET`) that did not exist.
+
+### The canonical pattern
+
+Established by reading every target function, not by copying commands. **Eleven of twelve gate
+on `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`** and 401 anything else. Exactly one —
+`truelayer-sync-scheduled` — gates on an `x-cron-secret` header instead
+(`index.ts:173-180`, the first statement in its handler). Both read from Vault; **no literal
+credential appears in any command.**
+
+That single difference is what broke both TrueLayer jobs on the legacy project: one sent a
+bearer to a function that never looks at bearers, and the other sent `x-cron-secret` sourced
+from a Vault name that did not exist.
+
+### Secret names
+
+`cron_service_role_key` replaces the legacy `email_queue_service_role_key`, which was misleading
+— it held the general service-role key while being read by eight unrelated jobs. London starts
+clean, so the rename is free.
+
+`cron_shared_secret` must **equal** the `CRON_SECRET` environment variable of
+`truelayer-sync-scheduled`. The Vault and the Edge Function environment are **different stores**;
+conflating them is exactly why the legacy hourly job sent a null header.
+
+### ⚠ One consolidation to confirm before applying
+
+The legacy estate ran **two** jobs against the **same** function: `truelayer-sync-scheduled`
+(`*/30`) and `truelayer-sync-hourly` (`7 * * * *`). Both returned 401, so neither ever worked and
+there is no evidence of which cadence was intended. This file schedules **one**, at `*/30`, with
+the mechanism the function actually checks. If hourly was intended, change the schedule.
+
+### Before applying
+
+Replace `__LONDON_PROJECT_URL__` — 12 occurrences in job bodies. The post-assertions refuse to
+commit while any placeholder remains, so a forgotten substitution fails loudly rather than
+producing twelve jobs that quietly post nowhere.
+
+### Verifying afterwards
+
+A green `pg_cron` run is **not** evidence. Prove delivery:
+
+```sql
+SELECT status_code, count(*) FROM net._http_response
+ WHERE created > now() - interval '20 minutes' GROUP BY 1;
+```
+
+Expect 2xx only. Any 401 is a credential mismatch between a Vault secret and the corresponding
+Edge Function environment variable.

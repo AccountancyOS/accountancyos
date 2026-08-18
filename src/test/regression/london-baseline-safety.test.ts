@@ -135,6 +135,58 @@ describe("London storage bootstrap", () => {
   });
 });
 
+describe("London cron bootstrap", () => {
+  const CRON = resolve(root, "docs/migration/london-baseline/london-cron.sql");
+  const sql = existsSync(CRON) ? readFileSync(CRON, "utf8") : "";
+  const code = sql.replace(/^\s*--.*$/gm, "");
+
+  it("schedules twelve jobs", () => {
+    expect((code.match(/cron\.schedule\(/g) ?? []).length).toBe(12);
+  });
+
+  it("embeds no credential — every job reads from Vault", () => {
+    // Five legacy jobs carried a literal anon JWT in cron.job.command. None may here.
+    const bodies = code.match(/\$cron\$[\s\S]*?\$cron\$/g) ?? [];
+    expect(bodies.length).toBe(12);
+    for (const b of bodies) {
+      expect(b).toContain("vault.decrypted_secrets");
+      expect(b).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/);
+      expect(b).not.toMatch(/app\.settings\./);
+    }
+  });
+
+  it("uses the bearer mechanism for eleven jobs and x-cron-secret for exactly one", () => {
+    // Established by reading every target function: 11 gate on Authorization == service-role
+    // key; only truelayer-sync-scheduled gates on x-cron-secret.
+    const bodies = code.match(/\$cron\$[\s\S]*?\$cron\$/g) ?? [];
+    const bearer = bodies.filter((b) => b.includes("'Authorization', 'Bearer '"));
+    const cronSecret = bodies.filter((b) => b.includes("'x-cron-secret'"));
+    expect(bearer.length).toBe(11);
+    expect(cronSecret.length).toBe(1);
+    expect(cronSecret[0]).toContain("truelayer-sync-scheduled");
+  });
+
+  it("carries no legacy project reference and no live URL — placeholder only", () => {
+    expect(code).not.toContain(LEGACY_REF);
+    expect((code.match(/__LONDON_PROJECT_URL__/g) ?? []).length).toBeGreaterThanOrEqual(12);
+  });
+
+  it("refuses to commit while a placeholder or a literal credential remains", () => {
+    expect(sql).toMatch(/still contains the placeholder URL/);
+    expect(sql).toMatch(/embeds a literal JWT/);
+    expect(sql).toMatch(/app\.settings GUC pattern/);
+    expect(code).toMatch(/^BEGIN;/m);
+    expect(code).toMatch(/^COMMIT;/m);
+  });
+
+  it("refuses to apply unless both Vault secrets exist", () => {
+    // A job that runs every minute and 401s every minute manufactures the appearance of a
+    // working system — the legacy failure mode this replaces.
+    expect(sql).toMatch(/vault secret "cron_service_role_key" is missing/);
+    expect(sql).toMatch(/vault secret "cron_shared_secret" is missing/);
+  });
+});
+
 describe("London baseline — placeholders that must be resolved before use", () => {
   const sql = existsSync(BASELINE) ? readFileSync(BASELINE, "utf8") : "";
 
