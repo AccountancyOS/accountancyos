@@ -62,8 +62,7 @@ Also included: 4 extensions (`pg_cron`, `pg_net`, `pgcrypto`, `uuid-ossp`), 6 de
   out of band three times (DEF-031). It must never exist on London.
 - **pg_cron jobs.** They embed credentials and environment URLs. Authored separately,
   credential-free, only after the Vault secret exists.
-- **Storage buckets.** The real bucket set is unresolved — the manifest names four, the
-  migrations reference ten. Settle against the export before creating any.
+- **Storage buckets** — now resolved and shipped separately as `london-storage.sql` (below).
 
 ### Surgical edits — 256 ACL blocks
 
@@ -119,6 +118,44 @@ The export corrected two details of the original DEF-032 finding — see
 
 ---
 
+## `london-storage.sql` — bucket set RESOLVED
+
+Apply **after** the baseline. 9 buckets + 36 storage policies, self-verifying, transactional.
+sha256 `107524646da822b30cc26ddcd098e13792fc8eed1a43f74bb602159e73ad45c9`.
+
+Resolved on 2026-08-18 by reading `storage.buckets` from the export — declarative configuration,
+no file or object metadata. **The answer contradicts both prior sources:**
+
+| Bucket | Public | Size limit |
+|---|---|---|
+| `branding` | **yes** | 2 MB |
+| `job-documents` | no | 20 MB |
+| `onboarding-documents` | no | platform default |
+| `questionnaire-files` | no | platform default |
+| `receipts` | no | platform default |
+| `filing-documents` | no | platform default |
+| `workpaper-files` | no | platform default |
+| `invoice-branding` | no | platform default |
+| `invoice-pdfs` | no | platform default |
+
+- `infra/supabase-manifest.json` names `email-assets`, `documents`, `filings`, `kyc`. **None of
+  them exists.** That manifest section is fiction and should be regenerated, not carried across.
+- `client-documents` appears in migration-authored policies but exists on neither the live bucket
+  list nor any live storage policy.
+- All 36 policies reference only the 9 declared buckets, and no bucket is unreferenced — the set
+  reconciles exactly.
+
+**Security note:** a tenth bucket, `database_export_17_08_26`, holds the export itself inside the
+legacy project. It is deliberately excluded here, and the archive it contains carries plaintext
+mailbox and bank tokens — it should be deleted from legacy storage once the migration completes.
+
+### A toolchain fact that affects whoever restores this
+
+The archive is **zstd-compressed**. Homebrew's `libpq` is built *without* zstd, so its
+`pg_restore` reads the schema but reports `no data will be available` and refuses any data
+section. `postgresql@17` (17.11) is built `--with-zstd` and reads it correctly. Anyone restoring
+this export needs a zstd-capable `pg_restore`, or they will silently get schema and no data.
+
 ## Still required before London is usable
 
 The baseline is the schema. It is not the system.
@@ -126,7 +163,7 @@ The baseline is the schema. It is not the system.
 1. **Extensions** — `pg_cron` and `pg_net` must be enabled on the project before any cron work.
 2. **Vault secret** for the cron worker, created **before** any job that reads it is scheduled.
 3. **Cron jobs** — 13 of them, authored fresh and credential-free.
-4. **Storage buckets and their policies** — set unresolved, see above.
+4. ~~Storage buckets~~ — RESOLVED, apply `london-storage.sql` after the baseline.
 5. **Auth configuration** — site URL, redirect allow-list, providers, hooks, email settings.
    None of it is in the schema; see `docs/migration/lovable-source/manual-settings.md` §1.
 6. **All 45 secrets**, per the rotation matrix in

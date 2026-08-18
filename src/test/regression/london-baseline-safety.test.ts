@@ -92,6 +92,49 @@ describe("London baseline — completeness against the independent live capture"
   });
 });
 
+describe("London storage bootstrap", () => {
+  const STORAGE = resolve(root, "docs/migration/london-baseline/london-storage.sql");
+  const sql = existsSync(STORAGE) ? readFileSync(STORAGE, "utf8") : "";
+  const code = sql.replace(/^\s*--.*$/gm, "");
+
+  it("declares the nine real application buckets", () => {
+    // Resolved from storage.buckets in the verified export on 2026-08-18. This contradicts
+    // infra/supabase-manifest.json, which names four buckets that exist nowhere.
+    for (const b of [
+      "onboarding-documents", "questionnaire-files", "receipts", "filing-documents",
+      "job-documents", "branding", "workpaper-files", "invoice-branding", "invoice-pdfs",
+    ]) {
+      expect(code).toContain(`'${b}'`);
+    }
+    expect((code.match(/INSERT INTO storage\.buckets/g) ?? []).length).toBe(9);
+  });
+
+  it("marks exactly one bucket public, and it is branding", () => {
+    const publicRows = code.match(/VALUES \('([a-z0-9-]+)', '[a-z0-9-]+', true,/g) ?? [];
+    expect(publicRows.length).toBe(1);
+    expect(publicRows[0]).toContain("branding");
+  });
+
+  it("carries all 36 storage policies", () => {
+    expect((code.match(/^CREATE POLICY /gm) ?? []).length).toBe(36);
+  });
+
+  it("excludes the export staging bucket, which is not an application bucket", () => {
+    expect(code).not.toMatch(/INSERT INTO storage\.buckets[\s\S]{0,120}database_export_17_08_26/);
+  });
+
+  it("creates no storage object and reads no file metadata", () => {
+    expect(code).not.toMatch(/INSERT INTO storage\.objects/i);
+    expect(code).not.toMatch(/COPY storage\.objects/i);
+  });
+
+  it("is self-verifying and transactional", () => {
+    expect(code).toMatch(/^BEGIN;/m);
+    expect(code).toMatch(/^COMMIT;/m);
+    expect(sql).toMatch(/RAISE EXCEPTION 'storage bootstrap failed/);
+  });
+});
+
 describe("London baseline — placeholders that must be resolved before use", () => {
   const sql = existsSync(BASELINE) ? readFileSync(BASELINE, "utf8") : "";
 
