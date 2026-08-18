@@ -218,3 +218,63 @@ In dependency order. No fix is proposed; these are decisions, not options to be 
    should the drift test assert the live constraint *set* rather than one named constraint?
 10. **`submit_filing_safe` / `approved_by` (§6)** — fold into DEF-032 remediation, or issue
     their own defect IDs?
+
+---
+
+## 11. Correction from the official export (2026-08-18)
+
+The Lovable database export — the first artefact that actually contains the constraint
+definitions — corrects two details of the finding above. **The headline conclusion is unchanged
+and is now confirmed from an authoritative source rather than inferred from migration
+provenance.**
+
+### 11.1 There are TWO status CHECK constraints, not three
+
+`public.filings` carries exactly three CHECK constraints, and one of them is unrelated to status:
+
+| Constraint | Column | Values |
+|---|---|---|
+| `chk_filing_status` | `status` | 13: `not_started, draft, in_progress, ready_for_review, sent_to_client, client_changes_requested, awaiting_approval, approved, ready_to_file, submitted, accepted, rejected, filed` |
+| `valid_status` | `status` | 6: `draft, awaiting_approval, approved, ready_to_file, filed, rejected` |
+| `filings_environment_check` | `environment` | `test, production` — not a status constraint |
+
+**`chk_filings_status` — the 15-value constraint from `20251218231226` — does not exist on the
+source database.** §2 recorded it from the 2026-08-06 catalog read; it is absent from the export.
+Either it was dropped between those dates, or the earlier reading was mistaken. Its absence is
+now the authoritative position.
+
+### 11.2 The CHECK-writable set is SIX values, not four
+
+`valid_status` is a strict subset of `chk_filing_status`, so the intersection is `valid_status`
+itself: `draft`, `awaiting_approval`, `approved`, `ready_to_file`, `filed`, `rejected`.
+
+§1 concluded four (`draft`, `approved`, `filed`, `rejected`) because it intersected the absent
+15-value constraint. **`awaiting_approval` and `ready_to_file` are in fact CHECK-writable**, so
+the review/approval path is less dead than recorded — `filing-service.ts:259`, `:451`, `:844`
+and `filing-lock-service.ts:240` are **not** dead on the CHECK constraints.
+
+### 11.3 `draft` is still terminal — confirmed, not merely inferred
+
+The trigger body, read verbatim from the export, maps `draft` to `["in_progress",
+"ready_for_review"]`. **Neither is CHECK-writable.** So no filing can leave `draft`, and every
+filing is inserted `draft`. The core finding stands.
+
+Two further details from the verbatim trigger body worth recording:
+
+- `awaiting_approval` and `filed` are **not keys** in the transition map. The function only
+  enforces a transition when `valid_transitions -> OLD.status` is a JSON array, so transitions
+  *out of* those two states are unconstrained by the trigger. They are unreachable anyway,
+  because nothing can reach them from `draft`.
+- The map contains `error`, `client_approved` and `client_rejected`, none of which appears in
+  either CHECK constraint — confirming §3's finding that the trigger encodes a vocabulary no
+  constraint recognises.
+
+### 11.4 What this changes for remediation
+
+The repair surface is narrower than §1 implied. The minimal reconciliation is between
+`valid_status` (6 values) and the trigger's exits from `draft` — not a four-way merge across
+three constraints. **No fix is designed here; the ten rulings in §9 still stand**, and ruling 3
+(which vocabulary is canonical) is now a two-way question rather than a five-way one.
+
+The baseline transcribes all three constraints and the trigger exactly as they are — see
+`docs/migration/london-baseline/README.md`.

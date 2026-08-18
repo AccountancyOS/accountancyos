@@ -1,0 +1,117 @@
+{
+  "generatedAt": "2026-08-18",
+  "source": {
+    "file": "export-schema-with-acl.sql",
+    "sha256_of_archive": "28420b17557249e92fa61cf685d0f84da432e64208a275c67e212a99d13c5321"
+  },
+  "output": {
+    "file": "london-baseline.sql",
+    "bytes": 1822368,
+    "sha256": "5894380726c5e41debf421164ab826f02a3f44ccc849eb13cb7cac3d37406d1e"
+  },
+  "keptByType": {
+    "POLICY": 688,
+    "FK CONSTRAINT": 622,
+    "ACL": 599,
+    "INDEX": 506,
+    "FUNCTION": 370,
+    "CONSTRAINT": 288,
+    "TABLE": 226,
+    "ROW SECURITY": 226,
+    "TRIGGER": 155,
+    "COMMENT": 48,
+    "TYPE": 11,
+    "DEFAULT ACL": 6,
+    "EXTENSION": 4,
+    "VIEW": 3,
+    "CHECK CONSTRAINT": 2,
+    "PUBLICATION TABLE": 1
+  },
+  "keptTotal": 3755,
+  "droppedTotal": 600,
+  "rejectedTotal": 4,
+  "rejectedSample": [
+    [
+      "DEFAULT PRIVILEGES FOR SEQUENCES",
+      "DEFAULT ACL",
+      "granted ONLY to sandbox_exec \u2014 nothing left after removal"
+    ],
+    [
+      "DEFAULT PRIVILEGES FOR TABLES",
+      "DEFAULT ACL",
+      "granted ONLY to sandbox_exec \u2014 nothing left after removal"
+    ],
+    [
+      "DEFAULT PRIVILEGES FOR SEQUENCES",
+      "DEFAULT ACL",
+      "granted ONLY to sandbox_exec \u2014 nothing left after removal"
+    ],
+    [
+      "DEFAULT PRIVILEGES FOR TABLES",
+      "DEFAULT ACL",
+      "granted ONLY to sandbox_exec \u2014 nothing left after removal"
+    ]
+  ],
+  "surgicalEdits": {
+    "count": 256,
+    "note": "sandbox_exec removed as a grantee; the block's other grants are preserved verbatim",
+    "sample": [
+      [
+        "SCHEMA extensions",
+        "ACL",
+        "sandbox_exec grantee removed"
+      ],
+      [
+        "SCHEMA public",
+        "ACL",
+        "sandbox_exec grantee removed"
+      ],
+      [
+        "SCHEMA storage",
+        "ACL",
+        "sandbox_exec grantee removed"
+      ],
+      [
+        "TABLE questionnaire_public_links",
+        "ACL",
+        "sandbox_exec grantee removed"
+      ],
+      [
+        "TABLE org_settings",
+        "ACL",
+        "sandbox_exec grantee removed"
+      ]
+    ]
+  },
+  "placeholdersRequiringEdit": {
+    "count": 2,
+    "note": "MUST be replaced before these objects work on London",
+    "items": [
+      [
+        "email_queue_dispatch()",
+        "FUNCTION",
+        "legacy project URL replaced with __LONDON_PROJECT_URL__"
+      ],
+      [
+        "email_queue_wake()",
+        "FUNCTION",
+        "legacy project URL replaced with __LONDON_PROJECT_URL__"
+      ]
+    ]
+  },
+  "droppedByReason": {
+    "-": 33,
+    "auth": 221,
+    "realtime": 97,
+    "storage": 108,
+    "extensions": 70,
+    "graphql_public": 5,
+    "pgbouncer": 2,
+    "pgmq": 40,
+    "supabase_migrations": 3,
+    "cron": 12,
+    "pg_catalog": 1,
+    "vault": 5,
+    "graphql": 3
+  }
+}
