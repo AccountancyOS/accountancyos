@@ -143,14 +143,27 @@ literal would deploy cleanly and fail only in production. So every deployed func
 back with `get_edge_function` and diffed against its repo source (trailing whitespace normalised;
 nothing else), with byte and line counts compared to catch truncation.
 
-**Result: no drift found.** Every function checked is identical to the repo, including the
-largest (`generate-filing-pdf`, 51,674 bytes) and those carrying constant tables.
+**Result: all 60 verified, no drift found.** Every deployed function is identical to its repo
+source, including the largest (`generate-filing-pdf`, 51,674 bytes), the MD5 constant tables in
+`hmrc-ct-delete`/`hmrc-ct-poll`, and `process-email-queue` (byte-exact).
 
-A methodological caveat worth recording: having an agent *retype* fetched source into a file is
-itself a transcription step, and two agents reported small byte deltas that proved to be their
-own retyping artefacts rather than deployment drift. The stronger route — used for the largest
-and most sensitive files — is mechanical extraction from the saved tool result with no retyping
-in the loop.
+The constant tables got more than a diff: the 67-entry table was extracted from both copies and
+the `md5HashSync` implementation was run against Node's `crypto` across eight vectors including
+the 55/56/64-byte boundary cases — so they are proven functionally correct, not merely textually
+equal.
+
+A methodological caveat worth recording, because it cuts both ways: having an agent *retype*
+fetched source into a file is itself a transcription step. Several agents reported small byte
+deltas that proved to be their own retyping artefacts rather than deployment drift — each was
+traced line-by-line to specific trailing-whitespace lines present on both sides, not waved
+through. One agent also raised a false alarm on the MD5 tables because it had recalled an
+expected hash wrongly from memory, and cleared it by recomputing mechanically.
+
+The stronger route is mechanical extraction from the raw tool result with no retyping at all.
+That was used where the harness saved results to a file — including `generate-filing-pdf`,
+`hmrc-ct-submit` and the entire `auth-email-hook` bundle. Where results came back inline the
+mechanical path was unavailable, so that evidence is retyped-and-reconciled rather than
+byte-exact. It is recorded as such rather than presented as stronger than it is.
 
 **The `auth-email-hook` bundle was verified in full**, not just its entrypoint. All six
 `_shared/email-templates/*.tsx` files and `deno.json` are byte-for-byte identical to the repo,
