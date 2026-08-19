@@ -152,9 +152,16 @@ own retyping artefacts rather than deployment drift. The stronger route — used
 and most sensitive files — is mechanical extraction from the saved tool result with no retyping
 in the loop.
 
-**Not yet byte-verified:** the six `_shared/email-templates/*.tsx` files bundled with
-`auth-email-hook`. Only its `index.ts` was compared. Those templates are the content of every
-branded auth email, so they warrant the same check before the email path is trusted.
+**The `auth-email-hook` bundle was verified in full**, not just its entrypoint. All six
+`_shared/email-templates/*.tsx` files and `deno.json` are byte-for-byte identical to the repo,
+confirmed by `cmp` and MD5 with no retyping in the loop (the raw tool result was parsed
+mechanically). The bundle contains exactly eight files — index.ts, deno.json and the six
+templates — with nothing extra on either side.
+
+This one was worth doing rather than assuming. Because passwords do not survive the migration,
+**every user will pass through `recovery.tsx`**, and its `confirmationUrl` is now proven
+unchanged by byte equality rather than by eye. `reauthentication.tsx` renders `{token}`
+unchanged on the same evidence.
 
 ## 5. Known deviations — action required
 
