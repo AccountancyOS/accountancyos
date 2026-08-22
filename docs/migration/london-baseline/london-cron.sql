@@ -40,8 +40,16 @@
 -- If the hourly cadence was the intended one, change the schedule below. Confirm before apply.
 --
 -- ============================ BEFORE APPLYING ============================
--- Replace `__LONDON_PROJECT_URL__` with the project URL. There are 12 occurrences.
--- The post-assertions refuse to commit while any placeholder remains.
+-- Replace `__LONDON_PROJECT_URL__` with the project URL — but ONLY inside the 12
+-- `$cron$ ... $cron$` job bodies.
+--
+-- ⚠ DO NOT do a global find/replace. The token also appears twice outside the job bodies: in
+-- this comment, and in the §3 post-assertion that DETECTS an unsubstituted placeholder. A global
+-- replace rewrites that guard so it tests for the real project URL — which every job command
+-- legitimately contains — and it then fires unconditionally, aborting the whole migration with
+-- "still contains the placeholder URL". That happened on the first attempt at applying this file.
+--
+-- The post-assertions refuse to commit while any placeholder remains inside a job body.
 --
 
 BEGIN;

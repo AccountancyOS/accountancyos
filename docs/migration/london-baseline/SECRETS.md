@@ -91,6 +91,27 @@ Tuning values, optional: `TL_SCHED_BATCH_SIZE`, `TL_SCHED_MAX_CONCURRENCY`.
 **Redirect URIs still need re-registering** at Google, Microsoft, TrueLayer and HMRC even though
 the client IDs and secrets carry over.
 
+## 5a. ⚠ This project uses the NEW API key format — a real trap
+
+Confirmed on London 2026-08-22 by probing the running edge runtime: the injected
+`SUPABASE_SERVICE_ROLE_KEY` is the **new format** — `sb_secret_…`, **41 characters** — *not* the
+legacy 219-character JWT. The project also exposes a legacy `service_role` JWT and an
+`sb_publishable_…` key, so both formats exist side by side and either can be copied by mistake.
+
+**This bit us.** The Vault entry `cron_service_role_key` was first set to the legacy JWT. It was a
+perfectly valid service-role JWT for the correct project — right `role`, right `ref`, right issuer
+— but the cron-invoked functions compare the bearer to the env var with **string equality**
+(`hmrc-ct-poll/index.ts:316`), so it did not match. Result: **ten of the twelve cron jobs returned
+401 on every run while `pg_cron` reported "succeeded"** — an exact reproduction of the legacy
+DEF-018/DEF-003 failure, in a new guise.
+
+It was caught within a minute only because delivery was checked in `net._http_response` rather
+than trusting the green `pg_cron` run. Fixed by putting the `sb_secret_…` value in Vault; 401s
+stopped immediately and the jobs began returning 200.
+
+**Rule:** anywhere a service-role key is compared or copied, take the value the edge runtime
+actually receives — not whichever key the dashboard happens to show first.
+
 ## 6. Vault entries — a different store (2)
 
 Set in the database, not in Edge Function secrets:
