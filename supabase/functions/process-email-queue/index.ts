@@ -1,4 +1,3 @@
-import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -7,18 +6,56 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const FROM_ADDRESS = 'AccountancyOS <noreply@accountancyos.com>'
-const SENDER_DOMAIN = 'notify.accountancyos.com'
-
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
 const DEFAULT_SEND_DELAY_MS = 200
 const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
-// Derive a plain-text fallback from HTML so the Lovable Email API always
-// receives a `text` parameter (it's required and 400s with missing_parameter
-// otherwise). Best-effort: strip tags, decode common entities, collapse space.
+const POSTMARK_API_URL = 'https://api.postmarkapp.com/email'
+const DEFAULT_POSTMARK_MESSAGE_STREAM = 'outbound'
+
+// Back-off applied to a held row's `scheduled_at`. A hold must not be re-attempted every
+// minute: a missing mailbox will still be missing sixty seconds later, and hammering a
+// mailbox that is down turns one outage into a rate-limit.
+const HOLD_BACKOFF_NO_MAILBOX_MINUTES = 15
+const HOLD_BACKOFF_BASE_MINUTES = 5
+const HOLD_BACKOFF_MAX_MINUTES = 60
+
+/**
+ * ============================================================================
+ * SENDER IDENTITY — the hard rule (owner, 2026-08-25)
+ * ============================================================================
+ * Two strictly separated identities:
+ *
+ *   context === 'system'        -> AccountancyOS's own mail  -> Postmark
+ *   anything else, incl. NULL   -> practice correspondence    -> the practice's
+ *                                  connected mailbox (gmail/outlook) ONLY
+ *
+ * There is NO Postmark fallback for practice correspondence. Ever. If no mailbox is
+ * connected, or the mailbox send fails, the message is HELD: it stays in the queue,
+ * unsent, `status='pending'`, with `last_error_code` set so the UI can warn.
+ *
+ * Sending a client's mail from AccountancyOS's own domain is the single worst outcome
+ * available here — the client sees it, and it is unrecoverable once delivered. Holding is
+ * always the correct failure direction.
+ *
+ * NULL routes to the mailbox path DELIBERATELY. Routing is a positive decision on
+ * `context`, never an inference from whether a mailbox happens to be present: the previous
+ * implementation chose by presence (`if (mailbox_id && provider) ... else default provider`)
+ * which meant a missing mailbox silently fell through to the platform sender.
+ *
+ * Design: `docs/superpowers/plans/2026-08-25-email-sender-identity-and-postmark.md` §3, §4,
+ * §9, §10.
+ */
+const SYSTEM_CONTEXT = 'system'
+
+function isSystemEmail(context: string | null | undefined): boolean {
+  return context === 'system'
+}
+
+// Derive a plain-text fallback from HTML so every send carries a TextBody as well as an
+// HtmlBody. Best-effort: strip tags, decode common entities, collapse space.
 function htmlToText(html: string): string {
   if (!html) return ''
   const stripped = html
@@ -37,9 +74,24 @@ function htmlToText(html: string): string {
   return decoded.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+/**
+ * Send failure carrying the transport status, so the existing rate-limit / forbidden
+ * classification keeps working without string-sniffing.
+ */
+class EmailSendError extends Error {
+  status: number | null
+  retryAfterSeconds: number | null
+
+  constructor(message: string, status: number | null = null, retryAfterSeconds: number | null = null) {
+    super(message)
+    this.name = 'EmailSendError'
+    this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
 // Check if an error is a rate-limit (429) response.
-// Uses EmailAPIError.status when available (email-js >=0.x with structured errors),
-// falls back to parsing the error message for older versions.
+// Uses EmailSendError.status when available, falls back to parsing the message.
 function isRateLimited(error: unknown): boolean {
   if (error && typeof error === 'object' && 'status' in error) {
     return (error as { status: number }).status === 429
@@ -56,12 +108,327 @@ function isForbidden(error: unknown): boolean {
   return error instanceof Error && error.message.includes('403')
 }
 
-// Extract Retry-After seconds from a structured EmailAPIError, or default to 60s.
+// Extract Retry-After seconds from a structured EmailSendError, or default to 60s.
 function getRetryAfterSeconds(error: unknown): number {
   if (error && typeof error === 'object' && 'retryAfterSeconds' in error) {
     return (error as { retryAfterSeconds: number | null }).retryAfterSeconds ?? 60
   }
   return 60
+}
+
+type PostmarkResponse = {
+  To?: string
+  SubmittedAt?: string
+  MessageID?: string
+  ErrorCode?: number
+  Message?: string
+}
+
+/**
+ * Postmark — AccountancyOS's OWN sender identity, and nothing else.
+ *
+ * The guard below lives INSIDE the sender rather than only at the call site. Routing
+ * decides; this refuses. That is the difference between "no current code path sends
+ * practice mail through Postmark" and "no code path can", and it is the property the
+ * regression suite pins.
+ */
+async function sendPostmarkEmail(params: {
+  context: string | null | undefined
+  to: string
+  subject: string
+  html: string
+  text: string
+  replyTo?: string | null
+}): Promise<{ providerMessageId: string; response: PostmarkResponse }> {
+  // NON-NEGOTIABLE. Practice correspondence must never leave AccountancyOS's domain.
+  if (!isSystemEmail(params.context)) {
+    throw new EmailSendError(
+      `postmark_blocked_non_system: refusing to send context=${params.context ?? 'null'} through ` +
+        `AccountancyOS's own sender. Practice correspondence goes out through the practice's ` +
+        `connected mailbox or it is held — there is no fallback.`
+    )
+  }
+
+  const token = Deno.env.get('POSTMARK_SERVER_TOKEN')
+  const fromAddress = Deno.env.get('POSTMARK_FROM_EMAIL')
+
+  // Fail CLOSED. A missing secret must surface as a loud, retryable failure — never as a
+  // send that is quietly skipped and later reported as delivered.
+  if (!token) {
+    throw new EmailSendError('postmark_not_configured: POSTMARK_SERVER_TOKEN is not set')
+  }
+  if (!fromAddress) {
+    throw new EmailSendError('postmark_not_configured: POSTMARK_FROM_EMAIL is not set')
+  }
+
+  const body: Record<string, unknown> = {
+    From: fromAddress,
+    To: params.to,
+    Subject: params.subject,
+    HtmlBody: params.html,
+    TextBody: params.text,
+    MessageStream: Deno.env.get('POSTMARK_MESSAGE_STREAM') || DEFAULT_POSTMARK_MESSAGE_STREAM,
+  }
+  if (params.replyTo) {
+    body.ReplyTo = params.replyTo
+  }
+
+  const res = await fetch(POSTMARK_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-Postmark-Server-Token': token,
+    },
+    body: JSON.stringify(body),
+  })
+
+  const rawBody = await res.text()
+  let parsed: PostmarkResponse | null = null
+  try {
+    parsed = rawBody ? (JSON.parse(rawBody) as PostmarkResponse) : null
+  } catch {
+    parsed = null
+  }
+
+  if (!res.ok) {
+    const retryAfterHeader = res.headers.get('Retry-After')
+    const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : null
+    throw new EmailSendError(
+      `postmark_http_${res.status}: ${parsed?.Message ?? rawBody.slice(0, 500)}`,
+      res.status,
+      Number.isFinite(retryAfterSeconds as number) ? (retryAfterSeconds as number) : null
+    )
+  }
+
+  // THE TRAP: Postmark answers HTTP 200 with a NON-ZERO `ErrorCode` for whole classes of
+  // failure — inactive recipient (406), invalid email address (300), suppressed address.
+  // Treating HTTP 200 as success would record unsent mail as `sent`, which is precisely the
+  // silent-failure class this programme keeps being bitten by. Success requires
+  // `ErrorCode === 0`; anything else is a failure and `Message` is recorded.
+  if (!parsed || parsed.ErrorCode !== 0) {
+    throw new EmailSendError(
+      `postmark_error_${parsed?.ErrorCode ?? 'unparseable'}: ${parsed?.Message ?? rawBody.slice(0, 500)}`
+    )
+  }
+
+  // ...and an accepted send must still hand back a provider id, or we have no proof of
+  // acceptance to record.
+  if (!parsed.MessageID) {
+    throw new EmailSendError('provider_no_ack: Postmark returned ErrorCode 0 without a MessageID')
+  }
+
+  return { providerMessageId: parsed.MessageID, response: parsed }
+}
+
+type PracticeMailbox = {
+  id: string
+  provider: 'gmail' | 'outlook'
+  /** Where the choice came from, for the log trail. */
+  source: 'queue_row' | 'organization'
+}
+
+/**
+ * Resolve the mailbox that practice correspondence must go out through.
+ *
+ * Returns null when there is no usable mailbox — which means HOLD, never "send it some
+ * other way".
+ */
+async function resolvePracticeMailbox(
+  supabase: ReturnType<typeof createClient>,
+  queueRow: {
+    id: string
+    organization_id: string | null
+    mailbox_id: string | null
+    provider: string | null
+    created_by: string | null
+  }
+): Promise<PracticeMailbox | null> {
+  // 1. The row names its own mailbox. Honour it.
+  //    `email_queue.provider` DEFAULTS to 'postmark', so presence is not enough — only
+  //    'gmail' and 'outlook' are mailbox providers, and a row carrying 'postmark' here is
+  //    carrying the default, not a decision.
+  if (queueRow.mailbox_id) {
+    if (queueRow.provider === 'gmail' || queueRow.provider === 'outlook') {
+      return { id: queueRow.mailbox_id, provider: queueRow.provider, source: 'queue_row' }
+    }
+
+    // A mailbox is named but the provider is missing or is the table default. Read the
+    // provider off the mailbox itself rather than guessing which API to call.
+    const { data, error } = await supabase
+      .from('connected_mailboxes')
+      .select('id, provider, status')
+      .eq('id', queueRow.mailbox_id)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (error) {
+      console.error('email_queue mailbox lookup failed', { id: queueRow.id, error: error.message })
+      return null
+    }
+    if (data && (data.provider === 'gmail' || data.provider === 'outlook')) {
+      return { id: String(data.id), provider: data.provider, source: 'queue_row' }
+    }
+    console.warn('email_queue names a mailbox that is not usable', {
+      id: queueRow.id,
+      mailbox_id: queueRow.mailbox_id,
+    })
+    return null
+  }
+
+  if (!queueRow.organization_id) return null
+
+  // 2. No mailbox on the row: resolve the organisation's active connected mailbox.
+  //    `connected_mailboxes.status` is the `mailbox_status` ENUM ('active'|'expired'|
+  //    'revoked'|'error') — 'active' is the only usable value. `sync_enabled` is nullable
+  //    and the established SQL convention treats NULL as true (COALESCE(sync_enabled,true)).
+  //    Preference order mirrors the quote-dispatch RPCs: the mailbox of whoever created the
+  //    email, then any active mailbox in the organisation, most recently refreshed first.
+  const asMailbox = (row: Record<string, unknown> | null): PracticeMailbox | null => {
+    if (!row) return null
+    const provider = row.provider
+    if (provider !== 'gmail' && provider !== 'outlook') return null
+    return { id: String(row.id), provider, source: 'organization' }
+  }
+
+  if (queueRow.created_by) {
+    const { data, error } = await supabase
+      .from('connected_mailboxes')
+      .select('id, provider, email_address, updated_at')
+      .eq('organization_id', queueRow.organization_id)
+      .eq('status', 'active')
+      .eq('user_id', queueRow.created_by)
+      .or('sync_enabled.is.null,sync_enabled.eq.true')
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('email_queue creator mailbox lookup failed', { id: queueRow.id, error: error.message })
+    } else {
+      const mailbox = asMailbox(data as Record<string, unknown> | null)
+      if (mailbox) return mailbox
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('connected_mailboxes')
+    .select('id, provider, email_address, updated_at')
+    .eq('organization_id', queueRow.organization_id)
+    .eq('status', 'active')
+    .or('sync_enabled.is.null,sync_enabled.eq.true')
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('email_queue organisation mailbox lookup failed', { id: queueRow.id, error: error.message })
+    return null
+  }
+  return asMailbox(data as Record<string, unknown> | null)
+}
+
+/**
+ * Send practice correspondence through the practice's own mailbox. This function knows
+ * about gmail-send and outlook-send and nothing else — there is no other route out of it.
+ */
+async function sendViaPracticeMailbox(
+  supabase: ReturnType<typeof createClient>,
+  mailbox: PracticeMailbox,
+  queueRow: { to_email: string; subject: string; body_html: string; body_text: string | null },
+  messageId: string
+): Promise<{ providerMessageId: string; response: Record<string, unknown> }> {
+  const fnName = mailbox.provider === 'outlook' ? 'outlook-send' : 'gmail-send'
+  const { data: fnData, error: fnErr } = await supabase.functions.invoke(fnName, {
+    body: {
+      mailbox_id: mailbox.id,
+      to: queueRow.to_email,
+      subject: queueRow.subject,
+      body_html: queueRow.body_html,
+      body_text: queueRow.body_text ?? htmlToText(queueRow.body_html),
+    },
+  })
+  if (fnErr) throw new Error(`${fnName} invoke failed: ${fnErr.message ?? String(fnErr)}`)
+
+  const data = (fnData ?? {}) as Record<string, unknown>
+  if (data.error) throw new Error(String(data.error))
+
+  // gmail-send/outlook-send do not always return a provider message id; a clean invoke
+  // means accepted, so synthesize one rather than discarding the acknowledgement.
+  const providerMessageId = String(data.message_id ?? data.id ?? `${mailbox.provider}-${messageId}`)
+  return { providerMessageId, response: data }
+}
+
+type HoldCode =
+  | 'blocked_mailbox_unavailable'
+  | 'mailbox_send_failed'
+  | 'attachments_unsupported'
+
+/**
+ * HOLD a practice email: keep it queued, unsent, and visible.
+ *
+ * A held message is NOT failed and NOT cancelled — it is genuinely still waiting, and will
+ * go out through the practice mailbox as soon as one is available. So `status` stays
+ * `'pending'` and the hold is carried by `last_error_code`.
+ *
+ * `email_queue_status_check` permits only pending|sent|failed|cancelled, that constraint is
+ * in the drift registry, and the Emails page has already crashed once on a status its badge
+ * map did not know ('cancelled'). Widening a status vocabulary is the defect class behind
+ * DEF-026 and DEF-032. So: no new status value. See design §4 and §10.
+ */
+async function holdEmailQueueRow(
+  supabase: ReturnType<typeof createClient>,
+  queueRow: { id: string; to_email: string; retry_count: number | null },
+  messageId: string,
+  code: HoldCode,
+  message: string
+): Promise<void> {
+  // `blocked_mailbox_unavailable` is a configuration state, not a transient fault. Counting
+  // it as a retry would walk the row into the retry ceiling and then bury the real cause
+  // behind "max retries exceeded". Only a genuine send failure increments.
+  const isTransient = code === 'mailbox_send_failed'
+  const priorRetries = queueRow.retry_count ?? 0
+  const backoffMinutes = isTransient
+    ? Math.min(HOLD_BACKOFF_MAX_MINUTES, HOLD_BACKOFF_BASE_MINUTES * 2 ** Math.min(priorRetries, 8))
+    : HOLD_BACKOFF_NO_MAILBOX_MINUTES
+
+  const trimmed = message.slice(0, 1000)
+
+  await supabase.from('email_send_log').insert({
+    message_id: messageId,
+    template_name: 'email_queue',
+    recipient_email: queueRow.to_email,
+    status: 'failed',
+    error_message: `${code}: ${trimmed}`.slice(0, 1000),
+    metadata: { email_queue_id: queueRow.id, held: true, last_error_code: code },
+  })
+
+  const { error } = await supabase
+    .from('email_queue')
+    .update({
+      status: 'pending',
+      // Release the claim so a later run can pick the row up again, and push `scheduled_at`
+      // out so it is not re-attempted every minute.
+      claimed_at: null,
+      scheduled_at: new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString(),
+      error_message: trimmed,
+      last_error_code: code,
+      last_error_message: trimmed,
+      updated_at: new Date().toISOString(),
+      ...(isTransient ? { retry_count: priorRetries + 1 } : {}),
+    })
+    .eq('id', queueRow.id)
+
+  if (error) {
+    console.error('email_queue hold could not be recorded', { id: queueRow.id, code, error: error.message })
+  } else {
+    console.warn('email_queue row held', {
+      id: queueRow.id,
+      code,
+      backoff_minutes: backoffMinutes,
+      retry_count_incremented: isTransient,
+    })
+  }
 }
 
 function parseJwtClaims(token: string): Record<string, unknown> | null {
@@ -113,11 +480,13 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
+  // Postmark's own secrets are checked inside `sendPostmarkEmail`, not here: the practice
+  // mailbox path does not need them, and refusing to start would stop practice mail moving
+  // because AccountancyOS's own sender is unconfigured.
+  if (!supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
     return new Response(
       JSON.stringify({ error: 'Server configuration error' }),
@@ -172,7 +541,15 @@ Deno.serve(async (req) => {
 
   let totalProcessed = 0
 
-  // 2. Process auth_emails first (priority), then transactional_emails
+  // 2. Process auth_emails first (priority), then transactional_emails.
+  //
+  //    These pgmq queues carry AccountancyOS's OWN mail: `auth_emails` is produced solely by
+  //    `auth-email-hook` (password reset, magic link, confirmation), and no producer in this
+  //    repository writes to `transactional_emails` at all. So they route to Postmark.
+  //
+  //    A payload may still declare its own `context`. If one ever carries practice
+  //    correspondence, `sendPostmarkEmail` rejects it rather than sending it under the wrong
+  //    identity, and the message stays in pgmq — fail closed, in the safe direction.
   for (const queue of ['auth_emails', 'transactional_emails']) {
     const { data: messages, error: readError } = await supabase.rpc('read_email_batch', {
       queue_name: queue,
@@ -286,52 +663,17 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const providerResponse = await sendLovableEmail(
-          {
-            run_id: payload.run_id,
-            to: payload.to,
-            from: payload.from,
-            sender_domain: payload.sender_domain,
-            subject: payload.subject,
-            html: payload.html,
-            text: payload.text,
-            purpose: payload.purpose,
-            label: payload.label,
-            idempotency_key: payload.idempotency_key,
-            unsubscribe_token: payload.unsubscribe_token,
-            message_id: payload.message_id,
-          },
-          // sendUrl is optional — when LOVABLE_SEND_URL is not set, the library
-          // falls back to the default Lovable API endpoint (https://api.lovable.dev).
-          // Set LOVABLE_SEND_URL as a Supabase secret to override (e.g. for local dev).
-          { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
-        )
-
-        // Non-negotiable: do not record `sent` unless the provider returned
-        // an acknowledgement (id / response body). A silent resolve from the
-        // SDK without a provider id means we have no proof of acceptance and
-        // must keep the message in-flight so it retries.
-        const providerId =
-          (providerResponse && typeof providerResponse === 'object'
-            ? ((providerResponse as Record<string, unknown>).id ??
-              (providerResponse as Record<string, unknown>).message_id ??
-                 (providerResponse as Record<string, unknown>).messageId ??
-                 (providerResponse as Record<string, unknown>).workflow_id ??
-                 (providerResponse as Record<string, unknown>).workflowId)
-            : null) ?? null
-
-        if (!providerId) {
-          // Treat as a soft failure so pgmq visibility timeout retries it.
-          await supabase.from('email_send_log').insert({
-            message_id: payload.message_id,
-            template_name: payload.label || queue,
-            recipient_email: payload.to,
-            status: 'failed',
-            error_message: 'provider_no_ack: SDK resolved without provider message id',
-            metadata: { provider_response: providerResponse ?? null },
-          })
-          continue
-        }
+        // Non-negotiable: do not record `sent` unless the provider acknowledged. Postmark's
+        // acknowledgement is `ErrorCode === 0` plus a `MessageID` — HTTP 200 alone is not
+        // proof, and `sendPostmarkEmail` throws when either is missing.
+        const { providerMessageId, response: providerResponse } = await sendPostmarkEmail({
+          context: typeof payload.context === 'string' ? payload.context : SYSTEM_CONTEXT,
+          to: payload.to,
+          subject: payload.subject,
+          html: payload.html,
+          text: payload.text ?? htmlToText(payload.html ?? ''),
+          replyTo: typeof payload.reply_to === 'string' ? payload.reply_to : null,
+        })
 
         await supabase.from('email_send_log').insert({
           message_id: payload.message_id,
@@ -339,8 +681,9 @@ Deno.serve(async (req) => {
           recipient_email: payload.to,
           status: 'sent',
           metadata: {
-            provider_message_id: String(providerId),
+            provider_message_id: String(providerMessageId),
             provider_response: providerResponse,
+            provider: 'postmark',
           },
         })
 
@@ -368,6 +711,12 @@ Deno.serve(async (req) => {
             message_id: payload.message_id,
             template_name: payload.label || queue,
             recipient_email: payload.to,
+            // NB: 'rate_limited' is not in email_send_log_status_check
+            // (pending|sent|suppressed|failed|bounced|complained|dlq), so this insert is
+            // rejected and the row is not written. Left exactly as it was: logging it as
+            // 'failed' instead would make every rate-limit consume the retry budget below
+            // and walk the message into the DLQ, which is the opposite of the intent. The
+            // status vocabulary is a separate defect — out of scope for this increment.
             status: 'rate_limited',
             error_message: errorMsg.slice(0, 1000),
           })
@@ -426,6 +775,7 @@ Deno.serve(async (req) => {
   //    Non-negotiable: only flip to `sent` when the provider returned a message id.
   let emailQueueProcessed = 0
   let emailQueueFailed = 0
+  let emailQueueHeld = 0
   try {
     // FUN-4/Fix 10: only pick rows that are unclaimed, or whose claim has gone stale (a worker
     // that crashed mid-send). This lets a second worker recover an orphaned row without
@@ -434,7 +784,9 @@ Deno.serve(async (req) => {
     const dueBefore = new Date().toISOString()
     const { data: rows, error: rowsError } = await supabase
       .from('email_queue')
-      .select('id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, created_by, attachments')
+      .select(
+        'id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, context, retry_count, created_by, attachments'
+      )
       .eq('status', 'pending')
       .lte('scheduled_at', dueBefore)
       .or(`claimed_at.is.null,claimed_at.lt.${staleClaimBefore}`)
@@ -451,6 +803,7 @@ Deno.serve(async (req) => {
         staleClaimBefore,
         ids: (rows ?? []).map((row) => ({
           id: row.id,
+          context: row.context ?? null,
           provider: row.provider ?? null,
           hasMailbox: Boolean(row.mailbox_id),
         })),
@@ -495,24 +848,13 @@ Deno.serve(async (req) => {
         }
         claimedRows++
 
-        const queueRow = claimed as typeof row
+        // `claim_email_queue_row` returns a fixed column list that does not include `context`
+        // or `retry_count`. Rather than change a live RPC's return type (a DROP/CREATE, and
+        // the routing decision must not wait on a migration), overlay the claimed values on
+        // the row we selected — which carries both.
+        const queueRow = { ...row, ...(claimed as typeof row) }
 
         const messageId = crypto.randomUUID()
-
-        // Mint a one-click unsubscribe token. The Lovable Email API rejects
-        // transactional sends without one (`missing_unsubscribe`).
-        let unsubscribeToken: string | null = null
-        if (queueRow.organization_id) {
-          const { data: tokenData, error: tokenErr } = await supabase.rpc(
-            'enqueue_unsubscribe_token',
-            { p_org_id: queueRow.organization_id, p_email: queueRow.to_email, p_category: 'transactional' }
-          )
-          if (tokenErr) {
-            console.error('Failed to mint unsubscribe token', { id: queueRow.id, error: tokenErr.message })
-          } else if (typeof tokenData === 'string') {
-            unsubscribeToken = tokenData
-          }
-        }
 
         await supabase.from('email_send_log').insert({
           message_id: messageId,
@@ -523,76 +865,110 @@ Deno.serve(async (req) => {
 
         try {
           let providerResponse: unknown
-          let providerLabel: 'gmail' | 'outlook' | 'lovable' = 'lovable'
+          let providerLabel: 'gmail' | 'outlook' | 'postmark'
+          let providerId: string
 
-          console.log('email_queue sending claimed row', {
+          console.log('email_queue routing claimed row', {
             id: queueRow.id,
-            provider: queueRow.provider ?? null,
+            context: queueRow.context ?? null,
+            system: isSystemEmail(queueRow.context),
             hasMailbox: Boolean(queueRow.mailbox_id),
           })
 
-          if (queueRow.mailbox_id && queueRow.provider) {
-            // Send from the accountant's connected mailbox
-            const fnName = queueRow.provider === 'outlook' ? 'outlook-send' : 'gmail-send'
-            providerLabel = queueRow.provider === 'outlook' ? 'outlook' : 'gmail'
-            const { data: fnData, error: fnErr } = await supabase.functions.invoke(fnName, {
-              body: {
-                mailbox_id: queueRow.mailbox_id,
-                to: queueRow.to_email,
-                subject: queueRow.subject,
-                body_html: queueRow.body_html,
-                body_text: queueRow.body_text ?? htmlToText(queueRow.body_html),
-              },
+          // ================================================================
+          // THE ROUTING DECISION. Positive, on `context`. Never on presence.
+          // ================================================================
+          if (isSystemEmail(queueRow.context)) {
+            // AccountancyOS's own mail — platform notices to practice staff.
+            providerLabel = 'postmark'
+            const sent = await sendPostmarkEmail({
+              context: queueRow.context,
+              to: queueRow.to_email,
+              subject: queueRow.subject,
+              html: queueRow.body_html,
+              text: queueRow.body_text ?? htmlToText(queueRow.body_html),
             })
-            if (fnErr) throw new Error(`${fnName} invoke failed: ${fnErr.message ?? String(fnErr)}`)
-            // gmail-send/outlook-send may not return a provider message id;
-            // a non-error invoke means accepted -> synthesize one for ack.
-            const data = (fnData ?? {}) as Record<string, unknown>
-            if (data.error) throw new Error(String(data.error))
-            if (!data.message_id && !data.id) {
-              data.message_id = `${providerLabel}-${messageId}`
-            }
-            providerResponse = data
+            providerId = sent.providerMessageId
+            providerResponse = sent.response
           } else {
-            providerResponse = await sendLovableEmail(
-              {
-                to: queueRow.to_email,
-                from: FROM_ADDRESS,
-                sender_domain: SENDER_DOMAIN,
-                subject: queueRow.subject,
-                html: queueRow.body_html,
-                text: queueRow.body_text ?? htmlToText(queueRow.body_html),
-                purpose: 'transactional',
-                label: 'email_queue',
-                idempotency_key: queueRow.id,
-                message_id: messageId,
-                unsubscribe_token: unsubscribeToken ?? undefined,
-                // Best-effort attachments (e.g. invoice PDF). Ignored by the SDK if unsupported.
-                ...(Array.isArray((queueRow as any).attachments) && (queueRow as any).attachments.length
-                  ? { attachments: (queueRow as any).attachments }
-                  : {}),
-              } as any,
-              { apiKey, sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
-            )
+            // Practice correspondence — including context NULL. The practice's own mailbox
+            // or nothing. Both failure directions below HOLD the row; neither of them, and
+            // no path after them, can reach another sender.
+            // ATTACHMENT GUARD. Neither `gmail-send` nor `outlook-send` accepts attachments —
+            // the word does not appear in either function. Before this routing change, rows
+            // carrying an attachment went out via the old default provider, which did carry
+            // them. Now that ALL practice mail goes through the mailbox, sending such a row
+            // would silently deliver, for example, an invoice email with no invoice attached:
+            // a client-visible failure that looks like a success on our side.
+            //
+            // So hold it. "Held and visible" is the correct failure direction here, exactly as
+            // it is for a missing mailbox. Lifted once the mailbox senders support attachments.
+            const attachmentCount = Array.isArray(queueRow.attachments)
+              ? queueRow.attachments.length
+              : 0
+
+            if (attachmentCount > 0) {
+              await holdEmailQueueRow(
+                supabase,
+                queueRow,
+                messageId,
+                'attachments_unsupported',
+                `This message carries ${attachmentCount} attachment(s), but sending through a ` +
+                  `connected mailbox does not yet support attachments. It is held rather than ` +
+                  `sent, because delivering it would drop the attachment silently — the ` +
+                  `recipient would get, for example, an invoice email with no invoice.`
+              )
+              emailQueueHeld++
+              continue
+            }
+
+            const mailbox = await resolvePracticeMailbox(supabase, queueRow)
+
+            if (!mailbox) {
+              await holdEmailQueueRow(
+                supabase,
+                queueRow,
+                messageId,
+                'blocked_mailbox_unavailable',
+                'No active connected mailbox for this organisation. Practice email is only ever ' +
+                  'sent from the practice\'s own mailbox, so this message is held, unsent. ' +
+                  'Connect Gmail or Outlook in Settings to release it.'
+              )
+              emailQueueHeld++
+              continue
+            }
+
+            providerLabel = mailbox.provider
+            try {
+              const sent = await sendViaPracticeMailbox(supabase, mailbox, queueRow, messageId)
+              providerId = sent.providerMessageId
+              providerResponse = sent.response
+            } catch (mailboxError) {
+              const mailboxErrorMsg =
+                mailboxError instanceof Error ? mailboxError.message : String(mailboxError)
+              await holdEmailQueueRow(
+                supabase,
+                queueRow,
+                messageId,
+                'mailbox_send_failed',
+                `Sending through the practice mailbox (${mailbox.provider}) failed: ` +
+                  `${mailboxErrorMsg}. The message is held and will be retried through the same ` +
+                  `mailbox; it is never re-routed to another sender.`
+              )
+              emailQueueHeld++
+              continue
+            }
           }
 
-          const providerId =
-            (providerResponse && typeof providerResponse === 'object'
-              ? ((providerResponse as Record<string, unknown>).id ??
-                (providerResponse as Record<string, unknown>).message_id ??
-                (providerResponse as Record<string, unknown>).messageId ??
-                (providerResponse as Record<string, unknown>).workflow_id ??
-                (providerResponse as Record<string, unknown>).workflowId ??
-                (providerResponse as Record<string, unknown>).provider_message_id)
-              : null) ?? null
-
           if (!providerId) {
+            // Defence in depth. Both senders above throw rather than return an empty id, so
+            // reaching here means one of them changed.
             await supabase.from('email_send_log').insert({
               message_id: messageId,
               template_name: 'email_queue',
               recipient_email: queueRow.to_email,
               status: 'failed',
-              error_message: 'provider_no_ack: SDK resolved without provider message id',
+              error_message: 'provider_no_ack: sender resolved without a provider message id',
               metadata: { provider_response: providerResponse ?? null, email_queue_id: queueRow.id },
             })
             await supabase
@@ -637,6 +1013,8 @@ Deno.serve(async (req) => {
           emailQueueProcessed++
           await new Promise((r) => setTimeout(r, sendDelayMs))
         } catch (error) {
+          // Only the Postmark (system) branch can land here: every practice-mailbox failure
+          // is caught above and held.
           const errorMsg = error instanceof Error ? error.message : String(error)
           console.error('email_queue send failed', { id: queueRow.id, error: errorMsg })
           await supabase.from('email_send_log').insert({
@@ -652,7 +1030,11 @@ Deno.serve(async (req) => {
             .update({
               status: 'failed',
               error_message: errorMsg.slice(0, 1000),
-              last_error_code: isRateLimited(error) ? 'rate_limited' : 'send_failed',
+              last_error_code: isRateLimited(error)
+                ? 'rate_limited'
+                : errorMsg.startsWith('provider_no_ack')
+                  ? 'provider_no_ack'
+                  : 'send_failed',
               last_error_message: errorMsg.slice(0, 1000),
               updated_at: new Date().toISOString(),
             })
@@ -685,9 +1067,11 @@ Deno.serve(async (req) => {
     JSON.stringify({
       processed: totalProcessed + emailQueueProcessed,
       failed: emailQueueFailed,
+      held: emailQueueHeld,
       pgmq_processed: totalProcessed,
       email_queue_processed: emailQueueProcessed,
       email_queue_failed: emailQueueFailed,
+      email_queue_held: emailQueueHeld,
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )

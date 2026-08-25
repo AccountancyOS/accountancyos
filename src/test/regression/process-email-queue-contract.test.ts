@@ -12,8 +12,18 @@ const SRC = readFileSync(
 );
 
 describe("process-email-queue contract", () => {
-  it("captures the provider response from sendLovableEmail", () => {
-    expect(SRC).toMatch(/const\s+providerResponse\s*=\s*await\s+sendLovableEmail/);
+  /**
+   * Updated 2026-08-25 with the sender-identity increment. This assertion used to name
+   * `sendLovableEmail`, which no longer exists in this function: `context === 'system'`
+   * now routes to Postmark and everything else to the practice's connected mailbox
+   * (see email-sender-identity.test.ts for that rule). The INVARIANT is unchanged and is
+   * what this test is for — whichever sender ran, its response is captured, because a
+   * `sent` row without a provider acknowledgement is the regression that hid the missing
+   * password reset.
+   */
+  it("captures the provider response from whichever sender ran", () => {
+    expect(SRC).toMatch(/response:\s*providerResponse\s*\}\s*=\s*await\s+sendPostmarkEmail/);
+    expect(SRC).toMatch(/providerResponse\s*=\s*sent\.response/);
   });
 
   it("refuses to mark a row `sent` without a provider message id", () => {
@@ -44,9 +54,20 @@ describe("process-email-queue contract", () => {
     // to slice each `new Response(...)` with a regex, but the lazy match
     // truncated at the inner JSON.stringify brace and never reached the headers
     // argument — a false red against correct code. Assert the intent directly.)
+    //
+    // Amended 2026-08-25: the function now makes an OUTBOUND request of its own (the
+    // Postmark send), whose headers legitimately carry Content-Type and an auth token and
+    // no CORS — CORS governs responses we return, not requests we make. That one block is
+    // exempted by the token header that identifies it, and the count of exemptions is
+    // pinned so a second one cannot slip in unexamined.
     const bareContentType =
-      SRC.match(/headers:\s*\{(?![^}]*corsHeaders)[^}]*[Cc]ontent-[Tt]ype[^}]*\}/g) ?? [];
+      SRC.match(
+        /headers:\s*\{(?![^}]*(?:corsHeaders|X-Postmark-Server-Token))[^}]*[Cc]ontent-[Tt]ype[^}]*\}/g,
+      ) ?? [];
     expect(bareContentType).toEqual([]);
+    const outboundRequestHeaders =
+      SRC.match(/headers:\s*\{[^}]*X-Postmark-Server-Token[^}]*\}/g) ?? [];
+    expect(outboundRequestHeaders).toHaveLength(1);
     // And the OPTIONS preflight returns corsHeaders directly.
     expect(SRC).toMatch(/OPTIONS[\s\S]*?headers:\s*corsHeaders/);
   });
