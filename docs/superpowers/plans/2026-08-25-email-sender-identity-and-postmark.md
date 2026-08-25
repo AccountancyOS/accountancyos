@@ -195,10 +195,61 @@ It is recorded as `last_error_code = 'blocked_mailbox_unavailable'` with `status
 
 The user-visible behaviour is identical — the message is marked, held, counted and surfaced.
 
-## 11. Open questions
+## 11. Sender address — CONFIRMED (owner, 2026-08-25)
 
-1. The `From` address for `POSTMARK_FROM_EMAIL` — must be on a Postmark-verified domain.
-   `accountancyos.com` is verified via the Return-Path above.
-2. "Practice administrator" for escalation — which role receives it (owner, or all admins)?
-3. What makes a held message "stale" on recovery — age, or superseded by a newer message for the
-   same entity?
+```
+POSTMARK_FROM_EMAIL = noreply@accountancyos.com
+From header          = AccountancyOS <noreply@accountancyos.com>
+```
+
+Deliverable via the verified Return-Path in §8.
+
+## 12. Escalation recipients — CONFIRMED (owner, 2026-08-25), with a schema correction
+
+**Intent:** active members of the organisation whose `organization_users.role IN ('owner','admin')`,
+alerted at their **AccountancyOS account/login email** — never an address taken from the
+disconnected mailbox connection. Deduplicate. Exclude inactive or suspended users.
+
+**Schema correction — "active" is not where you would expect it.** Verified against London:
+
+- `public.organization_users` has only `id, organization_id, user_id, role, created_at`. There is
+  **no status, `is_active` or `deleted_at` column** — membership is binary, a row exists or it
+  does not. (This is the same finding recorded under DEF-012: a "pending membership" cannot exist
+  in this schema.)
+- `public.profiles` exposes `id` and `email` and carries no activity or suspension field either.
+
+So eligibility must be derived from `auth.users`, which does carry it:
+
+```sql
+SELECT DISTINCT lower(u.email) AS recipient
+FROM public.organization_users ou
+JOIN auth.users u ON u.id = ou.user_id
+WHERE ou.organization_id = $1
+  AND ou.role IN ('owner','admin')
+  AND u.deleted_at IS NULL                              -- not soft-deleted
+  AND (u.banned_until IS NULL OR u.banned_until <= now()) -- not suspended
+  AND coalesce(u.is_anonymous, false) = false
+  AND u.email IS NOT NULL AND btrim(u.email) <> '';
+```
+
+Notes on the choices:
+- **`auth.users.email`, not `profiles.email`.** The account/login email is the authoritative one;
+  `profiles.email` is a mirror that can drift.
+- **`lower()` + `DISTINCT`** satisfies the deduplication requirement, including the case where one
+  person holds two memberships.
+- **Email confirmation is deliberately NOT required.** An unconfirmed admin still owns that login
+  address, and withholding an outage alert from them would make the failure quieter — the opposite
+  of the intent. Flagged in case the owner disagrees.
+
+**Zero eligible recipients:** do not substitute other staff. Record an escalation failure for
+platform operations (an `audit_log` entry with a distinct action, so it is queryable) and leave
+the messages held. An owner should always exist, so this indicates malformed legacy data and
+should be visible as such rather than silently absorbed.
+
+## 13. Open questions
+
+1. What makes a held message "stale" on recovery — age, or superseded by a newer message for the
+   same entity? (Needed for increment 4.)
+2. Should escalation alerts be suppressed while a practice has *never* connected a mailbox — i.e.
+   is "never connected" a different state from "connection broke"? The first is an onboarding
+   gap, the second an outage.
