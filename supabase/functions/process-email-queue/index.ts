@@ -1,4 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  validateAttachments,
+  type AttachmentRejectionCode,
+} from '../_shared/attachments.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -335,10 +339,22 @@ async function resolvePracticeMailbox(
 async function sendViaPracticeMailbox(
   supabase: ReturnType<typeof createClient>,
   mailbox: PracticeMailbox,
-  queueRow: { to_email: string; subject: string; body_html: string; body_text: string | null },
+  queueRow: {
+    to_email: string
+    subject: string
+    body_html: string
+    body_text: string | null
+    attachments?: unknown
+  },
   messageId: string
 ): Promise<{ providerMessageId: string; response: Record<string, unknown> }> {
   const fnName = mailbox.provider === 'outlook' ? 'outlook-send' : 'gmail-send'
+
+  // Attachments are FORWARDED, not dropped. `email_queue.attachments` is the same shape both
+  // mailbox senders now accept ({ filename, content (base64), contentType }); they validate it
+  // again on arrival and refuse rather than send a message missing its attachment.
+  const attachments = Array.isArray(queueRow.attachments) ? queueRow.attachments : []
+
   const { data: fnData, error: fnErr } = await supabase.functions.invoke(fnName, {
     body: {
       mailbox_id: mailbox.id,
@@ -346,6 +362,7 @@ async function sendViaPracticeMailbox(
       subject: queueRow.subject,
       body_html: queueRow.body_html,
       body_text: queueRow.body_text ?? htmlToText(queueRow.body_html),
+      ...(attachments.length > 0 ? { attachments } : {}),
     },
   })
   if (fnErr) throw new Error(`${fnName} invoke failed: ${fnErr.message ?? String(fnErr)}`)
@@ -359,10 +376,19 @@ async function sendViaPracticeMailbox(
   return { providerMessageId, response: data }
 }
 
+/**
+ * Every reason a practice email can be HELD.
+ *
+ * The old blanket "attachments not supported" code is GONE. It existed only because neither
+ * mailbox sender accepted attachments at all; both now do, so a blanket refusal would hold
+ * mail that is perfectly sendable. In its place are the specific `attachment_*` codes
+ * produced by `validateAttachments`, so the hold reason recorded on the row says what is
+ * actually wrong with the attachment.
+ */
 type HoldCode =
   | 'blocked_mailbox_unavailable'
   | 'mailbox_send_failed'
-  | 'attachments_unsupported'
+  | AttachmentRejectionCode
 
 /**
  * HOLD a practice email: keep it queued, unsent, and visible.
@@ -383,9 +409,12 @@ async function holdEmailQueueRow(
   code: HoldCode,
   message: string
 ): Promise<void> {
-  // `blocked_mailbox_unavailable` is a configuration state, not a transient fault. Counting
-  // it as a retry would walk the row into the retry ceiling and then bury the real cause
-  // behind "max retries exceeded". Only a genuine send failure increments.
+  // ONLY `mailbox_send_failed` is transient. `blocked_mailbox_unavailable` is a configuration
+  // state and every `attachment_*` code is a defect in the enqueued payload — neither gets
+  // better by being retried. Counting them as retries would walk the row into the retry
+  // ceiling and then bury the real cause behind "max retries exceeded". So the test is a
+  // positive allow-list of the one transient code, not a deny-list that a future code could
+  // silently join.
   const isTransient = code === 'mailbox_send_failed'
   const priorRetries = queueRow.retry_count ?? 0
   const backoffMinutes = isTransient
@@ -785,7 +814,7 @@ Deno.serve(async (req) => {
     const { data: rows, error: rowsError } = await supabase
       .from('email_queue')
       .select(
-        'id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, context, retry_count, created_by, attachments'
+        'id, organization_id, to_email, to_name, subject, body_html, body_text, mailbox_id, provider, context, retry_count, created_by, attachments, entity_type, entity_id'
       )
       .eq('status', 'pending')
       .lte('scheduled_at', dueBefore)
@@ -892,36 +921,8 @@ Deno.serve(async (req) => {
             providerResponse = sent.response
           } else {
             // Practice correspondence — including context NULL. The practice's own mailbox
-            // or nothing. Both failure directions below HOLD the row; neither of them, and
+            // or nothing. Every failure direction below HOLDS the row; none of them, and
             // no path after them, can reach another sender.
-            // ATTACHMENT GUARD. Neither `gmail-send` nor `outlook-send` accepts attachments —
-            // the word does not appear in either function. Before this routing change, rows
-            // carrying an attachment went out via the old default provider, which did carry
-            // them. Now that ALL practice mail goes through the mailbox, sending such a row
-            // would silently deliver, for example, an invoice email with no invoice attached:
-            // a client-visible failure that looks like a success on our side.
-            //
-            // So hold it. "Held and visible" is the correct failure direction here, exactly as
-            // it is for a missing mailbox. Lifted once the mailbox senders support attachments.
-            const attachmentCount = Array.isArray(queueRow.attachments)
-              ? queueRow.attachments.length
-              : 0
-
-            if (attachmentCount > 0) {
-              await holdEmailQueueRow(
-                supabase,
-                queueRow,
-                messageId,
-                'attachments_unsupported',
-                `This message carries ${attachmentCount} attachment(s), but sending through a ` +
-                  `connected mailbox does not yet support attachments. It is held rather than ` +
-                  `sent, because delivering it would drop the attachment silently — the ` +
-                  `recipient would get, for example, an invoice email with no invoice.`
-              )
-              emailQueueHeld++
-              continue
-            }
-
             const mailbox = await resolvePracticeMailbox(supabase, queueRow)
 
             if (!mailbox) {
@@ -933,6 +934,30 @@ Deno.serve(async (req) => {
                 'No active connected mailbox for this organisation. Practice email is only ever ' +
                   'sent from the practice\'s own mailbox, so this message is held, unsent. ' +
                   'Connect Gmail or Outlook in Settings to release it.'
+              )
+              emailQueueHeld++
+              continue
+            }
+
+            // ATTACHMENT VALIDATION — provider-specific, so it can only run once the mailbox
+            // is known (Gmail allows 25 MB, Microsoft Graph's simple fileAttachment 3 MB).
+            //
+            // This replaces the old blanket "attachments not supported" hold, which existed only
+            // because neither mailbox sender accepted attachments at all. They both do now, so
+            // an attachment that is well-formed and within the provider's limit is SENT.
+            //
+            // Anything that is not is HELD with the specific reason — never sent with the
+            // attachment dropped. Delivering an invoice email with no invoice attached is a
+            // client-visible failure that looks like a success on our side.
+            const attachmentValidation = validateAttachments(queueRow.attachments, mailbox.provider)
+            if (!attachmentValidation.ok) {
+              await holdEmailQueueRow(
+                supabase,
+                queueRow,
+                messageId,
+                attachmentValidation.code,
+                `${attachmentValidation.message} The message is held, unsent, rather than ` +
+                  `delivered without its attachment.`
               )
               emailQueueHeld++
               continue
@@ -1009,6 +1034,41 @@ Deno.serve(async (req) => {
               updated_at: new Date().toISOString(),
             })
             .eq('id', queueRow.id)
+
+          // ================================================================
+          // INVOICE SENT-STATE. Enqueuing is not sending.
+          // ================================================================
+          // `send-invoice` used to stamp `invoices.sent_at` the instant it enqueued the row,
+          // so an invoice read as "sent" while its email was still queued, held or failed.
+          // With attachment validation and the mailbox hold, an invoice could sit held
+          // indefinitely and still display as sent — exactly the wrong direction.
+          //
+          // So it is stamped HERE and only here: on the success path, after the provider
+          // acknowledged with a message id and the queue row was marked `sent`. Held and
+          // failed rows `continue` before reaching this point, so they leave `sent_at` NULL
+          // and remain visibly unsent.
+          //
+          // `.is('sent_at', null)` makes a resend a no-op against the column: the original
+          // send time is the one that matters, and overwriting it would erase the record of
+          // when the client first received the invoice.
+          if (queueRow.entity_type === 'invoice' && queueRow.entity_id) {
+            const { error: invoiceError } = await supabase
+              .from('invoices')
+              .update({ sent_at: new Date().toISOString() })
+              .eq('id', queueRow.entity_id)
+              .is('sent_at', null)
+
+            // The email genuinely went out. Failing the send because a bookkeeping column
+            // could not be stamped would be strictly worse — it would drive a retry and send
+            // the client a second copy. Log it and move on.
+            if (invoiceError) {
+              console.error('email_queue: invoice sent_at not stamped', {
+                id: queueRow.id,
+                invoice_id: queueRow.entity_id,
+                error: invoiceError.message,
+              })
+            }
+          }
 
           emailQueueProcessed++
           await new Promise((r) => setTimeout(r, sendDelayMs))

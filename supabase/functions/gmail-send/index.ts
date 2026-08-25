@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildGmailMimeMessage,
+  toGmailRawParam,
+  validateAttachments,
+  type EmailAttachment,
+} from "../_shared/attachments.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +29,13 @@ interface SendEmailRequest {
   thread_id?: string;
   client_id?: string;
   company_id?: string;
+  /**
+   * Optional file attachments, base64-encoded. Shape matches what `send-invoice` writes to
+   * `email_queue.attachments`, which `process-email-queue` forwards here verbatim.
+   * Validated by `validateAttachments` before anything is built — an attachment that cannot
+   * be carried correctly refuses the send rather than being dropped from it.
+   */
+  attachments?: EmailAttachment[];
 }
 
 // Refresh access token if expired. Returns Google's actual error on failure.
@@ -157,6 +170,21 @@ serve(async (req: Request) => {
       );
     }
 
+    // Attachments are validated BEFORE any token refresh or network call. A bad attachment
+    // must fail the whole send, loudly and with a specific code — never be quietly omitted
+    // from a message that then reports success. The caller (process-email-queue) turns this
+    // code into a HOLD on the queue row.
+    const hasAttachments = Array.isArray(body.attachments) && body.attachments.length > 0;
+    if (body.attachments !== undefined && body.attachments !== null) {
+      const validation = validateAttachments(body.attachments, 'gmail');
+      if (!validation.ok) {
+        return new Response(
+          JSON.stringify({ error: validation.code, details: validation.message }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Initialize Supabase clients
     const userSupabase = createClient(
       SUPABASE_URL!,
@@ -246,23 +274,45 @@ serve(async (req: Request) => {
     const ccAddresses = body.cc ? (Array.isArray(body.cc) ? body.cc : [body.cc]) : [];
     const bccAddresses = body.bcc ? (Array.isArray(body.bcc) ? body.bcc : [body.bcc]) : [];
 
-    // Create raw email
-    const rawEmail = createRawEmail(
-      mailbox.email_address,
-      toAddresses,
-      ccAddresses,
-      bccAddresses,
-      body.subject,
-      body.body_html,
-      body.body_text || '',
-      body.reply_to_message_id,
-      body.thread_id
-    );
+    // Create raw email.
+    //
+    // WITHOUT attachments the original multipart/alternative builder is used unchanged, so
+    // every existing send is byte-for-byte what it was before attachment support landed.
+    // WITH attachments the message must be multipart/mixed, which is a different structure —
+    // built by the pure, unit-tested `_shared/attachments.ts` so the regression suite can
+    // decode the emitted MIME and prove the PDF bytes survive it.
+    const rawParam = hasAttachments
+      ? toGmailRawParam(
+          buildGmailMimeMessage({
+            from: mailbox.email_address,
+            to: toAddresses,
+            cc: ccAddresses,
+            bcc: bccAddresses,
+            subject: body.subject,
+            html: body.body_html,
+            text: body.body_text || '',
+            attachments: body.attachments,
+            inReplyTo: body.reply_to_message_id,
+          })
+        )
+      : base64UrlEncode(
+          createRawEmail(
+            mailbox.email_address,
+            toAddresses,
+            ccAddresses,
+            bccAddresses,
+            body.subject,
+            body.body_html,
+            body.body_text || '',
+            body.reply_to_message_id,
+            body.thread_id
+          )
+        );
 
     // Send via Gmail API
     const sendUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
     const sendBody: any = {
-      raw: base64UrlEncode(rawEmail),
+      raw: rawParam,
     };
 
     if (body.thread_id) {

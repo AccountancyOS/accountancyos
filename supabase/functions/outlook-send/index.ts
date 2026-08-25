@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildOutlookAttachments,
+  validateAttachments,
+  type EmailAttachment,
+} from "../_shared/attachments.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +25,13 @@ interface SendEmailRequest {
   body_html?: string;
   body_text?: string;
   reply_to_message_id?: string;
+  /**
+   * Optional file attachments, base64-encoded — the same shape `send-invoice` writes to
+   * `email_queue.attachments`. Sent as Microsoft Graph `fileAttachment` objects, which are
+   * only valid below 3 MB in total; `validateAttachments` refuses anything larger rather
+   * than sending the message without its attachment.
+   */
+  attachments?: EmailAttachment[];
 }
 
 type RefreshResult =
@@ -100,13 +112,27 @@ serve(async (req: Request) => {
     }
 
     const body: SendEmailRequest = await req.json();
-    const { mailbox_id, to, cc, bcc, subject, body_html, body_text, reply_to_message_id } = body;
+    const { mailbox_id, to, cc, bcc, subject, body_html, body_text, reply_to_message_id, attachments } = body;
 
     if (!mailbox_id || !to || !subject) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields: mailbox_id, to, subject' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Validate BEFORE any token refresh or Graph call. An attachment that cannot be carried
+    // correctly fails the send with a specific code; it is never silently omitted from a
+    // message that then reports success.
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    if (attachments !== undefined && attachments !== null) {
+      const validation = validateAttachments(attachments, 'outlook');
+      if (!validation.ok) {
+        return new Response(
+          JSON.stringify({ error: validation.code, details: validation.message }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Use service role for mailbox access
@@ -189,6 +215,9 @@ serve(async (req: Request) => {
         toRecipients,
         ...(ccRecipients && { ccRecipients }),
         ...(bccRecipients && { bccRecipients }),
+        // Microsoft Graph `fileAttachment` objects. Only emitted when there is something to
+        // attach, so an attachment-free send is exactly the payload it was before.
+        ...(hasAttachments && { attachments: buildOutlookAttachments(attachments) }),
       },
       saveToSentItems: true,
     };

@@ -229,10 +229,21 @@ describe("holding — pending, marked, and not counted as a retry", () => {
     expect(QUEUE_UPDATE).toMatch(/last_error_message: trimmed/);
     expect(SRC).toMatch(/'blocked_mailbox_unavailable'/);
     expect(SRC).toMatch(/'mailbox_send_failed'/);
-    expect(SRC).toMatch(/'attachments_unsupported'/);
+    // UPDATED 2026-08-25, deliberately, NOT weakened.
+    //
+    // `'attachments_unsupported'` was a blanket hold code from when neither gmail-send nor
+    // outlook-send accepted attachments at all. Both now do, so the blanket refusal has been
+    // REMOVED — keeping it would hold invoice mail that is perfectly sendable, which is the
+    // very bug it guarded against, inverted.
+    //
+    // Its replacement is stricter, not looser: `AttachmentRejectionCode` is a union of five
+    // SPECIFIC codes from `validateAttachments`, so the reason recorded on the row says what
+    // is actually wrong with the attachment. The detailed assertions live in
+    // src/test/regression/email-attachments.test.ts.
     expect(SRC).toMatch(
-      /type HoldCode =\s*\|?\s*'blocked_mailbox_unavailable'\s*\|\s*'mailbox_send_failed'\s*\|\s*'attachments_unsupported'/,
+      /type HoldCode =\s*\|?\s*'blocked_mailbox_unavailable'\s*\|\s*'mailbox_send_failed'\s*\|\s*AttachmentRejectionCode/,
     );
+    expect(SRC).not.toContain("attachments_unsupported");
   });
 
   it("never increments retry_count for blocked_mailbox_unavailable", () => {
@@ -323,36 +334,65 @@ describe("the existing mechanics survive the rewrite", () => {
 });
 
 describe("attachments are never silently dropped on the practice path", () => {
-  // gmail-send and outlook-send do not support attachments — the word appears zero times in
-  // either function. Before sender-identity routing, rows carrying an attachment went out via
-  // the old default provider, which did carry them. Now that ALL practice mail goes through the
-  // mailbox, sending such a row would deliver an invoice email with no invoice attached: a
-  // client-visible failure that looks like success on our side. It must be held instead.
-  it("holds a practice email that carries attachments", () => {
-    expect(SRC).toContain("attachments_unsupported");
-    expect(SRC).toMatch(/attachmentCount\s*>\s*0/);
+  /**
+   * REWRITTEN 2026-08-25, deliberately. The INVARIANT is unchanged and still the strongest
+   * thing in this block: a practice email whose attachment cannot be carried correctly is
+   * HELD, never delivered without it. What changed is what "cannot be carried" means.
+   *
+   * Before: neither gmail-send nor outlook-send accepted attachments at all, so EVERY row
+   * carrying one was held under a single blanket code, `attachments_unsupported`. That was
+   * always a stopgap — it meant no invoice email could ever go out.
+   *
+   * Now: both senders carry attachments, and `validateAttachments` decides per provider.
+   * Well-formed attachments within the provider's limit are SENT; anything else is held with
+   * a SPECIFIC code. That is a strictly finer-grained guarantee, not a weaker one — the byte
+   * fidelity of what is sent is proven in src/test/regression/email-attachments.test.ts,
+   * which decodes the emitted MIME and Graph payload and compares them to the source PDF.
+   */
+  it("holds a practice email whose attachments fail validation", () => {
+    expect(SRC).toMatch(/validateAttachments\(queueRow\.attachments, mailbox\.provider\)/);
+    expect(SRC).toMatch(/if \(!attachmentValidation\.ok\) \{/);
+    expect(SRC).toMatch(/attachmentValidation\.code/);
+    // Held, unsent — the message body says so, and no sender follows.
+    expect(SRC).toContain("The message is held, unsent, rather than ");
+    expect(SRC).toContain("delivered without its attachment.");
   });
 
-  it("checks attachments BEFORE resolving a mailbox, so it cannot fall through to a send", () => {
-    const guard = SRC.indexOf("attachments_unsupported");
-    const resolve = SRC.indexOf("await resolvePracticeMailbox");
-    expect(guard).toBeGreaterThan(-1);
-    expect(resolve).toBeGreaterThan(-1);
-    expect(guard).toBeLessThan(resolve);
+  it("validates BEFORE sending, so a bad attachment cannot fall through to a send", () => {
+    // The ordering that matters. (The check now runs AFTER resolvePracticeMailbox rather than
+    // before it, because the limit is provider-specific — 25 MB for Gmail, 3 MB for a Graph
+    // fileAttachment — and the provider is not known until the mailbox is resolved. A missing
+    // mailbox still holds first, so nothing is sent in that case either.)
+    const validateAt = SRC.indexOf("validateAttachments(queueRow.attachments");
+    const resolveAt = SRC.indexOf("await resolvePracticeMailbox");
+    const sendAt = SRC.indexOf("await sendViaPracticeMailbox");
+    expect(resolveAt).toBeGreaterThan(-1);
+    expect(validateAt).toBeGreaterThan(resolveAt);
+    expect(sendAt).toBeGreaterThan(validateAt);
   });
 
-  it("treats it as non-transient — no retry_count inflation", () => {
-    // Only mailbox_send_failed is transient; a missing attachment capability is a code gap,
-    // not a blip, and inflating retry_count would eventually trip retry limits and mask it.
-    expect(SRC).toMatch(/isTransient\s*=\s*[^\n]*mailbox_send_failed/);
-    expect(SRC).not.toMatch(/isTransient[^\n]*attachments_unsupported/);
+  it("treats every attachment failure as non-transient — no retry_count inflation", () => {
+    // Only mailbox_send_failed is transient. A malformed or oversized attachment is a defect
+    // in the enqueued payload, not a blip; inflating retry_count would trip retry limits and
+    // mask the real cause. The test is a positive allow-list of the one transient code, so a
+    // future hold code cannot join it by accident.
+    expect(SRC).toMatch(/const isTransient = code === 'mailbox_send_failed'/);
+    expect(SRC).not.toMatch(/isTransient[^\n]*attachment_/);
   });
 
-  it("the mailbox senders genuinely still lack attachment support", () => {
-    // If this ever fails, attachment support has landed and the guard above can be lifted.
+  it("the mailbox senders now genuinely DO support attachments", () => {
+    // The inverse of what this test used to assert. It previously pinned the ABSENCE of
+    // attachment support, as the justification for the blanket hold; that support has now
+    // landed, so it pins its presence instead — otherwise the drainer would be forwarding
+    // attachments to functions that quietly ignore them, which is the silent drop the whole
+    // block exists to prevent.
     const gmail = readFileSync(resolve(root, "supabase/functions/gmail-send/index.ts"), "utf8");
     const outlook = readFileSync(resolve(root, "supabase/functions/outlook-send/index.ts"), "utf8");
-    expect(gmail).not.toMatch(/attachment/i);
-    expect(outlook).not.toMatch(/attachment/i);
+    expect(gmail).toMatch(/buildGmailMimeMessage/);
+    expect(gmail).toMatch(/attachments\?: EmailAttachment\[\]/);
+    expect(outlook).toMatch(/buildOutlookAttachments/);
+    expect(outlook).toMatch(/attachments\?: EmailAttachment\[\]/);
+    // ...and the drainer forwards what it holds, rather than dropping it at the boundary.
+    expect(SRC).toMatch(/\.\.\.\(attachments\.length > 0 \? \{ attachments \} : \{\}\)/);
   });
 });

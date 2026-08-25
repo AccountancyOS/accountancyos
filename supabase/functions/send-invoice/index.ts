@@ -125,7 +125,20 @@ serve(async (req) => {
     }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     if (qErr) return json({ error: `Could not queue the email: ${qErr.message}` }, 500);
 
-    await svc.from("invoices").update({ sent_at: new Date().toISOString() }).eq("id", invoice_id);
+    // DELIBERATELY NOT stamping `invoices.sent_at` here. Enqueuing is not sending.
+    //
+    // This function used to write it immediately after the upsert above, so an invoice read
+    // as "sent" while its email was still sitting in the queue — or held (no connected
+    // mailbox, an oversized attachment) or failed outright. `process-email-queue` now sets
+    // it on the success path only, once the provider has acknowledged the send with a message
+    // id, matching on `entity_type='invoice'` / `entity_id` and only when it is still NULL.
+    //
+    // The consequence is intended: an invoice whose email never goes out keeps `sent_at` NULL.
+    //
+    // NB (verified 2026-08-25): `invoices.sent_at` is currently WRITE-ONLY — no SQL, view, RLS
+    // predicate or UI component reads it back, and the Sales list derives its badge from
+    // `invoices.status` alone. So this change makes the column truthful rather than changing
+    // anything a user sees today. Surfacing it is a separate piece of work.
 
     return json({ success: true, sent_to: invoice.contact_email });
   } catch (e) {
