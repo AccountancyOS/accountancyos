@@ -135,17 +135,70 @@ Small and additive, per the repo's discipline. Each stops for review.
 4. **Warning surface** — show held emails and their reason; wire `acknowledged_at/by`.
 5. **Mandatory mailbox** — surface the requirement during onboarding.
 
-## 8. Prerequisite outside the code
+## 8. DNS — NOT a gate (owner decision, 2026-08-25)
 
-`notify.accountancyos.com` is **NS-delegated to Lovable** (`ns3/ns4.lovable.cloud`) and its SPF
-points at Mailgun. Postmark cannot verify a domain whose DNS Lovable controls. Reclaim the zone at
-GoDaddy first — see `docs/migration/london-baseline/LOVABLE-SURFACE.md`. DNS carries propagation
-delay, so this gates everything.
+**`notify.accountancyos.com` stays delegated to Lovable for now.** It may remain while the
+existing Lovable email path is still present, and be reclaimed or retired later, once every
+Lovable email dependency is removed and verified.
 
-## 9. Open questions
+Postmark sends via the **existing verified Return-Path**, confirmed against live DNS:
 
-1. Confirm the §3 classification, particularly staff-facing notifications like "Onboarding ready
-   for review" — platform mail, or practice mail?
-2. Sending domain for Postmark: reclaim `notify.accountancyos.com`, or use a different subdomain
-   and leave the Lovable-delegated zone alone until the frontend moves?
-3. Should a held email eventually escalate (alert after N hours), or only surface in the UI?
+```
+pm-bounces.accountancyos.com.  CNAME  pm.mtasv.net.
+```
+
+This works because a custom Return-Path makes SPF evaluate the **envelope** domain
+(`pm-bounces.accountancyos.com` → Postmark's own SPF), not the From header domain. The apex SPF
+therefore needs no Postmark include, and DMARC aligns under relaxed alignment since
+`pm-bounces.accountancyos.com` is a subdomain of the From domain.
+
+**So there is no DNS gate on this work.**
+
+## 9. Classification — CONFIRMED (owner, 2026-08-25)
+
+**Postmark (`system`):**
+- Staff-facing AccountancyOS notifications to accountants or practice staff
+- Authentication, invitations, security notices, platform alerts
+
+**Practice mailbox (everything else):**
+- Any email addressed to a practice's client or external contact
+- Anything presented as correspondence from the practice
+
+**Postmark must never be a fallback sender for client-facing practice correspondence.**
+
+## 10. Hold + escalation — CONFIRMED (owner, 2026-08-25)
+
+1. Mark the message `blocked_mailbox_unavailable` immediately; show a prominent UI warning with
+   the count of held messages.
+2. **One-hour grace period** for transient mailbox problems — no alert during it.
+3. Still blocked after 1 hour → Postmark **system** notification to the practice administrator.
+4. Reminder after 24 hours, then at most once per 24 hours while unresolved.
+5. Escalation stops immediately when the mailbox recovers.
+6. On recovery: revalidate held messages, cancel or supersede stale ones, send the valid ones
+   through the original practice mailbox.
+7. Every hold, alert, recovery, cancellation and eventual send is recorded in the audit trail.
+8. **The held client-facing message itself is never sent through Postmark.** Only the *alert about
+   it* goes via Postmark, and that alert is a system email to practice staff — which is squarely
+   inside the `system` classification.
+
+### Implementation note: `blocked_mailbox_unavailable` is an error code, not a status
+
+It is recorded as `last_error_code = 'blocked_mailbox_unavailable'` with `status` staying
+`'pending'` — deliberately, for three reasons:
+
+- `email_queue_status_check` permits only `pending|sent|failed|cancelled`. Widening a status
+  vocabulary is the exact defect class behind DEF-026 (eight months undetected) and DEF-032.
+- That constraint is in the drift registry, and the Emails page already crashed once on an
+  unhandled status value (`cancelled`), so adding another is a known hazard.
+- `pending` is semantically *correct*: the message is genuinely still waiting to be sent, and will
+  go out through the practice mailbox on recovery. It is not failed and not cancelled.
+
+The user-visible behaviour is identical — the message is marked, held, counted and surfaced.
+
+## 11. Open questions
+
+1. The `From` address for `POSTMARK_FROM_EMAIL` — must be on a Postmark-verified domain.
+   `accountancyos.com` is verified via the Return-Path above.
+2. "Practice administrator" for escalation — which role receives it (owner, or all admins)?
+3. What makes a held message "stale" on recovery — age, or superseded by a newer message for the
+   same entity?
