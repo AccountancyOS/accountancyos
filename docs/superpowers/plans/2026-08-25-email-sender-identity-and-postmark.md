@@ -123,17 +123,43 @@ and be registered in Auth settings.
 **Its verification must not simply be deleted.** The endpoint injects into the email queue; an
 unauthenticated version would let anyone send branded mail from the domain.
 
-## 7. Increments
+## 7. Increments — REVISED ORDER (owner, 2026-08-25)
 
-Small and additive, per the repo's discipline. Each stops for review.
+Small and additive. Each stops for review.
 
-1. **Drainer routing** — route on `context`; hold instead of falling back; Postmark provider with
-   `ErrorCode` handling. Regression tests for "no mailbox ⇒ held, never Postmark".
-2. **Sender classification** — set `context` and mailbox on every sender; extend
-   `queue_email_safe` to carry them. One additive migration.
-3. **Auth hook re-front** — Standard Webhooks + Postmark + register in Auth settings.
-4. **Warning surface** — show held emails and their reason; wire `acknowledged_at/by`.
-5. **Mandatory mailbox** — surface the requirement during onboarding.
+1. ~~**Drainer routing**~~ — **DONE** (`7f2e4bc`). Positive routing on `context`, Postmark sender
+   with `ErrorCode === 0`, hold semantics. 968 tests.
+2. **Mailbox attachment support + invoice sent-state.** ← current
+   Gmail MIME multipart and Outlook Graph attachments for the existing
+   `{filename, content, contentType}` shape; validate filename, MIME type, base64 and provider
+   size limits; never silently drop — hold with a specific reason. Keep the signed invoice
+   download link as the secondary route.
+   Also: `send-invoice` must stop writing `invoices.sent_at` on enqueue. A queued, held or failed
+   message must not make an invoice look sent; `sent_at` is set only on positive provider
+   acknowledgement.
+3. **Sender classification** through `queue_email_safe`.
+4. **Rate-limit logging defect** as its own tested increment: allow `rate_limited` in
+   `email_send_log`, prove the insert succeeds, and ensure rate-limited events do not consume the
+   failed-attempt retry budget.
+5. **Auth hook re-front** — Standard Webhooks — and complete Postmark system-email delivery.
+6. **Held-email UI warning** (immediate).
+7. **Escalation timers** — one-hour and daily.
+8. **End-to-end cutover tests** — authentication, system notifications, mailbox email, invoice
+   attachments, held messages, recovery.
+
+### Why attachments come before escalation
+
+Invoices are more load-bearing than alerting. Until the mailbox senders carry attachments, every
+invoice with a PDF is held — so the feature that most needs to work is the one currently blocked.
+
+## 7a. Postmark scope — CONFIRMED (owner, 2026-08-25)
+
+**Postmark is limited to transactional AccountancyOS system email.** Unsubscribe-token minting is
+NOT restored and `List-Unsubscribe` is NOT added now.
+
+If broadcast or marketing email is introduced later, consent, suppression and unsubscribe handling
+are to be treated as a **separate subsystem** — not bolted onto the transactional path. Recorded
+so the removal is a deliberate scope decision rather than an oversight.
 
 ## 8. DNS — NOT a gate (owner decision, 2026-08-25)
 
