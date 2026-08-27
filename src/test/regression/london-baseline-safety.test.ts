@@ -31,6 +31,54 @@ describe("London baseline — placement", () => {
   });
 });
 
+/**
+ * Post-baseline increments are London-only for the same reason the baseline is: the legacy project
+ * is still live and still serving users, and the Lovable executor applies whatever appears in
+ * `supabase/migrations/`. Sender-identity routing exists only on London, so its schema must not be
+ * pushed onto a project whose code cannot honour it.
+ *
+ * The divergence is deliberate and temporary — at cutover these fold into `supabase/migrations/`.
+ * Until then this guard keeps "deliberate" from decaying into "drifted".
+ */
+describe("London increments — placement", () => {
+  const incDir = resolve(root, "docs/migration/london-increments");
+  const increments = existsSync(incDir)
+    ? readdirSync(incDir).filter((f) => f.endsWith(".sql"))
+    : [];
+  const migDir = resolve(root, "supabase/migrations");
+  const migrations = readdirSync(migDir).filter((f) => f.endsWith(".sql"));
+
+  it("never copies an increment filename into supabase/migrations/", () => {
+    const collisions = increments.filter((f) => migrations.includes(f));
+    expect(collisions).toEqual([]);
+  });
+
+  it("never copies increment SQL into supabase/migrations/ under a different name", () => {
+    // Renaming to a timestamp is exactly how an increment would slip past a name check, so the
+    // real test is content: byte-identical SQL in the executor's directory is a leak.
+    const incBodies = new Map(
+      increments.map((f) => [readFileSync(resolve(incDir, f), "utf8").trim(), f]),
+    );
+    const leaked = migrations
+      .map((f) => ({ f, src: incBodies.get(readFileSync(resolve(migDir, f), "utf8").trim()) }))
+      .filter((x) => x.src)
+      .map((x) => `${x.f} is a copy of ${x.src}`);
+    expect(leaked).toEqual([]);
+  });
+
+  it("names increments so their apply order is unambiguous", () => {
+    const misnamed = increments.filter((f) => !/^\d{3}_[a-z0-9_]+\.sql$/.test(f));
+    expect(misnamed).toEqual([]);
+  });
+
+  it("does not point an increment at the legacy project", () => {
+    const offenders = increments.filter((f) =>
+      readFileSync(resolve(incDir, f), "utf8").includes(LEGACY_REF),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("London baseline — content safety", () => {
   const sql = existsSync(BASELINE) ? readFileSync(BASELINE, "utf8") : "";
   // Comments carry deliberate prose about what was excluded; only executable SQL is judged.
