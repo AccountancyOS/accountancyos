@@ -168,7 +168,12 @@ async function checkAuthHookEndToEnd(supabase: SupabaseClient) {
   while (Date.now() < deadline) {
     const { data, error: qErr } = await admin
       .from("email_send_log")
-      .select("status,created_at,error_message,template_name")
+      // `metadata` is not optional here: the credibility check below reads
+      // metadata.provider_message_id, so omitting the column made providerId
+      // unconditionally null and reported every genuinely-sent email as a
+      // failure. A check that always fails is worse than no check — it trains
+      // the reader to ignore the one signal that proves email actually works.
+      .select("status,created_at,error_message,template_name,metadata")
       .eq("recipient_email", RECIPIENT)
       .gte("created_at", before.toISOString())
       .order("created_at", { ascending: false })
