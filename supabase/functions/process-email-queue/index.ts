@@ -103,13 +103,37 @@ function isRateLimited(error: unknown): boolean {
   return error instanceof Error && error.message.includes('429')
 }
 
-// Check if an error is a forbidden (403) response. Retrying won't help.
-// Move straight to DLQ.
-function isForbidden(error: unknown): boolean {
+// A permanent CONFIGURATION failure: retrying cannot help, and every other message in the queue
+// will fail identically, so the batch stops rather than draining itself into the DLQ one message
+// at a time.
+//
+// This matched only 403, which was wrong for Postmark in two ways:
+//
+//  1. Postmark answers a bad or missing Server Token with HTTP **401**, not 403. A wrong token
+//     therefore fell through to the generic retry path and burned all five attempts per message,
+//     for every message in the queue, before each one reached the DLQ — turning a one-line
+//     config mistake into a queue-wide DLQ flood.
+//  2. Postmark reports unusable-sender conditions as HTTP 200 with a non-zero `ErrorCode`, which
+//     sendPostmarkEmail throws with `status = null`. Those cannot be classified by HTTP status at
+//     all, so the code is read back out of the message:
+//       400  SenderSignatureNotFound       — the From address is not a verified sender
+//       401  SenderSignatureNotConfirmed   — verified but not yet confirmed
+//       405  NotAllowedToSend              — account pending approval or disabled
+//
+// Deliberately NOT included: 300 (invalid email request) and 406 (inactive recipient) are
+// per-message, not per-configuration — stopping the whole batch for one bad address would let a
+// single malformed recipient block everyone else's mail.
+function isPermanentConfigFailure(error: unknown): boolean {
   if (error && typeof error === 'object' && 'status' in error) {
-    return (error as { status: number }).status === 403
+    const status = (error as { status: number | null }).status
+    if (status === 401 || status === 403) return true
   }
-  return error instanceof Error && error.message.includes('403')
+  if (error instanceof Error) {
+    if (/^postmark_error_(400|401|405):/.test(error.message)) return true
+    // Preserved from the original 403-only implementation.
+    if (error.message.includes('403')) return true
+  }
+  return false
 }
 
 // Extract Retry-After seconds from a structured EmailSendError, or default to 60s.
@@ -768,12 +792,14 @@ Deno.serve(async (req) => {
           )
         }
 
-        // 403s are permanent configuration or authorization failures for this
-        // message, so move straight to DLQ and stop processing the rest of the batch.
-        if (isForbidden(error)) {
+        // Permanent configuration failures — a rejected Server Token, or a From address that is
+        // not a verified/confirmed Postmark sender. Retrying cannot help and every remaining
+        // message would fail identically, so DLQ this one and stop the batch rather than
+        // shovelling the entire queue into the DLQ five attempts at a time.
+        if (isPermanentConfigFailure(error)) {
           await moveToDlq(supabase, queue, msg, errorMsg.slice(0, 1000))
           return new Response(
-            JSON.stringify({ processed: totalProcessed, stopped: 'forbidden' }),
+            JSON.stringify({ processed: totalProcessed, stopped: 'permanent_config_failure' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }

@@ -396,3 +396,42 @@ describe("attachments are never silently dropped on the practice path", () => {
     expect(SRC).toMatch(/\.\.\.\(attachments\.length > 0 \? \{ attachments \} : \{\}\)/);
   });
 });
+
+/**
+ * A rejected Postmark Server Token must stop the batch, not retry its way through it.
+ *
+ * The classifier originally matched only HTTP 403. Postmark answers a bad or missing Server Token
+ * with **401**, so a wrong token fell past this check into the generic retry path and burned all
+ * five attempts per message, for every message in the queue, before each one reached the DLQ. A
+ * one-line config mistake became a queue-wide DLQ flood, and the deploy-time verification gate
+ * that exists to catch exactly this would have passed.
+ *
+ * Postmark also reports unusable-sender conditions as HTTP 200 with a non-zero ErrorCode, thrown
+ * with `status = null`, so those cannot be classified by HTTP status at all.
+ */
+describe("a rejected Postmark token stops the batch instead of draining it", () => {
+  it("treats 401 as permanent, not just 403", () => {
+    expect(SRC).toMatch(/status === 401 \|\| status === 403/);
+  });
+
+  it("classifies the 200-with-ErrorCode sender failures, which carry no HTTP status", () => {
+    // 400 SenderSignatureNotFound, 401 SenderSignatureNotConfirmed, 405 NotAllowedToSend.
+    expect(SRC).toMatch(/postmark_error_\(400\|401\|405\)/);
+  });
+
+  it("does not treat per-message failures as batch-stopping", () => {
+    // 300 (invalid email request) and 406 (inactive recipient) are per-recipient. Stopping the
+    // batch for one bad address would let a single malformed recipient block everyone else's mail.
+    const classifier = SRC.slice(
+      SRC.indexOf("function isPermanentConfigFailure"),
+      SRC.indexOf("function isPermanentConfigFailure") + 900,
+    );
+    expect(classifier).not.toMatch(/406/);
+    expect(classifier).not.toMatch(/postmark_error_\([^)]*300/);
+  });
+
+  it("still DLQs and stops rather than continuing the batch", () => {
+    expect(SRC).toMatch(/if \(isPermanentConfigFailure\(error\)\)/);
+    expect(SRC).toMatch(/stopped: 'permanent_config_failure'/);
+  });
+});
