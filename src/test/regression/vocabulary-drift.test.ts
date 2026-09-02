@@ -52,6 +52,13 @@ const EXPECTED_CONSTRAINT_VALUES: Record<string, string[]> = {
   leads_pipeline_stage_check: ["new", "qualified", "proposal_sent", "chasing", "won", "lost"],
   email_queue_context_check: ["quote", "onboarding", "engagement", "job", "invoice", "system", "general"],
   email_queue_status_check: ["pending", "sent", "failed", "cancelled"],
+  // A DIFFERENT table from email_queue above. 'rate_limited' added by London forward migration
+  // 001 (20260902T0900), verified against the live constraint on ezsvdsjdtardkxfswjvq. It had
+  // been written by process-email-queue since June 2026 while the constraint rejected it, so
+  // every rate-limit event raised 23514 into a discarded error return and was logged nowhere.
+  email_send_log_status_check: [
+    "pending", "sent", "suppressed", "failed", "bounced", "complained", "dlq", "rate_limited",
+  ],
   // 'APPROVED' added by 20260805110000_def_026_027… — approve_bill_safe has written it since
   // 20251217171128 while the constraint rejected it, so every bill approval failed with 23514.
   // Bills were not in this registry, which is why the drift went unseen for eight months.

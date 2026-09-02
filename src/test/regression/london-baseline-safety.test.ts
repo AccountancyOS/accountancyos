@@ -245,3 +245,80 @@ describe("London baseline — placeholders that must be resolved before use", ()
     expect((sql.match(/__LONDON_PROJECT_URL__/g) ?? []).length).toBe(2);
   });
 });
+
+/**
+ * Hygiene properties every London increment must hold.
+ *
+ * These were written for a parallel `forward-migrations/` directory that a subagent created
+ * without noticing `london-increments/` already existed. Two competing conventions for the same
+ * job is worse than either one, so the directory was deleted and the assertions folded in here.
+ * The properties themselves are worth keeping — they encode what makes a migration safe to hand
+ * to someone else to apply.
+ */
+describe("London increments — safety properties", () => {
+  const incDir = resolve(root, "docs/migration/london-increments");
+  const increments = existsSync(incDir)
+    ? readdirSync(incDir).filter((f) => f.endsWith(".sql"))
+    : [];
+  const read = (f: string) => readFileSync(resolve(incDir, f), "utf8");
+
+  it("has increments to check", () => {
+    expect(increments.length).toBeGreaterThan(0);
+  });
+
+  it("declares London-only intent in every file", () => {
+    for (const f of increments) {
+      expect(read(f), `${f} must declare itself London-only`).toMatch(/LONDON ONLY/);
+    }
+  });
+
+  it("wraps every increment in a single explicit transaction", () => {
+    // A migration that half-applies is far worse than one that refuses: it leaves the database in
+    // a state no file describes.
+    for (const f of increments) {
+      const src = read(f);
+      expect(src, `${f} must open a transaction`).toMatch(/^BEGIN;$/m);
+      expect(src, `${f} must commit`).toMatch(/^COMMIT;$/m);
+      expect(
+        (src.match(/^BEGIN;$/gm) ?? []).length,
+        `${f} must use exactly one transaction`,
+      ).toBe(1);
+    }
+  });
+
+  it("gives every increment preconditions and post-assertions that abort", () => {
+    // Preconditions stop a migration encoding a stale assumption; post-assertions stop it
+    // reporting success it did not achieve. Both must RAISE, not warn.
+    for (const f of increments) {
+      const src = read(f);
+      expect(src, `${f} needs preconditions`).toMatch(/DO \$pre\$/);
+      expect(src, `${f} needs post-assertions`).toMatch(/DO \$post\$/);
+      expect(src, `${f} assertions must abort`).toMatch(/RAISE EXCEPTION/);
+    }
+  });
+
+  it("embeds no credential in any increment", () => {
+    const secretish = [
+      /\beyJ[A-Za-z0-9_-]{20,}/, // JWT
+      /\bsb_secret_[A-Za-z0-9_-]{10,}/,
+      /\bservice_role_key\s*=\s*['"][^'"]+['"]/i,
+      /\bpassword\s*=\s*['"][^'"]+['"]/i,
+    ];
+    for (const f of increments) {
+      const src = read(f);
+      for (const pattern of secretish) {
+        expect(pattern.test(src), `${f} appears to embed a credential (${pattern})`).toBe(false);
+      }
+    }
+  });
+
+  it("records every increment in the README's applied table", () => {
+    // The README is the ledger. A migration applied but unrecorded is the untracked-state defect
+    // this convention exists to prevent - it already happened once, when an increment went in via
+    // execute_sql and left no schema_migrations row.
+    const readme = readFileSync(resolve(incDir, "README.md"), "utf8");
+    for (const f of increments) {
+      expect(readme, `${f} is not recorded in the README ledger`).toContain(f);
+    }
+  });
+});

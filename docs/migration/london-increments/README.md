@@ -43,6 +43,7 @@ directory appears in `supabase/migrations/`, so the divergence stays deliberate 
 |---|---|---|---|
 | 001 | `001_email_vocabulary_and_sender_classification.sql` | 2026-08-26 | `london_inc_001_email_vocabulary_and_sender_classification` |
 | 002 | `002_sender_identity_enforcement.sql` | 2026-09-01 | `london_inc_002_sender_identity_enforcement` |
+| 003 | `003_email_send_log_rate_limited.sql` | 2026-09-02 | `london_inc_003_email_send_log_rate_limited` |
 
 ### 002 — prerequisites for deploying the rewritten drainer
 
@@ -81,6 +82,40 @@ the claim RPC returns 15 columns including `context text` and `retry_count integ
 
 Note the contrast with 001: there, omitting a `GRANT` did **not** narrow the ACL, because Supabase
 default privileges re-grant on `CREATE`. Here an explicit `REVOKE` was used and it did take effect.
+
+### 003 — `email_send_log.status` accepts `rate_limited`
+
+`process-email-queue` has recorded rate-limited sends as `status='rate_limited'` since June 2026,
+while the constraint permitted only seven other values. Every such insert was rejected with 23514 —
+and because the worker discards that insert's error return, **every rate-limit event was recorded
+nowhere at all.** The cooldown was still set, so the symptom was invisible: rate-limited sends
+simply vanished from the log rather than failing loudly.
+
+Not reused as `'failed'`: the retry budget *counts* rows with `status='failed'`, so logging a rate
+limit that way would let provider back-pressure consume the budget and walk authentication email
+into the DLQ. A rate limit is "not now", not "this failed".
+
+**This is the one place the programme deliberately widens a status vocabulary, and it does not
+contradict 001, which collapsed synonyms.** The test is whether a value names a genuinely distinct
+state: `'queued'` duplicated `'pending'` and `'ignored'` duplicated `'cancelled'`, but
+`'rate_limited'` duplicates nothing — it is the only state that must be recorded *without* counting
+toward the retry budget. `email_send_log.status` was also previously **absent** from
+`src/lib/db-constants/check-constraints.ts`, which is why the mismatch survived unnoticed; it is
+now registered there.
+
+**Provenance note, recorded deliberately.** The constraint change was first applied on 2026-09-02
+via `execute_sql`, which leaves no row in `supabase_migrations.schema_migrations` — so London
+briefly carried a schema change its own provenance did not record, the exact defect this
+convention exists to prevent. The file was re-filed here and made **idempotent** so it could be
+applied through `apply_migration` to earn the missing ledger row: it skips the `ALTER` when the
+value is already permitted, but still runs every post-assertion including the behavioural probe.
+A green apply therefore proves the live state regardless of which path it took.
+
+A subagent also created a parallel `docs/migration/london-baseline/forward-migrations/` with its
+own README, ledger and CI guard, not having noticed this directory already existed. Two competing
+conventions for one job is worse than either, so that directory was deleted and its worthwhile
+assertions folded into `london-baseline-safety.test.ts` — which is now the single guard for this
+directory, and which will fail the build if a future increment is applied but never recorded above.
 
 ### 001 — what it fixed, and how it was verified
 

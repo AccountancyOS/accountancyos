@@ -144,6 +144,34 @@ export const EMAIL_QUEUE_CONTEXTS = [
 export const EMAIL_QUEUE_STATUSES = ["pending", "sent", "failed", "cancelled"] as const;
 
 /**
+ * email_send_log.status — email_send_log_status_check.
+ *
+ * A DIFFERENT vocabulary from `email_queue.status` above, on a different table. `email_queue`
+ * is the outbound work queue (4 values); `email_send_log` is the per-attempt send record
+ * (8 values). Do not reconcile them — a queue row can produce many log rows.
+ *
+ * `rate_limited` added by London forward migration 001 (2026-09-02). It had been written by
+ * `process-email-queue` since June 2026 while the constraint still rejected it, so every
+ * rate-limit event raised 23514 and — because the worker discarded the insert's error return —
+ * was recorded nowhere at all. Registering the column here is what stops that recurring: this
+ * table was previously absent from the registry, which is why the mismatch survived.
+ *
+ * `rate_limited` is deliberately NOT counted by the worker's failed-attempt budget (which
+ * selects `status='failed'`). Provider back-pressure must not walk authentication email into
+ * the DLQ.
+ */
+export const EMAIL_SEND_LOG_STATUSES = [
+  "pending",
+  "sent",
+  "suppressed",
+  "failed",
+  "bounced",
+  "complained",
+  "dlq",
+  "rate_limited",
+] as const;
+
+/**
  * bills.status — bills_status_check.
  *
  * DRAFT -> APPROVED -> (payment) -> PART_PAID -> PAID, or -> OVERDUE; any non-draft -> VOIDED.
@@ -202,5 +230,6 @@ export const CHECK_CONSTRAINT_REGISTRY: readonly CheckConstraintVocab[] = [
   { table: "leads", column: "pipeline_stage", constraint: "leads_pipeline_stage_check", values: LEAD_PIPELINE_STAGES },
   { table: "email_queue", column: "context", constraint: "email_queue_context_check", values: EMAIL_QUEUE_CONTEXTS },
   { table: "email_queue", column: "status", constraint: "email_queue_status_check", values: EMAIL_QUEUE_STATUSES },
+  { table: "email_send_log", column: "status", constraint: "email_send_log_status_check", values: EMAIL_SEND_LOG_STATUSES },
   { table: "bills", column: "status", constraint: "bills_status_check", values: BILL_STATUSES },
 ] as const;
