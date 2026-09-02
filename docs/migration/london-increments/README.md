@@ -42,6 +42,45 @@ directory appears in `supabase/migrations/`, so the divergence stays deliberate 
 | # | File | Applied | Migration name on London |
 |---|---|---|---|
 | 001 | `001_email_vocabulary_and_sender_classification.sql` | 2026-08-26 | `london_inc_001_email_vocabulary_and_sender_classification` |
+| 002 | `002_sender_identity_enforcement.sql` | 2026-09-01 | `london_inc_002_sender_identity_enforcement` |
+
+### 002 — prerequisites for deploying the rewritten drainer
+
+**The rewritten `process-email-queue` is NOT deployed to London.** Every edge function is still at
+the 2026-08-17 baseline (all v27, `updated_at == created_at`); the deployed drainer is the old
+Lovable version. The sender-identity, Postmark, hold and attachment work exists in git only. Two
+database-layer defects had to be closed before it could ship:
+
+**1. RLS did not constrain `context`, so increment 001's RPC guard was bypassable.**
+`authenticated` holds a direct INSERT grant on `email_queue`, and `email_queue_insert_org` checked
+only `organization_id`. Any authenticated member could PostgREST-insert `context='system'` and skip
+`queue_email_safe` entirely — and once the Postmark worker deploys, that is attacker-authored
+content leaving AccountancyOS's own DKIM-signed domain. UPDATE needed the same guard, or the gap
+just moves (insert `'general'`, update to `'system'`). Verified unexploited: zero rows carried
+`context='system'` at the time of the fix.
+
+**2. `claim_email_queue_row` did not return `context`.** The rewritten drainer routes on the
+*claimed* row. Deployed as it stood, `context` would have been `undefined` for every message,
+`isSystemEmail()` false universally, and **every system email silently held forever** — no error,
+no failed row, a deploy that looks perfectly healthy while auth mail stops. `retry_count` was added
+at the same time (`COALESCE`d, since the drainer does back-off arithmetic on it and NULL would
+propagate to NaN rather than failing loudly), along with `entity_type` and `entity_id`.
+
+`IS DISTINCT FROM 'system'` rather than `<> 'system'` is deliberate: NULL context is the ordinary
+client-mail default, and `<>` would evaluate NULL — not true — rejecting every ordinary email.
+
+**Verified before applying:** `service_role` and `postgres` carry `rolbypassrls = true`,
+`authenticated`/`anon` do not, and `email_queue.relrowsecurity = true`. So the policy tightening
+constrains users only — the drainer (service_role) and the `SECURITY DEFINER` senders (postgres,
+including `public_submit_onboarding_for_review`, which legitimately writes `'system'`) are
+unaffected.
+
+**Verified after applying:** both policies carry `AND (context IS DISTINCT FROM 'system'::text)`;
+the claim RPC returns 15 columns including `context text` and `retry_count integer`; EXECUTE is
+`service_role` only (`authenticated` and `anon` both false).
+
+Note the contrast with 001: there, omitting a `GRANT` did **not** narrow the ACL, because Supabase
+default privileges re-grant on `CREATE`. Here an explicit `REVOKE` was used and it did take effect.
 
 ### 001 — what it fixed, and how it was verified
 

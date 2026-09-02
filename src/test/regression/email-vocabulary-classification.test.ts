@@ -179,3 +179,79 @@ describe("canonical status set is stated once and consistently", () => {
     }
   });
 });
+
+/**
+ * Guards on London increment 002 — the sender-identity boundary at the database layer.
+ *
+ * Increment 001 made queue_email_safe refuse context='system'. That guard is necessary but was
+ * not sufficient: `authenticated` holds a direct INSERT grant on email_queue, and the RLS policy
+ * checked only organization_id. Any authenticated member could PostgREST-insert context='system'
+ * and bypass the RPC entirely — and once the Postmark worker deploys, that is attacker-authored
+ * content leaving AccountancyOS's own DKIM-signed domain.
+ *
+ * The second half is subtler and would have failed silently: claim_email_queue_row did not return
+ * `context`, and the rewritten drainer routes on the CLAIMED row. Deployed as-was, every message
+ * would have had `context === undefined`, so every system email would be held forever with no
+ * error anywhere — a deploy that looks perfectly healthy while auth mail stops.
+ */
+const MIGRATION_002 = resolve(
+  root,
+  "docs/migration/london-increments/002_sender_identity_enforcement.sql",
+);
+const sql002 = existsSync(MIGRATION_002) ? readFileSync(MIGRATION_002, "utf8") : "";
+
+describe("London increment 002 — RLS closes the system-context bypass", () => {
+  it("exists and is London-only", () => {
+    expect(existsSync(MIGRATION_002)).toBe(true);
+    expect(sql002).toMatch(/LONDON ONLY/);
+  });
+
+  it("constrains context on INSERT", () => {
+    expect(sql002).toMatch(/CREATE POLICY email_queue_insert_org[\s\S]*?context IS DISTINCT FROM 'system'/);
+  });
+
+  it("constrains context on UPDATE too", () => {
+    // Otherwise the INSERT guard is trivially defeated: insert 'general', then update to 'system'.
+    expect(sql002).toMatch(/CREATE POLICY email_queue_update_org[\s\S]*?context IS DISTINCT FROM 'system'/);
+  });
+
+  it("uses IS DISTINCT FROM so a NULL context stays insertable", () => {
+    // NULL is the ordinary client-mail default. `<> 'system'` would be NULL for a NULL context,
+    // which is not true, so the policy would reject every ordinary user-composed email.
+    expect(sql002).not.toMatch(/context <> 'system'/);
+    expect(sql002).toMatch(/IS DISTINCT FROM 'system'/);
+  });
+
+  it("proves service_role bypasses RLS before tightening the policy", () => {
+    // If it did not, this change would silently stop the drainer rather than an attacker.
+    expect(sql002).toMatch(/rolbypassrls/);
+    expect(sql002).toMatch(/service_role does not bypass RLS/);
+  });
+});
+
+describe("London increment 002 — the claim RPC returns the routing input", () => {
+  it("returns context, without which the drainer holds all system mail silently", () => {
+    expect(sql002).toMatch(/context text,/);
+    expect(sql002).toMatch(/would have made the\s*--\s*rewritten drainer treat every message as non-system/);
+  });
+
+  it("returns retry_count coalesced, so back-off arithmetic cannot become NaN", () => {
+    expect(sql002).toMatch(/COALESCE\(q\.retry_count, 0\)/);
+  });
+
+  it("asserts the return shape after applying, not just before", () => {
+    expect(sql002).toMatch(/claim_email_queue_row does not return context/);
+  });
+
+  it("revokes EXECUTE explicitly rather than by omitting a grant", () => {
+    // Increment 001 established that Supabase default privileges re-grant PUBLIC/anon/
+    // authenticated on CREATE, so narrowing requires an explicit REVOKE.
+    expect(sql002).toMatch(/REVOKE EXECUTE ON FUNCTION public\.claim_email_queue_row[^;]*FROM authenticated;/);
+    expect(sql002).toMatch(/GRANT EXECUTE ON FUNCTION public\.claim_email_queue_row[^;]*TO service_role;/);
+    expect(sql002).toMatch(/authenticated still holds EXECUTE on claim_email_queue_row/);
+  });
+
+  it("keeps exactly one overload so a named call cannot resolve to the old shape", () => {
+    expect(sql002).toMatch(/expected exactly 1 claim_email_queue_row overload/);
+  });
+});
