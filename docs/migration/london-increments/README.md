@@ -44,6 +44,17 @@ directory appears in `supabase/migrations/`, so the divergence stays deliberate 
 | 001 | `001_email_vocabulary_and_sender_classification.sql` | 2026-08-26 | `london_inc_001_email_vocabulary_and_sender_classification` |
 | 002 | `002_sender_identity_enforcement.sql` | 2026-09-01 | `london_inc_002_sender_identity_enforcement` |
 | 003 | `003_email_send_log_rate_limited.sql` | 2026-09-02 | `london_inc_003_email_send_log_rate_limited` |
+| 004 | `004_protect_existing_system_rows.sql` | 2026-09-02 13:33Z | `london_inc_004_protect_existing_system_rows` (version `20260902133344`) |
+| 005 | `005_system_email_boundary_and_hold_state.sql` | 2026-09-02 14:51Z | ⚠ `london_inc_004_system_email_boundary_and_hold_state` (version `20260902145129`) |
+
+> ⚠ **The file numbered 005 is recorded on London under a `london_inc_004_*` name.** It was
+> authored and applied as 004, unaware that `004_protect_existing_system_rows` had taken that
+> number ~75 minutes earlier. The file is renumbered to 005; **the applied migration name is
+> deliberately NOT rewritten**, because London's history must record what actually ran.
+> **Reconcile by name + version, never by file number.** Both entries are legitimately applied
+> and complementary — 004 closed the UPDATE/DELETE `USING` gaps and revoked the
+> `queue_email_safe` over-grants; 005 added `queue_system_email_safe`, the hold/escalation
+> columns and the extended claim return shape.
 
 ### 002 — prerequisites for deploying the rewritten drainer
 
