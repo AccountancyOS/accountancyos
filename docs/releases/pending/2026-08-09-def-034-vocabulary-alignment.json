@@ -1,0 +1,133 @@
+{
+  "release_id": "2026-08-09-def-034-vocabulary-alignment",
+  "release_kind": "attestation-based",
+  "status": "declared-not-applied",
+  "declared_at": "2026-08-09T00:00:00Z",
+  "approver": "leon@bluetickaccountants.com",
+  "summary": "DEF-034. Retires two superseded CHECK constraints whose survival made declared states unwritable (filings.status could not be set to submitted; deadlines.status could not be set to completed), and repairs three status literals that no constraint permitted. Two function bodies re-issued. No column added, no constraint widened, no data modified.",
+  "convention_reference": "docs/releases/production-release-convention.md + docs/releases/executor-instruction-contract.md",
+
+  "problem": {
+    "root_cause": "A column may carry several live CHECK constraints. Postgres enforces every one of them, so the writable set is their INTERSECTION. Nothing in the codebase computed that intersection, so twice a new vocabulary was added without retiring the old one, leaving states that are declared, referenced by application code, and impossible to write.",
+    "filings_status": "valid_status (2025-11-27, 6 values) survived alongside chk_filing_status (2026-06-20, 13 values). Seven states unwritable: accepted, client_changes_requested, in_progress, not_started, ready_for_review, sent_to_client, submitted. A filing could not be recorded as submitted — this is on the filing engine's critical path.",
+    "deadlines_status": "deadlines_status_check (2025-11-27) survived alongside chk_deadlines_status (2025-12-18). Only pending, overdue and cancelled writable. A deadline could not be marked completed or in_progress.",
+    "literals": "Three writes named values no constraint permits, so every call raised 23514: lifecycle_accept_portal_invitation wrote portal_access.status = 'revoked_by_system'; lifecycle_generate_deadlines_for_job wrote client_tasks.status = 'pending', client_tasks.visibility = 'internal' and deadlines.status = 'open'.",
+    "how_found": "Statically, by scripts/generate-db-vocabulary.py and scripts/audit-check-violations.py. Not by execution — these paths raise 23514 only when exercised, and several never had been. Same class as DEF-026/027/028/033, all of which surfaced one per fix-cycle because a runtime error masks the next one.",
+    "class_closure": "The class is now enforced by src/test/regression/vocabulary-registry.test.ts, which fails the build on any new contradiction or unwritable literal."
+  },
+
+  "owner_rulings": {
+    "date": "2026-08-09",
+    "filings_status": "Drop valid_status. chk_filing_status matches both the FilingStatus TypeScript union and the hand registry, so valid_status is the leftover.",
+    "deadlines_status": "Drop chk_deadlines_status. Here the NEWER constraint is the leftover: application code, TypeScript types and the hand registry all use the older vocabulary (pending, in_progress, completed, filed, overdue, cancelled).",
+    "literal_renames": "Fix now, onto the vocabulary that already exists. No constraint widened to accommodate a caller.",
+    "supersedes": "The 2026-08-05 standing ruling 'make no further bill/invoice/filing status changes', which was scoped to the DEF-026 investigation."
+  },
+
+  "design_decisions": [
+    "Drops only. No constraint is widened to fit a caller — widening a vocabulary to accommodate a typo is how both contradictions came to exist.",
+    "Both drops are provably safe: every existing row currently satisfies BOTH constraints on its column, so every row is already inside the intersection, which is a subset of the survivor. Dropping cannot orphan a row that already satisfied the survivor. The migration ASSERTS this rather than relying on the argument.",
+    "Post-assertions check that exactly ONE CHECK constraint governs filings.status afterwards, not merely that the two dropped ones are gone. More than one is how the defect was born.",
+    "Post-assertions check that the target states are genuinely WRITABLE, not merely that a constraint is absent — dropping both would leave the column unconstrained, which is strictly worse than the contradiction.",
+    "Bodies were EXTRACTED from their defining migrations and edited against asserted anchors; each substitution had to match exactly once or the generator aborted. Nothing was retyped (DEF-029 receipt rule)."
+  ],
+
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260809120000_def_034_vocabulary_alignment.sql",
+      "sha256": "e359e0990853c9c2e1b43ca7fb3d3a071b036f3696492d1f8e4f57d846906178",
+      "lines": 572,
+      "drops_constraints": ["filings.valid_status", "deadlines.chk_deadlines_status"],
+      "reissues_functions": [
+        "lifecycle_accept_portal_invitation",
+        "lifecycle_generate_deadlines_for_job"
+      ]
+    }
+  ],
+
+  "guarded_by": "src/test/regression/def-034-vocabulary-alignment.test.ts (19 tests) and src/test/regression/vocabulary-registry.test.ts (31 tests). Both static over the migration and the generated vocabulary.",
+
+  "limitation": "STATICALLY VALIDATED ONLY — this migration has not been executed against Postgres. The two function bodies were extracted from GIT, not from LIVE. Two functions are already known to exist on production in no migration (email_queue_dispatch, email_queue_wake), so git and live are known to diverge. BEFORE APPLYING, the two live bodies must be diffed against the two here; if either differs, this migration is redeclared rather than applied. The post-assertions catch a wrong END state but cannot detect that a body was silently reverted to an older revision.",
+
+  "post_publish_verification": {
+    "environment": "LIVE",
+    "gate_policy": "Convention section 3. Every check must pass before this release may move out of pending.",
+    "checks": [
+      {
+        "id": "constraints-retired",
+        "sql": "SELECT conname FROM pg_constraint WHERE conname IN ('valid_status','chk_deadlines_status') AND conrelid IN ('public.filings'::regclass,'public.deadlines'::regclass);",
+        "expect": "zero rows"
+      },
+      {
+        "id": "survivors-present",
+        "sql": "SELECT conname FROM pg_constraint WHERE conname IN ('chk_filing_status','deadlines_status_check');",
+        "expect": "exactly two rows"
+      },
+      {
+        "id": "one-check-governs-filings-status",
+        "sql": "SELECT count(*) FROM pg_constraint WHERE conrelid='public.filings'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%status%';",
+        "expect": "1"
+      },
+      {
+        "id": "submitted-is-writable",
+        "sql": "SELECT pg_get_constraintdef(oid) LIKE '%submitted%' FROM pg_constraint WHERE conname='chk_filing_status';",
+        "expect": "true"
+      },
+      {
+        "id": "completed-is-writable",
+        "sql": "SELECT pg_get_constraintdef(oid) LIKE '%completed%' FROM pg_constraint WHERE conname='deadlines_status_check';",
+        "expect": "true"
+      },
+      {
+        "id": "bodies-repaired",
+        "sql": "SELECT proname, prosrc LIKE '%revoked_by_system%' AS has_old_portal, prosrc LIKE '%''open''%' AS has_old_deadline FROM pg_proc WHERE proname IN ('lifecycle_accept_portal_invitation','lifecycle_generate_deadlines_for_job') AND pronamespace='public'::regnamespace;",
+        "expect": "two rows, both boolean columns false"
+      },
+      {
+        "id": "no-overload",
+        "sql": "SELECT proname, count(*) FROM pg_proc WHERE proname IN ('lifecycle_accept_portal_invitation','lifecycle_generate_deadlines_for_job') AND pronamespace='public'::regnamespace GROUP BY proname;",
+        "expect": "each count = 1"
+      }
+    ]
+  },
+
+  "pre_apply_requirement": {
+    "step": "Diff the two LIVE function bodies against the two in this migration before applying.",
+    "sql": "SELECT proname, md5(prosrc) FROM pg_proc WHERE proname IN ('lifecycle_accept_portal_invitation','lifecycle_generate_deadlines_for_job') AND pronamespace='public'::regnamespace;",
+    "note": "Units matter. This is md5(prosrc), the body only — NOT md5(pg_get_functiondef(oid)), which includes the signature and options. A previous release lost time to that mismatch.",
+    "on_divergence": "Redeclare this migration against the live bodies. Do not apply."
+  },
+
+  "apply_instructions": {
+    "executor": "Lovable Cloud",
+    "target_production_project": "moxpdejnucjjcplleefn",
+    "exact_migration_filename": "20260809120000_def_034_vocabulary_alignment.sql",
+    "expected_sha256": "e359e0990853c9c2e1b43ca7fb3d3a071b036f3696492d1f8e4f57d846906178",
+    "permitted_actions": [
+      "Run the pre_apply_requirement diff and return raw output.",
+      "Apply that exact migration verbatim, only if the diff matches."
+    ],
+    "prohibited_actions": [
+      "No code or documentation changes",
+      "No edits to the migration",
+      "No additional grants, roles or schema changes",
+      "No other migrations",
+      "Do not widen any CHECK constraint"
+    ],
+    "required_raw_output": "The pre-apply md5 diff, then every post_publish_verification check, as raw output.",
+    "stop_conditions": [
+      "The SHA-256 differs from the expected value",
+      "Either live function body diverges from the one declared here",
+      "Any precondition RAISE EXCEPTION fires",
+      "The Cloud executor returns 42501"
+    ]
+  },
+
+  "explicitly_out_of_scope": {
+    "on_cgt_disposal_date_changed": "Broken in four ways and only one is a rename. It writes deadlines.title (the column is `name`), deadline_type = 'filing' (allowed: custom, internal, statutory) and status = 'upcoming' (not in the canonical set) — but before any of those it specifies ON CONFLICT (organization_id, client_id, service_code, deadline_type), and NO unique index on deadlines exists anywhere in the migration history, so the statement raises 42P10 first. Adding that index would also assert a client may hold only one CGT deadline ever, which is wrong: disposals span tax years and each carries its own 60-day deadline. The conflict target is a design error, not a typo. HELD FOR A RULING.",
+    "filing_status_literals": "approve_filing_safe ('approved_by_client'), queue_filing_for_submission ('queued') and regress_filing_status ('ready_for_approval') remain violations. Dropping valid_status does NOT legalise them: they belong to chk_filings_status, a THIRD filing vocabulary dropped on 2026-06-20. 'queued' likely belongs on filing_queue.status, since writing submission state onto the filing record conflates the projection with the HMRC transport layer, which the architecture forbids. HELD FOR A RULING.",
+    "job_workflow_literals": "create_job_from_template ('not_started', 'medium'), process_questionnaire_submission ('in_progress') and lifecycle_generate_jobs_for_service ('canonical_spine_v1') map a retired generic lifecycle onto workflow stages. Which stage each state becomes is a workflow decision. HELD FOR A RULING.",
+    "email_queue_status_registry": "check-constraints.ts declares email_queue.status permits 'cancelled', which no live constraint allows, and omits draft/queued/ignored, which they do. Correcting it means deciding whether the queue needs a cancelled state at all. HELD FOR A RULING.",
+    "casing_harmonisation": "40 constrained columns use UPPER_SNAKE (the sales/purchase ledger, VAT periods, the automation engine); 156 use lower_snake. No column mixes internally, so nothing is broken by this. Normalising would rewrite live status data across the ledgers for a cosmetic gain. RECOMMENDATION: leave existing vocabularies; require lower_snake for new ones. See docs/audits/2026-08-09-vocabulary-audit.md."
+  }
+}
