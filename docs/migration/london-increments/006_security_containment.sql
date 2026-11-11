@@ -78,7 +78,9 @@ BEGIN
       IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_oid) <> r.src_md5 THEN
         RAISE EXCEPTION '006 precondition: body of % differs from the 2026-11-11 London capture', r.sig;
       END IF;
-      IF (SELECT coalesce(proacl::text, '') FROM pg_proc WHERE oid = v_oid) <> r.acl THEN
+      -- Compared as a set: ACL entry order is not significant.
+      IF (SELECT array(SELECT x::text FROM unnest(proacl) x ORDER BY 1) FROM pg_proc WHERE oid = v_oid)
+         <> array(SELECT x::text FROM unnest(r.acl::aclitem[]) x ORDER BY 1) THEN
         RAISE EXCEPTION '006 precondition: ACL of % is % (expected %)', r.sig,
           (SELECT proacl::text FROM pg_proc WHERE oid = v_oid), r.acl;
       END IF;
@@ -115,7 +117,8 @@ BEGIN
   END IF;
   FOR r IN SELECT unnest(ARRAY['public.bank_connections','public.connected_mailboxes']) AS tbl LOOP
     IF coalesce(obj_description(r.tbl::regclass, 'pg_class'), '') NOT LIKE 'london_inc_006%'
-       AND (SELECT relacl::text FROM pg_class WHERE oid = r.tbl::regclass) <> '{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}' THEN
+       AND (SELECT array(SELECT x::text FROM unnest(relacl) x ORDER BY 1) FROM pg_class WHERE oid = r.tbl::regclass)
+           <> array(SELECT x::text FROM unnest('{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}'::aclitem[]) x ORDER BY 1) THEN
       RAISE EXCEPTION '006 precondition: % ACL differs from the 2026-11-11 London capture', r.tbl;
     END IF;
   END LOOP;
