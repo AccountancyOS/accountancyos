@@ -113,3 +113,23 @@ requires either `list_migrations` (history only) or a direct primary-database se
 `SUPABASE_DB_URL`, `PGPASSWORD`, `~/.pgpass` or `~/.pg_service.conf`; no `supabase` CLI; no
 Docker. `psql` 17.11 is installed but has no credential. Items requiring the trusted channel are
 therefore **blocked, not completed**.
+
+---
+
+## 5. Closed — history repaired (cutover B, 2026-11-11)
+
+The increments convention is closed. On 2026-11-11 the owner ran the cutover-B batch against London:
+
+- `supabase migration repair --status reverted` removed all 55 pre-cutover history rows: the baseline
+  build chunks, storage, seed, cron and increments 001–006, including `london_inc_006_security_containment`
+  (version `20261111130457`). Their exact contents, statements included, are preserved in
+  `docs/migration/london-baseline/schema_migrations_before_cutover_b.json`.
+- `supabase migration repair --status applied 20261111140000` recorded the single baseline
+  (`supabase/migrations/20261111140000_london_baseline.sql`) as applied, without executing it. Its
+  equivalence to London was proven before the repair.
+- `supabase db push` then applied `20261111140100_truelayer_sync_every_2h.sql`, the first ordinary
+  migration: `truelayer-sync-scheduled` → `0 */2 * * *`.
+- `supabase migration list`: local = remote (`20261111140000`, `20261111140100`). The 006 grant matrix
+  re-checked read-only afterwards: 59/59 `ok = true`.
+
+From here on, London's history is the ordinary Supabase migration history of `supabase/migrations/`.
