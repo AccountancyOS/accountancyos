@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["node_modules", "dist", ".lovable", "supabase/functions"],
+    exclude: ["node_modules", "dist", "supabase/functions"],
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

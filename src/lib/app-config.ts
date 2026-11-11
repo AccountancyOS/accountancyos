@@ -6,8 +6,8 @@
  * Rule:
  *  - Production custom domain (`app.accountancyos.com` or apex) -> always
  *    `https://app.accountancyos.com` (NEVER fall through to a preview URL).
- *  - Lovable preview / lovable.app / localhost -> the current `window.origin`
- *    so developers and preview sandboxes work normally.
+ *  - localhost -> the current `window.origin` so local development works.
+ *    (Hosting-preview domains are not recognised; set VITE_APP_URL for a preview build.)
  *  - Any other / non-browser context -> the production URL as the safe default.
  */
 const PRODUCTION_APP_URL = "https://app.accountancyos.com";
@@ -15,8 +15,6 @@ const PRODUCTION_APP_URL = "https://app.accountancyos.com";
 function isDevOrPreviewHost(hostname: string): boolean {
   if (!hostname) return false;
   if (hostname === "localhost" || hostname === "127.0.0.1") return true;
-  if (hostname.endsWith(".lovable.app")) return true;
-  if (hostname.endsWith(".lovableproject.com")) return true;
   return false;
 }
 

@@ -1,4 +1,11 @@
-# Welcome to your Lovable project
+# AccountancyOS
+
+The all-in-one operating system for UK accountancy practices: CRM, practice management,
+bookkeeping, workpapers, and HMRC / Companies House filing.
+
+**One backend:** Supabase project `ezsvdsjdtardkxfswjvq` (London, `eu-west-2`) is the only
+database and edge-function host. **One package manager:** npm (`package-lock.json`).
+**Hosting:** Vercel.
 
 ## Regression Prevention (read first)
 
@@ -10,83 +17,48 @@ AccountancyOS uses a layered safety net to catch drift in critical workflows:
 - [`docs/test-fixtures.md`](./docs/test-fixtures.md) — deterministic seeded users. Real users (e.g. live clients) are never used as regression subjects.
 - [`docs/email-system.md`](./docs/email-system.md) — both email pipelines (auth + app outbound queue), what silently breaks them, and the PR checklist.
 
+## Local development
+
+Requirements: Node.js + npm, Docker (for the local Supabase stack), the Supabase CLI, Deno.
+
+```sh
+npm ci                      # install exactly what package-lock.json pins
+cp .env.example .env.local  # then fill in the three VITE_SUPABASE_* values
+npm run dev                 # http://localhost:8080
+```
+
+`vite` refuses to start or build if any `VITE_SUPABASE_*` variable is missing — there is no
+fallback project.
+
+### Database
+
+`supabase/migrations/` rebuilds the production schema exactly, starting from a single baseline
+(`*_london_baseline.sql`). The pre-baseline history lives in `supabase/migrations_archive/` and is
+never applied.
+
+```sh
+supabase start        # local stack (Docker)
+supabase db reset     # apply supabase/migrations + supabase/seed.sql locally
+supabase test db      # pgTAP suites in supabase/tests/
+```
+
+Never run `supabase db push` or `supabase db reset --linked` against production outside the
+release process.
+
 ### Commands
 
 ```bash
-bun run test     # Vitest regression suite (frontend + manifest + edge contracts)
-bun smoke        # Post-deploy smoke test against the live backend
+npm test          # Vitest regression suite (frontend + manifest + edge contracts)
+npm run lint      # ESLint
+npm run build     # production build (needs VITE_SUPABASE_* set)
+npm run smoke     # post-deploy smoke test against the live backend
+deno check supabase/functions/<name>/index.ts   # type-check an edge function
 ```
 
-Both must pass before shipping. The smoke script fails loudly when any edge function, cron job, table, or auth wiring is missing.
+CI (`.github/workflows/ci.yml`) runs all of the above plus the database (pgTAP) and edge-function
+(`deno check` / `deno test`) jobs on every push and pull request.
 
-## Project info
+## Stack
 
-**URL**: https://lovable.dev/projects/484d38ef-d5f4-4a95-9b44-cfbcba7d7c13
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/484d38ef-d5f4-4a95-9b44-cfbcba7d7c13) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/484d38ef-d5f4-4a95-9b44-cfbcba7d7c13) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Vite · TypeScript · React · shadcn-ui · Tailwind CSS · Supabase (Postgres, Auth, Storage, Edge
+Functions on Deno).

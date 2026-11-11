@@ -4,9 +4,7 @@
   "siteUrl": "https://app.accountancyos.com",
   "redirectAllowList": [
     "https://app.accountancyos.com/*",
-    "https://app.accountancyos.com/portal/reset-password",
-    "https://accountancyos.lovable.app/*",
-    "https://accountancyos.lovable.app/portal/reset-password"
+    "https://app.accountancyos.com/portal/reset-password"
   ],
   "authEmailHook": {
     "function": "auth-email-hook",

@@ -23,11 +23,7 @@ const functionDirs = readdirSync(fnDir).filter(
 );
 
 describe("A4.6 — no hosting-platform origins baked into edge functions", () => {
-  it("no function references *.lovable.app or *.lovableproject.com", () => {
-    const offenders = functionSources.filter((p) => /lovable\.app|lovableproject\.com/.test(readFileSync(p, "utf8")));
-    expect(offenders).toEqual([]);
-  });
-
+  // (The retired-platform string scan now lives in no-legacy-platform.test.ts.)
   it("trusted origins come only from ALLOWED_ORIGINS", () => {
     const src = read("supabase/functions/_shared/origins.ts");
     expect(src).toMatch(/Deno\.env\.get\('ALLOWED_ORIGINS'\)/);

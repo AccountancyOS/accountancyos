@@ -1,4 +1,4 @@
-project_id = "moxpdejnucjjcplleefn"
+project_id = "ezsvdsjdtardkxfswjvq"
 
 # Every function directory in supabase/functions/ (except _shared) MUST have an explicit entry
 # here. A function with no entry deploys with the platform default, which is an accident rather
@@ -46,9 +46,6 @@ project_id = "moxpdejnucjjcplleefn"
   [functions.hmrc-vat-obligations]
     verify_jwt = true
   [functions.hmrc-vat-submit]
-    verify_jwt = true
-  # Generated Lovable MCP bridge. Not deployed to London; declared so it can never deploy open.
-  [functions.mcp]
     verify_jwt = true
   [functions.outlook-auth]
     verify_jwt = true

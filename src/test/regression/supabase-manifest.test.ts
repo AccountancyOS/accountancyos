@@ -20,12 +20,10 @@ describe("Supabase manifest invariants", () => {
     expect(manifest.authEmailHook.actionTypes).toContain("recovery");
   });
 
-  it("declares portal reset-password redirect on both hosts", () => {
-    const required = [
-      "https://app.accountancyos.com/portal/reset-password",
-      "https://accountancyos.lovable.app/portal/reset-password",
-    ];
-    for (const r of required) expect(manifest.redirectAllowList).toContain(r);
+  it("declares the portal reset-password redirect on the production host only", () => {
+    expect(manifest.redirectAllowList).toContain("https://app.accountancyos.com/portal/reset-password");
+    // The legacy hosting platform is retired (cutover B, 2026-11-11): no redirect may target it.
+    expect(manifest.redirectAllowList.every((u) => u.startsWith("https://app.accountancyos.com/"))).toBe(true);
   });
 
   it("declares the queue worker and the auth hook as edge functions", () => {

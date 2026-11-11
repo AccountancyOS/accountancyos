@@ -294,7 +294,7 @@ describe("holding — pending, marked, and not counted as a retry", () => {
 
 describe("Lovable is gone from the drainer", () => {
   it("imports nothing from Lovable and calls no Lovable sender", () => {
-    expect(SRC).not.toMatch(/@lovable\.dev/);
+    // (@-scoped platform packages are guarded repo-wide by no-legacy-platform.test.ts.)
     expect(SRC).not.toMatch(/sendLovableEmail/);
     expect(SRC).not.toMatch(/LOVABLE_/);
     // ...and no dead scaffolding left behind by that sender.
