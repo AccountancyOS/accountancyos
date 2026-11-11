@@ -37,7 +37,7 @@ export function ServiceStatusDashboard({ clientId, companyId }: Props) {
 
       // Fetch latest job per service
       const engagementIds = (data || []).map((e: any) => e.id);
-      let jobsByService: Record<string, any> = {};
+      const jobsByService: Record<string, any> = {};
       if (engagementIds.length) {
         const { data: jobs } = await supabase
           .from("jobs")

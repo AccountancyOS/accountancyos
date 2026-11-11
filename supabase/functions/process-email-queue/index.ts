@@ -1,4 +1,11 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
+
+// The service-role client is untyped (no generated Database types in edge functions), so its rows
+// are `any`. The ReturnType of createClient resolves to a client with NO schema in current
+// supabase-js, which types every row as `never` and fails `deno check` — hence this alias.
+// Type-only: no runtime change.
+// deno-lint-ignore no-explicit-any
+type AdminClient = SupabaseClient<any>
 import {
   validateAttachments,
   type AttachmentRejectionCode,
@@ -265,7 +272,7 @@ type PracticeMailbox = {
  * other way".
  */
 async function resolvePracticeMailbox(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AdminClient,
   queueRow: {
     id: string
     organization_id: string | null
@@ -362,7 +369,7 @@ async function resolvePracticeMailbox(
  * about gmail-send and outlook-send and nothing else — there is no other route out of it.
  */
 async function sendViaPracticeMailbox(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AdminClient,
   mailbox: PracticeMailbox,
   queueRow: {
     to_email: string
@@ -431,7 +438,7 @@ type HoldCode =
  * DEF-026 and DEF-032. So: no new status value. See design §4 and §10.
  */
 async function holdEmailQueueRow(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AdminClient,
   queueRow: { id: string; to_email: string; retry_count: number | null },
   messageId: string,
   code: HoldCode,
@@ -501,7 +508,7 @@ function timingSafeEqualString(a: string, b: string): boolean {
 
 // Move a message to the dead letter queue and log the reason.
 async function moveToDlq(
-  supabase: ReturnType<typeof createClient>,
+  supabase: AdminClient,
   queue: string,
   msg: { msg_id: number; message: Record<string, unknown> },
   reason: string
@@ -602,11 +609,16 @@ Deno.serve(async (req) => {
   //    correspondence, `sendPostmarkEmail` rejects it rather than sending it under the wrong
   //    identity, and the message stays in pgmq — fail closed, in the safe direction.
   for (const queue of ['auth_emails', 'transactional_emails']) {
-    const { data: messages, error: readError } = await supabase.rpc('read_email_batch', {
+    const { data, error: readError } = await supabase.rpc('read_email_batch', {
       queue_name: queue,
       batch_size: batchSize,
       vt: 30,
     })
+    // read_email_batch returns TABLE(msg_id bigint, read_ct integer, message jsonb). It does NOT
+    // return pgmq's enqueued_at, so the TTL fallback below never fires; typed optional to keep the
+    // existing behaviour exactly (reported as a finding in cutover B, not changed here).
+    // deno-lint-ignore no-explicit-any
+    const messages = data as Array<{ msg_id: number; read_ct: number; message: Record<string, any>; enqueued_at?: string }> | null
 
     if (readError) {
       console.error('Failed to read email batch', { queue, error: readError })

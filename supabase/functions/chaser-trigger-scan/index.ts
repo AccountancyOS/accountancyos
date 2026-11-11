@@ -6,7 +6,14 @@
  * Skips MANUAL trigger policies (those are started by accountants in UI).
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
+
+// The service-role client is untyped (no generated Database types in edge functions), so its rows
+// are `any`. The ReturnType of createClient resolves to a client with NO schema in current
+// supabase-js, which types every row as `never` and fails `deno check` — hence this alias.
+// Type-only: no runtime change.
+// deno-lint-ignore no-explicit-any
+type AdminClient = SupabaseClient<any>
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -104,7 +111,7 @@ Deno.serve(async (req: Request) => {
 // ---------------------------------------------------------------------------
 
 async function processPolicy(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   orgId: string,
   policy: any,
   today: Date,
@@ -215,7 +222,7 @@ async function processPolicy(
 // ---------------------------------------------------------------------------
 
 async function computePeriodEnd(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   triggerType: string,
   entityId: string,
   entityType: string,
@@ -349,7 +356,7 @@ function computePeriodLabel(
 // ---------------------------------------------------------------------------
 
 async function ensureJobExists(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   orgId: string,
   entityType: string,
   entityId: string,
@@ -427,7 +434,7 @@ async function ensureJobExists(
 // ---------------------------------------------------------------------------
 
 async function ensureChaserRun(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   orgId: string,
   jobId: string,
   policy: any,
@@ -463,7 +470,7 @@ async function ensureChaserRun(
 // ---------------------------------------------------------------------------
 
 async function processJobCreatedPolicy(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   orgId: string,
   policy: any,
   serviceType: string

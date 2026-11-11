@@ -76,6 +76,7 @@ export function escapeXmlSafe(str: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;')
     // Remove control characters (except tab, newline, carriage return)
+    // eslint-disable-next-line no-control-regex -- deliberately matches the C0 control characters XML 1.0 forbids
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
@@ -227,8 +228,8 @@ export function md5HashSync(str: string): string {
     return md5blks;
   }
   
-  let n = str.length;
-  let state = [1732584193, -271733879, -1732584194, 271733878];
+  const n = str.length;
+  const state = [1732584193, -271733879, -1732584194, 271733878];
   let i: number;
   
   for (i = 64; i <= str.length; i += 64) {
@@ -654,6 +655,7 @@ export function validateGeneratedXML(xml: string): { valid: boolean; errors: str
   }
   
   // Check for illegal control characters
+  // eslint-disable-next-line no-control-regex -- deliberately matches the C0 control characters XML 1.0 forbids
   if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(xml)) {
     errors.push('XML contains illegal control characters');
   }

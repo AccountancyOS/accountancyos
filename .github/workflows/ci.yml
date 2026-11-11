@@ -1,34 +1,102 @@
 name: CI
 
+# Every action is pinned to a full commit SHA (mutable tags can be repointed by their owner).
+# Every push and pull request runs three independent jobs. A failure in any step fails the run —
+# there is no continue-on-error anywhere in this file, and no step is allowed to be skipped
+# silently (src/test/regression/ci-workflow.test.ts enforces both).
+
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: Typecheck + Regression Tests
+  app:
+    name: App — install, typecheck, lint, build, test
+    runs-on: ubuntu-latest
+    env:
+      # Public, by design: the project URL and PUBLISHABLE key ship in every browser bundle.
+      # The build refuses to run without them (vite.config.ts). Never put a secret key here.
+      VITE_SUPABASE_URL: https://ezsvdsjdtardkxfswjvq.supabase.co
+      VITE_SUPABASE_PROJECT_ID: ezsvdsjdtardkxfswjvq
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_UuHuVvpONK6qLcdOUtmmmg__ZDq3Jk1
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (exactly what package-lock.json pins)
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Lint (new `any`s and stale suppressions both fail — see eslint-suppressions.json)
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Test
+        run: npm test
+
+  database:
+    name: Database — rebuild from migrations, pgTAP
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
-          bun-version: latest
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Typecheck
-        run: bunx tsc -p tsconfig.app.json --noEmit
-      - name: Vitest regression suite
-        run: bun run test
+          version: 3.1.0
+      - name: Start local stack (database, auth and storage schemas)
+        run: supabase start -x imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor,realtime
+      - name: Rebuild from supabase/migrations (baseline + forward migrations)
+        run: supabase db reset --local --yes
+      - name: pgTAP (supabase/tests — includes the increment-006 security suite)
+        run: supabase test db
+
+  edge-functions:
+    name: Edge functions — deno check, deno test
+    runs-on: ubuntu-latest
+    env:
+      # Each function is bundled on its own at deploy time; the repo-root package.json must not
+      # change how its npm: imports resolve during checking.
+      DENO_NO_PACKAGE_JSON: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.9.8
+      - name: deno check every function
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for dir in supabase/functions/*/; do
+            name="$(basename "$dir")"
+            [ "$name" = "_shared" ] && continue
+            args=()
+            [ -f "$dir/deno.json" ] && args=(--config "$dir/deno.json")
+            echo "::group::deno check $name"
+            deno check ${args[@]+"${args[@]}"} "$dir/index.ts"
+            echo "::endgroup::"
+            count=$((count + 1))
+          done
+          echo "Type-checked $count functions."
+          [ "$count" -gt 0 ]
+      - name: deno test (shared modules)
+        run: deno test --allow-env supabase/functions/_shared/
 
   smoke:
-    name: Post-Deploy Smoke (manual / deployment-gated)
-    runs-on: ubuntu-latest
-    # Smoke depends on live secrets. Run manually or after a deploy job.
+    name: Post-deploy smoke (manual)
+    # Talks to the live project with live secrets, so it runs only when triggered by hand.
     if: github.event_name == 'workflow_dispatch'
-    needs: test
+    needs: [app, database, edge-functions]
+    runs-on: ubuntu-latest
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -39,10 +107,11 @@ jobs:
       SMOKE_RLS_ORG_B_PASSWORD: ${{ secrets.SMOKE_RLS_ORG_B_PASSWORD }}
       SMOKE_RLS_ORG_B_CLIENT_ID: ${{ secrets.SMOKE_RLS_ORG_B_CLIENT_ID }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Run smoke
-        run: bun scripts/smoke-test.ts
+        run: npm run smoke

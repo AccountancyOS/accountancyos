@@ -379,11 +379,12 @@ export function getTaxPeriodNumber(
       return Math.min(26, Math.max(1, Math.floor(daysDiff / 14) + 1));
     case 'four_weekly':
       return Math.min(13, Math.max(1, Math.floor(daysDiff / 28) + 1));
-    case 'monthly':
-      // Month 1 = April (month index 3)
-      const monthIndex = date.getMonth();
-      const monthNum = monthIndex >= 3 ? monthIndex - 2 : monthIndex + 10;
-      return Math.min(12, Math.max(1, monthNum));
+    case 'monthly': {
+        // Month 1 = April (month index 3)
+        const monthIndex = date.getMonth();
+        const monthNum = monthIndex >= 3 ? monthIndex - 2 : monthIndex + 10;
+        return Math.min(12, Math.max(1, monthNum));
+    }
     default:
       return 1;
   }
@@ -412,13 +413,14 @@ export function getPeriodBoundaries(
       startDays = (taxPeriod - 1) * 28;
       endDays = taxPeriod * 28 - 1;
       break;
-    case 'monthly':
-      const startMonth = new Date(yearStart);
-      startMonth.setMonth(yearStart.getMonth() + taxPeriod - 1);
-      const endMonth = new Date(startMonth);
-      endMonth.setMonth(endMonth.getMonth() + 1);
-      endMonth.setDate(endMonth.getDate() - 1);
-      return { start: startMonth, end: endMonth };
+    case 'monthly': {
+        const startMonth = new Date(yearStart);
+        startMonth.setMonth(yearStart.getMonth() + taxPeriod - 1);
+        const endMonth = new Date(startMonth);
+        endMonth.setMonth(endMonth.getMonth() + 1);
+        endMonth.setDate(endMonth.getDate() - 1);
+        return { start: startMonth, end: endMonth };
+    }
     default:
       startDays = 0;
       endDays = 6;

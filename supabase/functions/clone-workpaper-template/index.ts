@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+// Pinned: the `/cors` subpath only exists from supabase-js 2.9x; a floating @2 can resolve to an
+// older cached version without it and fail `deno check`.
+import { corsHeaders } from 'npm:@supabase/supabase-js@2.119.0/cors';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {

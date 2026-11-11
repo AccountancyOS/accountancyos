@@ -35,7 +35,7 @@ export function PayslipsTab({ selectedEntity, selectedSchemeId, taxYear }: Paysl
     queryFn: async () => {
       if (!organization?.id) return [];
       
-      let query = supabase
+      const query = supabase
         .from("payslips")
         .select(`
           *,

@@ -98,7 +98,7 @@ export function calculateAdjustedDueDate(
   const businessDayMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
   const totalMinutesNeeded = durationHours * 60;
 
-  let currentDate = new Date(startTime);
+  const currentDate = new Date(startTime);
   let remainingMinutes = totalMinutesNeeded;
 
   // Process day by day

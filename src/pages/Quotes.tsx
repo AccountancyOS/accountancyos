@@ -112,7 +112,7 @@ const Quotes = () => {
   const filteredQuotes = useMemo(() => {
     if (!quotes) return [];
     const term = search.trim().toLowerCase();
-    let rows = quotes.filter((q) => {
+    const rows = quotes.filter((q) => {
       if (statusFilter !== "all" && q.status !== statusFilter) return false;
       if (!term) return true;
       const r = recipientFor(q);

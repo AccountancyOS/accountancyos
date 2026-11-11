@@ -5,7 +5,16 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  {
+    ignores: [
+      "dist",
+      // Deno edge functions: checked in CI by `deno check` / `deno test` (edge-functions job),
+      // not by this browser/React config.
+      "supabase/functions/**",
+      // Local tool state, never part of the app.
+      ".remember/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

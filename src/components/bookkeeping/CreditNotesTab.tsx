@@ -37,6 +37,22 @@ type CreditNoteType = "all" | "sales" | "purchase";
 type CreditNoteStatus = "all" | "draft" | "approved" | "allocated" | "void";
 
 export function CreditNotesTab({ entity, defaultType = "all" }: CreditNotesTabProps) {
+  // The empty state is decided here, before any hook runs. The hooks live in CreditNotesTabContent, which
+  // only ever renders with an entity, so every render calls the same hooks in the same order
+  // (previously the early return came after some hooks and before others — rules-of-hooks).
+  if (!entity) {
+    return (
+      <BookkeepingEmptyState
+        icon={CreditCard}
+        title="No entity selected"
+        description="Select a client or company above to view credit notes"
+      />
+    );
+  }
+  return <CreditNotesTabContent entity={entity} defaultType={defaultType} />;
+}
+
+function CreditNotesTabContent({ entity, defaultType }: { entity: BookkeepingEntity; defaultType: "all" | "sales" | "purchase" }) {
   const [typeFilter, setTypeFilter] = useState<CreditNoteType>(defaultType);
   const [statusFilter, setStatusFilter] = useState<CreditNoteStatus>("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -47,15 +63,6 @@ export function CreditNotesTab({ entity, defaultType = "all" }: CreditNotesTabPr
   const [editorType, setEditorType] = useState<"sales" | "purchase">("sales");
   const { organization } = useOrganization();
 
-  if (!entity) {
-    return (
-      <BookkeepingEmptyState
-        icon={CreditCard}
-        title="No entity selected"
-        description="Select a client or company above to view credit notes"
-      />
-    );
-  }
 
   const { data: creditNotes, isLoading } = useQuery({
     queryKey: [

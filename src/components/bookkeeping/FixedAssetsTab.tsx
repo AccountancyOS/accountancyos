@@ -20,14 +20,9 @@ const fmt = (n: number | null | undefined) =>
   (n ?? 0).toLocaleString("en-GB", { style: "currency", currency: "GBP" });
 
 export function FixedAssetsTab({ entity }: Props) {
-  const qc = useQueryClient();
-  const [addOpen, setAddOpen] = useState(false);
-  const [disposeAsset, setDisposeAsset] = useState<any | null>(null);
-  const [runOpen, setRunOpen] = useState(false);
-  const [periodEnd, setPeriodEnd] = useState(() => {
-    const d = new Date(); d.setDate(0); return d.toISOString().slice(0, 10);
-  });
-
+  // The empty state is decided here, before any hook runs. The hooks live in FixedAssetsTabContent, which
+  // only ever renders with an entity, so every render calls the same hooks in the same order
+  // (previously the early return came after some hooks and before others — rules-of-hooks).
   if (!entity || entity.type !== "company") {
     return (
       <BookkeepingEmptyState
@@ -37,6 +32,18 @@ export function FixedAssetsTab({ entity }: Props) {
       />
     );
   }
+  return <FixedAssetsTabContent entity={entity} />;
+}
+
+function FixedAssetsTabContent({ entity }: { entity: BookkeepingEntity }) {
+  const qc = useQueryClient();
+  const [addOpen, setAddOpen] = useState(false);
+  const [disposeAsset, setDisposeAsset] = useState<any | null>(null);
+  const [runOpen, setRunOpen] = useState(false);
+  const [periodEnd, setPeriodEnd] = useState(() => {
+    const d = new Date(); d.setDate(0); return d.toISOString().slice(0, 10);
+  });
+
 
   const { data: assets, isLoading } = useQuery({
     queryKey: ["fixed-assets", entity.id],

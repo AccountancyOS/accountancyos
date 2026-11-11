@@ -190,44 +190,44 @@ function evaluateConditions(
     let matches = false;
 
     switch (condition.field) {
-      case "description":
-        const desc = transaction.description.toLowerCase();
-        const val = String(condition.value).toLowerCase();
-        switch (condition.operator) {
-          case "contains":
-            matches = desc.includes(val);
-            break;
-          case "starts_with":
-            matches = desc.startsWith(val);
-            break;
-          case "ends_with":
-            matches = desc.endsWith(val);
-            break;
-          case "equals":
-            matches = desc === val;
-            break;
-        }
-        break;
-
-      case "amount":
-        const amt = Math.abs(transaction.amount);
-        const target = Number(condition.value);
-        switch (condition.operator) {
-          case "equals":
-            matches = Math.abs(amt - target) < 0.01;
-            break;
-          case "greater_than":
-            matches = amt > target;
-            break;
-          case "less_than":
-            matches = amt < target;
-            break;
-          case "between":
-            matches = amt >= target && amt <= (condition.value2 ?? target);
-            break;
-        }
-        break;
-
+      case "description": {
+          const desc = transaction.description.toLowerCase();
+          const val = String(condition.value).toLowerCase();
+          switch (condition.operator) {
+            case "contains":
+              matches = desc.includes(val);
+              break;
+            case "starts_with":
+              matches = desc.startsWith(val);
+              break;
+            case "ends_with":
+              matches = desc.endsWith(val);
+              break;
+            case "equals":
+              matches = desc === val;
+              break;
+          }
+          break;
+      }
+      case "amount": {
+          const amt = Math.abs(transaction.amount);
+          const target = Number(condition.value);
+          switch (condition.operator) {
+            case "equals":
+              matches = Math.abs(amt - target) < 0.01;
+              break;
+            case "greater_than":
+              matches = amt > target;
+              break;
+            case "less_than":
+              matches = amt < target;
+              break;
+            case "between":
+              matches = amt >= target && amt <= (condition.value2 ?? target);
+              break;
+          }
+          break;
+      }
       case "direction":
         if (condition.value === "in") {
           matches = transaction.amount > 0;

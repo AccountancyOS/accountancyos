@@ -40,13 +40,9 @@ interface BankRulesTabProps {
 }
 
 export function BankRulesTab({ entity }: BankRulesTabProps) {
-  const [bankAccountFilter, setBankAccountFilter] = useState("all");
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [testRunOpen, setTestRunOpen] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<any>(null);
-  const { organization } = useOrganization();
-  const queryClient = useQueryClient();
-
+  // The empty state is decided here, before any hook runs. The hooks live in BankRulesTabContent, which
+  // only ever renders with an entity, so every render calls the same hooks in the same order
+  // (previously the early return came after some hooks and before others — rules-of-hooks).
   if (!entity) {
     return (
       <BookkeepingEmptyState
@@ -56,6 +52,17 @@ export function BankRulesTab({ entity }: BankRulesTabProps) {
       />
     );
   }
+  return <BankRulesTabContent entity={entity} />;
+}
+
+function BankRulesTabContent({ entity }: { entity: BookkeepingEntity }) {
+  const [bankAccountFilter, setBankAccountFilter] = useState("all");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [testRunOpen, setTestRunOpen] = useState(false);
+  const [selectedRule, setSelectedRule] = useState<any>(null);
+  const { organization } = useOrganization();
+  const queryClient = useQueryClient();
+
 
   const { data: bankAccounts } = useQuery({
     queryKey: ["bank-accounts-for-rules", organization?.id, entity.type, entity.id],

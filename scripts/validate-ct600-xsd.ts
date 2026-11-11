@@ -66,6 +66,7 @@ function runLintValidation(xml: string): ValidationResult {
   }
 
   // 4. No illegal XML characters
+  // eslint-disable-next-line no-control-regex -- deliberately matches the C0 control characters XML 1.0 forbids
   if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(xml)) {
     errors.push('Contains illegal XML characters');
   }

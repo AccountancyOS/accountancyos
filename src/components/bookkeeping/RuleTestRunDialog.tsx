@@ -225,39 +225,42 @@ export function RuleTestRunDialog({
 
   const evaluateCondition = (condition: RuleCondition, tx: any): boolean => {
     switch (condition.field) {
-      case "description":
-        const desc = (tx.description || "").toLowerCase();
-        const val = String(condition.value).toLowerCase();
-        switch (condition.operator) {
-          case "contains":
-            return desc.includes(val);
-          case "starts_with":
-            return desc.startsWith(val);
-          case "ends_with":
-            return desc.endsWith(val);
-          case "equals":
-            return desc === val;
-          default:
-            return false;
-        }
-      case "amount":
-        const amt = Math.abs(tx.amount);
-        const target = Number(condition.value);
-        switch (condition.operator) {
-          case "equals":
-            return Math.abs(amt - target) < 0.01;
-          case "greater_than":
-            return amt > target;
-          case "less_than":
-            return amt < target;
-          case "between":
-            return amt >= target && amt <= (condition.value2 || target);
-          default:
-            return false;
-        }
-      case "direction":
-        const isIn = tx.amount > 0;
-        return condition.value === "in" ? isIn : !isIn;
+      case "description": {
+          const desc = (tx.description || "").toLowerCase();
+          const val = String(condition.value).toLowerCase();
+          switch (condition.operator) {
+            case "contains":
+              return desc.includes(val);
+            case "starts_with":
+              return desc.startsWith(val);
+            case "ends_with":
+              return desc.endsWith(val);
+            case "equals":
+              return desc === val;
+            default:
+              return false;
+          }
+      }
+      case "amount": {
+          const amt = Math.abs(tx.amount);
+          const target = Number(condition.value);
+          switch (condition.operator) {
+            case "equals":
+              return Math.abs(amt - target) < 0.01;
+            case "greater_than":
+              return amt > target;
+            case "less_than":
+              return amt < target;
+            case "between":
+              return amt >= target && amt <= (condition.value2 || target);
+            default:
+              return false;
+          }
+      }
+      case "direction": {
+          const isIn = tx.amount > 0;
+          return condition.value === "in" ? isIn : !isIn;
+      }
       default:
         return false;
     }

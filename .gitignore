@@ -28,3 +28,10 @@ dist-ssr
 *.sln
 *.sw?
 .livebodies/
+
+# Local tool / CLI state
+supabase/.temp/
+supabase/.branches/
+.remember/
+# Created by `deno check` / `deno test` at the repo root
+deno.lock

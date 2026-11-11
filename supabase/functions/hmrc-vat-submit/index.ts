@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Pinned to the same version as _shared/hmrc-auth.ts (and most functions): with a floating @2 the
+// client created here and the client type the shared helper expects are different classes.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getValidHmrcAccessToken, HmrcAuthError } from "../_shared/hmrc-auth.ts";
 
 const corsHeaders = {
