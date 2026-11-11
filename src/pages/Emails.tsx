@@ -201,19 +201,21 @@ export default function Emails() {
     enabled: !!organization?.id,
   });
 
-  // Process queue manually
+  // Release this organisation's scheduled mail now. The drain itself is service-role only
+  // (it sends every organisation's mail), so the browser never invokes it: this org-scoped RPC
+  // makes the mail due, and the background worker sends it on its next run (every minute).
   const processQueueMutation = useMutation({
     mutationFn: async () => {
       setIsProcessing(true);
-      if (organization?.id) {
-        await supabase.rpc("flush_email_queue_now", { p_organization_id: organization.id });
-      }
-      const { data, error } = await supabase.functions.invoke("process-email-queue");
+      if (!organization?.id) throw new Error("No organisation selected");
+      const { data, error } = await supabase.rpc("flush_email_queue_now", { p_organization_id: organization.id });
       if (error) throw error;
-      return data;
+      const result = data as { success?: boolean; flushed?: number; error?: string } | null;
+      if (result && result.success === false) throw new Error(result.error || "Could not release queued emails");
+      return result;
     },
     onSuccess: (data) => {
-      toast.success(`Queue processed: ${data?.processed || 0} sent, ${data?.failed || 0} failed`);
+      toast.success(`${data?.flushed ?? 0} email(s) released — they will send within a minute`);
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
       queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },
@@ -228,13 +230,12 @@ export default function Emails() {
   // Send a single queued email immediately (overrides its scheduled_at).
   const sendNowMutation = useMutation({
     mutationFn: async (emailId: string) => {
+      // Makes the email due now; the background worker sends it on its next run.
       const { error: rpcError } = await supabase.rpc("send_queued_email_now", { p_email_id: emailId });
       if (rpcError) throw rpcError;
-      const { error: fnError } = await supabase.functions.invoke("process-email-queue");
-      if (fnError) throw fnError;
     },
     onSuccess: () => {
-      toast.success("Email sent");
+      toast.success("Email will send within a minute");
       queryClient.invalidateQueries({ queryKey: ["email-queue"] });
       queryClient.invalidateQueries({ queryKey: ["email-queue-counts"] });
     },

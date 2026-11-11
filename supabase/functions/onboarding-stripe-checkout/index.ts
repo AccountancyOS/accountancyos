@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { resolveAppBaseUrl } from "../_shared/origins.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,33 +20,12 @@ function isIncludedLine(l: any): boolean {
   return false;
 }
 
-function resolveAppBaseUrl(req: Request): string {
-  const origin = req.headers.get("origin") || "";
-  try {
-    const host = new URL(origin).hostname;
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host.endsWith(".lovable.app") ||
-      host.endsWith(".lovableproject.com") ||
-      host === "app.accountancyos.com" ||
-      host === "accountancyos.com" ||
-      host === "www.accountancyos.com"
-    ) {
-      return origin.replace(/\/$/, "");
-    }
-  } catch { /* ignore */ }
-  const envUrl = Deno.env.get("APP_PUBLIC_URL");
-  if (envUrl) return envUrl.replace(/\/$/, "");
-  return "https://app.accountancyos.com";
-}
-
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { application_id } = await req.json();
+    const { application_id, access_token } = await req.json();
     if (!application_id) {
       return new Response(JSON.stringify({ error: "application_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -58,6 +38,24 @@ serve(async (req: Request) => {
       { auth: { persistSession: false } }
     );
 
+    // Caller authentication. This endpoint is public (the applicant has no account), so the
+    // credential is the onboarding access token issued to the applicant — the same token every
+    // other public onboarding RPC requires. Knowing an application UUID is not enough.
+    if (typeof access_token !== "string" || access_token.length === 0) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: tokenOk, error: tokenErr } = await supabase.rpc("validate_onboarding_access_token", {
+      p_application_id: application_id,
+      p_token: access_token,
+    });
+    if (tokenErr || tokenOk !== true) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: app, error: appErr } = await supabase
       .from("onboarding_applications")
       .select("id, organization_id, quote_id, email, first_name, last_name, company_name, status, billing_status")
@@ -66,6 +64,13 @@ serve(async (req: Request) => {
     if (appErr || !app) throw new Error(appErr?.message ?? "Application not found");
     if (["approved", "rejected", "cancelled"].includes(app.status)) {
       throw new Error("Onboarding is closed");
+    }
+    // Never reopen a completed payment: a new session would overwrite the paid session id and
+    // reset billing_status to 'pending'.
+    if (app.billing_status === "completed") {
+      return new Response(JSON.stringify({ error: "already_paid" }), {
+        status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { data: org } = await supabase
@@ -151,6 +156,12 @@ serve(async (req: Request) => {
       : Number(snapshot.total_now ?? 0);
 
     const appBase = resolveAppBaseUrl(req);
+    if (!appBase) {
+      // Neither an allow-listed Origin nor APP_PUBLIC_URL: refuse rather than invent a redirect.
+      return new Response(JSON.stringify({ error: "not_configured" }), {
+        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     // NOTE: the onboarding access token is intentionally NOT included in these
     // Stripe redirect URLs — a third party (Stripe) must never see the secret.
     // The client persists it in sessionStorage before redirecting and restores

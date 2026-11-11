@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { resolveAppBaseUrl } from "../_shared/origins.ts";
 
 // Portal client pays one of their AccountancyOS invoices via the practice's
 // Stripe Connect account. Returns a Checkout URL; the actual "mark paid" happens
@@ -11,20 +12,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-function resolveAppBaseUrl(req: Request): string {
-  const origin = req.headers.get("origin") || "";
-  try {
-    const host = new URL(origin).hostname;
-    if (
-      host === "localhost" || host === "127.0.0.1" ||
-      host.endsWith(".lovable.app") || host.endsWith(".lovableproject.com") ||
-      host === "client.accountancyos.com" || host === "app.accountancyos.com" ||
-      host === "accountancyos.com" || host === "www.accountancyos.com"
-    ) return origin.replace(/\/$/, "");
-  } catch { /* ignore */ }
-  return "https://client.accountancyos.com";
-}
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -87,7 +74,14 @@ serve(async (req: Request) => {
     const currency = String(inv.currency ?? "GBP").toLowerCase();
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" });
-    const appBase = resolveAppBaseUrl(req);
+    // Return URL: the caller's Origin only if it is in ALLOWED_ORIGINS, else PORTAL_PUBLIC_URL.
+    // Neither configured -> refuse; a redirect target is never guessed.
+    const appBase = resolveAppBaseUrl(req, "PORTAL_PUBLIC_URL");
+    if (!appBase) {
+      return new Response(JSON.stringify({ error: "not_configured" }), {
+        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const session = await stripe.checkout.sessions.create(
       {

@@ -153,10 +153,15 @@ describe("sender identity — practice correspondence can never reach Postmark",
     expect(body).toMatch(/\.eq\('status', 'active'\)/);
     expect(body).not.toMatch(/is_active/);
     // Scoped to the organisation, preferring the creator's mailbox.
-    expect(body).toMatch(/\.eq\('organization_id', queueRow\.organization_id\)/);
+    // (Cutover A / increment 006: the organisation is bound once as `orgId` and EVERY lookup —
+    //  including a mailbox named on the row — is scoped to it.)
+    expect(body).toMatch(/const orgId = queueRow\.organization_id/);
+    expect(body).toMatch(/\.eq\('organization_id', orgId\)/);
     expect(body).toMatch(/\.eq\('user_id', queueRow\.created_by\)/);
-    // `email_queue.provider` DEFAULTS to 'postmark', so presence is not a mailbox.
-    expect(body).toMatch(/queueRow\.provider === 'gmail' \|\| queueRow\.provider === 'outlook'/);
+    // `email_queue.provider` DEFAULTS to 'postmark' and is caller-writable, so it is never trusted:
+    // the provider is read off the (org-scoped) mailbox row itself.
+    expect(body).not.toMatch(/queueRow\.provider === 'gmail'/);
+    expect(body).toMatch(/data\.provider === 'gmail' \|\| data\.provider === 'outlook'/);
     // No mailbox means null, which means hold — never a substitute sender.
     expect(body).toMatch(/return null/);
   });

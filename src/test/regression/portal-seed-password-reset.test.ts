@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const source = readFileSync(
-  resolve(__dirname, "../../../supabase/functions/seed-portal-test-users/index.ts"),
+  resolve(__dirname, "../../../scripts/qa/seed-portal-test-users/index.ts"),
   "utf8",
 );
 

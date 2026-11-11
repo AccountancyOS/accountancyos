@@ -1,27 +1,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { isAllowedOrigin } from "../_shared/origins.ts";
 
-const PORTAL_ORIGINS = new Set([
-  "https://client.accountancyos.com",
-  "https://accountancyosclientportal.lovable.app",
-]);
-const LOVABLE_PREVIEW = /^https:\/\/[a-z0-9-]+\.lovable\.app$/i;
-
-function isAllowedOrigin(origin: string | null): boolean {
-  if (!origin) return false;
-  if (PORTAL_ORIGINS.has(origin)) return true;
-  return LOVABLE_PREVIEW.test(origin);
-}
-
+// CORS: only origins listed in ALLOWED_ORIGINS are reflected. Any other origin receives no
+// Access-Control-Allow-Origin header, so a browser on an unlisted site cannot read the response.
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("Origin");
-  const allow = isAllowedOrigin(origin) ? origin! : "*";
-  return {
-    "Access-Control-Allow-Origin": allow,
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
+  if (origin && isAllowedOrigin(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
 }
 
 function json(req: Request, body: unknown, status = 200): Response {

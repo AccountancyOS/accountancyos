@@ -18,6 +18,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 interface SendEmailRequest {
   mailbox_id: string;
+  /** Required on service-role (internal) calls: the organisation the mailbox must belong to. */
+  organization_id?: string;
   to: string | string[];
   cc?: string | string[];
   bcc?: string | string[];
@@ -138,7 +140,9 @@ serve(async (req: Request) => {
     // Use service role for mailbox access
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    // Get mailbox (verify ownership when called by an end-user)
+    // Get mailbox. End-user calls must own it; service-role (internal) calls must name the
+    // organisation and the mailbox must belong to it — a service-role call is not a licence to
+    // send from any mailbox.
     let mailboxQuery = supabase
       .from('connected_mailboxes')
       .select('*')
@@ -146,6 +150,14 @@ serve(async (req: Request) => {
       .eq('provider', 'outlook');
     if (verifiedUserId) {
       mailboxQuery = mailboxQuery.eq('user_id', verifiedUserId);
+    } else {
+      if (!body.organization_id) {
+        return new Response(
+          JSON.stringify({ error: 'organization_id is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      mailboxQuery = mailboxQuery.eq('organization_id', body.organization_id);
     }
     const { data: mailbox, error: mailboxError } = await mailboxQuery.single();
 

@@ -189,7 +189,9 @@ serve(async (req) => {
       const connectionData: Record<string, unknown> = {
         organization_id: authState.organization_id,
         provider: 'TRUELAYER',
-        provider_connection_id: tokens.access_token.substring(0, 32),
+        // An opaque identifier, never derived from the token: this column is user-readable
+        // (bank_connections_safe), and a token prefix there leaked secret material.
+        provider_connection_id: crypto.randomUUID(),
         status: 'ACTIVE',
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,

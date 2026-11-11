@@ -169,9 +169,11 @@ serve(async (req: Request) => {
       : '';
 
     // Get connected mailbox for this user
+    // Only non-secret columns: token columns are not selectable by end users (increment 006),
+    // and this function needs nothing beyond the mailbox identity and provider.
     const { data: mailbox, error: mailboxError } = await userSupabase
       .from('connected_mailboxes')
-      .select('*')
+      .select('id, provider, email_address, status')
       .eq('user_id', user.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })

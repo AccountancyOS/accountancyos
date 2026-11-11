@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.21.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { resolveAppBaseUrl } from "../_shared/origins.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,39 +12,6 @@ const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[STRIPE-CHECKOUT] ${step}${detailsStr}`);
 };
-
-/**
- * Resolve the canonical app base URL for success/cancel URLs.
- * Prefers the request `origin` header when it matches a known-safe host
- * (preview OR production), so the user is always returned to the same
- * origin they started checkout from — otherwise their Supabase session
- * (stored per-origin) is lost and ProtectedRoute bounces them to /auth.
- * Falls back to APP_PUBLIC_URL, then the hard-coded production URL, when
- * no usable origin header is present (e.g. server-to-server callers).
- */
-function resolveAppBaseUrl(req: Request): string {
-  const origin = req.headers.get("origin") || "";
-  try {
-    const host = new URL(origin).hostname;
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host.endsWith(".lovable.app") ||
-      host.endsWith(".lovableproject.com") ||
-      host === "app.accountancyos.com" ||
-      host === "accountancyos.com" ||
-      host === "www.accountancyos.com"
-    ) {
-      return origin.replace(/\/$/, "");
-    }
-  } catch {
-    // ignore
-  }
-
-  const envUrl = Deno.env.get("APP_PUBLIC_URL");
-  if (envUrl) return envUrl.replace(/\/$/, "");
-  return "https://app.accountancyos.com";
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -186,7 +154,14 @@ serve(async (req) => {
     }
 
     // Create a checkout session
+    // Return URL: the caller's Origin only if it is in ALLOWED_ORIGINS, else APP_PUBLIC_URL.
+    // Neither configured -> refuse; a redirect target is never guessed.
     const appBaseUrl = resolveAppBaseUrl(req);
+    if (!appBaseUrl) {
+      return new Response(JSON.stringify({ error: 'not_configured' }), {
+        status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const successUrl = `${appBaseUrl}/onboarding-wizard?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${appBaseUrl}/complete-payment?canceled=true`;
     logStep('Resolved app URLs', { appBaseUrl, successUrl, cancelUrl });

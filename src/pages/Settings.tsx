@@ -33,7 +33,6 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
 
@@ -226,27 +225,6 @@ export default function Settings() {
     },
   });
 
-  // Process email queue mutation
-  const processQueueMutation = useMutation({
-    mutationFn: async () => {
-      setIsProcessing(true);
-      const { data, error } = await supabase.functions.invoke("process-email-queue");
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      toast.success(`Email queue processed: ${data.sent || 0} sent, ${data.failed || 0} failed`);
-      queryClient.invalidateQueries({ queryKey: ["email-queue-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["email-queue-failures"] });
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to process queue: ${error.message}`);
-    },
-    onSettled: () => {
-      setIsProcessing(false);
-    },
-  });
 
   // Delete single failed email mutation
   const deleteFailedEmailMutation = useMutation({
@@ -653,14 +631,8 @@ export default function Settings() {
                   Automated system emails (portal invites, notifications) via Postmark
                 </CardDescription>
               </div>
-              <Button
-                onClick={() => processQueueMutation.mutate()}
-                disabled={isProcessing || (queueStats?.pending || 0) === 0}
-                variant="outline"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isProcessing ? "animate-spin" : ""}`} />
-                Process Now
-              </Button>
+              {/* No manual "Process Now": the drain sends every organisation's mail, so it is
+                  service-role only and runs automatically every minute. */}
             </div>
           </CardHeader>
           <CardContent className="space-y-6">

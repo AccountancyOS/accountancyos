@@ -46,6 +46,26 @@ Deno.serve(async (req) => {
     }
     const supabase = createClient(supabaseUrl, service);
 
+    // Every lookup below uses the service role, so it must be bound to the caller's own
+    // organisations explicitly — RLS does not apply to a service-role client.
+    const callerId = typeof claims.claims.sub === "string" ? claims.claims.sub : null;
+    if (!callerId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { data: memberships, error: memErr } = await supabase
+      .from("organization_users")
+      .select("organization_id")
+      .eq("user_id", callerId);
+    if (memErr) {
+      return new Response(JSON.stringify({ error: "Membership lookup failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const orgIds = (memberships ?? []).map((m: { organization_id: string }) => m.organization_id);
+    if (orgIds.length === 0) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const notFound = (what: string) =>
+      new Response(JSON.stringify({ error: `${what} not found` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
     const body = (await req.json()) as DryRunRequest;
     if (!body.mode) {
       return new Response(JSON.stringify({ error: "mode required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -54,7 +74,8 @@ Deno.serve(async (req) => {
     // Build resolution context
     const ctx: Record<string, string> = {};
     if (body.client_id) {
-      const { data: c } = await supabase.from("clients").select("id, first_name, last_name, email, business_name").eq("id", body.client_id).maybeSingle();
+      const { data: c } = await supabase.from("clients").select("id, first_name, last_name, email, business_name").eq("id", body.client_id).in("organization_id", orgIds).maybeSingle();
+      if (!c) return notFound("Client");
       if (c) {
         ctx.client_id = c.id;
         ctx.client_name = c.business_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
@@ -62,7 +83,8 @@ Deno.serve(async (req) => {
       }
     }
     if (body.company_id) {
-      const { data: co } = await supabase.from("companies").select("id, name").eq("id", body.company_id).maybeSingle();
+      const { data: co } = await supabase.from("companies").select("id, name").eq("id", body.company_id).in("organization_id", orgIds).maybeSingle();
+      if (!co) return notFound("Company");
       if (co) { ctx.company_id = co.id; ctx.company_name = co.name; }
     }
     ctx.period_key = new Date().toISOString().slice(0, 10);
@@ -75,6 +97,7 @@ Deno.serve(async (req) => {
         .from("automation_chaser_policies")
         .select("id, name, category, trigger_type, frequency_interval, frequency_unit, max_sends, is_enabled, organization_id, email_template_id")
         .eq("id", body.policy_id)
+        .in("organization_id", orgIds)
         .maybeSingle();
       if (pErr || !policy) {
         return new Response(JSON.stringify({ error: "Policy not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -82,7 +105,13 @@ Deno.serve(async (req) => {
       let renderedSubject = "";
       let renderedBody = "";
       if (policy.email_template_id) {
-        const { data: tpl } = await supabase.from("templates").select("subject, body").eq("id", policy.email_template_id).maybeSingle();
+        // Email templates are org-owned or global (organization_id NULL); never another org's.
+        const { data: tpl } = await supabase
+          .from("templates")
+          .select("subject, body")
+          .eq("id", policy.email_template_id)
+          .or(`organization_id.is.null,organization_id.eq.${policy.organization_id}`)
+          .maybeSingle();
         renderedSubject = resolvePlaceholders(tpl?.subject || "", ctx);
         renderedBody = resolvePlaceholders(tpl?.body || "", ctx);
       }

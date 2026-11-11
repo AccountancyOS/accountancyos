@@ -36,8 +36,14 @@ describe("onboarding access-token threading", () => {
   });
 
   it("does NOT route the access token through Stripe (no third-party secret leak)", () => {
-    // The Stripe checkout invoke body must not carry the token.
-    expect(ONB).not.toMatch(/onboarding-stripe-checkout[\s\S]{0,150}access_token/);
+    // Cutover A (A4.2): the token IS now sent to our own onboarding-stripe-checkout edge function,
+    // because that function must authenticate the applicant (validate_onboarding_access_token)
+    // instead of trusting any caller who knows an application UUID. The invariant this test
+    // protects is unchanged: the token never reaches Stripe — not in the session parameters, the
+    // metadata, or the redirect URLs.
+    const sessionParams = STRIPE.slice(STRIPE.indexOf("const sessionParams"), STRIPE.indexOf("stripe.checkout.sessions.create"));
+    expect(sessionParams.length).toBeGreaterThan(0);
+    expect(sessionParams).not.toMatch(/access_token/);
     // The edge function must not append the token to its redirect URLs.
     expect(STRIPE).not.toMatch(/billing=success[^`]*token=/);
     expect(STRIPE).not.toMatch(/billing=cancelled[^`]*token=/);

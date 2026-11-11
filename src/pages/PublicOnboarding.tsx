@@ -110,7 +110,7 @@ export default function PublicOnboarding() {
     if (billing === "success" && sessionId) {
       (async () => {
         const { data, error } = await supabase.functions.invoke("onboarding-stripe-verify", {
-          body: { application_id: applicationId, session_id: sessionId },
+          body: { application_id: applicationId, session_id: sessionId, access_token: getAccessToken() },
         });
         if (error || !data?.paid) {
           toast.error("Payment not confirmed yet. Refresh in a moment.");
@@ -487,7 +487,7 @@ function BillingStep({ bundle, onDone }: { bundle: AppBundle; onDone: () => void
   const payWithStripe = async () => {
     setSubmitting(true);
     const { data, error } = await supabase.functions.invoke("onboarding-stripe-checkout", {
-      body: { application_id: bundle.application.id },
+      body: { application_id: bundle.application.id, access_token: getAccessToken() },
     });
     // Zero-fee proposal (all "Included" lines): the checkout function skips Stripe
     // and returns { skipped, reason }. There is nothing to pay — advance the

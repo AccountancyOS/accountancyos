@@ -1,25 +1,58 @@
 project_id = "moxpdejnucjjcplleefn"
 
+# Every function directory in supabase/functions/ (except _shared) MUST have an explicit entry
+# here. A function with no entry deploys with the platform default, which is an accident rather
+# than a decision. src/test/regression/edge-function-hardening.test.ts enforces this.
+#
+# verify_jwt = false is allowed ONLY when the caller cannot hold a user JWT, and the function then
+# authenticates the caller in code. Each such entry says how.
+
 [functions]
-  [functions.auth-email-hook]
-    verify_jwt = false
-  [functions.accept-portal-invite-signup]
-    verify_jwt = false
+  # --- verify_jwt = true: caller must present a valid Supabase JWT --------------------------
+  [functions.automation-dry-run]
+    verify_jwt = true
+  [functions.ch-officers]
+    verify_jwt = true
   [functions.ch-submit]
     verify_jwt = true
-  [functions.chaser-tick]
-    verify_jwt = false
-  [functions.chaser-trigger-scan]
-    verify_jwt = false
-  [functions.dormant-lead-scan]
-    verify_jwt = false
-  [functions.invoice-overdue-scan]
-    verify_jwt = false
   [functions.check-subscription]
     verify_jwt = true
   [functions.cis-submit]
     verify_jwt = true
-  [functions.ch-officers]
+  [functions.clone-workpaper-template]
+    verify_jwt = true
+  [functions.companies-house-sync]
+    verify_jwt = true
+  [functions.customer-portal]
+    verify_jwt = true
+  [functions.fx-rates]
+    verify_jwt = true
+  [functions.gdpr-data-deletion]
+    verify_jwt = true
+  [functions.gdpr-data-export]
+    verify_jwt = true
+  [functions.generate-filing-pdf]
+    verify_jwt = true
+  [functions.generate-invoice-pdf]
+    verify_jwt = true
+  [functions.gmail-auth]
+    verify_jwt = true
+  [functions.gmail-send]
+    verify_jwt = true
+  [functions.hmrc-auth]
+    verify_jwt = true
+  [functions.hmrc-ct-submit]
+    verify_jwt = true
+  [functions.hmrc-vat-obligations]
+    verify_jwt = true
+  [functions.hmrc-vat-submit]
+    verify_jwt = true
+  # Generated Lovable MCP bridge. Not deployed to London; declared so it can never deploy open.
+  [functions.mcp]
+    verify_jwt = true
+  [functions.outlook-auth]
+    verify_jwt = true
+  [functions.outlook-send]
     verify_jwt = true
   # Both portal payment endpoints act on a client's invoice and must never be reachable
   # anonymously. portal-verify-invoice-payment had no entry at all (DEF-024/DEF-025), so
@@ -28,90 +61,102 @@ project_id = "moxpdejnucjjcplleefn"
     verify_jwt = true
   [functions.portal-verify-invoice-payment]
     verify_jwt = true
-  [functions.companies-house-sync]
-    verify_jwt = true
-  [functions.customer-portal]
-    verify_jwt = true
-  [functions.fx-rates]
-    verify_jwt = true
-  [functions.generate-filing-pdf]
-    verify_jwt = true
-  [functions.generate-invoice-pdf]
-    verify_jwt = true
-  # One-click unsubscribe is followed by an email recipient, who is never authenticated. The
-  # function authenticates the link itself via consume_unsubscribe_token, so the token is the
-  # credential — a JWT requirement here just 401s every unsubscribe link (PECR/CAN-SPAM risk).
-  [functions.handle-email-unsubscribe]
-    verify_jwt = false
-  [functions.send-invoice]
-    verify_jwt = true
-  [functions.gmail-auth]
-    verify_jwt = true
-  [functions.gmail-callback]
-    verify_jwt = false
-  [functions.gmail-exchange]
-    verify_jwt = false
-  [functions.gmail-send]
-    verify_jwt = true
-  [functions.gmail-sync]
-    verify_jwt = false
-  [functions.hmrc-auth]
-    verify_jwt = true
-  [functions.hmrc-callback]
-    verify_jwt = false
-  [functions.hmrc-ct-delete]
-    verify_jwt = false
-  [functions.hmrc-ct-poll]
-    verify_jwt = false
-  [functions.hmrc-ct-submit]
-    verify_jwt = true
-  [functions.hmrc-vat-obligations]
-    verify_jwt = true
-  [functions.hmrc-vat-submit]
-    verify_jwt = true
-  [functions.outlook-auth]
-    verify_jwt = true
-  [functions.outlook-callback]
-    verify_jwt = false
-  [functions.outlook-exchange]
-    verify_jwt = false
-  [functions.outlook-send]
-    verify_jwt = true
-  [functions.outlook-sync]
-    verify_jwt = false
-  [functions.process-automation-events]
-    verify_jwt = false
-  [functions.process-email-queue]
-    verify_jwt = true
   [functions.rti-submit]
     verify_jwt = true
   [functions.send-engagement-letter]
     verify_jwt = true
-  [functions.session-cleanup]
-    verify_jwt = false
-  [functions.sla-check]
-    verify_jwt = false
+  [functions.send-invoice]
+    verify_jwt = true
   [functions.stripe-checkout]
     verify_jwt = true
   [functions.stripe-connect-charge]
     verify_jwt = true
   [functions.stripe-connect-onboard]
     verify_jwt = true
+  [functions.truelayer-auth]
+    verify_jwt = true
+  [functions.truelayer-sync]
+    verify_jwt = true
+
+  # --- verify_jwt = false: cron workers, authenticated in code by the service-role key -------
+  # Invoked only by London pg_cron with `Authorization: Bearer <service-role key from Vault>`.
+  # On London that key is the non-JWT `sb_secret_…` format, which gateway JWT verification would
+  # reject; each function compares the bearer to SUPABASE_SERVICE_ROLE_KEY and returns 401/403
+  # otherwise.
+  [functions.chaser-tick]
+    verify_jwt = false
+  [functions.chaser-trigger-scan]
+    verify_jwt = false
+  [functions.dormant-lead-scan]
+    verify_jwt = false
+  [functions.gmail-sync]
+    verify_jwt = false
+  [functions.hmrc-ct-delete]
+    verify_jwt = false
+  [functions.hmrc-ct-poll]
+    verify_jwt = false
+  [functions.invoice-overdue-scan]
+    verify_jwt = false
+  [functions.outlook-sync]
+    verify_jwt = false
+  [functions.process-automation-events]
+    verify_jwt = false
+  # Drains every organisation's queue, so ONLY the service role may call it (constant-time
+  # bearer check in code). End users never trigger the drain; the UI marks mail due via
+  # org-scoped RPCs and the next cron tick sends it.
+  [functions.process-email-queue]
+    verify_jwt = false
+  [functions.session-cleanup]
+    verify_jwt = false
+  [functions.sla-check]
+    verify_jwt = false
+  [functions.workflow-tick]
+    verify_jwt = false
+
+  # --- verify_jwt = false: cron worker, authenticated in code by a shared cron secret -------
+  # Requires `x-cron-secret` == CRON_SECRET (Vault `cron_shared_secret`); 503 if unset.
+  [functions.truelayer-sync-scheduled]
+    verify_jwt = false
+
+  # --- verify_jwt = false: third-party webhooks, authenticated by signature ----------------
+  # Stripe signature verified with STRIPE_WEBHOOK_SECRET (constructEventAsync).
   [functions.stripe-webhook]
+    verify_jwt = false
+  # Supabase Auth send-email hook: payload signature verified before anything is queued.
+  [functions.auth-email-hook]
+    verify_jwt = false
+
+  # --- verify_jwt = false: OAuth redirect targets, authenticated by single-use state -------
+  # The provider redirects the browser here with no Authorization header. The `state` value is
+  # looked up server-side, must be unexpired, and is consumed on use.
+  [functions.gmail-callback]
+    verify_jwt = false
+  [functions.gmail-exchange]
+    verify_jwt = false
+  [functions.hmrc-callback]
+    verify_jwt = false
+  [functions.outlook-callback]
+    verify_jwt = false
+  [functions.outlook-exchange]
+    verify_jwt = false
+  [functions.truelayer-callback]
+    verify_jwt = false
+
+  # --- verify_jwt = false: public flows for people with no account, authenticated by token --
+  # One-click unsubscribe is followed by an email recipient, who is never authenticated. The
+  # function authenticates the link itself via consume_unsubscribe_token, so the token is the
+  # credential — a JWT requirement here just 401s every unsubscribe link (PECR/CAN-SPAM risk).
+  [functions.handle-email-unsubscribe]
+    verify_jwt = false
+  # Portal invitee signs up before having an account; the invite token is validated
+  # (get_portal_invite_details) and the email must match the invite.
+  [functions.accept-portal-invite-signup]
+    verify_jwt = false
+  # Public onboarding applicant (no account). Each requires the applicant's onboarding access
+  # token, checked server-side with validate_onboarding_access_token before any work.
+  [functions.onboarding-fetch-ch-officers]
     verify_jwt = false
   [functions.onboarding-stripe-checkout]
     verify_jwt = false
   [functions.onboarding-stripe-verify]
-    verify_jwt = false
-  [functions.onboarding-fetch-ch-officers]
-    verify_jwt = false
-  [functions.truelayer-auth]
-    verify_jwt = true
-  [functions.truelayer-callback]
-    verify_jwt = false
-  [functions.truelayer-sync]
-    verify_jwt = true
-  [functions.truelayer-sync-scheduled]
-    verify_jwt = false
-  [functions.workflow-tick]
     verify_jwt = false

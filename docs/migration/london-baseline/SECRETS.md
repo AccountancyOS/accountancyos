@@ -53,11 +53,18 @@ secret names (not yet chosen).
 | `ENCRYPTION_KEY` | `_shared/hmrc-auth.ts`, `hmrc-callback`, `hmrc-vat-obligations` | Owner decision: ROTATE |
 
 Protects **HMRC tokens only** — Gmail, Outlook and TrueLayer tokens are stored in plaintext — so
-rotating forces HMRC re-authorisation and nothing else. While setting it, note the code currently
-falls back to a published constant (`|| 'default-dev-key-change-in-production'`) and derives the
-key by `padEnd(32).slice(0,32)`; both should be fixed in the function, not worked around here.
+rotating forces HMRC re-authorisation and nothing else.
 
-## 4. MUST BE NEW OR ENVIRONMENT-SPECIFIC (11)
+**Format (cutover workstream A):** exactly 32 random bytes, base64-encoded — generate with
+`openssl rand -base64 32`. The functions now read it through `_shared/token-crypto.ts`, which
+derives the AES-256-GCM key with HKDF-SHA256 and **fails closed**: if the variable is missing or
+does not decode to 32 bytes, `hmrc-callback`, `hmrc-vat-obligations` and `hmrc-vat-submit`
+return `503 not_configured`. The old published fallback constant and the `padEnd(32)` derivation
+are gone. Ciphertext is versioned (`v2:`), so any token stored under the old scheme is refused and
+must be re-authorised — acceptable while London holds no users. **Rotating this key later forces
+every organisation to re-authorise HMRC.**
+
+## 4. MUST BE NEW OR ENVIRONMENT-SPECIFIC (10)
 
 These cannot simply be copied — they encode the old project or domain.
 
@@ -65,12 +72,11 @@ These cannot simply be copied — they encode the old project or domain.
 |---|---|---|
 | `CRON_SECRET` | `truelayer-sync-scheduled` | **Must equal the Vault entry `cron_shared_secret`.** Different stores; conflating them is why the legacy hourly job 401'd forever. |
 | `APP_URL` | `gmail-callback` | New app URL |
-| `APP_PUBLIC_URL` | `_shared`, `onboarding-stripe-checkout`, `stripe-checkout` | New app URL |
-| `PORTAL_PUBLIC_URL` | `_shared` | New portal URL |
-| `ALLOWED_ORIGINS` | `_shared` | New domains. **Drop `*.lovable.app` / `*.lovableproject.com`** |
+| `APP_PUBLIC_URL` | `_shared/origins.ts` (fallback redirect base for `onboarding-stripe-checkout`, `stripe-checkout`), `auth-email-hook` (preview sample link) | New app URL. Required: with no allow-listed Origin and no value, checkout returns `503 not_configured` |
+| `PORTAL_PUBLIC_URL` | `_shared/origins.ts` (fallback redirect base for `portal-pay-invoice`) | New portal URL. Required for the same reason as `APP_PUBLIC_URL` |
+| `ALLOWED_ORIGINS` | `_shared/cors.ts`, `_shared/origins.ts` (`accept-portal-invite-signup`, `onboarding-stripe-checkout`, `stripe-checkout`, `portal-pay-invoice`) | Comma-separated **exact** origins of the new app and portal. This is now the **only** source of trusted origins — the hard-coded `*.lovable.app` / `*.lovableproject.com` matching was removed from every function |
 | `TRUELAYER_REDIRECT_URI` | `_shared` | Re-register at TrueLayer against the new domain |
 | `STRIPE_WEBHOOK_SECRET` | `stripe-webhook` | **New value.** Signing secrets are per-endpoint and cannot be copied — re-register the endpoint first |
-| `PORTAL_SEED_SECRET` | `seed-portal-test-users` | New value (QA tooling) |
 | `HMRC_MODE` | `cis-submit`, `rti-submit` | Confirm test vs production |
 | `TRUELAYER_ENV` | `_shared` | Confirm sandbox vs live |
 | `HMRC_AUTH_URL` | `_shared`, `hmrc-auth`, `hmrc-callback` | Confirm it matches `HMRC_MODE` |

@@ -16,11 +16,9 @@
   },
   "edgeFunctions": [
     { "name": "auth-email-hook", "verifyJwt": false, "critical": true },
-    { "name": "process-email-queue", "verifyJwt": true, "critical": true },
+    { "name": "process-email-queue", "verifyJwt": false, "critical": true },
     { "name": "handle-email-unsubscribe", "verifyJwt": false, "critical": false },
     { "name": "accept-portal-invite-signup", "verifyJwt": false, "critical": true },
-    { "name": "seed-portal-test-users", "verifyJwt": false, "critical": false },
-    { "name": "portal-qa-probe", "verifyJwt": false, "critical": false },
     { "name": "stripe-checkout", "verifyJwt": true, "critical": true },
     { "name": "stripe-webhook", "verifyJwt": false, "critical": true },
     { "name": "customer-portal", "verifyJwt": true, "critical": true },
@@ -102,8 +100,7 @@
     "GMAIL_CLIENT_ID",
     "GMAIL_CLIENT_SECRET",
     "OUTLOOK_CLIENT_ID",
-    "OUTLOOK_CLIENT_SECRET",
-    "PORTAL_SEED_SECRET"
+    "OUTLOOK_CLIENT_SECRET"
   ],
   "emailInfrastructure": {
     "tables": ["email_send_log", "email_send_state", "suppressed_emails", "email_unsubscribe_tokens"],

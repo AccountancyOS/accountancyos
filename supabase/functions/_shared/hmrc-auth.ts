@@ -5,11 +5,11 @@
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.57.2';
 import { logInfo, logError, logWarn } from './logging.ts';
+import { decryptToken, encryptToken, assertTokenCryptoConfigured, TokenCryptoNotConfiguredError } from './token-crypto.ts';
 
 const HMRC_AUTH_URL = Deno.env.get('HMRC_AUTH_URL') || 'https://test-api.service.hmrc.gov.uk';
 const HMRC_CLIENT_ID = Deno.env.get('HMRC_CLIENT_ID');
 const HMRC_CLIENT_SECRET = Deno.env.get('HMRC_CLIENT_SECRET');
-const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY') || 'default-dev-key-change-in-production';
 
 // Token buffer - refresh if expiring within this many seconds
 const TOKEN_EXPIRY_BUFFER_SECONDS = 120;
@@ -20,64 +20,6 @@ export interface HmrcTokenResult {
 }
 
 /**
- * Decrypt a value encrypted with Web Crypto AES-GCM
- */
-async function decryptValue(encryptedBase64: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)),
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"]
-  );
-  
-  const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-  const iv = combined.slice(0, 12);
-  const ciphertext = combined.slice(12);
-  
-  const decryptedBuffer = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    keyMaterial,
-    ciphertext
-  );
-  
-  return decoder.decode(decryptedBuffer);
-}
-
-/**
- * Encrypt a value using Web Crypto AES-GCM
- */
-async function encryptValue(plaintext: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plaintext);
-  
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)),
-    { name: "AES-GCM" },
-    false,
-    ["encrypt"]
-  );
-  
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  
-  const encryptedBuffer = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    keyMaterial,
-    data
-  );
-  
-  const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(encryptedBuffer), iv.length);
-  
-  return btoa(String.fromCharCode(...combined));
-}
-
-/**
  * Get a valid HMRC access token, refreshing if necessary
  */
 export async function getValidHmrcAccessToken(
@@ -85,7 +27,18 @@ export async function getValidHmrcAccessToken(
   options: { orgId: string; traceId: string }
 ): Promise<HmrcTokenResult> {
   const { orgId, traceId } = options;
-  
+
+  // Fail closed before touching any stored token: without a valid ENCRYPTION_KEY nothing can be
+  // decrypted, and there is deliberately no fallback key.
+  try {
+    assertTokenCryptoConfigured();
+  } catch (e) {
+    if (e instanceof TokenCryptoNotConfiguredError) {
+      throw new HmrcAuthError('ENCRYPTION_NOT_CONFIGURED', 'not_configured');
+    }
+    throw e;
+  }
+
   // Fetch stored HMRC credentials
   const { data: hmrcIntegration, error: fetchError } = await adminClient
     .from('organization_integrations_hmrc')
@@ -114,7 +67,7 @@ export async function getValidHmrcAccessToken(
   // Check if token is still valid (with buffer)
   if (expiresAt > bufferTime) {
     logInfo(traceId, 'Using existing HMRC token', { orgId, expiresAt: expiresAt.toISOString() });
-    const accessToken = await decryptValue(hmrcIntegration.mtd_vat_access_token_encrypted);
+    const accessToken = await decryptToken(hmrcIntegration.mtd_vat_access_token_encrypted);
     return { accessToken, expiresAt };
   }
   
@@ -129,7 +82,7 @@ export async function getValidHmrcAccessToken(
     throw new HmrcAuthError('HMRC_NOT_CONFIGURED', 'HMRC client credentials not configured');
   }
   
-  const refreshToken = await decryptValue(hmrcIntegration.mtd_vat_refresh_token_encrypted);
+  const refreshToken = await decryptToken(hmrcIntegration.mtd_vat_refresh_token_encrypted);
   
   // Call HMRC token endpoint
   const tokenResponse = await fetch(`${HMRC_AUTH_URL}/oauth/token`, {
@@ -164,9 +117,9 @@ export async function getValidHmrcAccessToken(
   const tokens = await tokenResponse.json();
   
   // Encrypt and store new tokens
-  const encryptedAccessToken = await encryptValue(tokens.access_token);
+  const encryptedAccessToken = await encryptToken(tokens.access_token);
   const encryptedRefreshToken = tokens.refresh_token 
-    ? await encryptValue(tokens.refresh_token) 
+    ? await encryptToken(tokens.refresh_token) 
     : hmrcIntegration.mtd_vat_refresh_token_encrypted; // Keep old refresh token if not provided
   
   const newExpiresAt = new Date(Date.now() + (tokens.expires_in || 14400) * 1000);

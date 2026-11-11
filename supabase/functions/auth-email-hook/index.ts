@@ -46,7 +46,8 @@ const FROM_DOMAIN = "accountancyos.com" // Domain shown in From address (may be 
 // The sample email uses a fixed placeholder (RFC 6761 .test TLD) so the Go backend
 // can always find-and-replace it with the actual recipient when sending test emails,
 // even if the project's domain has changed since the template was scaffolded.
-const SAMPLE_PROJECT_URL = "https://accountancyos.lovable.app"
+// Preview-only sample link. Uses the configured app URL; never a hard-coded hosting domain.
+const SAMPLE_PROJECT_URL = (Deno.env.get("APP_PUBLIC_URL") ?? "https://app.example.com").replace(/\/+$/, "")
 const SAMPLE_EMAIL = "user@example.test"
 const SAMPLE_DATA: Record<string, object> = {
   signup: {

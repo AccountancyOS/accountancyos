@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken, assertTokenCryptoConfigured, notConfiguredResponse } from "../_shared/token-crypto.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,42 +11,22 @@ const corsHeaders = {
 const HMRC_AUTH_URL = Deno.env.get('HMRC_AUTH_URL') || 'https://test-api.service.hmrc.gov.uk';
 const HMRC_CLIENT_ID = Deno.env.get('HMRC_CLIENT_ID');
 const HMRC_CLIENT_SECRET = Deno.env.get('HMRC_CLIENT_SECRET');
-const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY') || 'default-dev-key-change-in-production';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-// Simple encryption using Web Crypto API
-async function encryptValue(plaintext: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plaintext);
-  
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)),
-    { name: "AES-GCM" },
-    false,
-    ["encrypt"]
-  );
-  
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  
-  const encryptedBuffer = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    keyMaterial,
-    data
-  );
-  
-  const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(encryptedBuffer), iv.length);
-  
-  return btoa(String.fromCharCode(...combined));
-}
 
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Fail closed before consuming the one-time OAuth state: with no valid ENCRYPTION_KEY the
+  // tokens could not be stored safely, and there is deliberately no fallback key.
+  try {
+    assertTokenCryptoConfigured();
+  } catch {
+    console.error('HMRC callback refused: ENCRYPTION_KEY not configured');
+    return notConfiguredResponse(corsHeaders);
   }
 
   try {
@@ -124,9 +105,9 @@ serve(async (req: Request) => {
     const tokens = await tokenResponse.json();
 
     // Encrypt tokens
-    const encryptedAccessToken = await encryptValue(tokens.access_token);
+    const encryptedAccessToken = await encryptToken(tokens.access_token);
     const encryptedRefreshToken = tokens.refresh_token 
-      ? await encryptValue(tokens.refresh_token) 
+      ? await encryptToken(tokens.refresh_token) 
       : null;
 
     // Calculate expiry

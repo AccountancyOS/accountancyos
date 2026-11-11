@@ -252,6 +252,8 @@ async function sendPostmarkEmail(params: {
 type PracticeMailbox = {
   id: string
   provider: 'gmail' | 'outlook'
+  /** Always the queue row's organisation — resolution refuses any mailbox outside it. */
+  organization_id: string
   /** Where the choice came from, for the log trail. */
   source: 'queue_row' | 'organization'
 }
@@ -272,21 +274,21 @@ async function resolvePracticeMailbox(
     created_by: string | null
   }
 ): Promise<PracticeMailbox | null> {
-  // 1. The row names its own mailbox. Honour it.
-  //    `email_queue.provider` DEFAULTS to 'postmark', so presence is not enough — only
-  //    'gmail' and 'outlook' are mailbox providers, and a row carrying 'postmark' here is
-  //    carrying the default, not a decision.
-  if (queueRow.mailbox_id) {
-    if (queueRow.provider === 'gmail' || queueRow.provider === 'outlook') {
-      return { id: queueRow.mailbox_id, provider: queueRow.provider, source: 'queue_row' }
-    }
+  // A row with no organisation cannot be tied to anyone's mailbox: HOLD.
+  if (!queueRow.organization_id) return null
+  const orgId = queueRow.organization_id
 
-    // A mailbox is named but the provider is missing or is the table default. Read the
-    // provider off the mailbox itself rather than guessing which API to call.
+  // 1. The row names its own mailbox. Honour it — but only if that mailbox belongs to the
+  //    row's own organisation. `mailbox_id` is a column any member of the row's org can write,
+  //    so trusting it alone would let org A send from org B's connected mailbox. The mailbox is
+  //    always re-read and scoped to the row's organisation; the row's `provider` column is not
+  //    trusted (it defaults to 'postmark' and is caller-writable) — the mailbox's own is used.
+  if (queueRow.mailbox_id) {
     const { data, error } = await supabase
       .from('connected_mailboxes')
-      .select('id, provider, status')
+      .select('id, provider, status, organization_id')
       .eq('id', queueRow.mailbox_id)
+      .eq('organization_id', orgId)
       .eq('status', 'active')
       .maybeSingle()
 
@@ -295,16 +297,15 @@ async function resolvePracticeMailbox(
       return null
     }
     if (data && (data.provider === 'gmail' || data.provider === 'outlook')) {
-      return { id: String(data.id), provider: data.provider, source: 'queue_row' }
+      return { id: String(data.id), provider: data.provider, organization_id: orgId, source: 'queue_row' }
     }
-    console.warn('email_queue names a mailbox that is not usable', {
+    console.warn('email_queue names a mailbox that is not usable for its organisation', {
       id: queueRow.id,
       mailbox_id: queueRow.mailbox_id,
     })
     return null
   }
 
-  if (!queueRow.organization_id) return null
 
   // 2. No mailbox on the row: resolve the organisation's active connected mailbox.
   //    `connected_mailboxes.status` is the `mailbox_status` ENUM ('active'|'expired'|
@@ -316,14 +317,14 @@ async function resolvePracticeMailbox(
     if (!row) return null
     const provider = row.provider
     if (provider !== 'gmail' && provider !== 'outlook') return null
-    return { id: String(row.id), provider, source: 'organization' }
+    return { id: String(row.id), provider, organization_id: orgId, source: 'organization' }
   }
 
   if (queueRow.created_by) {
     const { data, error } = await supabase
       .from('connected_mailboxes')
       .select('id, provider, email_address, updated_at')
-      .eq('organization_id', queueRow.organization_id)
+      .eq('organization_id', orgId)
       .eq('status', 'active')
       .eq('user_id', queueRow.created_by)
       .or('sync_enabled.is.null,sync_enabled.eq.true')
@@ -342,7 +343,7 @@ async function resolvePracticeMailbox(
   const { data, error } = await supabase
     .from('connected_mailboxes')
     .select('id, provider, email_address, updated_at')
-    .eq('organization_id', queueRow.organization_id)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
     .or('sync_enabled.is.null,sync_enabled.eq.true')
     .order('updated_at', { ascending: false, nullsFirst: false })
@@ -382,6 +383,9 @@ async function sendViaPracticeMailbox(
   const { data: fnData, error: fnErr } = await supabase.functions.invoke(fnName, {
     body: {
       mailbox_id: mailbox.id,
+      // The sender re-verifies that the mailbox belongs to this organisation; a service-role
+      // call is not a licence to send from any mailbox.
+      organization_id: mailbox.organization_id,
       to: queueRow.to_email,
       subject: queueRow.subject,
       body_html: queueRow.body_html,
@@ -484,22 +488,15 @@ async function holdEmailQueueRow(
   }
 }
 
-function parseJwtClaims(token: string): Record<string, unknown> | null {
-  const parts = token.split('.')
-  if (parts.length < 2) {
-    return null
-  }
-
-  try {
-    const payload = parts[1]
-      .replaceAll('-', '+')
-      .replaceAll('_', '/')
-      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
-
-    return JSON.parse(atob(payload)) as Record<string, unknown>
-  } catch {
-    return null
-  }
+/** Constant-time string comparison, so the bearer check does not leak the key byte by byte. */
+function timingSafeEqualString(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const ab = enc.encode(a)
+  const bb = enc.encode(b)
+  let diff = ab.length ^ bb.length
+  const len = Math.max(ab.length, bb.length)
+  for (let i = 0; i < len; i++) diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0)
+  return diff === 0
 }
 
 // Move a message to the dead letter queue and log the reason.
@@ -555,15 +552,16 @@ Deno.serve(async (req) => {
     )
   }
 
-  // Auth: verify_jwt=true at the gateway (see config.toml) guarantees the bearer
-  // is a signature-verified JWT, so the role claim can be trusted. We allow two
-  // callers: the service-role cron (automated draining) AND an authenticated app
-  // user (the manual "Process Queue" admin action in the UI). Anon is rejected —
-  // queue processing is not a public operation.
-  const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
-  const callerRole = claims?.role
-  if (callerRole !== 'service_role' && callerRole !== 'authenticated') {
+  // Auth: ONLY the service role may drain. The drain is global — it sends every
+  // organisation's queued mail — so no end-user, of any organisation or role, may trigger it.
+  // Automated draining is the London cron job, which presents the service-role key read from
+  // Vault (london-cron.sql). The bearer is compared to the key the runtime actually holds, in
+  // constant time; the JWT role claim is not consulted, because on London the injected key is
+  // the non-JWT `sb_secret_…` format (london-baseline/SECRETS.md §5a).
+  // UI "send now" actions call org-scoped RPCs (flush_email_queue_now / send_queued_email_now)
+  // that make mail due; the next cron tick sends it.
+  const bearer = authHeader.slice('Bearer '.length).trim()
+  if (!timingSafeEqualString(bearer, supabaseServiceKey)) {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
       { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

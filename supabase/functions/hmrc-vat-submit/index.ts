@@ -330,6 +330,13 @@ serve(async (req: Request) => {
         : 'Could not obtain a valid HMRC access token. Please reconnect HMRC.';
       // Log the code only — never the token, refresh token, or encrypted values.
       console.error(`[hmrc-vat-submit] HMRC token acquisition failed: ${code}`);
+      if (code === 'ENCRYPTION_NOT_CONFIGURED') {
+        // Fail closed: no ENCRYPTION_KEY means no token can be read. Never fall back to a default.
+        return new Response(
+          JSON.stringify({ success: false, error: 'not_configured', error_code: code }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       return new Response(
         JSON.stringify({ success: false, message, error_code: code }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

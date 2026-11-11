@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken, encryptToken, assertTokenCryptoConfigured, notConfiguredResponse } from "../_shared/token-crypto.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,61 +14,6 @@ const HMRC_ENDPOINTS = {
 
 const HMRC_CLIENT_ID = Deno.env.get('HMRC_CLIENT_ID');
 const HMRC_CLIENT_SECRET = Deno.env.get('HMRC_CLIENT_SECRET');
-const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY') || 'default-dev-key-change-in-production';
-
-// Decrypt token using AES-GCM
-async function decryptValue(encrypted: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  
-  const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
-  const iv = combined.slice(0, 12);
-  const data = combined.slice(12);
-  
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)),
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"]
-  );
-  
-  const decryptedBuffer = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    keyMaterial,
-    data
-  );
-  
-  return decoder.decode(decryptedBuffer);
-}
-
-// Encrypt token using AES-GCM
-async function encryptValue(plaintext: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plaintext);
-  
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)),
-    { name: "AES-GCM" },
-    false,
-    ["encrypt"]
-  );
-  
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  
-  const encryptedBuffer = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    keyMaterial,
-    data
-  );
-  
-  const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(encryptedBuffer), iv.length);
-  
-  return btoa(String.fromCharCode(...combined));
-}
 
 // Refresh HMRC access token
 async function refreshAccessToken(
@@ -106,7 +52,15 @@ serve(async (req: Request) => {
   }
 
   const startTime = Date.now();
-  
+
+  // Fail closed: without a valid ENCRYPTION_KEY no stored token can be read or re-stored.
+  try {
+    assertTokenCryptoConfigured();
+  } catch {
+    console.error('[hmrc-vat-obligations] refused: ENCRYPTION_KEY not configured');
+    return notConfiguredResponse(corsHeaders);
+  }
+
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -210,7 +164,7 @@ serve(async (req: Request) => {
     // Decrypt and potentially refresh token
     let accessToken: string;
     try {
-      accessToken = await decryptValue(hmrcAuth.mtd_vat_access_token_encrypted);
+      accessToken = await decryptToken(hmrcAuth.mtd_vat_access_token_encrypted);
     } catch (e) {
       console.error('Failed to decrypt access token:', e);
       return new Response(
@@ -226,7 +180,7 @@ serve(async (req: Request) => {
       
       let refreshToken: string;
       try {
-        refreshToken = await decryptValue(hmrcAuth.mtd_vat_refresh_token_encrypted);
+        refreshToken = await decryptToken(hmrcAuth.mtd_vat_refresh_token_encrypted);
       } catch (e) {
         return new Response(
           JSON.stringify({ success: false, message: 'Failed to decrypt refresh token' }),
@@ -247,8 +201,8 @@ serve(async (req: Request) => {
       }
 
       // Update stored tokens
-      const encryptedAccess = await encryptValue(newTokens.access_token);
-      const encryptedRefresh = await encryptValue(newTokens.refresh_token);
+      const encryptedAccess = await encryptToken(newTokens.access_token);
+      const encryptedRefresh = await encryptToken(newTokens.refresh_token);
       const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
 
       await supabase
