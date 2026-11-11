@@ -17,7 +17,7 @@ import { resolve } from "node:path";
  * annualises it.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 
 const MIG_NAME = "20260727170000_billing_frequency_annual.sql";
 const MIG = readFileSync(resolve(migDir, MIG_NAME), "utf8");

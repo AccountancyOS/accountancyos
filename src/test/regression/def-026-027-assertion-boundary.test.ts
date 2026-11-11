@@ -20,7 +20,7 @@ const PATCH_PATH = resolve(
 );
 const MIGRATION_PATH = resolve(
   __dirname,
-  "../../../supabase/migrations/20260805110000_def_026_027_bill_status_and_customer_columns.sql",
+  "../../../supabase/migrations_archive/20260805110000_def_026_027_bill_status_and_customer_columns.sql",
 );
 
 /** PostgreSQL \mIDENT\M — `_` counts as a word character. */

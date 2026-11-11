@@ -13,7 +13,7 @@ import { resolve } from "node:path";
  * legitimately predate the linking behaviour.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 
 function newestDefiningMaterialize(): string {
   const files = readdirSync(migDir)

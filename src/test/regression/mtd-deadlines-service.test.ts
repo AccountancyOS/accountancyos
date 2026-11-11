@@ -12,7 +12,7 @@ import { resolve } from "node:path";
  * the migration set (mirrors job-creation-single-source.test.ts).
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 const migAll = readdirSync(migDir)
   .filter((f) => f.endsWith(".sql"))
   .map((f) => readFileSync(resolve(migDir, f), "utf8"))

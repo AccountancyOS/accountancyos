@@ -1,86 +1,174 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { LEGACY_REF } from "../retired-identifiers";
 
 /**
- * Guards on the London canonical baseline.
+ * Single-project migration invariants (cutover B, 2026-11-11).
  *
- * The baseline is the whole application schema derived from the verified Lovable export. Two
- * things would be seriously damaging and both are cheap to prevent:
+ * `supabase/migrations/` rebuilds production (London, ezsvdsjdtardkxfswjvq) exactly. It starts with
+ * ONE baseline — London's schema, storage, reference data and cron, dumped read-only and proven
+ * locally to produce no schema diff against London (`supabase db diff --linked` empty, 628/628 ACLs,
+ * 371/371 function definitions byte-identical). London's history table marks that baseline applied.
  *
- * 1. **It must never sit in `supabase/migrations/`.** The Lovable executor applies from that
- *    directory against the LEGACY project, which is still live. A 226-table baseline landing
- *    there would be run against the old database.
- * 2. **It must never carry a Lovable platform artefact onto the new project.** `sandbox_exec`
- *    carried BYPASSRLS on the legacy backend (DEF-031, reverted out of band three times); the
- *    legacy project ref would point the new project's functions at the dead backend.
+ * What this guards:
+ *   1. The pre-baseline history (supabase/migrations_archive/) is never applied — not by name, not by
+ *      content — and the archive itself is never edited.
+ *   2. The baseline is immutable: once London's history records it as applied, changing a byte of it
+ *      would make git describe a database production does not have. Change the schema with a NEW
+ *      migration instead.
+ *   3. The baseline still has the shape that was verified against London.
+ *   4. The London-only increments convention is closed: 001–006 are folded into the baseline.
  */
 const root = resolve(__dirname, "../../../");
-const BASELINE = resolve(root, "docs/migration/london-baseline/london-baseline.sql");
-const LEGACY_REF = "moxpdejnucjjcplleefn";
+const migDir = resolve(root, "supabase/migrations");
+const archiveDir = resolve(root, "supabase/migrations_archive");
+const incDir = resolve(root, "docs/migration/london-increments");
 
-describe("London baseline — placement", () => {
-  it("is not in supabase/migrations/, where the executor would apply it to the legacy project", () => {
-    const migDir = resolve(root, "supabase/migrations");
-    const strays = readdirSync(migDir).filter((f) => /baseline/i.test(f));
-    expect(strays).toEqual([]);
+const BASELINE = "20261111140000_london_baseline.sql";
+// sha256 of the baseline exactly as verified against London and recorded as applied there.
+const BASELINE_SHA256 = "153f2af4a79351845f37a4f2a20249f3c01bf00e26c3ec438788d7ee1146be6d";
+
+const migrations = readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort();
+const archived = readdirSync(archiveDir).filter((f) => f.endsWith(".sql"));
+const baselineSql = readFileSync(resolve(migDir, BASELINE), "utf8");
+const count = (re: RegExp) => (baselineSql.match(re) ?? []).length;
+
+describe("supabase/migrations — one baseline, then forward migrations", () => {
+  it("starts with exactly one London baseline, and it is the earliest migration", () => {
+    expect(migrations.filter((f) => /_london_baseline\.sql$/.test(f))).toEqual([BASELINE]);
+    expect(migrations[0]).toBe(BASELINE);
   });
 
-  it("lives in the staging directory instead", () => {
-    expect(existsSync(BASELINE)).toBe(true);
+  it("names every migration <14-digit version>_<snake_case>.sql, versions strictly increasing", () => {
+    for (const f of migrations) expect(f, f).toMatch(/^\d{14}_[a-z0-9_]+\.sql$/);
+    const versions = migrations.map((f) => f.slice(0, 14));
+    expect(new Set(versions).size).toBe(versions.length);
   });
 });
 
-/**
- * Post-baseline increments are London-only for the same reason the baseline is: the legacy project
- * is still live and still serving users, and the Lovable executor applies whatever appears in
- * `supabase/migrations/`. Sender-identity routing exists only on London, so its schema must not be
- * pushed onto a project whose code cannot honour it.
- *
- * The divergence is deliberate and temporary — at cutover these fold into `supabase/migrations/`.
- * Until then this guard keeps "deliberate" from decaying into "drifted".
- */
-describe("London increments — placement", () => {
-  const incDir = resolve(root, "docs/migration/london-increments");
-  const increments = existsSync(incDir)
-    ? readdirSync(incDir).filter((f) => f.endsWith(".sql"))
-    : [];
-  const migDir = resolve(root, "supabase/migrations");
-  const migrations = readdirSync(migDir).filter((f) => f.endsWith(".sql"));
-
-  it("never copies an increment filename into supabase/migrations/", () => {
-    const collisions = increments.filter((f) => migrations.includes(f));
-    expect(collisions).toEqual([]);
+describe("supabase/migrations_archive — history, never applied", () => {
+  it("still holds the 528 pre-baseline migrations and its README", () => {
+    expect(archived.length).toBe(528);
+    expect(readFileSync(resolve(archiveDir, "README.md"), "utf8")).toMatch(/NEVER applied/);
   });
 
-  it("never copies increment SQL into supabase/migrations/ under a different name", () => {
-    // Renaming to a timestamp is exactly how an increment would slip past a name check, so the
-    // real test is content: byte-identical SQL in the executor's directory is a leak.
-    const incBodies = new Map(
-      increments.map((f) => [readFileSync(resolve(incDir, f), "utf8").trim(), f]),
-    );
-    const leaked = migrations
-      .map((f) => ({ f, src: incBodies.get(readFileSync(resolve(migDir, f), "utf8").trim()) }))
-      .filter((x) => x.src)
-      .map((x) => `${x.f} is a copy of ${x.src}`);
+  it("no archived migration appears in supabase/migrations by name", () => {
+    expect(archived.filter((f) => migrations.includes(f))).toEqual([]);
+  });
+
+  it("no archived migration appears in supabase/migrations by content", () => {
+    const archivedBodies = new Set(archived.map((f) => readFileSync(resolve(archiveDir, f), "utf8").trim()));
+    const leaked = migrations.filter((f) => archivedBodies.has(readFileSync(resolve(migDir, f), "utf8").trim()));
     expect(leaked).toEqual([]);
   });
 
-  it("names increments so their apply order is unambiguous", () => {
-    const misnamed = increments.filter((f) => !/^\d{3}_[a-z0-9_]+\.sql$/.test(f));
-    expect(misnamed).toEqual([]);
-  });
-
-  it("does not point an increment at the legacy project", () => {
-    const offenders = increments.filter((f) =>
-      readFileSync(resolve(incDir, f), "utf8").includes(LEGACY_REF),
-    );
-    expect(offenders).toEqual([]);
+  it("no forward migration shares a version with the archive (the CLI would treat it as already known)", () => {
+    const archivedVersions = new Set(archived.map((f) => f.slice(0, 14)));
+    expect(migrations.filter((f) => archivedVersions.has(f.slice(0, 14)))).toEqual([]);
   });
 });
 
+describe("the baseline is London", () => {
+  it("is byte-for-byte the baseline that was verified against London and marked applied there", () => {
+    expect(createHash("sha256").update(baselineSql).digest("hex")).toBe(BASELINE_SHA256);
+  });
+
+  it("carries London's object counts", () => {
+    expect(count(/^CREATE TABLE IF NOT EXISTS "public"\./gm)).toBe(226);
+    expect(count(/^CREATE OR REPLACE FUNCTION "public"\./gm)).toBe(371);
+    expect(count(/^CREATE POLICY .* ON "public"\./gm)).toBe(687);
+    expect(count(/^CREATE OR REPLACE TRIGGER /gm)).toBe(155);
+    expect(count(/^CREATE OR REPLACE VIEW "public"\./gm)).toBe(3);
+    expect(count(/^CREATE TYPE "public"\./gm)).toBe(11);
+  });
+
+  it("carries London's storage (9 buckets, branding the only public one, 36 object policies)", () => {
+    expect(count(/INSERT INTO storage\.buckets/g)).toBe(9);
+    expect(count(/^CREATE POLICY .* ON storage\.objects/gm)).toBe(36);
+    const publicRows = baselineSql.match(/VALUES \('([a-z0-9-]+)', '[a-z0-9-]+', true,/g) ?? [];
+    expect(publicRows).toHaveLength(1);
+    expect(publicRows[0]).toContain("branding");
+  });
+
+  it("carries the 14 reference-data tables and no tenant data", () => {
+    const tables = new Set((baselineSql.match(/^INSERT INTO "public"\."([a-z_0-9]+)"/gm) ?? []));
+    expect(tables.size).toBe(14);
+    for (const t of ["organizations", "clients", "companies", "organization_users", "invoices", "email_queue"]) {
+      expect(baselineSql, t).not.toMatch(new RegExp(`^INSERT INTO "public"\\."${t}"`, "m"));
+    }
+  });
+
+  it("schedules London's 12 cron jobs, active only where both Vault secrets exist", () => {
+    expect(count(/^SELECT cron\.schedule\(/gm)).toBe(12);
+    expect(baselineSql).toMatch(/name IN \('cron_service_role_key', 'cron_shared_secret'\)/);
+    expect(baselineSql).toMatch(/cron\.alter_job\(job_id := v_job\.jobid, active := v_provisioned\)/);
+  });
+
+  it("creates objects under built-in ACLs, so platform default privileges cannot widen grants", () => {
+    const clear = baselineSql.indexOf("ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS");
+    const firstFn = baselineSql.search(/^CREATE OR REPLACE FUNCTION "public"\./m);
+    expect(clear).toBeGreaterThan(-1);
+    expect(clear).toBeLessThan(firstFn);
+  });
+
+  it("keeps increment 006's grants: no A1 function is granted to anon or PUBLIC", () => {
+    for (const fn of [
+      "post_to_ledger", "approve_invoice", "approve_bill", "record_invoice_payment", "record_bill_payment",
+      "read_email_batch", "enqueue_email", "delete_email", "move_to_dlq", "lifecycle_send_back_onboarding",
+      "public_complete_billing", "trigger_records_request", "get_trial_balance_from_ledger",
+    ]) {
+      expect(baselineSql, fn).not.toMatch(new RegExp(`GRANT ALL ON FUNCTION "public"\\."${fn}"\\([^;]*\\) TO "anon";`));
+      expect(baselineSql, fn).not.toMatch(new RegExp(`GRANT ALL ON FUNCTION "public"\\."${fn}"\\([^;]*\\) TO PUBLIC;`));
+    }
+  });
+
+  it("embeds no credential", () => {
+    expect(baselineSql).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/);
+    expect(baselineSql).not.toMatch(/sb_secret_[A-Za-z0-9_-]{10,}/);
+    expect(baselineSql).not.toMatch(/postgres:\/\/[^\s'"]{5,}/);
+  });
+
+  it("creates or alters no role, and never confers BYPASSRLS", () => {
+    const code = baselineSql.replace(/^\s*--.*$/gm, "");
+    expect(code).not.toMatch(/\bCREATE\s+ROLE\b/i);
+    expect(code).not.toMatch(/\bALTER\s+ROLE\b/i);
+    expect(code).not.toMatch(/\bBYPASSRLS\b/i);
+  });
+});
+
+describe("the London-only increments convention is closed", () => {
+  it("holds exactly 001–006 (+ the read-only 006 verify) and nothing new", () => {
+    const sql = existsSync(incDir) ? readdirSync(incDir).filter((f) => f.endsWith(".sql")).sort() : [];
+    expect(sql).toEqual([
+      "001_email_vocabulary_and_sender_classification.sql",
+      "002_sender_identity_enforcement.sql",
+      "003_email_send_log_rate_limited.sql",
+      "004_protect_existing_system_rows.sql",
+      "005_system_email_boundary_and_hold_state.sql",
+      "006_security_containment.sql",
+      "006_verify.sql",
+    ]);
+  });
+
+  it("README declares the convention closed and folded into the baseline", () => {
+    const readme = readFileSync(resolve(incDir, "README.md"), "utf8");
+    expect(readme).toMatch(/CLOSED/);
+    expect(readme).toContain(BASELINE);
+  });
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * The historical London build artefacts (docs/migration/london-baseline/*, london-increments/*)
+ * stay in the repo as the record of how London was built. They are no longer applied, but they
+ * still must never carry a credential, data, a role grant, or the retired project — and they must
+ * stay complete, because the cutover-B drift report was computed against them.
+ * ------------------------------------------------------------------------------------------- */
+const DOCS_BASELINE = resolve(root, "docs/migration/london-baseline/london-baseline.sql");
+
 describe("London baseline — content safety", () => {
-  const sql = existsSync(BASELINE) ? readFileSync(BASELINE, "utf8") : "";
+  const sql = existsSync(DOCS_BASELINE) ? readFileSync(DOCS_BASELINE, "utf8") : "";
   // Comments carry deliberate prose about what was excluded; only executable SQL is judged.
   const code = sql.replace(/^\s*--.*$/gm, "");
 
@@ -117,7 +205,7 @@ describe("London baseline — content safety", () => {
 });
 
 describe("London baseline — completeness against the independent live capture", () => {
-  const sql = existsSync(BASELINE) ? readFileSync(BASELINE, "utf8") : "";
+  const sql = existsSync(DOCS_BASELINE) ? readFileSync(DOCS_BASELINE, "utf8") : "";
   const count = (re: RegExp) => (sql.match(re) ?? []).length;
 
   // These figures were captured from the live legacy backend through a read-only connector
@@ -236,7 +324,7 @@ describe("London cron bootstrap", () => {
 });
 
 describe("London baseline — placeholders that must be resolved before use", () => {
-  const sql = existsSync(BASELINE) ? readFileSync(BASELINE, "utf8") : "";
+  const sql = existsSync(DOCS_BASELINE) ? readFileSync(DOCS_BASELINE, "utf8") : "";
 
   it("marks the two hard-coded project URLs as placeholders rather than carrying them over", () => {
     // email_queue_dispatch() and email_queue_wake() hard-coded the legacy function URL.

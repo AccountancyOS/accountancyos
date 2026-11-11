@@ -16,8 +16,8 @@ const readCode = (p: string) =>
   read(p).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*--.*$/gm, "").replace(/^\s*\/\/.*$/gm, "");
 
 const MIG_NAME = "20260731210000_def_001_002_rpc_context_and_invoice_draft.sql";
-const MIG = read(`supabase/migrations/${MIG_NAME}`);
-const CODE = readCode(`supabase/migrations/${MIG_NAME}`);
+const MIG = read(`supabase/migrations_archive/${MIG_NAME}`);
+const CODE = readCode(`supabase/migrations_archive/${MIG_NAME}`);
 
 /** The eight functions the LIVE sweep and pg_proc both evidenced as broken. */
 const REPAIRED = [
@@ -231,7 +231,7 @@ describe("release hygiene", () => {
       .trim();
 
   it("owns the live body of every function it reissues, or records who took it over", () => {
-    const migDir = resolve(root, "supabase/migrations");
+    const migDir = resolve(root, "supabase/migrations_archive");
     const files = readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort();
     for (const fn of [...REPAIRED, "create_invoice_draft_safe", "update_invoice_draft_safe"]) {
       const definers = files.filter((f) =>
@@ -257,7 +257,7 @@ describe("release hygiene", () => {
     expect(rb).toMatch(/42883/);
     expect(rb).toMatch(/Cross-tenant relationship checks are lost/);
     // Rollback must not live where it could be applied as a migration.
-    expect(() => read("supabase/migrations/2026-07-31-def-001-002-rollback.sql")).toThrow();
+    expect(() => read("supabase/migrations_archive/2026-07-31-def-001-002-rollback.sql")).toThrow();
   });
 
   /**

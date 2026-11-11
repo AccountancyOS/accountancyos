@@ -1,5 +1,13 @@
 project_id = "ezsvdsjdtardkxfswjvq"
 
+# Local stack must match production (London runs PostgreSQL 17.6).
+[db]
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
 # Every function directory in supabase/functions/ (except _shared) MUST have an explicit entry
 # here. A function with no entry deploys with the platform default, which is an accident rather
 # than a decision. src/test/regression/edge-function-hardening.test.ts enforces this.

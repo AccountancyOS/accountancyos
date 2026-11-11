@@ -20,7 +20,7 @@ import { resolve } from "node:path";
  */
 const root = resolve(__dirname, "../../../");
 const MIG_NAME = "20260805160000_def_019_cron_and_delivery_observability.sql";
-const MIG = readFileSync(resolve(root, `supabase/migrations/${MIG_NAME}`), "utf8");
+const MIG = readFileSync(resolve(root, `supabase/migrations_archive/${MIG_NAME}`), "utf8");
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
 
 const FUNCTIONS = [

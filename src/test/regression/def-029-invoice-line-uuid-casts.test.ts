@@ -21,7 +21,7 @@ const stripComments = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*--.*$/gm, "");
 
 const MIG_NAME = "20260803120000_def_029_invoice_line_uuid_casts.sql";
-const MIG = read(`supabase/migrations/${MIG_NAME}`);
+const MIG = read(`supabase/migrations_archive/${MIG_NAME}`);
 const CODE = stripComments(MIG);
 
 const BODIES = ["create_invoice_draft_safe", "update_invoice_draft_safe"];

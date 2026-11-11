@@ -8,9 +8,9 @@ import { resolve } from "node:path";
  * e.g. job-creation-single-source.test.ts) that the draft-snapshot engine stays
  * ledger-sourced and status-constrained.
  */
-const migAll = readdirSync(resolve(__dirname, "../../../supabase/migrations"))
+const migAll = readdirSync(resolve(__dirname, "../../../supabase/migrations_archive"))
   .filter((f) => f.endsWith(".sql"))
-  .map((f) => readFileSync(resolve(__dirname, "../../../supabase/migrations", f), "utf8"))
+  .map((f) => readFileSync(resolve(__dirname, "../../../supabase/migrations_archive", f), "utf8"))
   .join("\n");
 
 describe("tb snapshot draft lifecycle", () => {

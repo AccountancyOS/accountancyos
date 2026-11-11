@@ -14,7 +14,7 @@ import { resolve } from "node:path";
  * These assertions pin the contract that the client depends on.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 
 const MIG_NAME = "20260727160000_quote_token_returns_onboarding_token.sql";
 const MIG = readFileSync(resolve(migDir, MIG_NAME), "utf8");

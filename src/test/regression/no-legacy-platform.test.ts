@@ -6,8 +6,8 @@ import { resolve, join, relative } from "node:path";
  * Cutover B (2026-11-11): the legacy Lovable-hosted project is retired. AccountancyOS has one
  * backend (London, ezsvdsjdtardkxfswjvq) and no dependency on the Lovable platform.
  *
- * This is the ONE place the retired identifiers are spelled out, because it is the test that keeps
- * them out of everything else. Excluded from the scan, deliberately:
+ * The retired identifiers are spelled out only in src/test/retired-identifiers.ts, which this test
+ * imports to keep them out of everything else. Excluded from the scan, deliberately:
  *   - docs/ — historical record, kept as written;
  *   - supabase/migrations_archive/ — pre-baseline history, never applied;
  *   - this file.
@@ -17,11 +17,11 @@ import { resolve, join, relative } from "node:path";
  *     cutover B. The exception is pinned to that one directory so it cannot spread.
  */
 const root = resolve(__dirname, "../../../");
-const LEGACY_REF = "moxpdejnucjjcplleefn";
-const RETIRED = [LEGACY_REF, "lovable.app", "lovableproject.com", "@lovable.dev", "lovable-tagger"];
+import { LEGACY_REF, RETIRED_IDENTIFIERS as RETIRED } from "../retired-identifiers";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "docs", "migrations_archive", ".temp"]);
 const SELF = relative(root, __filename);
+const IDENTIFIERS_MODULE = "src/test/retired-identifiers.ts";
 const ALLOWED_PREFIX = "supabase/functions/auth-email-hook/";
 const TEXT = /\.(ts|tsx|js|jsx|mjs|cjs|json|toml|sql|html|md|yml|yaml|css|sh)$/;
 
@@ -37,7 +37,7 @@ function walk(dir: string): string[] {
 
 const files = walk(root)
   .map((p) => relative(root, p))
-  .filter((p) => p !== SELF && p !== "package-lock.json" && !p.startsWith(".env"));
+  .filter((p) => p !== SELF && p !== IDENTIFIERS_MODULE && p !== "package-lock.json" && !p.startsWith(".env"));
 
 describe("the legacy project and platform are retired from active code", () => {
   it("no active file references the legacy project ref or Lovable hosts/packages", () => {

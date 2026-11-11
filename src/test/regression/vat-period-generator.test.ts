@@ -13,7 +13,7 @@ import { resolve } from "node:path";
  * the function's existence and its handling of all three UK VAT frequencies + stagger.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 const migAll = readdirSync(migDir)
   .filter((f) => f.endsWith(".sql"))
   .map((f) => readFileSync(resolve(migDir, f), "utf8"))

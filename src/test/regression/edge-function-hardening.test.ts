@@ -17,7 +17,8 @@ function walk(dir: string): string[] {
     return statSync(p).isDirectory() ? walk(p) : [p];
   });
 }
-const functionSources = walk(fnDir).filter((p) => /\.(ts|tsx|js|json)$/.test(p));
+// Deployable source only: *.test.ts files legitimately name the values they prove are refused.
+const functionSources = walk(fnDir).filter((p) => /\.(ts|tsx|js|json)$/.test(p) && !/\.test\.ts$/.test(p));
 const functionDirs = readdirSync(fnDir).filter(
   (d) => d !== "_shared" && statSync(join(fnDir, d)).isDirectory(),
 );

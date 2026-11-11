@@ -11,9 +11,9 @@ import { resolve } from "node:path";
  */
 const root = resolve(__dirname, "../../../");
 const conversationsTab = readFileSync(resolve(root, "src/components/client-portal/ConversationsTab.tsx"), "utf8");
-const migAll = readdirSync(resolve(root, "supabase/migrations"))
+const migAll = readdirSync(resolve(root, "supabase/migrations_archive"))
   .filter((f) => f.endsWith(".sql"))
-  .map((f) => readFileSync(resolve(root, "supabase/migrations", f), "utf8"))
+  .map((f) => readFileSync(resolve(root, "supabase/migrations_archive", f), "utf8"))
   .join("\n");
 
 describe("client portal messaging", () => {

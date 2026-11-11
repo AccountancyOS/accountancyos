@@ -20,7 +20,7 @@ const root = resolve(__dirname, "../../../");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 
 const MIG_NAME = "20260805110000_def_026_027_bill_status_and_customer_columns.sql";
-const MIG = read(`supabase/migrations/${MIG_NAME}`);
+const MIG = read(`supabase/migrations_archive/${MIG_NAME}`);
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
 
 const CANONICAL = ["DRAFT", "APPROVED", "AWAITING_PAYMENT", "PART_PAID", "PAID", "OVERDUE", "VOIDED"];

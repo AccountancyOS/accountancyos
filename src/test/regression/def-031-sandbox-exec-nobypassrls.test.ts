@@ -18,7 +18,7 @@ import { resolve } from "node:path";
  */
 const root = resolve(__dirname, "../../../");
 const MIG_NAME = "20260805200000_def_031_sandbox_exec_nobypassrls.sql";
-const MIG = readFileSync(resolve(root, `supabase/migrations/${MIG_NAME}`), "utf8");
+const MIG = readFileSync(resolve(root, `supabase/migrations_archive/${MIG_NAME}`), "utf8");
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
 
 describe("DEF-031 — the repair", () => {
@@ -55,7 +55,8 @@ describe("DEF-031 — the repair", () => {
 describe("DEF-031 — it cannot silently do nothing", () => {
   it("aborts if the role does not exist rather than succeeding vacuously", () => {
     expect(CODE).toMatch(/role "sandbox_exec" does not exist/);
-    expect(CODE).toMatch(/moxpdejnucjjcplleefn/);
+    // (The archived migration also named the retired project in its error text; that project is
+    //  retired and its ref is guarded out of active code by no-legacy-platform.test.ts.)
   });
 
   it("is idempotent when the attribute is already correct", () => {

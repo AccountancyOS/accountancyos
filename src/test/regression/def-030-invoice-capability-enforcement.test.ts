@@ -23,7 +23,7 @@ import { PERMISSIONS } from "@/lib/permissions";
  * are here because this test failed, read the ruling above before changing anything.
  */
 const root = resolve(__dirname, "../../../");
-const MIG_DIR = resolve(root, "supabase/migrations");
+const MIG_DIR = resolve(root, "supabase/migrations_archive");
 
 /** Every migration that defines one of the invoice-draft RPCs, oldest first. */
 function definersOf(fn: string): string[] {

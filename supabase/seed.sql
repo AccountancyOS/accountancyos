@@ -1,0 +1,6 @@
+-- Local-only seed (supabase db reset). Intentionally empty.
+--
+-- Production reference data (canonical services, rate tables, automation library, templates) is
+-- NOT seed: the app is broken without it, so it lives in the baseline migration
+-- (supabase/migrations/*_london_baseline.sql, section 5) and reaches every environment, production
+-- included. Put only local developer fixtures here.

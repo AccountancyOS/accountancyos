@@ -15,7 +15,7 @@ import { resolve } from "node:path";
  *   - the public signing page reads through an RPC, never straight off an RLS'd table.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 
 const MIG_NAME = "20260727150000_el_per_signatory_signing.sql";
 const MIG = readFileSync(resolve(migDir, MIG_NAME), "utf8");

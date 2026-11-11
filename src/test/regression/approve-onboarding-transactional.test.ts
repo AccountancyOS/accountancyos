@@ -15,7 +15,7 @@ const root = resolve(__dirname, "../../../");
 const MIGRATION = readFileSync(
   resolve(
     root,
-    "supabase/migrations/20260722150000_approve_onboarding_transactional.sql",
+    "supabase/migrations_archive/20260722150000_approve_onboarding_transactional.sql",
   ),
   "utf8",
 );

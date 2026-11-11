@@ -10,7 +10,7 @@ import {
 /**
  * G1 — pins the pure requirements-catalog model that drives onboarding/portal/chasing/
  * reporting completeness (one definition, every surface). Mirrors the seed rows in
- * supabase/migrations/20260722130000_data_governance_foundation.sql.
+ * supabase/migrations_archive/20260722130000_data_governance_foundation.sql.
  */
 describe("data-requirements-model (G1 catalog)", () => {
   describe("catalog completeness", () => {

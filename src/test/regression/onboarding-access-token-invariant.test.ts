@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 const SQL = readFileSync(
   join(
     process.cwd(),
-    "supabase/migrations/20260722160000_fix_onboarding_access_token_default.sql",
+    "supabase/migrations_archive/20260722160000_fix_onboarding_access_token_default.sql",
   ),
   "utf8",
 );

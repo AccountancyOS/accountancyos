@@ -165,7 +165,7 @@ describe("workflow instance status vocabulary is canonical UPPERCASE 7-value", (
   const migration = readFileSync(
     resolve(
       process.cwd(),
-      "supabase/migrations/20260720140000_fix_workflow_instance_status_vocabulary.sql",
+      "supabase/migrations_archive/20260720140000_fix_workflow_instance_status_vocabulary.sql",
     ),
     "utf8",
   );
@@ -199,7 +199,7 @@ describe("per-engine kill-switch wiring (AUTO-1 increment 3)", () => {
   const migration = readFileSync(
     resolve(
       process.cwd(),
-      "supabase/migrations/20260717110000_auto1_engine_switches_and_cron.sql",
+      "supabase/migrations_archive/20260717110000_auto1_engine_switches_and_cron.sql",
     ),
     "utf8",
   );

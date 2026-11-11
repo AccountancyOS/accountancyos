@@ -6,13 +6,13 @@ import { resolve } from "node:path";
  * Migration application-drift guard.
  *
  * Failure mode we're protecting against: a migration file lands in
- * `supabase/migrations/` but its approval card is never green-lit, so the
+ * `supabase/migrations_archive/` but its approval card is never green-lit, so the
  * SQL never runs against the live DB. The feature it introduces then
  * silently no-ops in production (this is exactly how the
  * `process-email-queue` cron went missing for weeks).
  *
  * How this guard works:
- *   - Reads every filename in `supabase/migrations/`.
+ *   - Reads every filename in `supabase/migrations_archive/`.
  *   - Reads the applied-versions manifest at
  *     `docs/audits/unapplied-migrations-baseline.json` (a checked-in snapshot
  *     of `supabase_migrations.schema_migrations.version` taken at the last
@@ -29,7 +29,7 @@ import { resolve } from "node:path";
  * version to the JSON) before merging.
  */
 
-const MIGRATIONS_DIR = resolve(__dirname, "../../../supabase/migrations");
+const MIGRATIONS_DIR = resolve(__dirname, "../../../supabase/migrations_archive");
 const BASELINE_PATH = resolve(
   __dirname,
   "../../../docs/audits/unapplied-migrations-baseline.json",

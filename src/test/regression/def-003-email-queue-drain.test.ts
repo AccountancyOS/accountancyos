@@ -25,7 +25,7 @@ import { resolve } from "node:path";
  */
 const root = resolve(__dirname, "../../../");
 const MIG_NAME = "20260817100000_def_003_reinstate_email_queue_drain.sql";
-const MIG = readFileSync(resolve(root, `supabase/migrations/${MIG_NAME}`), "utf8");
+const MIG = readFileSync(resolve(root, `supabase/migrations_archive/${MIG_NAME}`), "utf8");
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
 
 const manifest = JSON.parse(
@@ -95,7 +95,7 @@ describe("DEF-003 — the manifest describes the real cron estate", () => {
   /**
    * Jobs that exist on production but that NO migration in this repository schedules.
    * Established 2026-08-17 by comparing a live `catalog_cron` read against every
-   * `cron.schedule(...)` call in `supabase/migrations/`.
+   * `cron.schedule(...)` call in `supabase/migrations_archive/`.
    *
    * They were created out of band — the Lovable dashboard, most likely — and are therefore
    * DEF-020 evidence: production cron state that git does not describe and cannot reproduce.
@@ -119,7 +119,7 @@ describe("DEF-003 — the manifest describes the real cron estate", () => {
     // The failure mode this catches: `sla-check` and `session-cleanup` sat in the manifest
     // for months while existing nowhere, so the smoke test reported them missing forever and
     // the noise trained the signal out.
-    const migDir = resolve(root, "supabase/migrations");
+    const migDir = resolve(root, "supabase/migrations_archive");
     const allSql = readdirSync(migDir)
       .filter((f) => f.endsWith(".sql"))
       .map((f) => readFileSync(resolve(migDir, f), "utf8"))
@@ -134,7 +134,7 @@ describe("DEF-003 — the manifest describes the real cron estate", () => {
   });
 
   it("keeps the out-of-git list honest — an entry a migration now schedules must be removed", () => {
-    const migDir = resolve(root, "supabase/migrations");
+    const migDir = resolve(root, "supabase/migrations_archive");
     const allSql = readdirSync(migDir)
       .filter((f) => f.endsWith(".sql"))
       .map((f) => readFileSync(resolve(migDir, f), "utf8"))

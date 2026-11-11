@@ -12,7 +12,7 @@ import { resolve } from "node:path";
  * so any re-inlining is drift and fails here.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 
 const migFiles = readdirSync(migDir)
   .filter((f) => f.endsWith(".sql"))

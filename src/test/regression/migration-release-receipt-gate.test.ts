@@ -18,7 +18,7 @@ import { describe, it, expect } from "vitest";
 // release must have one.
 const RECEIPT_REGIME_START = "20260722130000";
 
-const MIGRATIONS_DIR = join(process.cwd(), "supabase/migrations");
+const MIGRATIONS_DIR = join(process.cwd(), "supabase/migrations_archive");
 const RELEASES_DIR = join(process.cwd(), "docs/releases");
 const BASELINE_PATH = join(process.cwd(), "docs/audits/unapplied-migrations-baseline.json");
 
@@ -82,7 +82,8 @@ describe("migration release receipt gate", () => {
     const problems: string[] = [];
     for (const { file, json } of receipts) {
       for (const entry of migrationEntries(json)) {
-        const abs = join(process.cwd(), entry.path);
+        // Receipts record pre-cutover paths; those files now live in supabase/migrations_archive/.
+        const abs = join(process.cwd(), entry.path.replace(/^supabase\/migrations\//, "supabase/migrations_archive/"));
         if (!existsSync(abs)) {
           problems.push(`${file}: references missing migration ${entry.path}`);
           continue;

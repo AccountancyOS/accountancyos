@@ -17,7 +17,7 @@ const root = resolve(__dirname, "../../../");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 
 const MIG_NAME = "20260803140000_def_028_portal_provenance_contact_link.sql";
-const MIG = read(`supabase/migrations/${MIG_NAME}`);
+const MIG = read(`supabase/migrations_archive/${MIG_NAME}`);
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
 
 const SPLIT = CODE.indexOf("DO $def028$");

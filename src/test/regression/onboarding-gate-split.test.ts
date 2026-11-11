@@ -8,7 +8,7 @@ import { resolve } from "node:path";
  * Guards the migration 20260727130000_split_onboarding_gate.sql (re-issued from the live
  * bodies of lifecycle_onboarding_gates / _approve_onboarding / _evaluate_onboarding_activation).
  */
-const migDir = resolve(__dirname, "../../../supabase/migrations");
+const migDir = resolve(__dirname, "../../../supabase/migrations_archive");
 const gateFile = readFileSync(
   resolve(migDir, "20260727130000_split_onboarding_gate.sql"),
   "utf8",

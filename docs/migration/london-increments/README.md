@@ -1,4 +1,14 @@
-# London-only migrations
+# London-only migrations — CLOSED (2026-11-11)
+
+> **This convention is closed.** Increments 001–006 are folded into the single baseline migration
+> `supabase/migrations/20261111140000_london_baseline.sql` (cutover workstream B), which was dumped
+> read-only from London and proven locally to rebuild it with no schema differences. London's
+> migration history was repaired to record that baseline as applied.
+>
+> **Do not add files here.** Every schema change now goes in `supabase/migrations/` as an ordinary
+> migration and reaches London with `supabase db push`.
+> `src/test/regression/london-baseline-safety.test.ts` fails the build if a new file appears here.
+> The files below remain as the record of what was applied to London, and when.
 
 Migrations here are applied to the **London** project (`ezsvdsjdtardkxfswjvq`) **only**.
 

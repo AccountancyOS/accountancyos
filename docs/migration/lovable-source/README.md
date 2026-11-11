@@ -1,3 +1,7 @@
+> **Legacy project retired 2026-11-11.** This document is a historical record and is kept as written.
+> Production is the London project only; see `supabase/migrations_archive/README.md` and
+> `docs/migration/london-increments/README.md`.
+
 # Lovable backend — migration evidence pack
 
 ## Purpose and scope

@@ -1,3 +1,7 @@
+> **Legacy project retired 2026-11-11.** This document is a historical record and is kept as written.
+> Production is the London project only; see `supabase/migrations_archive/README.md` and
+> `docs/migration/london-increments/README.md`.
+
 # London build record — what was actually applied
 
 **Project:** `ezsvdsjdtardkxfswjvq` (AccountancyOS, `eu-west-2`, PostgreSQL 17.6.1.155)

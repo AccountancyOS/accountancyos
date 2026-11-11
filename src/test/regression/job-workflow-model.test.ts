@@ -12,7 +12,7 @@ import {
 } from "@/lib/job-workflow-model";
 
 // Byte-faithful copy of `valid_transitions` inside validate_job_status_transition()
-// (supabase/migrations/20260408203205_2c7ea4c6-d4d7-4a98-904d-7e85a69e88df.sql).
+// (supabase/migrations_archive/20260408203205_2c7ea4c6-d4d7-4a98-904d-7e85a69e88df.sql).
 // If that migration's map changes, update the model AND this expectation together —
 // this test exists specifically to catch drift between the two.
 const DB_TRIGGER_TRANSITIONS: Record<string, string[]> = {

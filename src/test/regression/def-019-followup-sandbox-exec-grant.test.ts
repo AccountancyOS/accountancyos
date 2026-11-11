@@ -15,7 +15,7 @@ import { resolve } from "node:path";
  */
 const root = resolve(__dirname, "../../../");
 const FOLLOWUP_NAME = "20260805220000_def_019_grant_exec_sandbox_exec.sql";
-const MIG = readFileSync(resolve(root, `supabase/migrations/${FOLLOWUP_NAME}`), "utf8");
+const MIG = readFileSync(resolve(root, `supabase/migrations_archive/${FOLLOWUP_NAME}`), "utf8");
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
 
 const RECEIPT = JSON.parse(
@@ -62,7 +62,7 @@ describe("DEF-019 follow-up — grants EXECUTE to sandbox_exec, and only that", 
 
   it("leaves the already-applied DEF-019 migration untouched", () => {
     const applied = readFileSync(
-      resolve(root, "supabase/migrations/20260805160000_def_019_cron_and_delivery_observability.sql"),
+      resolve(root, "supabase/migrations_archive/20260805160000_def_019_cron_and_delivery_observability.sql"),
       "utf8",
     );
     expect(applied).toContain("GRANT EXECUTE ON FUNCTION public.redact_secrets(text) TO authenticated, service_role;");
@@ -125,6 +125,7 @@ describe("DEF-019 receipt — the gate is runnable by sandbox_exec", () => {
 
   it("records the follow-up migration and stays in pending/", () => {
     const paths = (RECEIPT.migrations as Array<{ path: string }>).map((m) => m.path);
+    // Receipts record the path the migration had when it was released (before cutover B moved it).
     expect(paths).toContain(`supabase/migrations/${FOLLOWUP_NAME}`);
     expect(RECEIPT.status).not.toBe("live_verified");
   });

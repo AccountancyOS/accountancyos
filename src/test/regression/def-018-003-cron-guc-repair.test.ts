@@ -24,7 +24,7 @@ const root = resolve(__dirname, "../../../");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 
 const MIG_NAME = "20260805100000_def_018_003_cron_guc_repair.sql";
-const MIG = read(`supabase/migrations/${MIG_NAME}`);
+const MIG = read(`supabase/migrations_archive/${MIG_NAME}`);
 
 /** Comments carry the defect string deliberately; guards must run on executable SQL. */
 const CODE = MIG.replace(/^\s*--.*$/gm, "");
@@ -190,7 +190,7 @@ describe("DEF-003 — the email drain", () => {
   });
 
   it("supersedes rather than re-applies the broken 2026-07-20 migration", () => {
-    const superseded = "supabase/migrations/20260720120000_schedule_process_email_queue.sql";
+    const superseded = "supabase/migrations_archive/20260720120000_schedule_process_email_queue.sql";
     if (existsSync(resolve(root, superseded))) {
       // If it is still in the tree it must remain unapplied and be recorded as superseded,
       // because applying it would re-create the job with the GUC defect.

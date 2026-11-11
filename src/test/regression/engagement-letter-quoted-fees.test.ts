@@ -12,7 +12,7 @@ import { resolve } from "node:path";
  * so a fee the client had agreed to was silently absent from the document they signed.
  */
 const root = resolve(__dirname, "../../../");
-const migDir = resolve(root, "supabase/migrations");
+const migDir = resolve(root, "supabase/migrations_archive");
 
 const MIG_NAME = "20260727180000_engagement_letter_states_quoted_fees.sql";
 const MIG = readFileSync(resolve(migDir, MIG_NAME), "utf8");

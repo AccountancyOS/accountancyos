@@ -75,7 +75,7 @@ describe("DEF-014 — no nested interactive controls", () => {
 
 describe("DEF-010 — one canonical MTD quarterly service", () => {
   const MIG = read(
-    "supabase/migrations/20260728130000_retire_legacy_mtd_quarterly_service.sql",
+    "supabase/migrations_archive/20260728130000_retire_legacy_mtd_quarterly_service.sql",
   );
 
   it("deactivates the legacy entry rather than deleting it", () => {
@@ -108,22 +108,22 @@ describe("DEF-010 — sa_mtd is an anchor, not a billable line", () => {
     // It carries canonical_service_code 'self_assessment_mtd_quarterly' and doubles as
     // the client type. Retiring the row would stop MTD jobs being created.
     const retire = read(
-      "supabase/migrations/20260728130000_retire_legacy_mtd_quarterly_service.sql",
+      "supabase/migrations_archive/20260728130000_retire_legacy_mtd_quarterly_service.sql",
     );
     expect(retire).not.toMatch(/'sa_mtd'/);
     const prices = read(
-      "supabase/migrations/20260728140000_service_prices_and_unpriced_state.sql",
+      "supabase/migrations_archive/20260728140000_service_prices_and_unpriced_state.sql",
     );
     expect(prices).not.toMatch(/UPDATE public\.services_catalog[\s\S]{0,200}active = false/);
     // The engine still keys on it.
-    const mig = read("supabase/migrations/20260725140000_mtd_deadlines_and_service.sql");
+    const mig = read("supabase/migrations_archive/20260725140000_mtd_deadlines_and_service.sql");
     expect(mig).toMatch(/sc\.code = 'sa_mtd'/);
   });
 });
 
 describe("DEF-010 — an unset price is unset, never £0.00", () => {
   const MIG = read(
-    "supabase/migrations/20260728140000_service_prices_and_unpriced_state.sql",
+    "supabase/migrations_archive/20260728140000_service_prices_and_unpriced_state.sql",
   );
   const DIALOG = read("src/components/quotes/CreateQuoteDialog.tsx");
 
@@ -150,7 +150,7 @@ describe("DEF-010 — an unset price is unset, never £0.00", () => {
 
 describe("DEF-006 — bank connection health works, and says so when it does not", () => {
   const MIG = read(
-    "supabase/migrations/20260728160000_fix_bank_connection_health_ambiguity.sql",
+    "supabase/migrations_archive/20260728160000_fix_bank_connection_health_ambiguity.sql",
   );
   const CARD = read("src/components/bookkeeping/PracticeBankingOverview.tsx");
 
@@ -217,7 +217,7 @@ describe("DEF-012 — permissions administration loads", () => {
     // Ruled out deliberately: a constraint would fail against existing orphaned
     // memberships and would make an incomplete membership unrepresentable.
     const migrations = read(
-      "supabase/migrations/20260728150000_profiles_email_signature.sql",
+      "supabase/migrations_archive/20260728150000_profiles_email_signature.sql",
     );
     expect(migrations).not.toMatch(/REFERENCES public\.profiles/);
   });
