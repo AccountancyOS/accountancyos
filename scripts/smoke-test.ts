@@ -5,8 +5,8 @@
  * Exits non-zero on any failure so it is safe to wire into CI.
  *
  * Usage:
- *   bun scripts/smoke-test.ts                  # uses VITE_SUPABASE_URL + anon key
- *   SMOKE_TARGET=preview bun scripts/smoke-test.ts
+ *   npm run smoke                              # uses VITE_SUPABASE_URL + publishable key
+ *   SMOKE_TARGET=preview npm run smoke
  *
  * Environment:
  *   VITE_SUPABASE_URL              required
@@ -17,14 +17,15 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CHECK_CONSTRAINT_REGISTRY } from "../src/lib/db-constants/check-constraints";
 
 type Manifest = typeof import("../infra/supabase-manifest.json");
 
 const manifest: Manifest = JSON.parse(
-  readFileSync(resolve(import.meta.dir, "../infra/supabase-manifest.json"), "utf8"),
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../infra/supabase-manifest.json"), "utf8"),
 );
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;

@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "bun scripts/smoke-test.ts"
+    "smoke": "vite-node scripts/smoke-test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

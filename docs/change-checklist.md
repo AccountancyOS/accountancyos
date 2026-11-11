@@ -8,7 +8,7 @@
 
 ## 2. Tests
 - [ ] Added or updated Vitest tests covering the change.
-- [ ] `bun test` runs green locally.
+- [ ] `npm test` runs green locally.
 - [ ] For RLS or queue work: extended `scripts/smoke-test.ts` if a new invariant is introduced.
 
 ## 3. Migration Safety
@@ -37,7 +37,7 @@
 - [ ] Redirect URL allow-listed in Supabase Auth config.
 
 ## 7. Smoke Test
-- [ ] `bun smoke` runs green against the deployment, or the failing checks are explicitly waived in the PR.
+- [ ] `npm run smoke` runs green against the deployment, or the failing checks are explicitly waived in the PR.
 
 ## 8. Documentation
 - [ ] `critical-workflows.md` updated when behaviour or state machine changes.

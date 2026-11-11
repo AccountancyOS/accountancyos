@@ -279,7 +279,9 @@ describe("Outlook Graph payload — the PDF is genuinely in the message", () => 
 
 describe("validateAttachments — every refusal has its own code", () => {
   const ok = (a: unknown) => validateAttachments(a, "gmail");
-  const codeOf = (result: ReturnType<typeof ok>) => (result.ok ? null : result.code);
+  // Narrow with `in`: the app tsconfig runs without strictNullChecks, where `result.ok` does not
+  // discriminate the union.
+  const codeOf = (result: ReturnType<typeof ok>) => ("code" in result ? result.code : null);
 
   it("accepts no attachments at all", () => {
     expect(ok(null)).toEqual({ ok: true });

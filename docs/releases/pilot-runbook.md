@@ -35,11 +35,11 @@ reviewed change.
 
 1. Merge the reviewed source change on `main`. Note that SHA — this is `source_commit_sha`.
 2. On a fresh clean workspace at that SHA, run
-   `bunx tsx scripts/stamp-release.ts --function companies-house-sync --source-sha <source_commit_sha> --release-id <yyyy-mm-dd-slug>`.
+   `npx vite-node scripts/stamp-release.ts --function companies-house-sync --source-sha <source_commit_sha> --release-id <yyyy-mm-dd-slug>`.
    The only file that changes is `supabase/functions/companies-house-sync/VERSION.ts`.
 3. Commit that change with message `release: stamp companies-house-sync <release_id>`.
    That commit's SHA is `release_commit_sha`.
-4. Run `bunx tsx scripts/release-checksum.ts supabase/functions/companies-house-sync` and
+4. Run `npx vite-node scripts/release-checksum.ts supabase/functions/companies-house-sync` and
    capture the value as `artifact_checksum_post_stamp`.
 5. Write `docs/releases/pending/<release_id>.json` (schema in `_schema/pending-release.json`)
    with all of: `release_kind: "attestation-based"`, `source_commit_sha`,
@@ -55,7 +55,7 @@ Executed by the release operator, in one uninterrupted session:
 1. `git fetch && git checkout <release_commit_sha>` (detached HEAD is fine).
 2. `git rev-parse HEAD` MUST equal `release_commit_sha`. If not — abort.
 3. `git status --porcelain` MUST be empty. If not — abort.
-4. `bunx tsx scripts/release-checksum.ts supabase/functions/companies-house-sync` MUST
+4. `npx vite-node scripts/release-checksum.ts supabase/functions/companies-house-sync` MUST
    equal `artifact_checksum_post_stamp` in the pending record. If not — abort (tree drift).
 5. Record `release_window.locked_at = now()` and set both boolean flags true.
 6. **No other tool calls, file edits, or deploys until step 4 of §3 completes.**
@@ -64,7 +64,7 @@ Executed by the release operator, in one uninterrupted session:
 
 1. Call `supabase--deploy_edge_functions(["companies-house-sync"])`. Record
    `release_window.deployed_at`.
-2. Run `bunx tsx scripts/verify-release.ts --release docs/releases/pending/<release_id>.json`.
+2. Run `npx vite-node scripts/verify-release.ts --release docs/releases/pending/<release_id>.json`.
    The script hits
    `https://<production-domain>/functions/v1/companies-house-sync?action=version`
    and asserts `sha == release_commit_sha`, `source_sha == source_commit_sha`,

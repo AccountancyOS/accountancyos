@@ -27,4 +27,4 @@ See `storageBuckets`. `email-assets` is the only intentionally public bucket. Al
 See `rlsRequiredTables`. Every entry **must** have RLS enabled. The smoke test asserts this via `pg_class.relrowsecurity`.
 
 ## Drift Detection
-Run `bun smoke` after every deploy and as a CI gate. Output includes per-check status, error message, and remediation hint.
+Run `npm run smoke` after every deploy and as a CI gate. Output includes per-check status, error message, and remediation hint.

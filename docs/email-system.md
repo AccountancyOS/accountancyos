@@ -120,18 +120,18 @@ Any insert with a value outside this list is rejected by the DB. Update the chec
 
 ## Drift Detection (already wired)
 
-- `bun smoke` — `scripts/smoke-test.ts` diffs the live backend against `infra/supabase-manifest.json`. Missing cron, edge functions, tables, RLS, or secrets fail loudly.
+- `npm run smoke` — `scripts/smoke-test.ts` diffs the live backend against `infra/supabase-manifest.json`. Missing cron, edge functions, tables, RLS, or secrets fail loudly.
 - `src/test/regression/auth-email-hook-contract.test.ts` — locks the auth hook contract
 - `src/test/regression/process-email-queue-contract.test.ts` — locks the worker contract
 - `src/test/regression/supabase-manifest.test.ts` — locks the manifest
-- `src/test/regression/vocabulary-drift.test.ts` — catches stale enum / context values; **`email_queue.context` and `email_queue.status` are now registered** in `src/lib/db-constants/check-constraints.ts`, so a value drifting out of the allowed set fails this test (and the live `bun smoke` check) before it reaches a client
+- `src/test/regression/vocabulary-drift.test.ts` — catches stale enum / context values; **`email_queue.context` and `email_queue.status` are now registered** in `src/lib/db-constants/check-constraints.ts`, so a value drifting out of the allowed set fails this test (and the live `npm run smoke` check) before it reaches a client
 - CI (`.github/workflows/ci.yml`) runs these on every PR
 
 Run both before shipping anything that touches email:
 
 ```bash
-bun run test
-bun smoke
+npm test
+npm run smoke
 ```
 
 ---
@@ -144,7 +144,7 @@ bun smoke
 - Add new UI that reads `email_queue` / `email_messages`
 - Add new triggers via `queueEmail()` or `queue_email_safe`
 
-### Care (run `bun run test` + `bun smoke`)
+### Care (run `npm test` + `npm run smoke`)
 - Any migration touching `email_*` tables, RLS, or RPCs
 - Editing `auth-email-hook`, `process-email-queue`, or a sender RPC like `lifecycle_send_quote`
 - Changing the `email_queue_context_check` constraint or the matching frontend constants
@@ -167,6 +167,6 @@ bun smoke
 - [ ] No new code paths that bulk-loop a single template over many recipients
 - [ ] `auth-email-hook` still calls `enqueue_email` (no reverts to direct-send)
 - [ ] `SENDER_DOMAIN` constants unchanged (or reviewed)
-- [ ] `bun run test` passes locally
-- [ ] `bun smoke` passes against the target backend
+- [ ] `npm test` passes locally
+- [ ] `npm run smoke` passes against the target backend
 - [ ] If publishing to Live: verified `process-email-queue` pg_cron exists in prod after publish

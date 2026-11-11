@@ -77,5 +77,5 @@ Today, a flag-ON client is activated when the **accountant clicks Approve** (the
 
 ## Quick reference — what guards this work
 - `npx vitest run` (135 tests) — incl. `onboarding-token-threading.test.ts`, `vocabulary-drift.test.ts`.
-- `bun smoke` — live drift check (cron/vault/constraints incl. `email_queue` context).
+- `npm run smoke` — live drift check (cron/vault/constraints incl. `email_queue` context).
 - All increment migrations are diff-verified verbatim reproductions + only the documented additions.

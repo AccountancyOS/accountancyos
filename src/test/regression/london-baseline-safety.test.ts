@@ -194,7 +194,7 @@ describe("London cron bootstrap", () => {
 
   it("embeds no credential — every job reads from Vault", () => {
     // Five legacy jobs carried a literal anon JWT in cron.job.command. None may here.
-    const bodies = code.match(/\$cron\$[\s\S]*?\$cron\$/g) ?? [];
+    const bodies: string[] = code.match(/\$cron\$[\s\S]*?\$cron\$/g) ?? [];
     expect(bodies.length).toBe(12);
     for (const b of bodies) {
       expect(b).toContain("vault.decrypted_secrets");
@@ -206,7 +206,7 @@ describe("London cron bootstrap", () => {
   it("uses the bearer mechanism for eleven jobs and x-cron-secret for exactly one", () => {
     // Established by reading every target function: 11 gate on Authorization == service-role
     // key; only truelayer-sync-scheduled gates on x-cron-secret.
-    const bodies = code.match(/\$cron\$[\s\S]*?\$cron\$/g) ?? [];
+    const bodies: string[] = code.match(/\$cron\$[\s\S]*?\$cron\$/g) ?? [];
     const bearer = bodies.filter((b) => b.includes("'Authorization', 'Bearer '"));
     const cronSecret = bodies.filter((b) => b.includes("'x-cron-secret'"));
     expect(bearer.length).toBe(11);
