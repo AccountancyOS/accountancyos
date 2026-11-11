@@ -46,7 +46,7 @@ directory appears in `supabase/migrations/`, so the divergence stays deliberate 
 | 003 | `003_email_send_log_rate_limited.sql` | 2026-09-02 | `london_inc_003_email_send_log_rate_limited` |
 | 004 | `004_protect_existing_system_rows.sql` | 2026-09-02 13:33Z | `london_inc_004_protect_existing_system_rows` (version `20260902133344`) |
 | 005 | `005_system_email_boundary_and_hold_state.sql` | 2026-09-02 14:51Z | ⚠ `london_inc_004_system_email_boundary_and_hold_state` (version `20260902145129`) |
-| 006 | `006_security_containment.sql` | **PENDING APPROVAL — not applied** | to be applied as `london_inc_006_security_containment` |
+| 006 | `006_security_containment.sql` | 2026-11-11 13:04:57Z | `london_inc_006_security_containment` (version `20261111130457`) |
 
 > ⚠ **The file numbered 005 is recorded on London under a `london_inc_004_*` name.** It was
 > authored and applied as 004, unaware that `004_protect_existing_system_rows` had taken that
@@ -57,9 +57,30 @@ directory appears in `supabase/migrations/`, so the divergence stays deliberate 
 > `queue_email_safe` over-grants; 005 added `queue_system_email_safe`, the hold/escalation
 > columns and the extended claim return shape.
 
-### 006 — security containment (cutover workstream A) — PENDING APPROVAL
+### 006 — security containment (cutover workstream A) — APPLIED 2026-11-11
 
-**Not applied.** Prepared on branch `cutover/a-security-containment`. Caller map, per-function
+**Applied 2026-11-11 13:04:57Z** with owner approval, byte-exact from this file (sha256
+`aff4d240de2d5f58e164351215a446fe033604f77f4ad2c92c8173ff22012bca`) as one transaction. Recorded in
+`supabase_migrations.schema_migrations` as version `20261111130457`, name
+`london_inc_006_security_containment`, `statements[1]` = the exact file contents (md5
+`ecc6ff55d0abb556dab907f3ae0344fc`).
+
+> Unlike 001–005, whose recorded `statements` are a condensed rewrite of each file, 006's record is
+> the file verbatim.
+
+**Verified after apply:**
+- `006_verify.sql`, read-only on London: **59/59 rows `ok = true`**, identical to the expected
+  matrix from the local replica.
+- The 15 functions below were deployed at v29 from this branch (13:06Z), each with the
+  `verify_jwt` declared in `config.toml`. All 58 deployed functions match `config.toml`.
+- `seed-portal-test-users` and `portal-qa-probe` were **deleted** from London.
+- Refusal probes returned the expected codes:
+  - `process-email-queue`: 401 with no auth, 403 with a non-service bearer.
+  - Both onboarding Stripe functions: 401 without a valid token.
+  - The deleted seed function: 404.
+- `ENCRYPTION_KEY` was rotated to the new 32-byte format at 13:03Z, before the deploys.
+
+Prepared on branch `cutover/a-security-containment`. Caller map, per-function
 decisions, exact body diffs, out-of-scope findings and the pre/post grant matrices are in
 [`006_CALLER_MAP.md`](006_CALLER_MAP.md).
 
@@ -72,7 +93,7 @@ decisions, exact body diffs, out-of-scope findings and the pre/post grant matric
 - `006_verify.sql` — **read-only** grant matrix, not a migration. Safe to run against London at any
   time. Before 006, 59/59 rows are `ok = false`; after it, 59/59 must be `true`.
 
-**Edge functions to deploy after 006 is applied** (one `supabase functions deploy <name>
+**Edge functions deployed after 006 was applied** (one `supabase functions deploy <name>
 --project-ref ezsvdsjdtardkxfswjvq` each) — every function changed on the branch, directly or
 through `_shared/origins.ts`, `_shared/token-crypto.ts` or `_shared/hmrc-auth.ts`:
 
@@ -82,11 +103,10 @@ through `_shared/origins.ts`, `_shared/token-crypto.ts` or `_shared/hmrc-auth.ts
 `send-engagement-letter`, `stripe-checkout`, `truelayer-callback` (15).
 
 ⚠ `process-email-queue`, `gmail-send` and `outlook-send` have **undeployed email-programme commits**
-on `main` (increments 1–5: Postmark sender, hold semantics, attachments). London still runs the
-2026-08-18 build of all three, so deploying them for 006 **also releases that work**. This is an
-owner decision, not a side effect.
+on `main` (increments 1–5: Postmark sender, hold semantics, attachments). Deploying them for 006
+**also released that work** — owner-approved 2026-11-11.
 
-**Functions to delete from London:** `seed-portal-test-users`, `portal-qa-probe` (moved to
+**Functions deleted from London (2026-11-11):** `seed-portal-test-users`, `portal-qa-probe` (moved to
 `scripts/qa/`, never to be deployed).
 
 ### 002 — prerequisites for deploying the rewritten drainer
