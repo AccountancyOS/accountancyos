@@ -19,8 +19,10 @@ plus storage, cron and seed bootstraps, plus six London-only increments
 
 So `supabase/migrations/` was restarted from a single baseline, `<timestamp>_london_baseline.sql`.
 It is London's actual schema, storage, reference data and cron, dumped read-only on 2026-11-11 and
-proven locally to rebuild London with no schema differences. London's history table was repaired to
-mark that baseline as applied. Every change from now on is a normal migration in
+proven locally to rebuild London with no schema differences. London's history table is repaired by
+the cutover-B batch (run by the owner; see
+`docs/migration/london-baseline/schema_migrations_before_cutover_b.json` for the pre-repair record)
+so that it marks that baseline as applied. Every change from now on is a normal migration in
 `supabase/migrations/`, applied with `supabase db push`.
 
 ## Rules
